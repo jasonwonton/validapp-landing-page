@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Six7 — See who likes you</title>
+    <meta name="description" content="Six7 is the viral anonymous poll game for high schools. Grab the invite, see who voted for you, and unlock more reveals every night.">
+    <script>
+        (function () {
+            var ua = navigator.userAgent || navigator.vendor || window.opera;
+            if (/Android/i.test(ua)) {
+                window.location.replace("/android/");
+            }
+        })();
+    </script>
+    <link rel="canonical" href="https://validapp.lol/">
+    <link rel="icon" type="image/png" href="assets/AppIconV2.png">
+    <link rel="apple-touch-icon" href="assets/AppIconV2.png">
+    <meta property="og:url" content="https://validapp.lol/">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Six7">
+    <meta property="og:title" content="Six7 — See who likes you">
+    <meta property="og:description" content="Answer polls, bank aura, and reveal what your classmates are saying about you.">
+    <meta property="og:image" content="https://validapp.lol/assets/AppIconV2.png">
+    <meta property="og:image:secure_url" content="https://validapp.lol/assets/AppIconV2.png">
+    <meta property="og:image:width" content="1024">
+    <meta property="og:image:height" content="1024">
+    <meta property="og:image:alt" content="Six7 App Icon">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Six7 — See who likes you">
+    <meta name="twitter:description" content="Unlock anonymous votes and shoutouts by sharing your invite link.">
+    <meta name="twitter:image" content="https://validapp.lol/assets/AppIconV2.png">
+    <meta name="twitter:image:alt" content="Six7 App Icon">
+    <meta name="theme-color" content="#050914">
+    <meta name="apple-mobile-web-app-title" content="Six7">
+    <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@type": "MobileApplication",
+          "name": "Six7",
+          "operatingSystem": "iOS",
+          "applicationCategory": "SocialNetworkingApplication",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          },
+          "url": "https://validapp.lol/",
+          "image": "https://validapp.lol/assets/AppIconV2.png",
+          "publisher": {
+            "@type": "Organization",
+            "name": "Six7",
+            "logo": "https://validapp.lol/assets/valid_logo.png",
+            "url": "https://validapp.lol/"
+          },
+          "description": "Six7 is the anonymous poll game built for high schools. Answer questions, bank aura, and reveal who voted for you."
+        }
+    </script>
+    <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@type": "Organization",
+          "name": "Six7",
+          "url": "https://validapp.lol/",
+          "logo": "https://validapp.lol/assets/valid_logo.png",
+          "sameAs": [
+            "https://apps.apple.com/us/app/six7/id6755367062"
+          ],
+          "description": "Six7 is the viral anonymous poll game for high schools. Grab the invite, see who voted for you, and unlock more reveals every night."
+        }
+    </script>
+    <style>
+        :root {
+            color-scheme: light dark;
+            --bg: #050914;
+            --card: rgba(255, 255, 255, 0.06);
+            --text: #f5f7ff;
+            --muted: rgba(245, 247, 255, 0.8);
+            --accent: #ffb15e;
+            --accent-alt: #9e66fa;
+            --accent-gradient: linear-gradient(90deg, #ff7a59 0%, #ffb15e 52%, #ffe066 100%);
+        }
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #f2fffd;
+            color: #050914;
+            display: flex;
+            justify-content: center;
+            padding: clamp(20px, 4vw, 48px) 16px 64px;
+        }
+        main {
+            width: 100%;
+            max-width: 1040px;
+            background: var(--card);
+            border-radius: 32px;
+            padding: clamp(24px, 6vw, 56px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            box-shadow: 0 40px 120px rgba(5, 9, 20, 0.6);
+            text-align: center;
+        }
+        header {
+            margin-bottom: 32px;
+            text-align: center;
+            width: 100%;
+        }
+        header img {
+            filter: none;
+            height: 96px;
+            display: block;
+            margin: 0 auto 12px;
+        }
+        .hero-title {
+            font-size: 3.5rem;
+            margin: 0 0 12px 0;
+            letter-spacing: 0;
+            color: #050914;
+        }
+        .hero-copy {
+            font-size: 1.25rem;
+            color: rgba(5, 9, 20, 0.8);
+            line-height: 1.7;
+            margin-bottom: 28px;
+            max-width: 720px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .cta-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 40px;
+            justify-content: center;
+        }
+        .cta {
+            padding: 18px 36px;
+            border-radius: 999px;
+            font-weight: 600;
+            font-size: 1.05rem;
+            text-decoration: none;
+            color: #050914;
+            background: var(--accent-gradient);
+            border: 3px solid #050914;
+            box-shadow: 0 12px 36px rgba(255, 122, 89, 0.32);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .cta.secondary {
+            background: rgba(255, 255, 255, 0.72);
+            color: #050914;
+            border: 3px solid #050914;
+            box-shadow: none;
+        }
+        .cta:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 16px 42px rgba(255, 122, 89, 0.42);
+        }
+        .cta.disabled {
+            cursor: default;
+            opacity: 0.8;
+            color: #050914;
+        }
+        .note {
+            font-size: 0.95rem;
+            color: rgba(5, 9, 20, 0.8);
+            text-align: center;
+        }
+        .eyebrow {
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            letter-spacing: 0.18em;
+            color: rgba(5, 9, 20, 0.65);
+            margin-bottom: 10px;
+        }
+        .invite-preview {
+            margin-top: 32px;
+            border-radius: 32px;
+            padding: 28px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(5, 9, 20, 0.08);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .preview-card {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            border-radius: 28px;
+            padding: 20px;
+            background: #050914;
+            color: #f5f7ff;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+        }
+        .preview-icon {
+            width: 72px;
+            height: 72px;
+            border-radius: 18px;
+            object-fit: cover;
+        }
+        .preview-content h3 {
+            margin: 0;
+            font-size: 1.4rem;
+        }
+        .preview-content p {
+            margin: 4px 0 0;
+            color: rgba(245, 247, 255, 0.7);
+        }
+        .preview-meta {
+            margin: 0;
+            font-size: 0.95rem;
+            color: rgba(5, 9, 20, 0.8);
+        }
+        footer {
+            margin-top: 48px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            font-size: 0.95rem;
+            color: rgba(5, 9, 20, 0.7);
+        }
+        footer a {
+            color: #050914;
+            text-decoration: none;
+        }
+        footer a:hover {
+            text-decoration: underline;
+        }
+        .footer-link-button {
+            background: var(--accent-gradient);
+            color: #050914;
+            border: 2px solid #050914;
+            padding: 4px 8px;
+            border-radius: 999px;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        @media (max-width: 640px) {
+            header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .cta-row {
+                flex-direction: column;
+                width: 100%;
+            }
+            .cta {
+                text-align: center;
+                width: 100%;
+            }
+            .hero-title {
+                font-size: 2.5rem;
+            }
+            .hero-copy {
+                font-size: 1.08rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <header>
+            <img src="assets/valid_logo.png" alt="Valid Logo">
+        </header>
+
+        <section class="hero">
+            <h2 class="hero-title">See who likes you 🤫</h2>
+            <p class="hero-copy">
+                Answer polls and see what your classmates think about you &#x1F440;
+            </p>
+            <div class="cta-row">
+                <a class="cta" href="https://apps.apple.com/us/app/six7/id6755367062">
+                    Download on the App Store
+                </a>
+            </div>
+        </section>
+
+        <section class="phone-mockup" style="text-align: center; margin-top: 40px; margin-bottom: 40px;">
+            <img src="assets/phone_mockup.png" alt="Phone Mockup" style="max-width: 100%; height: auto; border-radius: 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);">
+        </section>
+
+
+
+
+
+        <footer>
+            <span>© <script>document.write(new Date().getFullYear());</script> Six7. All rights reserved.</span>
+            <span>
+                <a href="privacy-policy.html" class="footer-link-button">Privacy Policy</a>
+                &nbsp;•&nbsp;
+                <a href="terms.html" class="footer-link-button">Terms</a>
+            </span>
+        </footer>
+    </main>
+</body>
+</html>
