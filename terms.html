@@ -8,6 +8,11 @@
     <link rel="canonical" href="https://validapp.lol/terms.html">
     <link rel="icon" type="image/png" href="assets/AppIconV2.png">
     <style>
+        @font-face {
+            font-family: "Jua-Regular";
+            src: url("assets/Jua-Regular.ttf") format("truetype");
+            font-display: swap;
+        }
         :root {
             color-scheme: light;
             --bg: #f2fffd;
@@ -22,7 +27,7 @@
         }
         body {
             margin: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+            font-family: "Jua-Regular", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             background: var(--bg);
             color: var(--text);
             line-height: 1.6;
@@ -42,6 +47,36 @@
         }
         nav {
             margin-bottom: 28px;
+        }
+        .legal-nav {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+        .brand {
+            color: var(--text);
+            font-weight: 800;
+            text-decoration: none;
+        }
+        .brand img {
+            width: 42px;
+            height: 42px;
+            object-fit: contain;
+        }
+        .nav-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .nav-links a {
+            color: var(--muted);
+            text-decoration: none;
+        }
+        .nav-links a:hover {
+            color: var(--text);
+            text-decoration: underline;
         }
         h1 {
             margin: 0 0 8px;
@@ -70,7 +105,16 @@
 </head>
 <body>
     <main>
-        <nav><a href="/">Valid</a></nav>
+        <nav class="legal-nav" aria-label="Primary navigation">
+            <a class="brand" href="index.html"><img src="assets/valid_logo.png" alt="Valid logo"></a>
+            <div class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="about.html">About</a>
+                <a href="contact.html">Contact</a>
+                <a href="privacy-policy.html">Privacy</a>
+                <a href="terms.html">Terms</a>
+            </div>
+        </nav>
         <h1>Terms of Service</h1>
         <p class="updated">Last updated: July 9, 2026</p>
 
@@ -134,10 +178,12 @@
         <h2>Contact</h2>
         <p>
             Questions about these Terms can be sent to <a href="mailto:support@validapp.lol">support@validapp.lol</a>.
+            Valid is the DBA for this service. Business mailing address is available on request by email.
         </p>
 
         <footer>
             &copy; <script>document.write(new Date().getFullYear());</script> Valid. All rights reserved.
+            <br><a href="about.html">About</a> &nbsp; <a href="contact.html">Contact us</a> &nbsp; <a href="privacy-policy.html">Privacy Policy</a>
         </footer>
     </main>
 </body>

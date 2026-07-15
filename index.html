@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Six7 — See who likes you</title>
-    <meta name="description" content="Six7 is the viral anonymous poll game for high schools. Grab the invite, see who voted for you, and unlock more reveals every night.">
+    <title>Valid - See who likes you</title>
+    <meta name="description" content="Valid is the anonymous social polling app for school communities. Answer polls, receive app notifications, invite classmates, and reveal who voted for you.">
     <script>
         (function () {
             var ua = navigator.userAgent || navigator.vendor || window.opera;
@@ -18,26 +18,26 @@
     <link rel="apple-touch-icon" href="assets/AppIconV2.png">
     <meta property="og:url" content="https://validapp.lol/">
     <meta property="og:type" content="website">
-    <meta property="og:site_name" content="Six7">
-    <meta property="og:title" content="Six7 — See who likes you">
-    <meta property="og:description" content="Answer polls, bank aura, and reveal what your classmates are saying about you.">
+    <meta property="og:site_name" content="Valid">
+    <meta property="og:title" content="Valid - See who likes you">
+    <meta property="og:description" content="Answer polls, invite classmates, and reveal who voted for you on Valid.">
     <meta property="og:image" content="https://validapp.lol/assets/AppIconV2.png">
     <meta property="og:image:secure_url" content="https://validapp.lol/assets/AppIconV2.png">
     <meta property="og:image:width" content="1024">
     <meta property="og:image:height" content="1024">
-    <meta property="og:image:alt" content="Six7 App Icon">
+    <meta property="og:image:alt" content="Valid App Icon">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Six7 — See who likes you">
-    <meta name="twitter:description" content="Unlock anonymous votes and shoutouts by sharing your invite link.">
+    <meta name="twitter:title" content="Valid - See who likes you">
+    <meta name="twitter:description" content="Unlock anonymous votes and app notifications from your school community.">
     <meta name="twitter:image" content="https://validapp.lol/assets/AppIconV2.png">
-    <meta name="twitter:image:alt" content="Six7 App Icon">
-    <meta name="theme-color" content="#050914">
-    <meta name="apple-mobile-web-app-title" content="Six7">
+    <meta name="twitter:image:alt" content="Valid App Icon">
+    <meta name="theme-color" content="#f2fffd">
+    <meta name="apple-mobile-web-app-title" content="Valid">
     <script type="application/ld+json">
         {
           "@context": "https://schema.org",
           "@type": "MobileApplication",
-          "name": "Six7",
+          "name": "Valid",
           "operatingSystem": "iOS",
           "applicationCategory": "SocialNetworkingApplication",
           "offers": {
@@ -49,36 +49,28 @@
           "image": "https://validapp.lol/assets/AppIconV2.png",
           "publisher": {
             "@type": "Organization",
-            "name": "Six7",
+            "name": "Valid",
             "logo": "https://validapp.lol/assets/valid_logo.png",
-            "url": "https://validapp.lol/"
+            "url": "https://validapp.lol/",
+            "email": "support@validapp.lol"
           },
-          "description": "Six7 is the anonymous poll game built for high schools. Answer questions, bank aura, and reveal who voted for you."
-        }
-    </script>
-    <script type="application/ld+json">
-        {
-          "@context": "https://schema.org",
-          "@type": "Organization",
-          "name": "Six7",
-          "url": "https://validapp.lol/",
-          "logo": "https://validapp.lol/assets/valid_logo.png",
-          "sameAs": [
-            "https://apps.apple.com/us/app/six7/id6755367062"
-          ],
-          "description": "Six7 is the viral anonymous poll game for high schools. Grab the invite, see who voted for you, and unlock more reveals every night."
+          "description": "Valid is the anonymous poll app for school communities. Answer questions, receive app notifications, invite classmates, and reveal who voted for you."
         }
     </script>
     <style>
+        @font-face {
+            font-family: "Jua-Regular";
+            src: url("assets/Jua-Regular.ttf") format("truetype");
+            font-display: swap;
+        }
         :root {
-            color-scheme: light dark;
-            --bg: #050914;
-            --card: rgba(255, 255, 255, 0.06);
-            --text: #f5f7ff;
-            --muted: rgba(245, 247, 255, 0.8);
+            color-scheme: light;
+            --bg: #f2fffd;
+            --text: #050914;
+            --muted: rgba(5, 9, 20, 0.72);
+            --surface: rgba(255, 255, 255, 0.74);
+            --border: rgba(5, 9, 20, 0.14);
             --accent: #ffb15e;
-            --accent-alt: #9e66fa;
-            --accent-gradient: linear-gradient(90deg, #ff7a59 0%, #ffb15e 52%, #ffe066 100%);
         }
         * {
             box-sizing: border-box;
@@ -86,215 +78,203 @@
         body {
             margin: 0;
             min-height: 100vh;
-            font-family: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
-            background: #f2fffd;
-            color: #050914;
+            font-family: "Jua-Regular", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+        }
+        a {
+            color: inherit;
+        }
+        .site-header {
+            background: rgba(242, 255, 253, 0.94);
+            border-bottom: 1px solid var(--border);
+        }
+        .nav {
+            width: min(1040px, calc(100% - 32px));
+            min-height: 72px;
+            margin: 0 auto;
             display: flex;
-            justify-content: center;
-            padding: clamp(20px, 4vw, 48px) 16px 64px;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+        }
+        .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.15rem;
+            text-decoration: none;
+        }
+        .brand img {
+            width: 42px;
+            height: 42px;
+            object-fit: contain;
+        }
+        .nav-links {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 16px;
+            color: var(--muted);
+            font-size: 1rem;
+        }
+        .nav-links a {
+            text-decoration: none;
+        }
+        .nav-links a:hover {
+            color: var(--text);
         }
         main {
-            width: 100%;
-            max-width: 1040px;
-            background: var(--card);
-            border-radius: 32px;
-            padding: clamp(24px, 6vw, 56px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(20px);
-            box-shadow: 0 40px 120px rgba(5, 9, 20, 0.6);
+            width: min(1040px, calc(100% - 32px));
+            margin: 0 auto;
+            padding: clamp(28px, 5vw, 48px) 0 52px;
             text-align: center;
         }
-        header {
-            margin-bottom: 32px;
-            text-align: center;
-            width: 100%;
-        }
-        header img {
-            filter: none;
-            height: 96px;
+        .hero-logo {
+            width: min(260px, 68vw);
+            height: auto;
             display: block;
             margin: 0 auto 12px;
         }
         .hero-title {
-            font-size: 3.5rem;
-            margin: 0 0 12px 0;
+            margin: 0 0 12px;
+            font-size: clamp(3rem, 10vw, 5.6rem);
+            line-height: 0.98;
             letter-spacing: 0;
-            color: #050914;
         }
         .hero-copy {
-            font-size: 1.25rem;
-            color: rgba(5, 9, 20, 0.8);
-            line-height: 1.7;
-            margin-bottom: 28px;
-            max-width: 720px;
-            margin-left: auto;
-            margin-right: auto;
+            max-width: 680px;
+            margin: 0 auto 26px;
+            color: var(--muted);
+            font-size: clamp(1.2rem, 3vw, 1.55rem);
+            line-height: 1.45;
         }
         .cta-row {
             display: flex;
-            flex-wrap: wrap;
-            gap: 16px;
-            margin-bottom: 40px;
             justify-content: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: clamp(26px, 5vw, 42px);
         }
-        .cta {
-            padding: 18px 36px;
-            border-radius: 999px;
-            font-weight: 600;
-            font-size: 1.05rem;
-            text-decoration: none;
-            color: #050914;
-            background: var(--accent-gradient);
-            border: 3px solid #050914;
-            box-shadow: 0 12px 36px rgba(255, 122, 89, 0.32);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-        .cta.secondary {
-            background: rgba(255, 255, 255, 0.72);
-            color: #050914;
-            border: 3px solid #050914;
-            box-shadow: none;
-        }
-        .cta:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 16px 42px rgba(255, 122, 89, 0.42);
-        }
-        .cta.disabled {
-            cursor: default;
-            opacity: 0.8;
-            color: #050914;
-        }
-        .note {
-            font-size: 0.95rem;
-            color: rgba(5, 9, 20, 0.8);
-            text-align: center;
-        }
-        .eyebrow {
-            text-transform: uppercase;
-            font-size: 0.8rem;
-            letter-spacing: 0.18em;
-            color: rgba(5, 9, 20, 0.65);
-            margin-bottom: 10px;
-        }
-        .invite-preview {
-            margin-top: 32px;
-            border-radius: 32px;
-            padding: 28px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(5, 9, 20, 0.08);
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-        .preview-card {
-            display: flex;
-            gap: 16px;
+        .button {
+            display: inline-flex;
             align-items: center;
-            border-radius: 28px;
-            padding: 20px;
-            background: #050914;
-            color: #f5f7ff;
-            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+            justify-content: center;
+            min-height: 54px;
+            padding: 0 28px;
+            border: 3px solid var(--text);
+            border-radius: 30px;
+            background: var(--accent);
+            color: var(--text);
+            font-size: 1.08rem;
+            text-decoration: none;
+            box-shadow: 0 12px 32px rgba(255, 122, 89, 0.26);
         }
-        .preview-icon {
-            width: 72px;
-            height: 72px;
-            border-radius: 18px;
-            object-fit: cover;
+        .mockup {
+            margin: 0 auto;
+            width: min(820px, 100%);
         }
-        .preview-content h3 {
-            margin: 0;
-            font-size: 1.4rem;
+        .mockup img {
+            width: 100%;
+            height: auto;
+            display: block;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(5, 9, 20, 0.2);
         }
-        .preview-content p {
-            margin: 4px 0 0;
-            color: rgba(245, 247, 255, 0.7);
+        .quick-info {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 24px;
+            color: var(--muted);
+            font-size: 0.98rem;
         }
-        .preview-meta {
-            margin: 0;
-            font-size: 0.95rem;
-            color: rgba(5, 9, 20, 0.8);
+        .quick-info a {
+            color: var(--text);
+            text-decoration: underline;
+            text-underline-offset: 3px;
         }
         footer {
-            margin-top: 48px;
+            width: min(1040px, calc(100% - 32px));
+            margin: 0 auto;
+            padding: 24px 0 34px;
+            border-top: 1px solid var(--border);
+            color: var(--muted);
             display: flex;
-            flex-direction: column;
-            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 12px;
             font-size: 0.95rem;
-            color: rgba(5, 9, 20, 0.7);
         }
         footer a {
-            color: #050914;
+            color: var(--text);
             text-decoration: none;
         }
         footer a:hover {
             text-decoration: underline;
         }
-        .footer-link-button {
-            background: var(--accent-gradient);
-            color: #050914;
-            border: 2px solid #050914;
-            padding: 4px 8px;
-            border-radius: 999px;
-            text-decoration: none;
-            font-weight: 600;
-        }
-        @media (max-width: 640px) {
-            header {
-                flex-direction: column;
+        @media (max-width: 700px) {
+            .nav {
                 align-items: flex-start;
-            }
-            .cta-row {
                 flex-direction: column;
+                padding: 14px 0;
+            }
+            .nav-links {
+                justify-content: flex-start;
+                gap: 12px 14px;
+            }
+            .button {
                 width: 100%;
             }
-            .cta {
-                text-align: center;
-                width: 100%;
-            }
-            .hero-title {
-                font-size: 2.5rem;
-            }
-            .hero-copy {
-                font-size: 1.08rem;
+            .mockup img {
+                border-radius: 12px;
             }
         }
     </style>
 </head>
 <body>
-    <main>
-        <header>
-            <img src="assets/valid_logo.png" alt="Valid Logo">
-        </header>
+    <header class="site-header">
+        <nav class="nav" aria-label="Primary navigation">
+            <a class="brand" href="index.html">
+                <img src="assets/valid_logo.png" alt="Valid logo">
+            </a>
+            <div class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="about.html">About</a>
+                <a href="contact.html">Contact</a>
+                <a href="privacy-policy.html">Privacy</a>
+                <a href="terms.html">Terms</a>
+            </div>
+        </nav>
+    </header>
 
-        <section class="hero">
-            <h2 class="hero-title">See who likes you 🤫</h2>
+    <main>
+        <img class="hero-logo" src="assets/valid_logo.png" alt="Valid logo">
+        <section class="hero" aria-labelledby="hero-title">
+            <h1 class="hero-title" id="hero-title">See who likes you &#x1F92B;</h1>
             <p class="hero-copy">
                 Answer polls and see what your classmates think about you &#x1F440;
             </p>
             <div class="cta-row">
-                <a class="cta" href="https://apps.apple.com/us/app/six7/id6755367062">
-                    Download on the App Store
-                </a>
+                <a class="button" href="https://apps.apple.com/us/app/six7/id6755367062">Download on the App Store</a>
             </div>
         </section>
 
-        <section class="phone-mockup" style="text-align: center; margin-top: 40px; margin-bottom: 40px;">
-            <img src="assets/phone_mockup.png" alt="Phone Mockup" style="max-width: 100%; height: auto; border-radius: 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);">
+        <section class="mockup" aria-label="Valid app preview">
+            <img src="assets/phone_mockup.png" alt="Valid app phone mockup">
         </section>
 
-
-
-
-
-        <footer>
-            <span>© <script>document.write(new Date().getFullYear());</script> Six7. All rights reserved.</span>
-            <span>
-                <a href="privacy-policy.html" class="footer-link-button">Privacy Policy</a>
-                &nbsp;•&nbsp;
-                <a href="terms.html" class="footer-link-button">Terms</a>
-            </span>
-        </footer>
     </main>
+
+    <footer>
+        <span>&copy; <script>document.write(new Date().getFullYear());</script> Valid. All rights reserved.</span>
+        <span>
+            <a href="about.html">About</a>
+            &nbsp; &nbsp;
+            <a href="contact.html">Contact</a>
+        </span>
+    </footer>
 </body>
 </html>
