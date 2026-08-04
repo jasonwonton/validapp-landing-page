@@ -12,6 +12,30 @@ test("local integration mode uses only the same-origin API proxy", async ({ page
     expect(baseURL).toBe("http://127.0.0.1:4173/api/v1");
 });
 
+test("real adapter sends bounded, encoded unified-search queries", async ({ page }) => {
+    const urls = [];
+    await page.route(`${API_ORIGIN}/api/v1/**`, async (route) => {
+        urls.push(new URL(route.request().url()));
+        await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+    });
+    await page.goto("/app/");
+    await page.evaluate(async (userId) => {
+        const { ValidAPI } = await import("/app/api.js");
+        const api = new ValidAPI();
+        api.saveSession({ access_token: "search-token", user: { id: userId } });
+        await Promise.all([
+            api.getClassmates(userId, "Maya Chen", 10),
+            api.getPersonalFeed(userId, 0, "Maya Chen"),
+            api.getSchoolFeed(userId, null, "Maya Chen"),
+        ]);
+    }, USER_ID);
+    expect(urls.map((url) => `${url.pathname}${url.search}`).sort()).toEqual([
+        `/api/v1/users/${USER_ID}/classmates?limit=10&search=Maya+Chen`,
+        `/api/v1/users/${USER_ID}/feed/school?limit=20&search=Maya+Chen`,
+        `/api/v1/users/${USER_ID}/feed?limit=20&offset=0&search=Maya+Chen`,
+    ].sort());
+});
+
 function profile(firstName = "Jordan", auraPoints = 500) {
     return {
         user_id: USER_ID,
@@ -116,6 +140,7 @@ async function interceptProductionAPI(page, { signup = false, profileAura = 500,
             return fulfill({ is_unlocked: true, lock_reasons: [], votes_cast: 3, required_votes: 3 });
         }
         if (path === `/api/v1/users/${USER_ID}/feed?limit=20&offset=0`) return fulfill([]);
+        if (path.startsWith(`/api/v1/users/${USER_ID}/feed?limit=20&offset=0&search=`)) return fulfill([]);
         if (path === `/api/v1/users/${USER_ID}/anonymous-inbox?limit=30&offset=0`) {
             return fulfill({ questions: [], answers: [] });
         }
@@ -129,6 +154,9 @@ async function interceptProductionAPI(page, { signup = false, profileAura = 500,
                 { user_id: "41111111-1111-1111-1111-111111111111", first_name: "Ava", last_name: "Patel" },
                 { user_id: "51111111-1111-1111-1111-111111111111", first_name: "Eli", last_name: "Brooks" },
             ]);
+        }
+        if (path.startsWith(`/api/v1/users/${USER_ID}/classmates?limit=10&search=`)) {
+            return fulfill([{ user_id: "21111111-1111-1111-1111-111111111111", first_name: "Maya", last_name: "Chen", grade: "Senior" }]);
         }
         if (path === `/api/v1/users/${USER_ID}/invites/status`) return fulfill({ limit: 3, sent_today: 0, remaining: 3 });
         if (path === "/api/v1/config") return fulfill({
@@ -186,6 +214,21 @@ test("real adapter signs in, authenticates API calls, and revokes logout", async
     await expect.poll(() => requests.some((request) => request.path === "/api/v1/auth/logout")).toBe(true);
     const logout = requests.find((request) => request.path === "/api/v1/auth/logout");
     expect(logout.authorization).toBe("Bearer session-token");
+});
+
+test("unified search debounces rapid typing into one bounded request pair", async ({ page }) => {
+    await installCredentialStub(page, "get");
+    const requests = await interceptProductionAPI(page);
+    await page.goto("/app/");
+    await page.getByRole("button", { name: /sign in with a passkey/i }).click();
+    await expect(page.getByText("Hey, Jordan")).toBeVisible();
+    requests.length = 0;
+
+    await page.getByPlaceholder("Search names, questions...").pressSequentially("Maya", { delay: 25 });
+    await expect.poll(() => requests.filter((request) => request.path.includes("/classmates?limit=10&search=")).length).toBe(1);
+    await page.waitForTimeout(450);
+    expect(requests.filter((request) => request.path.includes("/classmates?limit=10&search=")).length).toBe(1);
+    expect(requests.filter((request) => request.path.includes("/feed?limit=20&offset=0&search=")).length).toBe(1);
 });
 
 test("real adapter completes passkey-only signup without an SMS request", async ({ page }) => {

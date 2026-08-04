@@ -76,6 +76,7 @@
                         <label class="feed-search"><span aria-hidden="true">⌕</span><input id="feedSearch" type="search" placeholder="Search names, questions..." autocomplete="off"></label>
                         <button id="myVotesFilter" class="filter-button hidden" type="button" aria-pressed="false">○ My Votes</button>
                     </div>
+                    <div id="feedClassmateResults" class="feed-classmate-results hidden"></div>
                     <div id="feedStatus" class="inline-status" role="status"></div>
                     <div id="feedList" class="card-list"></div>
                     <button id="loadMoreFeed" class="secondary-button hidden" type="button">Load more</button>
@@ -279,6 +280,7 @@
                 <span aria-hidden="true">🔒</span>
                 <div><strong>You choose exactly who to share.</strong><p>Valid uses selected phone numbers only to find people you know. No one will be texted.</p></div>
             </div>
+            <div id="inviteRewardCard" class="invite-reward-card hidden" aria-live="polite"></div>
             <p id="classmatesStatus" class="status-message" role="status"></p>
             <button id="chooseContactsButton" class="primary-button" type="button">Choose from contacts</button>
             <button id="shareClassmateInviteButton" class="secondary-button" type="button">Share my invite instead</button>
@@ -304,6 +306,25 @@
             </div>
             <p class="fine-print">Valid never reveals anonymous senders. Reporting sends this question to the moderation queue.</p>
         </form>
+    </dialog>
+
+    <dialog id="anonymousAnswerDetailDialog" class="modal">
+        <div class="anonymous-answer-detail-content">
+            <div class="modal-heading">
+                <div><span class="eyebrow">ANONYMOUS REPLY</span><h2>Reply</h2></div>
+                <button class="icon-button" aria-label="Close" type="button" data-close-dialog>×</button>
+            </div>
+            <div id="anonymousAnswerRecipient" class="anonymous-answer-recipient"></div>
+            <article class="anonymous-response-card">
+                <small>Your message</small>
+                <p id="anonymousOriginalMessage"></p>
+            </article>
+            <article class="anonymous-response-card reply">
+                <small>Their reply</small>
+                <p id="anonymousReceivedReply"></p>
+            </article>
+            <p id="anonymousAnswerReceivedAt" class="fine-print"></p>
+        </div>
     </dialog>
 
     <dialog id="deleteAccountDialog" class="modal">

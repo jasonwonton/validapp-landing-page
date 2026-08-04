@@ -36,6 +36,7 @@ export class DemoAPI {
             vote_count: 84,
             weekly_vote_count: 16,
             current_streak: 7,
+            streak_multiplier: 1.5,
             profile_picture_url: "../assets/AppIconV2.png",
             profile_picture_url_thumb: "../assets/AppIconV2.png",
             profile_picture_url_medium: "../assets/AppIconV2.png",
@@ -175,7 +176,17 @@ export class DemoAPI {
                     aura_points_earned: 0,
                 },
             ],
-            answers: [],
+            answers: [
+                {
+                    id: "answer-demo-1",
+                    question_body: "What always makes you laugh in class?",
+                    answer_text: "Your impressions of our history teacher 😂",
+                    recipient_display_name: "Maya Chen",
+                    recipient_username: "maya_c",
+                    recipient_profile_picture_url: "../assets/app/anonymous.png",
+                    answered_at: ago(42),
+                },
+            ],
         };
     }
 
@@ -306,7 +317,7 @@ export class DemoAPI {
             aura_points_earned: 5,
             total_aura_points: this.profile.aura_points,
             current_streak: this.profile.current_streak,
-            streak_multiplier: 1,
+            streak_multiplier: this.profile.streak_multiplier,
         };
     }
 

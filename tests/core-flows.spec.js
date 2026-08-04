@@ -102,6 +102,19 @@ test("reduced-motion users do not receive panel animations", async ({ page }) =>
     expect(durationSeconds).toBeLessThanOrEqual(0.001);
 });
 
+test("strict production CSP permits dynamic progress UI", async ({ page }) => {
+    const violations = [];
+    page.on("console", (message) => {
+        if (message.text().includes("Content Security Policy")) violations.push(message.text());
+    });
+    await page.goto("/app/?demo=1&locked=1");
+    await page.getByRole("button", { name: /sign in with a passkey/i }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.locator("#findClassmatesButton").click();
+    await expect(page.getByRole("dialog").getByText(/invite unlocks left today/)).toBeVisible();
+    expect(violations).toEqual([]);
+});
+
 test("android shell surfaces connectivity and install affordances", async ({ page, context }) => {
     await signInToDemo(page);
     await context.setOffline(true);
@@ -134,6 +147,18 @@ test("feed navigation, filtering, and upvotes work", async ({ page }) => {
     const upvote = page.locator("[data-upvote='9003']");
     await upvote.click();
     await expect(upvote).toHaveClass(/active/);
+});
+
+test("feed search includes classmates and filters their school activity", async ({ page }) => {
+    await signInToDemo(page);
+    await page.getByPlaceholder("Search names, questions...").fill("Maya");
+    await expect(page.locator("#anonymousInboxSection")).toBeHidden();
+    const classmateResult = page.locator("[data-feed-classmate='classmate-1']");
+    await expect(classmateResult).toContainText("Maya Chen");
+    await classmateResult.click();
+    await expect(page.getByRole("button", { name: "School", exact: true })).toHaveClass(/active/);
+    await expect(page.getByText("Who has the best music taste?")).toBeVisible();
+    await expect(page.getByText("Who is most likely to start a company?")).toBeHidden();
 });
 
 test("feed polls open the iOS-style detail and moderation flow", async ({ page }) => {
@@ -177,6 +202,12 @@ test("anonymous inbox supports private answers and safety controls", async ({ pa
     await expect(page.locator("#auraCount")).toHaveText("1,290");
     await answerDialog.getByRole("button", { name: "Close" }).click();
 
+    await page.getByRole("button", { name: /Maya Chen replied to you/ }).click();
+    const replyDialog = page.getByRole("dialog");
+    await expect(replyDialog.getByText("What always makes you laugh in class?")).toBeVisible();
+    await expect(replyDialog.getByText("Your impressions of our history teacher 😂")).toBeVisible();
+    await replyDialog.getByRole("button", { name: "Close" }).click();
+
     await page.getByRole("button", { name: /Who has been making school better lately/ }).click();
     page.once("dialog", (confirmation) => confirmation.accept());
     await page.getByRole("dialog").getByRole("button", { name: "Report" }).click();
@@ -187,6 +218,8 @@ test("anonymous inbox supports private answers and safety controls", async ({ pa
 test("play answers a poll and advances", async ({ page }) => {
     await signInToDemo(page);
     await page.getByRole("button", { name: "Play", exact: true }).click();
+    await expect(page.locator(".play-streak-chip")).toContainText("7");
+    await expect(page.locator(".play-streak-chip")).toContainText("1.5x");
     await expect(page.getByText("Who would survive longest on a deserted island?")).toBeVisible();
     await page.locator("[data-choice]").first().click();
     await expect(page.getByText("Who should plan the senior trip?")).toBeVisible();
@@ -262,6 +295,8 @@ test("classmate discovery is selected-contact only and never sends SMS", async (
     await page.locator("#findClassmatesButton").click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByText("No one will be texted.")).toBeVisible();
+    await expect(dialog.getByText(/0 \/ 3 qualifying/)).toBeVisible();
+    await expect(dialog.getByText(/2 invite unlocks left today/)).toBeVisible();
     await dialog.getByRole("button", { name: "Choose from contacts" }).click();
     await expect(dialog).toBeHidden();
     await expect(page.locator("#toast")).toContainText("Classmates are ready for Play");

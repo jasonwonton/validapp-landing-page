@@ -184,4 +184,6 @@ profile. Never leave the host overrides active during ordinary production
 debugging.
 
 Production order, iOS rollback gates, routing, and DDoS controls are documented
-in [PRODUCTION_DEPLOYMENT.md](PRODUCTION_DEPLOYMENT.md).
+in [PRODUCTION_DEPLOYMENT.md](PRODUCTION_DEPLOYMENT.md). The current Swift-to-web
+coverage and deliberate platform differences are recorded in
+[IOS_WEB_PARITY.md](IOS_WEB_PARITY.md).

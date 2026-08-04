@@ -10,6 +10,10 @@ const state = {
     feedType: "personal",
     myVotesOnly: false,
     feedSearch: "",
+    feedClassmateResults: [],
+    feedSearchTimer: null,
+    feedSearchGeneration: 0,
+    feedAppliedSearch: "",
     feedItems: [],
     feedOffset: 0,
     feedCursor: null,
@@ -373,6 +377,7 @@ function feedAvatar(item) {
 function renderFeed() {
     const list = $("#feedList");
     const query = state.feedSearch.trim().toLowerCase();
+    renderFeedClassmateResults();
     const visible = query ? state.feedItems.filter((item) => [item.question_text, item.voted_for_name, item.contact_name, item.voter_name].some((value) => String(value || "").toLowerCase().includes(query))) : state.feedItems;
     if (!visible.length) {
         const text = state.feedSearch ? "No matching votes." : state.myVotesOnly ? "You haven't voted yet. Answer questions in Play to see your votes here." : "No votes here yet. Play a few rounds and check back soon.";
@@ -393,6 +398,57 @@ function renderFeed() {
             <button class="upvote-button ${item.user_has_upvoted ? "active" : ""}" type="button" data-upvote="${item.question_answer_id}" aria-label="Upvote">${item.user_has_upvoted ? "♥" : "♡"}<span>${item.upvote_count || 0}</span></button>
         </article>`;
     }).join("");
+}
+
+function renderFeedClassmateResults() {
+    const container = $("#feedClassmateResults");
+    const query = state.feedSearch.trim();
+    if (query.length < 2 || !state.feedClassmateResults.length) {
+        container.classList.add("hidden");
+        container.innerHTML = "";
+        return;
+    }
+    container.innerHTML = `<div class="feed-search-section-heading"><span>CLASSMATES</span><small>${state.feedClassmateResults.length}</small></div><div class="feed-classmate-list">${state.feedClassmateResults.slice(0, 10).map((classmate) => `<button type="button" data-feed-classmate="${escapeHTML(classmate.user_id)}">${avatarMarkup(classmate, "row-avatar")}<span><strong>${escapeHTML(displayName(classmate))}</strong><small>${escapeHTML(formatGrade(classmate.grade || "Classmate"))}</small></span><span aria-hidden="true">›</span></button>`).join("")}</div>`;
+    container.classList.remove("hidden");
+}
+
+function selectFeedClassmate(classmateId) {
+    const classmate = state.feedClassmateResults.find((item) => String(item.user_id) === String(classmateId));
+    if (!classmate) return;
+    const name = displayName(classmate);
+    state.feedSearch = name;
+    $("#feedSearch").value = name;
+    state.feedType = "school";
+    state.myVotesOnly = false;
+    $$("[data-feed]").forEach((button) => button.classList.toggle("active", button.dataset.feed === "school"));
+    $("#myVotesFilter").classList.remove("hidden");
+    loadFeed(true);
+}
+
+function scheduleFeedSearch() {
+    clearTimeout(state.feedSearchTimer);
+    const query = state.feedSearch.trim();
+    const generation = ++state.feedSearchGeneration;
+    if (query.length < 2) {
+        state.feedClassmateResults = [];
+        renderFeed();
+        if (state.feedAppliedSearch) loadFeed(true);
+        return;
+    }
+    state.feedSearchTimer = setTimeout(async () => {
+        const classmates = (await api.getClassmates(api.user.id, query, 10).catch(() => []))
+            .filter((classmate) => displayName(classmate).toLowerCase().includes(query.toLowerCase()))
+            .sort((first, second) => {
+                const firstName = displayName(first).toLowerCase();
+                const secondName = displayName(second).toLowerCase();
+                return Number(secondName.startsWith(query.toLowerCase())) - Number(firstName.startsWith(query.toLowerCase())) || firstName.localeCompare(secondName);
+            })
+            .slice(0, 10);
+        if (generation !== state.feedSearchGeneration || query !== state.feedSearch.trim()) return;
+        state.feedClassmateResults = classmates;
+        renderFeedClassmateResults();
+        loadFeed(true);
+    }, 280);
 }
 
 function selectedFeedItem() {
@@ -477,7 +533,7 @@ function renderFeedGate() {
         <span class="feed-gate-lock" aria-hidden="true">🔒</span>
         <h3>Feed is locked</h3>
         <p>Answer a few polls to see what everyone is saying.</p>
-        <div class="feed-gate-progress"><span style="--feed-progress:${required ? Math.min(100, (cast / required) * 100) : 0}%"></span></div>
+        <progress class="feed-gate-progress" max="${Math.max(1, required)}" value="${Math.min(cast, Math.max(1, required))}" aria-label="Votes required to unlock Feed"></progress>
         <strong>${cast} / ${required} votes cast</strong>
         <button class="primary-button" type="button" data-vote-to-unlock>Vote now to unlock Feed</button>
     </article>`;
@@ -492,7 +548,7 @@ async function refreshFeedGateStatus() {
 
 function renderAnonymousInbox() {
     const section = $("#anonymousInboxSection");
-    if (state.feedType !== "personal" || !state.anonymousInbox) {
+    if (state.feedType !== "personal" || !state.anonymousInbox || state.feedSearch.trim()) {
         section.classList.add("hidden");
         return;
     }
@@ -509,13 +565,29 @@ function renderAnonymousInbox() {
         <span class="anonymous-row-copy"><strong>${escapeHTML(question.body)}</strong><small>${escapeHTML(question.provenance_label)} · ${escapeHTML(relativeTime(question.created_at))}</small></span>
         <span class="anonymous-row-state">${question.status === "answered" ? "Answered" : "›"}</span>
     </button>`).join("");
-    const answerRows = answers.slice(0, 2).map((answer) => `<article class="anonymous-reply-row">
+    const answerRows = answers.slice(0, 2).map((answer) => `<button class="anonymous-reply-row" type="button" data-anonymous-answer="${escapeHTML(answer.id)}">
         <span class="anonymous-row-icon reply" aria-hidden="true">↩</span>
-        <span class="anonymous-row-copy"><strong>${escapeHTML(answer.answer_text)}</strong><small>Reply from @${escapeHTML(answer.recipient_username)} · ${escapeHTML(relativeTime(answer.answered_at))}</small></span>
-    </article>`).join("");
+        <span class="anonymous-row-copy"><strong>${escapeHTML(answer.recipient_display_name)} replied to you</strong><small>${escapeHTML(answer.answer_text)} · ${escapeHTML(relativeTime(answer.answered_at))}</small></span>
+        <span class="anonymous-row-state" aria-hidden="true">›</span>
+    </button>`).join("");
     $("#anonymousInboxList").innerHTML = questionRows || answerRows
         ? `${questionRows}${answerRows}`
         : `<div class="anonymous-empty"><img src="../assets/app/anonymous.png" alt=""><span>No anonymous questions yet. Share your Ask me link from Profile.</span></div>`;
+}
+
+function openAnonymousAnswerDialog(answerId) {
+    const answer = state.anonymousInbox?.answers?.find((item) => String(item.id) === String(answerId));
+    if (!answer) return;
+    const avatarURL = api.assetURL(answer.recipient_profile_picture_url);
+    $("#anonymousAnswerRecipient").innerHTML = `${avatarMarkup({
+        first_name: answer.recipient_display_name,
+        username: answer.recipient_username,
+        profile_picture_url: avatarURL,
+    }, "anonymous-answer-avatar")}<span><strong>${escapeHTML(answer.recipient_display_name)} replied to you</strong><small>@${escapeHTML(answer.recipient_username)}</small></span>`;
+    $("#anonymousOriginalMessage").textContent = answer.question_body;
+    $("#anonymousReceivedReply").textContent = answer.answer_text;
+    $("#anonymousAnswerReceivedAt").textContent = relativeTime(answer.answered_at);
+    $("#anonymousAnswerDetailDialog").showModal();
 }
 
 async function loadAnonymousInbox() {
@@ -631,6 +703,8 @@ async function loadFeed(reset = false) {
     const generation = reset ? ++state.feedGeneration : state.feedGeneration;
     const feedType = state.feedType;
     const myVotesOnly = state.myVotesOnly;
+    const rawSearch = state.feedSearch.trim();
+    const search = rawSearch.length >= 2 ? rawSearch : "";
     if (reset) {
         state.feedItems = [];
         state.feedOffset = 0;
@@ -648,10 +722,12 @@ async function loadFeed(reset = false) {
     loadMore.classList.add("hidden");
     try {
         let items;
-        if (feedType === "personal") items = await api.getPersonalFeed(api.user.id, state.feedOffset);
+        if (feedType === "personal") items = await api.getPersonalFeed(api.user.id, state.feedOffset, search);
         else if (myVotesOnly) items = await api.getUserVotes(api.user.id, state.feedCursor);
-        else items = await api.getSchoolFeed(api.user.id, state.feedCursor);
-        if (generation !== state.feedGeneration || feedType !== state.feedType || myVotesOnly !== state.myVotesOnly) return;
+        else items = await api.getSchoolFeed(api.user.id, state.feedCursor, search);
+        const currentRawSearch = state.feedSearch.trim();
+        const currentSearch = currentRawSearch.length >= 2 ? currentRawSearch : "";
+        if (generation !== state.feedGeneration || feedType !== state.feedType || myVotesOnly !== state.myVotesOnly || search !== currentSearch) return;
         state.feedItems.push(...items);
         if (feedType === "personal") state.feedOffset += items.length;
         else if (items.length) {
@@ -659,6 +735,7 @@ async function loadFeed(reset = false) {
             state.feedCursor = { timestamp: last.timestamp, id: last.question_answer_id };
         }
         status.textContent = "";
+        state.feedAppliedSearch = search;
         renderFeed();
         loadMore.classList.toggle("hidden", items.length < 20);
     } catch (error) {
@@ -782,8 +859,11 @@ function renderPlay() {
     const artworkURL = api.assetURL(question.image_url);
     const attribution = question.is_user_submitted ? `<div class="question-attribution">${question.is_anonymous ? avatarMarkup({ first_name: "Anonymous", profile_picture_url: "../assets/app/anonymous.png" }, "attribution-avatar") : avatarMarkup({ first_name: question.submitted_by_name || "A classmate", profile_picture_url: question.submitted_by_avatar_url }, "attribution-avatar")}<span><small>Question submitted by</small><strong>${escapeHTML(question.is_anonymous ? "Someone at your school" : question.submitted_by_name || "A classmate")}</strong></span></div>` : "";
     const remainingSkips = Math.max(0, Number(state.config?.max_skips_per_set ?? 3) - state.skipsUsedInSet);
+    const currentStreak = Math.max(0, Number(state.profile?.current_streak || 0));
+    const streakMultiplier = Math.max(1, Number(state.profile?.streak_multiplier || 1));
     const safetyActions = question.is_user_submitted ? `<div class="play-safety-actions"><button type="button" data-play-question-action="report">Report question</button><button type="button" data-play-question-action="block">Block submitter</button></div>` : "";
     card.innerHTML = `<article class="play-card">
+        <div class="play-live-stats"><span class="play-streak-chip">🔥 <strong>${currentStreak}</strong>${streakMultiplier > 1 ? `<small>(${streakMultiplier.toFixed(1)}x)</small>` : ""}</span><span class="play-aura-chip"><img src="../assets/app/aura.png" alt=""><strong>${Number(state.profile?.aura_points || 0).toLocaleString()}</strong></span></div>
         <h3>${escapeHTML(question.question_text)}</h3>
         ${attribution}
         <div class="question-artwork">${artworkURL ? `<img src="${escapeHTML(artworkURL)}" alt="">` : `<div class="artwork-placeholder"><img src="../assets/app/pencil-clipboard.png" alt=""><span>Question artwork</span></div>`}</div>
@@ -883,6 +963,8 @@ async function nominateClassmate(candidateId) {
         });
         if (state.profile && Number.isFinite(Number(result.total_aura_points))) {
             state.profile.aura_points = Number(result.total_aura_points);
+            state.profile.current_streak = Math.max(0, Number(result.current_streak ?? state.profile.current_streak ?? 0));
+            state.profile.streak_multiplier = Math.max(1, Number(result.streak_multiplier ?? state.profile.streak_multiplier ?? 1));
             renderProfileHeader();
         }
         $("#nominationDialog").close();
@@ -903,7 +985,11 @@ async function answerPlayQuestion(choiceId) {
     const choices = choicesForQuestion(question);
     const selected = choices.find((choice) => String(choice.user_id) === choiceId);
     if (!selected) return;
-    $$(".choice-button").forEach((button) => { button.disabled = true; });
+    $$(".choice-button").forEach((button) => {
+        button.disabled = true;
+        button.classList.toggle("selected", button.dataset.choice === choiceId);
+    });
+    softHaptic();
     try {
         const result = await api.answerQuestion(api.user.id, {
             question_id: question.id,
@@ -915,10 +1001,11 @@ async function answerPlayQuestion(choiceId) {
         state.playAuraEarned += Math.max(0, Number(result.aura_points_earned || 0));
         if (state.profile && Number.isFinite(Number(result.total_aura_points))) {
             state.profile.aura_points = Number(result.total_aura_points);
+            state.profile.current_streak = Math.max(0, Number(result.current_streak ?? state.profile.current_streak ?? 0));
+            state.profile.streak_multiplier = Math.max(1, Number(result.streak_multiplier ?? state.profile.streak_multiplier ?? 1));
             renderProfileHeader();
         }
         showToast(`You picked ${displayName(selected)} ✨`);
-        softHaptic();
         state.questionIndex += 1;
         renderPlay();
         refreshProfile();
@@ -1215,12 +1302,33 @@ function contactsPickerSupported() {
     return demoMode || Boolean(navigator.contacts?.select);
 }
 
-function openClassmatesDialog() {
+function renderInviteRewardCard() {
+    const card = $("#inviteRewardCard");
+    const status = state.inviteStatus;
+    if (!status) {
+        card.classList.add("hidden");
+        return;
+    }
+    const goal = Math.max(1, Number(status.aura_reward_goal || 1));
+    const progress = Math.max(0, Math.min(goal, Number(status.aura_reward_progress || 0)));
+    const remaining = Math.max(0, Number(status.remaining || 0));
+    card.innerHTML = `<div><span class="eyebrow">INVITE REWARDS</span><strong>${status.aura_reward_max_reached ? "Reward complete" : `Get ${goal} friends to join · +${Number(status.aura_reward_amount || 0).toLocaleString()} aura`}</strong></div>
+        <progress class="invite-reward-progress" max="${goal}" value="${progress}" aria-label="Qualifying invites"></progress>
+        <small>${progress} / ${goal} qualifying · ${remaining} invite ${remaining === 1 ? "unlock" : "unlocks"} left today</small>`;
+    card.classList.remove("hidden");
+}
+
+async function openClassmatesDialog() {
     $("#classmatesStatus").textContent = contactsPickerSupported()
         ? ""
         : "This browser cannot open selected contacts. You can still share a private invite.";
     $("#chooseContactsButton").classList.toggle("hidden", !contactsPickerSupported());
+    renderInviteRewardCard();
     $("#classmatesDialog").showModal();
+    try {
+        state.inviteStatus = await api.getInviteStatus(api.user.id);
+        renderInviteRewardCard();
+    } catch (_) { /* Contact discovery remains usable when rewards are unavailable. */ }
 }
 
 function contactPayload(selectedContacts) {
@@ -1287,6 +1395,8 @@ async function shareClassmateInvite() {
         if (error.name !== "AbortError") $("#classmatesStatus").textContent = error.message || "Could not create an invite.";
     } finally {
         setButtonLoading(button, false);
+        state.inviteStatus = await api.getInviteStatus(api.user.id).catch(() => state.inviteStatus);
+        renderInviteRewardCard();
     }
 }
 
@@ -1398,7 +1508,17 @@ function bindEvents() {
         event.currentTarget.textContent = `${state.myVotesOnly ? "✓" : "○"} My Votes`;
         loadFeed(true);
     });
-    $("#feedSearch").addEventListener("input", (event) => { state.feedSearch = event.currentTarget.value; renderFeed(); });
+    $("#feedSearch").addEventListener("input", (event) => {
+        state.feedSearch = event.currentTarget.value;
+        state.feedClassmateResults = [];
+        renderAnonymousInbox();
+        renderFeed();
+        scheduleFeedSearch();
+    });
+    $("#feedClassmateResults").addEventListener("click", (event) => {
+        const classmate = event.target.closest("[data-feed-classmate]");
+        if (classmate) selectFeedClassmate(classmate.dataset.feedClassmate);
+    });
     $("#loadMoreFeed").addEventListener("click", () => loadFeed(false));
     $("#feedList").addEventListener("click", (event) => {
         const upvote = event.target.closest("[data-upvote]");
@@ -1422,7 +1542,9 @@ function bindEvents() {
     $("#feedGateLock").addEventListener("click", (event) => { if (event.target.closest("[data-vote-to-unlock]")) switchPanel("play"); });
     $("#anonymousInboxList").addEventListener("click", (event) => {
         const question = event.target.closest("[data-anonymous-question]");
+        const answer = event.target.closest("[data-anonymous-answer]");
         if (question) openAnonymousQuestionDialog(question.dataset.anonymousQuestion);
+        if (answer) openAnonymousAnswerDialog(answer.dataset.anonymousAnswer);
     });
     $("#anonymousAnswerForm").addEventListener("submit", answerAnonymousQuestion);
     $("#anonymousQuestionDialog").addEventListener("click", (event) => {

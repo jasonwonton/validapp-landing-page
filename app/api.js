@@ -173,14 +173,17 @@ export class ValidAPI {
         return this.request(`/users/${userId}/top-questions?${params}`);
     }
 
-    getPersonalFeed(userId, offset = 0) {
-        return this.request(`/users/${userId}/feed?limit=20&offset=${offset}`);
+    getPersonalFeed(userId, offset = 0, search = "") {
+        const params = new URLSearchParams({ limit: "20", offset: String(offset) });
+        if (search.trim()) params.set("search", search.trim());
+        return this.request(`/users/${userId}/feed?${params}`);
     }
 
-    getSchoolFeed(userId, cursor = null) {
+    getSchoolFeed(userId, cursor = null, search = "") {
         const params = new URLSearchParams({ limit: "20" });
         if (cursor?.timestamp) params.set("before_ts", cursor.timestamp);
         if (cursor?.id) params.set("before_id", String(cursor.id));
+        if (search.trim()) params.set("search", search.trim());
         return this.request(`/users/${userId}/feed/school?${params}`);
     }
 
@@ -212,8 +215,10 @@ export class ValidAPI {
         return this.request("/config", { auth: false });
     }
 
-    getClassmates(userId) {
-        return this.request(`/users/${userId}/classmates?limit=500`);
+    getClassmates(userId, search = "", limit = 500) {
+        const params = new URLSearchParams({ limit: String(limit) });
+        if (search.trim()) params.set("search", search.trim());
+        return this.request(`/users/${userId}/classmates?${params}`);
     }
 
     getClassmatesStatus(userId) {
