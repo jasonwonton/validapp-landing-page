@@ -42,11 +42,26 @@ export class ValidAPI {
             headers.set("Authorization", `Bearer ${this.token}`);
         }
 
-        const response = await fetch(`${this.baseURL}${path}`, {
-            ...options,
-            headers,
-            credentials: "omit",
-        });
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), options.timeoutMs || 15_000);
+        if (options.signal) {
+            if (options.signal.aborted) controller.abort();
+            else options.signal.addEventListener("abort", () => controller.abort(), { once: true });
+        }
+        let response;
+        try {
+            response = await fetch(`${this.baseURL}${path}`, {
+                ...options,
+                headers,
+                signal: controller.signal,
+                credentials: "omit",
+            });
+        } catch (error) {
+            if (error.name === "AbortError") throw new APIError("That request took too long. Check your connection and try again.", 408);
+            throw new APIError("Could not reach Valid. Check your connection and try again.", 0);
+        } finally {
+            clearTimeout(timeout);
+        }
 
         const contentType = response.headers.get("content-type") || "";
         const payload = contentType.includes("application/json")
@@ -89,6 +104,30 @@ export class ValidAPI {
         });
     }
 
+    getWebSignupChallenge(username) {
+        return this.request("/auth/passkey/signup/challenge", {
+            method: "POST",
+            auth: false,
+            body: JSON.stringify({ username }),
+        });
+    }
+
+    completeWebSignup(payload) {
+        return this.request("/auth/passkey/signup/complete", {
+            method: "POST",
+            auth: false,
+            body: JSON.stringify(payload),
+        });
+    }
+
+    resolveSchool(payload) {
+        return this.request("/highschools/request", {
+            method: "POST",
+            auth: false,
+            body: JSON.stringify(payload),
+        });
+    }
+
     logout() {
         return this.request("/auth/logout", { method: "POST" });
     }
@@ -124,12 +163,36 @@ export class ValidAPI {
         return this.request(`/users/${userId}/feed/upvote/${questionAnswerId}`, { method: "POST" });
     }
 
+    reportQuestion(userId, questionId, reason = "inappropriate") {
+        const params = new URLSearchParams({ reason });
+        return this.request(`/users/${userId}/questions/${questionId}/report-question?${params}`, { method: "POST" });
+    }
+
+    blockQuestionSubmitter(userId, questionId) {
+        return this.request(`/users/${userId}/questions/${questionId}/block-submitter`, { method: "POST" });
+    }
+
     getPlayQuestions(userId) {
         return this.request(`/users/${userId}/questions/unanswered`);
     }
 
+    getConfig() {
+        return this.request("/config", { auth: false });
+    }
+
     getClassmates(userId) {
         return this.request(`/users/${userId}/classmates?limit=500`);
+    }
+
+    getClassmatesStatus(userId) {
+        return this.request(`/users/${userId}/classmates/status`);
+    }
+
+    addContacts(userId, contacts) {
+        return this.request(`/users/${userId}/contacts`, {
+            method: "POST",
+            body: JSON.stringify(contacts),
+        });
     }
 
     answerQuestion(userId, payload) {
@@ -204,6 +267,42 @@ export class ValidAPI {
             method: "POST",
             body: JSON.stringify({ platform }),
         });
+    }
+
+    getAnonymousInbox(userId, limit = 30, offset = 0) {
+        const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+        return this.request(`/users/${userId}/anonymous-inbox?${params}`);
+    }
+
+    openAnonymousQuestion(userId, questionId) {
+        return this.request(`/users/${userId}/anonymous-questions/${questionId}/open`, { method: "POST" });
+    }
+
+    answerAnonymousQuestion(userId, questionId, answerText) {
+        return this.request(`/users/${userId}/anonymous-questions/${questionId}/answer`, {
+            method: "POST",
+            body: JSON.stringify({ answer_text: answerText }),
+        });
+    }
+
+    reportAnonymousQuestion(userId, questionId) {
+        return this.request(`/users/${userId}/anonymous-questions/${questionId}/report`, { method: "POST" });
+    }
+
+    blockAnonymousQuestion(userId, questionId) {
+        return this.request(`/users/${userId}/anonymous-questions/${questionId}/block`, { method: "POST" });
+    }
+
+    deleteAnonymousQuestion(userId, questionId) {
+        return this.request(`/users/${userId}/anonymous-questions/${questionId}`, { method: "DELETE" });
+    }
+
+    requestAccountDeletion(userId) {
+        return this.request(`/users/${userId}/delete`, { method: "POST" });
+    }
+
+    cancelAccountDeletion(userId) {
+        return this.request(`/users/${userId}/delete/cancel`, { method: "POST" });
     }
 
 }

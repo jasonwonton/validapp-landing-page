@@ -1,0 +1,12 @@
+{
+  "name": "validapp-landing-page",
+  "private": true,
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:update": "playwright test --update-snapshots",
+    "test:production": "node scripts/check-production.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
+  }
+}

@@ -20,6 +20,8 @@ export class DemoAPI {
         assertLocalDemo();
         this.token = null;
         this.user = null;
+        this.deletionRequestedAt = null;
+        this.feedVotesCast = new URLSearchParams(window.location.search).get("locked") === "1" ? 1 : 3;
         this.profile = {
             user_id: "demo-user",
             first_name: "Jules",
@@ -62,6 +64,10 @@ export class DemoAPI {
                 voted_for_name: "Jules",
                 voter_gender: "female",
                 voter_grade: "Sophomore",
+                selected_contact_name: "Jules Rivera",
+                presented_options: [
+                    { name: "Jules Rivera" }, { name: "Maya Chen" }, { name: "Noah Williams" }, { name: "Ava Patel" },
+                ],
                 upvote_count: 12,
                 user_has_upvoted: false,
             },
@@ -74,6 +80,10 @@ export class DemoAPI {
                 voted_for_name: "Jules",
                 voter_gender: "male",
                 voter_grade: "Senior",
+                selected_contact_name: "Jules Rivera",
+                presented_options: [
+                    { name: "Jules Rivera" }, { name: "Eli Brooks" }, { name: "Sofia Kim" }, { name: "Mateo Lee" },
+                ],
                 upvote_count: 7,
                 user_has_upvoted: true,
             },
@@ -89,6 +99,10 @@ export class DemoAPI {
                 voted_for_profile_picture_url: "../assets/app/anonymous.png",
                 voter_gender: "female",
                 voter_grade: "Junior",
+                selected_contact_name: "Maya Chen",
+                presented_options: [
+                    { name: "Maya Chen" }, { name: "Jules Rivera" }, { name: "Noah Williams" }, { name: "Ava Patel" },
+                ],
                 upvote_count: 19,
                 user_has_upvoted: false,
             },
@@ -103,6 +117,10 @@ export class DemoAPI {
                 voter_gender: "male",
                 voter_grade: "Sophomore",
                 current_user_voted: true,
+                selected_contact_name: "Noah Williams",
+                presented_options: [
+                    { name: "Noah Williams" }, { name: "Jules Rivera" }, { name: "Sofia Kim" }, { name: "Mateo Lee" },
+                ],
                 upvote_count: 5,
                 user_has_upvoted: false,
             },
@@ -126,6 +144,39 @@ export class DemoAPI {
             share_url: "https://validapp.lol/a/jules-demo",
             is_active: true,
         };
+        this.anonymousInbox = {
+            questions: [
+                {
+                    id: "ask-demo-1",
+                    body: "What is something you are genuinely proud of this year?",
+                    sender_type: "guest",
+                    provenance_label: "Fully anonymous guest",
+                    provenance_detail: "Valid does not show you who sent this.",
+                    source_platform: "instagram",
+                    status: "received",
+                    created_at: ago(18),
+                    opened_at: null,
+                    answered_at: null,
+                    answer_text: null,
+                    aura_points_earned: 0,
+                },
+                {
+                    id: "ask-demo-2",
+                    body: "Who has been making school better lately?",
+                    sender_type: "valid_member",
+                    provenance_label: "From a Valid member",
+                    provenance_detail: "Their identity always stays private.",
+                    source_platform: null,
+                    status: "received",
+                    created_at: ago(144),
+                    opened_at: ago(120),
+                    answered_at: null,
+                    answer_text: null,
+                    aura_points_earned: 0,
+                },
+            ],
+            answers: [],
+        };
     }
 
     hasSession() {
@@ -136,8 +187,20 @@ export class DemoAPI {
         assertLocalDemo();
         return {
             access_token: "local-demo-memory-only",
-            user: { id: "demo-user" },
+            user: { id: "demo-user", deletion_requested_at: this.deletionRequestedAt },
         };
+    }
+
+    async resolveSchool(payload) {
+        return { school: { id: 77, name: payload.school_name, city: payload.city, state: payload.state } };
+    }
+
+    async demoSignup(payload) {
+        Object.assign(this.profile, payload.profile, {
+            user_id: "demo-user",
+            school_name: payload.school_name,
+        });
+        return { access_token: "local-demo-memory-only", user: { id: "demo-user" }, profile: this.profile };
     }
 
     saveSession(loginResponse) {
@@ -191,17 +254,54 @@ export class DemoAPI {
         return { was_added: item.user_has_upvoted };
     }
 
+    async reportQuestion(_userId, questionId) {
+        this.personalFeed = this.personalFeed.filter((item) => item.question_id !== questionId);
+        this.schoolFeed = this.schoolFeed.filter((item) => item.question_id !== questionId);
+        return { message: "Report submitted successfully" };
+    }
+
+    async blockQuestionSubmitter(_userId, questionId) {
+        return this.reportQuestion(_userId, questionId);
+    }
+
     async getPlayQuestions() {
         return { questions: this.questions.map((question) => ({ ...question })) };
+    }
+
+    async getConfig() {
+        return { nomination_aura_cost: 100 };
     }
 
     async getClassmates() {
         return this.classmates.map((classmate) => ({ ...classmate }));
     }
 
+    async getClassmatesStatus() {
+        return {
+            is_unlocked: this.feedVotesCast >= 3,
+            lock_reasons: this.feedVotesCast >= 3 ? [] : ["votes"],
+            total_classmates: this.classmates.length,
+            joined_users: this.classmates.length,
+            required_joined_users: 4,
+            votes_cast: this.feedVotesCast,
+            required_votes: 3,
+        };
+    }
+
+    async addContacts(_userId, contacts) {
+        return contacts.map((contact) => ({ ...contact, is_six7_user: false }));
+    }
+
     async answerQuestion() {
+        this.feedVotesCast = Math.min(3, this.feedVotesCast + 1);
         this.profile.aura_points += 5;
-        return { id: crypto.randomUUID() };
+        return {
+            id: crypto.randomUUID(),
+            aura_points_earned: 5,
+            total_aura_points: this.profile.aura_points,
+            current_streak: this.profile.current_streak,
+            streak_multiplier: 1,
+        };
     }
 
     async skipQuestion() {
@@ -262,6 +362,58 @@ export class DemoAPI {
 
     async trackAskShare() {
         return { status: "tracked" };
+    }
+
+    async getAnonymousInbox() {
+        return structuredClone(this.anonymousInbox);
+    }
+
+    async openAnonymousQuestion(_userId, questionId) {
+        const question = this.anonymousInbox.questions.find((item) => item.id === questionId);
+        if (!question) throw new Error("Question not found");
+        question.opened_at ||= new Date().toISOString();
+        return { ...question };
+    }
+
+    async answerAnonymousQuestion(_userId, questionId, answerText) {
+        const question = this.anonymousInbox.questions.find((item) => item.id === questionId);
+        if (!question) throw new Error("Question not found");
+        question.status = "answered";
+        question.answer_text = answerText;
+        question.answered_at = new Date().toISOString();
+        question.aura_points_earned = 10;
+        this.profile.aura_points += 10;
+        return { ...question };
+    }
+
+    async reportAnonymousQuestion(_userId, questionId) {
+        this.anonymousInbox.questions = this.anonymousInbox.questions.filter((item) => item.id !== questionId);
+    }
+
+    async blockAnonymousQuestion(_userId, questionId) {
+        this.anonymousInbox.questions = this.anonymousInbox.questions.filter((item) => item.id !== questionId);
+    }
+
+    async deleteAnonymousQuestion(_userId, questionId) {
+        this.anonymousInbox.questions = this.anonymousInbox.questions.filter((item) => item.id !== questionId);
+    }
+
+    async requestAccountDeletion() {
+        const requestedAt = new Date();
+        const scheduledFor = new Date(requestedAt.getTime() + 5 * 86_400_000);
+        this.deletionRequestedAt = requestedAt.toISOString();
+        this.user.deletion_requested_at = this.deletionRequestedAt;
+        return {
+            message: "Account deletion scheduled.",
+            requested_at: requestedAt.toISOString(),
+            scheduled_for: scheduledFor.toISOString(),
+        };
+    }
+
+    async cancelAccountDeletion() {
+        this.deletionRequestedAt = null;
+        this.user.deletion_requested_at = null;
+        return { message: "Account deletion cancelled." };
     }
 
 }
