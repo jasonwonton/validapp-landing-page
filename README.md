@@ -182,8 +182,9 @@ On current Android Chrome (and once in desktop Chrome), verify:
 3. Switch Inbox/School feeds, search, open a poll, upvote, report, and block.
 4. Complete a Play set, shuffle, nominate, use all three skips, and watch the
    cooldown unlock without a page refresh.
-5. Edit Profile, share/rotate the Ask link, submit an aura-confirmed question,
-   and verify an ambiguous retry cannot double-charge.
+5. Edit Profile, browse/search classmates, share/rotate the Ask link, submit an
+   aura-confirmed question, and verify an ambiguous retry cannot double-charge.
+   On a God Mode account, reveal one sender and confirm the weekly balance drops.
 6. Use the browser Contact Picker. Confirm only selected contacts are uploaded
    and no message or SMS is sent.
 7. Answer/report/block/delete an anonymous Inbox item.

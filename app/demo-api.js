@@ -21,6 +21,7 @@ export class DemoAPI {
         this.token = null;
         this.user = null;
         this.deletionRequestedAt = null;
+        this.demoGodMode = new URLSearchParams(window.location.search).get("godmode") === "1";
         this.feedVotesCast = new URLSearchParams(window.location.search).get("locked") === "1" ? 1 : 3;
         this.profile = {
             user_id: "demo-user",
@@ -33,6 +34,8 @@ export class DemoAPI {
             gender: "female",
             bio: "Trying to make senior year unforgettable ✨",
             aura_points: 1280,
+            remaining_reveals: this.demoGodMode ? 3 : 0,
+            god_mode_aura_multiplier: 2,
             vote_count: 84,
             weekly_vote_count: 16,
             current_streak: 7,
@@ -133,12 +136,12 @@ export class DemoAPI {
             { id: 204, question_text: "Who is secretly the funniest person here?", image_url: "../assets/AppIconV2.png" },
         ];
         this.classmates = [
-            { user_id: "classmate-1", first_name: "Maya", last_name: "Chen", profile_picture_url: "../assets/app/anonymous.png" },
-            { user_id: "classmate-2", first_name: "Noah", last_name: "Williams", profile_picture_url: "../assets/app/lock.png" },
-            { user_id: "classmate-3", first_name: "Ava", last_name: "Patel", profile_picture_url: "../assets/app/pencil-clipboard.png" },
-            { user_id: "classmate-4", first_name: "Eli", last_name: "Brooks", profile_picture_url: "../assets/AppIconV2.png" },
-            { user_id: "classmate-5", first_name: "Sofia", last_name: "Kim", profile_picture_url: "../assets/app/aura.png" },
-            { user_id: "classmate-6", first_name: "Mateo", last_name: "Lee", profile_picture_url: "../assets/valid_logo.png" },
+            { user_id: "classmate-1", first_name: "Maya", last_name: "Chen", username: "maya_c", grade: "Senior", school_name: "Westview High School", bio: "Student council and bad puns.", vote_count: 61, profile_picture_url: "../assets/app/anonymous.png" },
+            { user_id: "classmate-2", first_name: "Noah", last_name: "Williams", username: "noahw", grade: "Sophomore", school_name: "Westview High School", vote_count: 44, profile_picture_url: "../assets/app/lock.png" },
+            { user_id: "classmate-3", first_name: "Ava", last_name: "Patel", username: "avap", grade: "Junior", school_name: "Westview High School", vote_count: 39, profile_picture_url: "../assets/app/pencil-clipboard.png" },
+            { user_id: "classmate-4", first_name: "Eli", last_name: "Brooks", username: "elib", grade: "Junior", school_name: "Westview High School", vote_count: 31, profile_picture_url: "../assets/AppIconV2.png" },
+            { user_id: "classmate-5", first_name: "Sofia", last_name: "Kim", username: "sofiak", grade: "Freshman", school_name: "Westview High School", vote_count: 27, profile_picture_url: "../assets/app/aura.png" },
+            { user_id: "classmate-6", first_name: "Mateo", last_name: "Lee", username: "mateol", grade: "Senior", school_name: "Westview High School", vote_count: 24, profile_picture_url: "../assets/valid_logo.png" },
         ];
         this.inviteStatus = { limit: 3, sent_today: 1, remaining: 2, next_reset_at: ago(-720), qualifying_invites: 0, aura_reward_progress: 0, aura_reward_goal: 3, aura_reward_amount: 50, aura_rewards_claimed: 0, aura_rewards_max: 1, aura_reward_max_reached: false };
         this.askLink = {
@@ -198,7 +201,7 @@ export class DemoAPI {
         assertLocalDemo();
         return {
             access_token: "local-demo-memory-only",
-            user: { id: "demo-user", deletion_requested_at: this.deletionRequestedAt },
+            user: { id: "demo-user", subscribed_user: this.demoGodMode, remaining_reveals: this.profile.remaining_reveals, deletion_requested_at: this.deletionRequestedAt },
         };
     }
 
@@ -237,8 +240,16 @@ export class DemoAPI {
         }
     }
 
-    async getProfile() {
+    async getProfile(userId = "demo-user") {
+        if (userId !== "demo-user") {
+            const classmate = this.classmates.find((candidate) => candidate.user_id === userId);
+            if (classmate) return { ...classmate };
+        }
         return { ...this.profile };
+    }
+
+    async getUser() {
+        return { ...this.user };
     }
 
     async getTopQuestions(_userId, period = "weekly", limit = 10) {
@@ -265,6 +276,22 @@ export class DemoAPI {
         return { was_added: item.user_has_upvoted };
     }
 
+    async revealSender(_userId, answerId) {
+        const item = this.personalFeed.find((candidate) => candidate.question_answer_id === answerId);
+        if (!this.demoGodMode || !item) throw new Error("God Mode subscription required for reveals.");
+        item.voter_name = "Maya Chen";
+        item.voter_profile_picture_url = "../assets/app/anonymous.png";
+        if (this.profile.remaining_reveals > 0) this.profile.remaining_reveals -= 1;
+        else this.profile.aura_points -= 200;
+        return {
+            question_answer_id: answerId,
+            full_name: item.voter_name,
+            profile_picture_url: item.voter_profile_picture_url,
+            remaining_reveals: this.profile.remaining_reveals,
+            total_aura_points: this.profile.aura_points,
+        };
+    }
+
     async reportQuestion(_userId, questionId) {
         this.personalFeed = this.personalFeed.filter((item) => item.question_id !== questionId);
         this.schoolFeed = this.schoolFeed.filter((item) => item.question_id !== questionId);
@@ -286,6 +313,7 @@ export class DemoAPI {
             max_custom_question_length: 280,
             max_skips_per_set: 3,
             play_lock_time_seconds: 60,
+            full_reveal_aura_cost: 200,
         };
     }
 

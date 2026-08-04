@@ -168,6 +168,10 @@ export class ValidAPI {
         return this.request(`/users/${userId}/profile`);
     }
 
+    getUser(userId) {
+        return this.request(`/users/${userId}`);
+    }
+
     getTopQuestions(userId, period = "weekly", limit = 10) {
         const params = new URLSearchParams({ period, limit: String(limit) });
         return this.request(`/users/${userId}/top-questions?${params}`);
@@ -196,6 +200,10 @@ export class ValidAPI {
 
     toggleUpvote(userId, questionAnswerId) {
         return this.request(`/users/${userId}/feed/upvote/${questionAnswerId}`, { method: "POST" });
+    }
+
+    revealSender(userId, questionAnswerId) {
+        return this.request(`/users/${userId}/reveals/${questionAnswerId}`, { method: "POST" });
     }
 
     reportQuestion(userId, questionId, reason = "inappropriate") {

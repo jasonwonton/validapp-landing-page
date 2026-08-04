@@ -19,7 +19,8 @@ python3 -m http.server 4173
 ```
 
 Open `http://127.0.0.1:4173/app/?demo=1`. Add `&locked=1` to exercise the
-iOS-style vote-to-unlock Feed state. Test Feed and School switching,
+iOS-style vote-to-unlock Feed state, or `&godmode=1` to exercise an active God
+Mode entitlement and sender reveals. Test Feed and School switching,
 anonymous Inbox answer/report/block/delete, a complete Play set, shuffle and
 nomination, the three-skip limit and live cooldown, profile editing, Ask me link
 controls, aura-confirmed/idempotent question submission, optional onboarding
@@ -76,7 +77,9 @@ On an actual Android phone in current Chrome:
 2. Close the tab, return, and sign in with the same passkey.
 3. Install Valid from Profile, launch it from the home screen, and exercise Feed,
    Play, Profile, selected-contact discovery, invites, question submission, and
-   the anonymous Inbox. Confirm Play enforces three skips and its cooldown
+   the anonymous Inbox. Browse/search classmates and open one public classmate
+   profile. If the account has God Mode, reveal a sender and confirm its weekly
+   reveal balance decrements. Confirm Play enforces three skips and its cooldown
    unlocks without a refresh. Confirm question submission shows the server aura
    cost and safely checks an ambiguous submission without charging twice.
    Confirm contact selection sends no message or SMS.

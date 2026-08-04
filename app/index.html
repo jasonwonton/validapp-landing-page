@@ -104,8 +104,13 @@
                 </div>
                 <div id="profileStatus" class="inline-status" role="status"></div>
                 <div id="profileCard"></div>
+                <section id="godModeSection" class="profile-polls-section" aria-labelledby="godModeHeading">
+                    <h3 id="godModeHeading">God Mode</h3>
+                    <div id="godModeCard"></div>
+                </section>
                 <section class="profile-actions" aria-label="Profile actions">
                     <button id="editProfileButton" class="settings-row" type="button"><span class="settings-icon" aria-hidden="true">✎</span><span><strong>Edit profile</strong><small>Photo, bio and profile information</small></span><span aria-hidden="true">›</span></button>
+                    <button id="viewClassmatesButton" class="settings-row" type="button"><span class="settings-icon" aria-hidden="true">◉</span><span><strong>View classmates</strong><small>Browse people at your school</small></span><span aria-hidden="true">›</span></button>
                     <button id="findClassmatesButton" class="settings-row" type="button"><span class="settings-icon" aria-hidden="true">♧</span><span><strong>Find classmates</strong><small>Choose contacts or share your invite</small></span><span aria-hidden="true">›</span></button>
                     <button id="profileSubmitQuestion" class="settings-row" type="button"><img src="../assets/app/pencil-clipboard.png" alt=""><span><strong>Submit a school question</strong><small>Create a poll for your school</small></span><span aria-hidden="true">›</span></button>
                 </section>
@@ -194,6 +199,7 @@
             <div id="feedDetailBody"></div>
             <p id="feedDetailStatus" class="status-message" role="status"></p>
             <div class="feed-detail-actions">
+                <button id="revealFeedSenderButton" class="secondary-button reveal-sender-button hidden" type="button">Reveal sender</button>
                 <button class="primary-button" type="button" data-share-feed-item>Share poll</button>
                 <button class="secondary-button danger-row" type="button" data-report-feed-item>Report question</button>
                 <button id="blockFeedSubmitterButton" class="secondary-button danger-row hidden" type="button" data-block-feed-submitter>Block submitter</button>
@@ -285,6 +291,30 @@
             <button id="chooseContactsButton" class="primary-button" type="button">Choose from contacts</button>
             <button id="shareClassmateInviteButton" class="secondary-button" type="button">Share my invite instead</button>
             <p class="fine-print">Your browser never gives Valid your whole address book. On unsupported browsers, use a private invite link instead.</p>
+        </div>
+    </dialog>
+
+    <dialog id="classmateDirectoryDialog" class="modal">
+        <div class="classmate-directory-content">
+            <div class="modal-heading">
+                <div><span class="eyebrow">YOUR SCHOOL</span><h2>Classmates</h2></div>
+                <button class="icon-button" aria-label="Close" type="button" data-close-dialog>×</button>
+            </div>
+            <label class="feed-search classmate-directory-search"><span aria-hidden="true">⌕</span><input id="classmateDirectorySearch" type="search" placeholder="Search classmates..." autocomplete="off"></label>
+            <p id="classmateDirectoryStatus" class="status-message" role="status"></p>
+            <div id="classmateDirectoryList" class="classmate-directory-list"></div>
+        </div>
+    </dialog>
+
+    <dialog id="classmateProfileDialog" class="modal">
+        <div class="classmate-profile-content">
+            <div class="modal-heading">
+                <div><span class="eyebrow">CLASSMATE PROFILE</span><h2>Profile</h2></div>
+                <button class="icon-button" aria-label="Close" type="button" data-close-dialog>×</button>
+            </div>
+            <div id="classmateProfileStatus" class="status-message" role="status"></div>
+            <div id="classmateProfileCard"></div>
+            <button id="backToClassmatesButton" class="secondary-button" type="button">Back to classmates</button>
         </div>
     </dialog>
 

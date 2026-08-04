@@ -27,12 +27,14 @@ test("real adapter sends bounded, encoded unified-search queries", async ({ page
             api.getClassmates(userId, "Maya Chen", 10),
             api.getPersonalFeed(userId, 0, "Maya Chen"),
             api.getSchoolFeed(userId, null, "Maya Chen"),
+            api.revealSender(userId, 9001),
         ]);
     }, USER_ID);
     expect(urls.map((url) => `${url.pathname}${url.search}`).sort()).toEqual([
         `/api/v1/users/${USER_ID}/classmates?limit=10&search=Maya+Chen`,
         `/api/v1/users/${USER_ID}/feed/school?limit=20&search=Maya+Chen`,
         `/api/v1/users/${USER_ID}/feed?limit=20&offset=0&search=Maya+Chen`,
+        `/api/v1/users/${USER_ID}/reveals/9001`,
     ].sort());
 });
 
@@ -118,7 +120,7 @@ async function interceptProductionAPI(page, { signup = false, profileAura = 500,
             });
         }
         if (path === "/api/v1/auth/passkey/authenticate") {
-            return fulfill({ access_token: "session-token", user: { id: USER_ID } });
+            return fulfill({ access_token: "session-token", user: { id: USER_ID, subscribed_user: false } });
         }
         if (path === "/api/v1/highschools/request") {
             return fulfill({ school: { id: 77, name: body.school_name, city: body.city, state: body.state } });
@@ -133,9 +135,13 @@ async function interceptProductionAPI(page, { signup = false, profileAura = 500,
             });
         }
         if (path === "/api/v1/auth/passkey/signup/complete") {
-            return fulfill({ access_token: "session-token", user: { id: USER_ID }, profile: profile("Taylor", profileAura) });
+            return fulfill({ access_token: "session-token", user: { id: USER_ID, subscribed_user: false }, profile: profile("Taylor", profileAura) });
         }
+        if (path === `/api/v1/users/${USER_ID}`) return fulfill({ id: USER_ID, subscribed_user: false });
         if (path === `/api/v1/users/${USER_ID}/profile`) return fulfill(profile(signup ? "Taylor" : "Jordan", profileAura));
+        if (path === "/api/v1/users/21111111-1111-1111-1111-111111111111/profile") {
+            return fulfill({ ...profile("Maya", 0), user_id: "21111111-1111-1111-1111-111111111111", last_name: "Chen", username: "maya_c", bio: "Student council and bad puns.", vote_count: 61 });
+        }
         if (path === `/api/v1/users/${USER_ID}/classmates/status`) {
             return fulfill({ is_unlocked: true, lock_reasons: [], votes_cast: 3, required_votes: 3 });
         }
@@ -306,6 +312,14 @@ test("real adapter submits a Play vote and multipart school question", async ({ 
     expect(vote.body.presented_options).toHaveLength(4);
 
     await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: "View classmates" }).click();
+    const directory = page.getByRole("dialog").filter({ hasText: "YOUR SCHOOL" });
+    await directory.getByRole("button", { name: /Maya Chen/ }).click();
+    const classmateProfile = page.getByRole("dialog").filter({ hasText: "CLASSMATE PROFILE" });
+    await expect(classmateProfile.getByRole("heading", { name: "Maya Chen" })).toBeVisible();
+    await expect.poll(() => requests.some((request) => request.path.endsWith("21111111-1111-1111-1111-111111111111/profile"))).toBe(true);
+    await classmateProfile.getByRole("button", { name: "Back to classmates" }).click();
+    await directory.getByRole("button", { name: "Close" }).click();
     await page.getByRole("button", { name: /Submit a school question/i }).click();
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("What should your school vote on?").fill("Who makes everyone feel included?");

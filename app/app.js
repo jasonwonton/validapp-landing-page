@@ -39,6 +39,8 @@ const state = {
     anonymousInboxGeneration: 0,
     topQuestionsWeekly: null,
     topQuestionsAllTime: null,
+    classmateDirectory: null,
+    selectedClassmateProfile: null,
     signupStep: 0,
     installPrompt: null,
 };
@@ -116,8 +118,9 @@ async function showSignedIn() {
     $("#bottomNav").classList.remove("hidden");
     $("#logoutButton").classList.remove("hidden");
     try {
-        const [profile, classmatesStatus, config] = await Promise.all([
+        const [profile, currentUser, classmatesStatus, config] = await Promise.all([
             api.getProfile(api.user.id),
+            api.getUser(api.user.id).catch(() => api.user),
             api.getClassmatesStatus(api.user.id).catch(() => null),
             api.getConfig().catch(() => ({
                 nomination_aura_cost: 100,
@@ -125,8 +128,10 @@ async function showSignedIn() {
                 max_custom_question_length: 280,
                 max_skips_per_set: 3,
                 play_lock_time_seconds: 60,
+                full_reveal_aura_cost: 200,
             })),
         ]);
+        api.user = { ...api.user, ...currentUser };
         state.profile = profile;
         state.classmatesStatus = classmatesStatus;
         state.config = config;
@@ -204,6 +209,84 @@ function renderProfilePanel() {
     </article>`;
     renderProfilePolls($("#weeklyPolls"), state.topQuestionsWeekly, "No polls this week yet");
     renderProfilePolls($("#allTimePolls"), state.topQuestionsAllTime, "No polls yet");
+    renderGodModeCard();
+}
+
+function renderGodModeCard() {
+    const active = api.user?.subscribed_user === true;
+    const multiplier = Math.max(1, Number(state.profile?.god_mode_aura_multiplier || 2));
+    const remainingReveals = Math.max(0, Number(state.profile?.remaining_reveals || 0));
+    $("#godModeCard").innerHTML = `<article class="god-mode-card ${active ? "active" : ""}">
+        <div class="god-mode-title"><span aria-hidden="true">♛</span><div><strong>${active ? "God Mode Active" : "God Mode"}</strong><small>${active ? "Everything unlocked" : "Optional power-ups for your account"}</small></div>${active ? `<span class="god-mode-active">✨ Active</span>` : ""}</div>
+        <ul><li>Weekly reveals and first-letter hints</li><li>${multiplier}× aura on every answer</li><li>Priority placement in classmates' polls</li></ul>
+        ${active
+        ? `<p>Your subscription is recognized on web · ${remainingReveals} weekly ${remainingReveals === 1 ? "reveal" : "reveals"} left. Billing stays with the store where you subscribed.</p>`
+        : `<p>Web checkout is being finalized. An existing iOS subscription will be recognized here.</p>`}
+    </article>`;
+}
+
+function renderClassmateDirectory() {
+    const query = $("#classmateDirectorySearch").value.trim().toLowerCase();
+    const classmates = (state.classmateDirectory || []).filter((classmate) => {
+        const searchable = `${displayName(classmate)} ${classmate.username || ""} ${classmate.grade || ""}`.toLowerCase();
+        return !query || searchable.includes(query);
+    });
+    $("#classmateDirectoryList").innerHTML = classmates.length
+        ? classmates.map((classmate) => `<button type="button" data-directory-classmate="${escapeHTML(classmate.user_id)}">${avatarMarkup(classmate, "row-avatar")}<span><strong>${escapeHTML(displayName(classmate))}</strong><small>${escapeHTML([classmate.username ? `@${classmate.username}` : "", formatGrade(classmate.grade || "")].filter(Boolean).join(" · ") || "Classmate")}</small></span><span aria-hidden="true">›</span></button>`).join("")
+        : `<div class="profile-poll-empty">${query ? "No matching classmates." : "No classmates are visible yet."}</div>`;
+}
+
+async function openClassmateDirectory() {
+    const dialog = $("#classmateDirectoryDialog");
+    $("#classmateDirectorySearch").value = "";
+    $("#classmateDirectoryStatus").textContent = state.classmateDirectory ? "" : "Loading classmates...";
+    renderClassmateDirectory();
+    dialog.showModal();
+    if (state.classmateDirectory) return;
+    try {
+        state.classmateDirectory = await api.getClassmates(api.user.id, "", 500);
+        $("#classmateDirectoryStatus").textContent = `${state.classmateDirectory.length} ${state.classmateDirectory.length === 1 ? "classmate" : "classmates"}`;
+        renderClassmateDirectory();
+    } catch (error) {
+        $("#classmateDirectoryStatus").textContent = error.message || "Could not load classmates.";
+    }
+}
+
+function renderClassmateProfile() {
+    const profile = state.selectedClassmateProfile;
+    if (!profile) return;
+    const imageURL = api.assetURL(profile.profile_picture_url_medium || profile.profile_picture_url);
+    $("#classmateProfileCard").innerHTML = `<article class="full-profile-card classmate-profile-card">
+        <span class="full-profile-avatar">${imageURL ? `<img src="${escapeHTML(imageURL)}" alt="${escapeHTML(displayName(profile))}">` : `<span>${escapeHTML(initials(profile))}</span>`}</span>
+        <h3>${escapeHTML(displayName(profile))}</h3>
+        <div class="profile-handle">${profile.username ? `@${escapeHTML(profile.username)}` : "Valid classmate"}</div>
+        ${profile.bio ? `<p class="profile-bio">${escapeHTML(profile.bio)}</p>` : ""}
+        <div class="profile-school-meta"><span>🏫 ${escapeHTML(profile.school_name || state.profile?.school_name || "Your school")}</span>${profile.grade ? `<span>🎓 ${escapeHTML(formatGrade(profile.grade))}</span>` : ""}</div>
+        <div class="profile-stats-grid single"><div class="profile-stat-card"><strong><span class="heart">♥</span>${Number(profile.vote_count || 0).toLocaleString()}</strong><span>Votes Received</span></div></div>
+    </article>`;
+}
+
+async function openClassmateProfile(userId) {
+    const preview = (state.classmateDirectory || []).find((classmate) => String(classmate.user_id) === String(userId));
+    if (!preview) return;
+    $("#classmateDirectoryDialog").close();
+    state.selectedClassmateProfile = preview;
+    renderClassmateProfile();
+    $("#classmateProfileStatus").textContent = "Loading profile...";
+    $("#classmateProfileDialog").showModal();
+    try {
+        state.selectedClassmateProfile = await api.getProfile(userId);
+        $("#classmateProfileStatus").textContent = "";
+        renderClassmateProfile();
+    } catch (error) {
+        $("#classmateProfileStatus").textContent = error.message || "Could not load this profile.";
+    }
+}
+
+function backToClassmates() {
+    $("#classmateProfileDialog").close();
+    renderClassmateDirectory();
+    $("#classmateDirectoryDialog").showModal();
 }
 
 async function loadProfilePanel() {
@@ -462,6 +545,7 @@ function renderFeedDetail() {
     const options = Array.isArray(item.presented_options) ? item.presented_options : [];
     const artworkURL = api.assetURL(item.image_url);
     const hint = formatVoterHint(item);
+    const revealed = item.voter_name ? `<div class="revealed-sender-card">${avatarMarkup({ first_name: item.voter_name, profile_picture_url: item.voter_profile_picture_url }, "row-avatar")}<span><small>Sent by</small><strong>${escapeHTML(item.voter_name)}</strong></span></div>` : "";
     $("#feedDetailBody").innerHTML = `<article class="feed-detail-card">
         <h3>${escapeHTML(item.question_text)}</h3>
         ${artworkURL ? `<div class="feed-detail-art"><img src="${escapeHTML(artworkURL)}" alt=""></div>` : ""}
@@ -471,8 +555,18 @@ function renderFeedDetail() {
             const selected = name === selectedName;
             return `<div class="feed-detail-option ${selected ? "selected" : ""}"><span>${selected ? "✓" : ""}</span><strong>${escapeHTML(name)}</strong></div>`;
         }).join("")}</div>` : ""}
+        ${revealed}
     </article>`;
     $("#blockFeedSubmitterButton").classList.toggle("hidden", !item.question_submitted_by_user_id);
+    const revealButton = $("#revealFeedSenderButton");
+    const canRevealThisVote = api.user?.subscribed_user === true && item.item_type === "received_vote" && !item.voter_name;
+    revealButton.classList.toggle("hidden", !canRevealThisVote);
+    if (canRevealThisVote) {
+        const remaining = Math.max(0, Number(state.profile?.remaining_reveals || 0));
+        const auraCost = Math.max(0, Number(state.config?.full_reveal_aura_cost ?? 200));
+        revealButton.textContent = remaining > 0 ? `Reveal sender · ${remaining} left` : `Reveal sender · ${auraCost.toLocaleString()} aura`;
+        revealButton.disabled = remaining === 0 && Number(state.profile?.aura_points || 0) < auraCost;
+    }
     $("#feedDetailStatus").textContent = "";
 }
 
@@ -494,6 +588,40 @@ async function shareFeedItem() {
         }
     } catch (error) {
         if (error.name !== "AbortError") $("#feedDetailStatus").textContent = "Could not share this poll.";
+    }
+}
+
+async function revealFeedSender() {
+    const item = selectedFeedItem();
+    if (!item || api.user?.subscribed_user !== true || item.voter_name) return;
+    const button = $("#revealFeedSenderButton");
+    const remaining = Math.max(0, Number(state.profile?.remaining_reveals || 0));
+    const auraCost = Math.max(0, Number(state.config?.full_reveal_aura_cost ?? 200));
+    if (remaining === 0) {
+        if (Number(state.profile?.aura_points || 0) < auraCost) {
+            $("#feedDetailStatus").textContent = `You need ${auraCost.toLocaleString()} aura for another reveal.`;
+            return;
+        }
+        if (!confirm(`Use ${auraCost.toLocaleString()} aura to reveal who sent this vote?`)) return;
+    }
+    setButtonLoading(button, true, "Revealing...");
+    $("#feedDetailStatus").textContent = "";
+    try {
+        const result = await api.revealSender(api.user.id, item.question_answer_id);
+        item.voter_name = result.full_name;
+        item.voter_profile_picture_url = result.profile_picture_url;
+        if (state.profile) {
+            state.profile.remaining_reveals = Number(result.remaining_reveals || 0);
+            state.profile.aura_points = Number(result.total_aura_points ?? state.profile.aura_points ?? 0);
+        }
+        renderProfileHeader();
+        renderProfilePanel();
+        renderFeed();
+        renderFeedDetail();
+        showToast(`Revealed: ${result.full_name}`);
+    } catch (error) {
+        $("#feedDetailStatus").textContent = error.message || "Could not reveal this sender.";
+        setButtonLoading(button, false);
     }
 }
 
@@ -1535,6 +1663,7 @@ function bindEvents() {
         }
     });
     $("#feedDetailDialog").addEventListener("click", (event) => {
+        if (event.target.closest("#revealFeedSenderButton")) revealFeedSender();
         if (event.target.closest("[data-share-feed-item]")) shareFeedItem();
         if (event.target.closest("[data-report-feed-item]")) moderateFeedItem("report");
         if (event.target.closest("[data-block-feed-submitter]")) moderateFeedItem("block");
@@ -1580,6 +1709,13 @@ function bindEvents() {
     });
     $("#profilePanel").addEventListener("click", (event) => { if (event.target.closest("[data-edit-profile]")) openProfileDialog(); });
     $("#editProfileButton").addEventListener("click", openProfileDialog);
+    $("#viewClassmatesButton").addEventListener("click", openClassmateDirectory);
+    $("#classmateDirectorySearch").addEventListener("input", renderClassmateDirectory);
+    $("#classmateDirectoryList").addEventListener("click", (event) => {
+        const classmate = event.target.closest("[data-directory-classmate]");
+        if (classmate) openClassmateProfile(classmate.dataset.directoryClassmate);
+    });
+    $("#backToClassmatesButton").addEventListener("click", backToClassmates);
     $("#findClassmatesButton").addEventListener("click", openClassmatesDialog);
     $("#chooseContactsButton").addEventListener("click", chooseContacts);
     $("#shareClassmateInviteButton").addEventListener("click", shareClassmateInvite);

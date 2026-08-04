@@ -282,11 +282,47 @@ test("profile exposes editing, ask link, and school question flows", async ({ pa
     await page.getByRole("button", { name: "Profile", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Jules Rivera" })).toBeVisible();
     await expect(page.getByText("Your link is live")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "God Mode", exact: true })).toBeVisible();
+    await expect(page.getByText("Web checkout is being finalized.")).toBeVisible();
     await page.getByRole("button", { name: "Edit profile" }).click();
     await expect(page.getByRole("dialog").getByRole("heading", { name: "Edit profile" })).toBeVisible();
     await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
     await page.getByRole("button", { name: /Submit a school question/i }).click();
     await expect(page.getByRole("dialog").getByRole("heading", { name: "Submit a school question" })).toBeVisible();
+});
+
+test("profile browses and searches classmates with public profile details", async ({ page }) => {
+    await signInToDemo(page);
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: "View classmates" }).click();
+    const directory = page.getByRole("dialog").filter({ hasText: "YOUR SCHOOL" });
+    await expect(directory.getByText("6 classmates")).toBeVisible();
+    await directory.getByPlaceholder("Search classmates...").fill("Maya");
+    await expect(directory.getByRole("button", { name: /Maya Chen/ })).toBeVisible();
+    await expect(directory.getByRole("button", { name: /Noah Williams/ })).toBeHidden();
+    await directory.getByRole("button", { name: /Maya Chen/ }).click();
+    const profile = page.getByRole("dialog").filter({ hasText: "CLASSMATE PROFILE" });
+    await expect(profile.getByRole("heading", { name: "Maya Chen" })).toBeVisible();
+    await expect(profile.getByText("Student council and bad puns.")).toBeVisible();
+    await expect(profile.getByText("61")).toBeVisible();
+    await profile.getByRole("button", { name: "Back to classmates" }).click();
+    await expect(directory).toBeVisible();
+});
+
+test("God Mode subscribers can reveal a vote sender and consume one weekly reveal", async ({ page }) => {
+    await page.goto("/app/?demo=1&godmode=1");
+    await page.getByRole("button", { name: /sign in with a passkey/i }).click();
+    await page.locator("[data-feed-detail='9001']").click();
+    const detail = page.getByRole("dialog").filter({ hasText: "POLL DETAILS" });
+    await expect(detail.getByRole("button", { name: "Reveal sender · 3 left" })).toBeVisible();
+    await detail.getByRole("button", { name: "Reveal sender · 3 left" }).click();
+    await expect(detail.getByText("Sent by")).toBeVisible();
+    await expect(detail.locator(".revealed-sender-card").getByText("Maya Chen", { exact: true })).toBeVisible();
+    await expect(page.locator("#toast")).toContainText("Revealed: Maya Chen");
+    await detail.getByRole("button", { name: "Close" }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await expect(page.getByText("God Mode Active")).toBeVisible();
+    await expect(page.getByText(/2 weekly reveals left/)).toBeVisible();
 });
 
 test("classmate discovery is selected-contact only and never sends SMS", async ({ page }) => {

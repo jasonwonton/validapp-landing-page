@@ -415,6 +415,29 @@ h3 { font-size: 1.45rem; }
 .settings-row > span:last-child { font-size: 2rem; }
 .danger-row { color: #a3293c; }
 .danger-row small { color: #8a5962; }
+.god-mode-card { display: grid; gap: 12px; padding: 18px; border: var(--line); border-radius: 18px; background: linear-gradient(145deg, rgba(255,255,255,.94), rgba(255,213,223,.72)); }
+.god-mode-card.active { background: linear-gradient(145deg, #fff7ca, #ffd5df); }
+.god-mode-title { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.god-mode-title > span:first-child { width: 42px; height: 42px; display: grid; place-items: center; border: 2px solid var(--ink); border-radius: 50%; background: #fff4a8; font-size: 1.45rem; }
+.god-mode-title > div { display: grid; gap: 2px; }
+.god-mode-title > div strong { font-size: 1.18rem; }
+.god-mode-title small, .god-mode-card p { color: var(--muted); }
+.god-mode-active { padding: 6px 9px; border-radius: 999px; background: rgba(28,151,98,.15); color: #136a47; font-size: .8rem; white-space: nowrap; }
+.god-mode-card ul { display: grid; gap: 6px; margin: 0; padding-left: 22px; }
+.god-mode-card p { margin: 0; font-size: .86rem; line-height: 1.4; }
+.classmate-directory-content, .classmate-profile-content { display: grid; gap: 14px; padding: 22px; }
+.classmate-directory-search { margin: 0; }
+.classmate-directory-list { display: grid; gap: 8px; }
+.classmate-directory-list > button { width: 100%; display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 11px; padding: 11px; border: var(--line); border-radius: 14px; background: var(--white); color: inherit; cursor: pointer; text-align: left; }
+.classmate-directory-list > button > span:nth-child(2) { display: grid; gap: 3px; min-width: 0; }
+.classmate-directory-list > button small { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.classmate-directory-list > button > span:last-child { font-size: 1.8rem; }
+.classmate-profile-card .full-profile-avatar { width: 104px; height: 104px; }
+.profile-stats-grid.single { grid-template-columns: minmax(0, 280px); justify-content: center; }
+.reveal-sender-button { background: linear-gradient(145deg, #fff4a8, #ffd5df); }
+.revealed-sender-card { display: grid; grid-template-columns: 48px minmax(0, 1fr); align-items: center; gap: 10px; padding: 12px; border: 2px solid var(--ink); border-radius: 14px; background: linear-gradient(145deg, #fff4a8, #ffd5df); }
+.revealed-sender-card > span { display: grid; gap: 2px; }
+.revealed-sender-card small { color: var(--muted); }
 
 .bottom-nav {
     position: fixed;
