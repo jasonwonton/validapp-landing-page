@@ -3,6 +3,25 @@ import { expect, test } from "@playwright/test";
 const API_ORIGIN = "https://api.six7.lol";
 const USER_ID = "11111111-1111-1111-1111-111111111111";
 
+async function fillProductionSignup(dialog) {
+    await dialog.getByLabel("School name").fill("Westview High School");
+    await dialog.getByLabel("City").fill("San Diego");
+    await dialog.getByLabel("State").fill("CA");
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await dialog.getByLabel("Grade").selectOption("Senior");
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await dialog.getByLabel("Birthday").fill("2008-05-12");
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await dialog.getByLabel("First name").fill("Taylor");
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await dialog.getByLabel("Last name").fill("Jordan");
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await dialog.getByLabel("Username").fill("taylor_j");
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await dialog.getByLabel("Gender").selectOption("non-binary");
+    await dialog.getByRole("button", { name: "Continue" }).click();
+}
+
 test("local integration mode uses only the same-origin API proxy", async ({ page }) => {
     await page.goto("/app/?local-api=1");
     const baseURL = await page.evaluate(async () => {
@@ -289,17 +308,7 @@ test("real adapter completes passkey-only signup without an SMS request", async 
     await page.goto("/app/");
     await page.getByRole("button", { name: "Create an account" }).click();
     const dialog = page.getByRole("dialog");
-    await dialog.getByLabel("First name").fill("Taylor");
-    await dialog.getByLabel("Last name").fill("Jordan");
-    await dialog.getByLabel("Username").fill("taylor_j");
-    await dialog.getByLabel("Birthday").fill("2008-05-12");
-    await dialog.getByLabel("Gender").selectOption("non-binary");
-    await dialog.getByRole("button", { name: "Continue" }).click();
-    await dialog.getByLabel("School name").fill("Westview High School");
-    await dialog.getByLabel("City").fill("San Diego");
-    await dialog.getByLabel("State").fill("CA");
-    await dialog.getByLabel("Grade").selectOption("Senior");
-    await dialog.getByRole("button", { name: "Continue" }).click();
+    await fillProductionSignup(dialog);
     await dialog.getByLabel(/minimum age requirement/).check();
     await dialog.getByLabel(/Profile photo/).setInputFiles({
         name: "avatar.png",

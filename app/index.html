@@ -61,9 +61,51 @@
                         </div>
                         <div id="anonymousInboxStatus" class="inline-status" role="status"></div>
                         <div id="anonymousInboxList" class="anonymous-inbox-list"></div>
+                        <section id="anonymousQuestionDialog" class="inline-detail-card hidden" aria-label="Anonymous question">
+                            <form id="anonymousAnswerForm">
+                                <div class="inline-detail-heading">
+                                    <div><span class="eyebrow">PRIVATE QUESTION</span><h3>Your inbox</h3></div>
+                                    <button class="icon-button" aria-label="Close" type="button" data-close-anonymous>×</button>
+                                </div>
+                                <div id="anonymousQuestionBody" class="anonymous-question-detail"></div>
+                                <label id="anonymousAnswerLabel" for="anonymousAnswerText">Your answer</label>
+                                <textarea id="anonymousAnswerText" minlength="1" maxlength="500" required placeholder="Write an answer..."></textarea>
+                                <p id="anonymousAnswerStatus" class="status-message" role="status"></p>
+                                <button id="anonymousAnswerButton" class="primary-button" type="submit">Answer privately</button>
+                                <div id="anonymousAnswerShare" class="anonymous-share-section hidden">
+                                    <strong>Share your answer</strong>
+                                    <div class="share-platform-row">
+                                        <button class="share-platform-button snapchat" type="button" data-share-anonymous="snapchat" aria-label="Share answer to Snapchat"></button>
+                                        <button class="share-platform-button instagram" type="button" data-share-anonymous="instagram" aria-label="Share answer to Instagram"></button>
+                                        <button class="share-platform-button native" type="button" data-share-anonymous="other" aria-label="More sharing options"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#fff"/><path d="M32 39V12m0 0-10 10m10-10 10 10M17 31v18h30V31" fill="none" stroke="#050914" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                                    </div>
+                                </div>
+                                <div class="safety-actions" aria-label="Question safety actions">
+                                    <button type="button" data-anonymous-action="report">Report</button>
+                                    <button type="button" data-anonymous-action="block">Block sender</button>
+                                    <button type="button" data-anonymous-action="delete">Delete</button>
+                                </div>
+                            </form>
+                        </section>
                     </section>
                     <div id="feedStatus" class="inline-status" role="status"></div>
                     <div id="feedList" class="card-list"></div>
+                    <section id="feedDetailDialog" class="inline-detail-card hidden" aria-label="Poll details">
+                        <div class="feed-detail-content">
+                            <div class="inline-detail-heading">
+                                <div><span class="eyebrow">POLL DETAILS</span><h3>What happened</h3></div>
+                                <button class="icon-button" aria-label="Close" type="button" data-close-feed-detail>×</button>
+                            </div>
+                            <div id="feedDetailBody"></div>
+                            <p id="feedDetailStatus" class="status-message" role="status"></p>
+                            <div class="feed-detail-actions">
+                                <button id="revealFeedSenderButton" class="secondary-button reveal-sender-button hidden" type="button">Reveal sender</button>
+                                <button class="primary-button" type="button" data-share-feed-item>Share poll</button>
+                                <button class="secondary-button danger-row" type="button" data-report-feed-item>Report question</button>
+                                <button id="blockFeedSubmitterButton" class="secondary-button danger-row hidden" type="button" data-block-feed-submitter>Block submitter</button>
+                            </div>
+                        </div>
+                    </section>
                     <button id="loadMoreFeed" class="secondary-button hidden" type="button">Load more</button>
                 </div>
             </section>
@@ -82,6 +124,7 @@
                 <div id="profileStatus" class="inline-status" role="status"></div>
                 <div id="profileCard"></div>
                 <input id="profilePictureInput" class="hidden" type="file" accept="image/jpeg,image/png,image/webp">
+                <section id="schoolCard" class="profile-polls-section school-card-section" aria-label="School"></section>
                 <section class="profile-polls-section poll-highlights" aria-labelledby="weeklyPollsHeading">
                     <h3 id="weeklyPollsHeading">Top Polls This Week</h3>
                     <div id="weeklyPolls" class="profile-poll-list"></div>
@@ -96,24 +139,13 @@
                     <div id="auraPurchases" class="purchase-list"></div>
                 </section>
                 <section class="profile-actions" aria-label="Profile actions">
-                    <button id="editProfileButton" class="settings-row" type="button"><span class="settings-icon" aria-hidden="true">▣</span><span><strong>Profile information</strong><small>Name, username, school and grade</small></span><span aria-hidden="true">›</span></button>
                     <button id="addPasskeyButton" class="settings-row" type="button"><span class="settings-icon" aria-hidden="true">🔑</span><span><strong>Add a backup passkey</strong><small id="passkeyStatusText">Add another secure way to sign in</small></span><span aria-hidden="true">›</span></button>
-                    <button id="viewClassmatesButton" class="settings-row" type="button"><span class="settings-icon" aria-hidden="true">◉</span><span><strong>View classmates</strong><small>Browse people at your school</small></span><span aria-hidden="true">›</span></button>
-                    <button id="findClassmatesButton" class="settings-row" type="button"><span class="settings-icon" aria-hidden="true">♧</span><span><strong>Find classmates</strong><small>Choose contacts or share your invite</small></span><span aria-hidden="true">›</span></button>
                 </section>
-                <section id="askLinkSection" class="profile-polls-section" aria-label="Anonymous ask link">
+                <section id="askLinkSection" class="profile-polls-section messages-section" aria-label="Anonymous ask link">
                     <div id="askStatus" class="inline-status" role="status"></div>
                     <div id="askLinkCard"></div>
                 </section>
-                <section class="profile-polls-section" aria-labelledby="safetyHeading">
-                    <h3 id="safetyHeading">Safety &amp; account</h3>
-                    <div class="profile-actions">
-                        <button id="installAppButton" class="settings-row hidden" type="button"><span class="settings-icon" aria-hidden="true">⇩</span><span><strong>Install Valid</strong><small>Add the app to your home screen</small></span><span aria-hidden="true">›</span></button>
-                        <a class="settings-row" href="mailto:support@validapp.lol"><span class="settings-icon" aria-hidden="true">?</span><span><strong>Safety &amp; support</strong><small>Get help from the Valid team</small></span><span aria-hidden="true">›</span></a>
-                        <a class="settings-row" href="../privacy-policy.html" target="_blank" rel="noopener"><span class="settings-icon" aria-hidden="true">⌾</span><span><strong>Privacy policy</strong><small>How Valid protects your information</small></span><span aria-hidden="true">›</span></a>
-                        <button id="deleteAccountButton" class="settings-row danger-row" type="button"><span class="settings-icon" aria-hidden="true">×</span><span><strong>Delete account</strong><small>Schedule permanent deletion</small></span><span aria-hidden="true">›</span></button>
-                    </div>
-                </section>
+                <button id="installAppButton" class="settings-row hidden" type="button"><span class="settings-icon" aria-hidden="true">⇩</span><span><strong>Install Valid</strong><small>Add the app to your home screen</small></span><span aria-hidden="true">›</span></button>
             </section>
         </section>
     </main>
@@ -168,57 +200,56 @@
         </div>
     </dialog>
 
-    <dialog id="feedDetailDialog" class="modal">
-        <div class="feed-detail-content">
-            <div class="modal-heading">
-                <div><span class="eyebrow">POLL DETAILS</span><h2>What happened</h2></div>
+    <dialog id="signupDialog" class="signup-flow">
+        <form id="signupForm">
+            <div class="signup-flow-header">
+                <button class="signup-back-button hidden" aria-label="Back" type="button" data-signup-back>‹</button>
+                <img src="../assets/valid_logo.png" alt="Valid">
                 <button class="icon-button" aria-label="Close" type="button" data-close-dialog>×</button>
             </div>
-            <div id="feedDetailBody"></div>
-            <p id="feedDetailStatus" class="status-message" role="status"></p>
-            <div class="feed-detail-actions">
-                <button id="revealFeedSenderButton" class="secondary-button reveal-sender-button hidden" type="button">Reveal sender</button>
-                <button class="primary-button" type="button" data-share-feed-item>Share poll</button>
-                <button class="secondary-button danger-row" type="button" data-report-feed-item>Report question</button>
-                <button id="blockFeedSubmitterButton" class="secondary-button danger-row hidden" type="button" data-block-feed-submitter>Block submitter</button>
-            </div>
-        </div>
-    </dialog>
-
-    <dialog id="signupDialog" class="modal signup-modal">
-        <form id="signupForm" method="dialog">
-            <div class="modal-heading">
-                <div><span class="eyebrow">JOIN VALID</span><h2>Create your account</h2></div>
-                <button class="icon-button" aria-label="Close" type="button" data-close-dialog>×</button>
-            </div>
-            <div class="signup-progress" aria-label="Signup progress"><span class="active"></span><span></span><span></span></div>
+            <div class="signup-progress" aria-label="Signup progress"><span class="active"></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
             <fieldset class="signup-step" data-signup-step="0">
-                <legend>First, tell us about you</legend>
-                <p class="form-hint">This is how classmates will recognize you.</p>
-                <div class="two-field-row">
-                    <label>First name<input id="signupFirstName" autocomplete="given-name" maxlength="50" required></label>
-                    <label>Last name<input id="signupLastName" autocomplete="family-name" maxlength="50" required></label>
-                </div>
-                <label>Username<input id="signupUsername" autocomplete="username" minlength="3" maxlength="30" pattern="[a-z0-9_]+" placeholder="your_username" required></label>
-                <div class="two-field-row">
-                    <label>Birthday<input id="signupBirthday" type="date" autocomplete="bday" required></label>
-                    <label>Gender<select id="signupGender" required><option value="">Choose...</option><option value="female">Girl</option><option value="male">Boy</option><option value="non-binary">Non-binary</option></select></label>
-                </div>
+                <span class="eyebrow">YOUR COMMUNITY</span>
+                <h2>What school do you go to?</h2>
+                <p class="form-hint">Your school determines the people and polls you see.</p>
+                <label>School name<input id="signupSchool" autocomplete="organization" maxlength="200" placeholder="Westview High School" required></label>
+                <div class="two-field-row"><label>City<input id="signupCity" autocomplete="address-level2" maxlength="100" required></label><label>State<input id="signupState" autocomplete="address-level1" maxlength="2" pattern="[A-Za-z]{2}" placeholder="CA" required></label></div>
                 <button class="primary-button" type="button" data-signup-next>Continue</button>
             </fieldset>
             <fieldset class="signup-step hidden" data-signup-step="1">
-                <legend>Find your school</legend>
-                <p class="form-hint">Your school determines the classmates and polls you see.</p>
-                <label>School name<input id="signupSchool" autocomplete="organization" maxlength="200" placeholder="Westview High School" required></label>
-                <div class="two-field-row">
-                    <label>City<input id="signupCity" autocomplete="address-level2" maxlength="100" required></label>
-                    <label>State<input id="signupState" autocomplete="address-level1" maxlength="2" pattern="[A-Za-z]{2}" placeholder="CA" required></label>
-                </div>
-                <label>Grade<select id="signupGrade" required><option value="">Choose...</option><option>6th Grade</option><option>7th Grade</option><option>8th Grade</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select></label>
-                <div class="signup-button-row"><button class="secondary-button" type="button" data-signup-back>Back</button><button class="primary-button" type="button" data-signup-next>Continue</button></div>
+                <span class="eyebrow">YOUR COMMUNITY</span><h2>What grade are you in?</h2>
+                <label class="signup-choice-label">Grade<select id="signupGrade" required><option value="">Choose your grade</option><option>6th Grade</option><option>7th Grade</option><option>8th Grade</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select></label>
+                <button class="primary-button" type="button" data-signup-next>Continue</button>
             </fieldset>
             <fieldset class="signup-step hidden" data-signup-step="2">
-                <legend>Secure your account</legend>
+                <span class="eyebrow">ABOUT YOU</span><h2>When is your birthday?</h2>
+                <p class="form-hint">You must be at least 13 to use Valid.</p>
+                <label>Birthday<input id="signupBirthday" type="date" autocomplete="bday" required></label>
+                <button class="primary-button" type="button" data-signup-next>Continue</button>
+            </fieldset>
+            <fieldset class="signup-step hidden" data-signup-step="3">
+                <span class="eyebrow">ABOUT YOU</span><h2>What's your first name?</h2>
+                <label>First name<input id="signupFirstName" autocomplete="given-name" maxlength="50" placeholder="First name" required></label>
+                <button class="primary-button" type="button" data-signup-next>Continue</button>
+            </fieldset>
+            <fieldset class="signup-step hidden" data-signup-step="4">
+                <span class="eyebrow">ABOUT YOU</span><h2>What's your last name?</h2>
+                <label>Last name<input id="signupLastName" autocomplete="family-name" maxlength="50" placeholder="Last name" required></label>
+                <button class="primary-button" type="button" data-signup-next>Continue</button>
+            </fieldset>
+            <fieldset class="signup-step hidden" data-signup-step="5">
+                <span class="eyebrow">YOUR PROFILE</span><h2>Pick a username</h2>
+                <p class="form-hint">This is how classmates can find you.</p>
+                <label>Username<input id="signupUsername" autocomplete="username" minlength="3" maxlength="30" pattern="[a-z0-9_]+" placeholder="your_username" required></label>
+                <button class="primary-button" type="button" data-signup-next>Continue</button>
+            </fieldset>
+            <fieldset class="signup-step hidden" data-signup-step="6">
+                <span class="eyebrow">ABOUT YOU</span><h2>How do you identify?</h2>
+                <label class="signup-choice-label">Gender<select id="signupGender" required><option value="">Choose one</option><option value="female">Girl</option><option value="male">Boy</option><option value="non-binary">Non-binary</option></select></label>
+                <button class="primary-button" type="button" data-signup-next>Continue</button>
+            </fieldset>
+            <fieldset class="signup-step hidden" data-signup-step="7">
+                <span class="eyebrow">ONE LAST STEP</span><h2>Add a photo and passkey</h2>
                 <div class="passkey-explainer"><span aria-hidden="true">🔑</span><div><strong>No password. No phone number.</strong><p>Your face, fingerprint, or device PIN unlocks a passkey that stays on your device.</p></div></div>
                 <div id="signupReview" class="signup-review"></div>
                 <div class="signup-photo-picker">
@@ -226,7 +257,7 @@
                     <label>Profile photo <small>(optional, up to 5 MB)</small><input id="signupPicture" type="file" accept="image/jpeg,image/png,image/webp"></label>
                 </div>
                 <label class="check-row"><input id="signupAgeConsent" type="checkbox" required> I confirm I meet Valid's minimum age requirement and agree to the <a href="../terms.html" target="_blank">Terms</a>.</label>
-                <div class="signup-button-row"><button class="secondary-button" type="button" data-signup-back>Back</button><button class="primary-button" type="submit">Create with passkey</button></div>
+                <button class="primary-button" type="submit">Create with passkey</button>
             </fieldset>
             <p id="signupStatus" class="status-message" role="status"></p>
         </form>
@@ -342,35 +373,6 @@
             <div id="classmateProfileCard"></div>
             <button id="backToClassmatesButton" class="secondary-button" type="button">Back to classmates</button>
         </div>
-    </dialog>
-
-    <dialog id="anonymousQuestionDialog" class="modal">
-        <form id="anonymousAnswerForm" method="dialog">
-            <div class="modal-heading">
-                <div><span class="eyebrow">PRIVATE QUESTION</span><h2>Your inbox</h2></div>
-                <button class="icon-button" aria-label="Close" type="button" data-close-dialog>×</button>
-            </div>
-            <div id="anonymousQuestionBody" class="anonymous-question-detail"></div>
-            <label id="anonymousAnswerLabel" for="anonymousAnswerText">Your answer</label>
-            <textarea id="anonymousAnswerText" minlength="1" maxlength="500" required placeholder="Write an answer..."></textarea>
-            <p id="anonymousAnswerStatus" class="status-message" role="status"></p>
-            <button id="anonymousAnswerButton" class="primary-button" type="submit">Answer privately</button>
-            <div id="anonymousAnswerShare" class="anonymous-share-section hidden">
-                <strong>Share your answer</strong>
-                <span>Open on:</span>
-                <div class="share-platform-row">
-                    <button class="share-platform-button snapchat" type="button" data-share-anonymous="snapchat" aria-label="Share answer to Snapchat"></button>
-                    <button class="share-platform-button instagram" type="button" data-share-anonymous="instagram" aria-label="Share answer to Instagram"></button>
-                    <button class="share-platform-button native" type="button" data-share-anonymous="other" aria-label="More sharing options"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#fff"/><path d="M32 39V12m0 0-10 10m10-10 10 10M17 31v18h30V31" fill="none" stroke="#050914" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-                </div>
-            </div>
-            <div class="safety-actions" aria-label="Question safety actions">
-                <button type="button" data-anonymous-action="report">Report</button>
-                <button type="button" data-anonymous-action="block">Block sender</button>
-                <button type="button" data-anonymous-action="delete">Delete</button>
-            </div>
-            <p class="fine-print">Valid never reveals anonymous senders. Reporting sends this question to the moderation queue.</p>
-        </form>
     </dialog>
 
     <dialog id="anonymousAnswerDetailDialog" class="modal">

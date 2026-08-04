@@ -121,7 +121,7 @@ function shareIconMarkup(platform) {
     if (platform === "instagram") {
         return `<svg viewBox="0 0 64 64" role="img" aria-label="Instagram"><defs><radialGradient id="igGlow" cx="30%" cy="105%" r="105%"><stop offset="0" stop-color="#ffd600"/><stop offset=".38" stop-color="#ff7a00"/><stop offset=".7" stop-color="#ff0169"/><stop offset="1" stop-color="#d300c5"/></radialGradient></defs><rect width="64" height="64" rx="15" fill="url(#igGlow)"/><rect x="15" y="15" width="34" height="34" rx="10" fill="none" stroke="white" stroke-width="4"/><circle cx="32" cy="32" r="8" fill="none" stroke="white" stroke-width="4"/><circle cx="44" cy="20" r="2.5" fill="white"/></svg>`;
     }
-    return `<svg viewBox="0 0 64 64" role="img" aria-label="Snapchat"><path d="M32 9c-9 0-13 7-13 15v7c-1 3-4 5-8 6 1 4 5 5 8 6 1 4 4 4 7 4l6 5 6-5c3 0 6 0 7-4 3-1 7-2 8-6-4-1-7-3-8-6v-7c0-8-4-15-13-15Z" fill="white" stroke="#050914" stroke-width="3" stroke-linejoin="round"/></svg>`;
+    return `<img src="../assets/app/snapchat-logo.png" alt="Snapchat">`;
 }
 
 function showSignedOut(message = "") {
@@ -228,16 +228,28 @@ function renderProfilePanel() {
         <h3>${escapeHTML(displayName(profile))}</h3>
         <div class="profile-handle">@${escapeHTML(profile.username || "valid")}</div>
         <button class="profile-bio-button ${profile.bio ? "" : "empty"}" type="button" data-edit-bio>${profile.bio ? escapeHTML(profile.bio) : "+ Add bio"}</button>
-        <div class="profile-school-meta"><span>🏫 ${escapeHTML(profile.school_name || "Your school")}</span>${profile.grade ? `<span>🎓 ${escapeHTML(formatGrade(profile.grade))}</span>` : ""}</div>
-        <div class="profile-stats-grid single">
+        <button class="profile-information-inline" type="button" data-edit-profile><span><strong>Profile information</strong><small>Name, username, school and grade</small></span><span aria-hidden="true">›</span></button>
+        <div class="profile-stats-grid">
+            <div class="profile-stat-card"><strong><img class="profile-aura-icon" src="../assets/app/aura.png" alt="">${Number(profile.aura_points || 0).toLocaleString()}</strong><span>Aura</span></div>
             <div class="profile-stat-card"><strong><span class="heart">♥</span>${Number(profile.vote_count || 0).toLocaleString()}</strong><span>Votes Received</span></div>
         </div>
     </article>`;
+    renderSchoolCard();
     renderProfilePolls($("#weeklyPolls"), state.topQuestionsWeekly, "No polls this week yet");
     renderProfilePolls($("#allTimePolls"), state.topQuestionsAllTime, "No polls yet");
     renderGodModeCard();
     renderAuraPurchases();
     renderPasskeyStatus();
+}
+
+function renderSchoolCard() {
+    const container = $("#schoolCard");
+    const classmates = (state.classmateDirectory || state.classmates || []).slice(0, 4);
+    container.innerHTML = `<article class="school-card">
+        <div class="school-card-heading"><span class="school-card-icon" aria-hidden="true">🏫</span><span><strong>${escapeHTML(state.profile?.school_name || "Your school")}</strong><small>${escapeHTML(formatGrade(state.profile?.grade || ""))}</small></span></div>
+        ${classmates.length ? `<div class="school-classmate-preview">${classmates.map((classmate) => `<span title="${escapeHTML(displayName(classmate))}">${avatarMarkup(classmate, "school-preview-avatar")}</span>`).join("")}<small>${Number((state.classmateDirectory || state.classmates || []).length).toLocaleString()} classmates</small></div>` : `<p>See the people and polls in your school community.</p>`}
+        <button id="viewClassmatesButton" class="secondary-button" type="button">View classmates</button>
+    </article>`;
 }
 
 function renderPasskeyStatus() {
@@ -254,7 +266,7 @@ function renderGodModeCard() {
     const multiplier = Math.max(1, Number(state.profile?.god_mode_aura_multiplier || 2));
     const remainingReveals = Math.max(0, Number(state.profile?.remaining_reveals || 0));
     $("#godModeCard").innerHTML = `<article class="god-mode-card ${active ? "active" : ""}">
-        <div class="god-mode-title"><span aria-hidden="true">♛</span><div><strong>${active ? "God Mode Active" : "God Mode"}</strong><small>${active ? "Everything unlocked" : "Optional power-ups for your account"}</small></div>${active ? `<span class="god-mode-active">✨ Active</span>` : ""}</div>
+        <div class="god-mode-title"><span><img src="../assets/app/crown.png" alt=""></span><div><strong>${active ? "God Mode Active" : "God Mode"}</strong><small>${active ? "Everything unlocked" : "Optional power-ups for your account"}</small></div>${active ? `<span class="god-mode-active">✨ Active</span>` : ""}</div>
         <ul><li>Weekly reveals and first-letter hints</li><li>${multiplier}× aura on every answer</li><li>Priority placement in classmates' polls</li></ul>
         ${active
         ? `<p>Your subscription is recognized on web · ${remainingReveals} weekly ${remainingReveals === 1 ? "reveal" : "reveals"} left. Billing stays with the store where you subscribed.</p>`
@@ -387,7 +399,9 @@ function renderClassmateDirectory() {
 async function openClassmateDirectory() {
     const dialog = $("#classmateDirectoryDialog");
     $("#classmateDirectorySearch").value = "";
-    $("#classmateDirectoryStatus").textContent = state.classmateDirectory ? "" : "Loading classmates...";
+    $("#classmateDirectoryStatus").textContent = state.classmateDirectory
+        ? `${state.classmateDirectory.length} ${state.classmateDirectory.length === 1 ? "classmate" : "classmates"}`
+        : "Loading classmates...";
     renderClassmateDirectory();
     dialog.showModal();
     if (state.classmateDirectory) return;
@@ -445,6 +459,7 @@ async function loadProfilePanel() {
     if (!state.topQuestionsAllTime) requests.push({ key: "allTime", promise: api.getTopQuestions(api.user.id, "all_time", 3) });
     if (!state.askLink) requests.push({ key: "askLink", promise: api.getAskLink(api.user.id) });
     if (!state.passkeyStatus) requests.push({ key: "passkeyStatus", promise: api.getPasskeyStatus() });
+    if (!state.classmateDirectory) requests.push({ key: "classmates", promise: api.getClassmates(api.user.id, "", 500) });
     const results = await Promise.allSettled(requests.map((request) => request.promise));
     let profileError = "";
     requests.forEach((request, index) => {
@@ -454,6 +469,10 @@ async function loadProfilePanel() {
             if (request.key === "allTime") state.topQuestionsAllTime = result.value;
             if (request.key === "askLink") state.askLink = result.value;
             if (request.key === "passkeyStatus") state.passkeyStatus = result.value;
+            if (request.key === "classmates") {
+                state.classmateDirectory = result.value;
+                state.classmates = result.value;
+            }
         } else if (request.key === "askLink" && result.reason?.status === 404) {
             $("#askLinkSection").classList.add("hidden");
         } else {
@@ -531,12 +550,13 @@ function openSignupDialog() {
 }
 
 function setSignupStep(index) {
-    state.signupStep = Math.max(0, Math.min(2, index));
+    state.signupStep = Math.max(0, Math.min(7, index));
     $$('[data-signup-step]').forEach((step) => step.classList.toggle("hidden", Number(step.dataset.signupStep) !== state.signupStep));
     $$(".signup-progress span").forEach((segment, segmentIndex) => segment.classList.toggle("active", segmentIndex <= state.signupStep));
     $("#signupStatus").textContent = "";
     requestAnimationFrame(() => { $("#signupDialog").scrollTop = 0; });
-    if (state.signupStep === 2) {
+    $(".signup-back-button").classList.toggle("hidden", state.signupStep === 0);
+    if (state.signupStep === 7) {
         $("#signupReview").innerHTML = `<strong>${escapeHTML($("#signupFirstName").value.trim())} ${escapeHTML($("#signupLastName").value.trim())}</strong><span>@${escapeHTML($("#signupUsername").value.trim().toLowerCase())} · ${escapeHTML($("#signupGrade").value)}</span><span>${escapeHTML($("#signupSchool").value.trim())} · ${escapeHTML($("#signupCity").value.trim())}, ${escapeHTML($("#signupState").value.trim().toUpperCase())}</span>`;
     }
 }
@@ -546,11 +566,11 @@ async function advanceSignup(button) {
     const fields = [...step.querySelectorAll("input, select")];
     const invalid = fields.find((field) => !field.checkValidity());
     if (invalid) return invalid.reportValidity();
-    if (state.signupStep === 0 && !isAtLeastThirteen($("#signupBirthday").value)) {
+    if (state.signupStep === 2 && !isAtLeastThirteen($("#signupBirthday").value)) {
         $("#signupStatus").textContent = "You must be at least 13 to use Valid.";
         return;
     }
-    if (state.signupStep === 0) {
+    if (state.signupStep === 5) {
         setButtonLoading(button, true, "Checking username...");
         try {
             const result = await api.checkUsernameAvailability($("#signupUsername").value.trim().toLowerCase());
@@ -648,7 +668,7 @@ function renderFeed() {
         list.innerHTML = `<div class="empty-card">${escapeHTML(text)}</div>`;
         return;
     }
-    list.innerHTML = visible.map((item) => {
+    list.innerHTML = `<div class="feed-section-heading"><span>${query ? "MATCHING POLLS" : "POLLS"}</span><small>${visible.length}</small></div>${visible.map((item) => {
         const isPersonal = state.feedType === "personal";
         const title = isPersonal ? `${item.is_nomination ? "👑 " : ""}<strong>You</strong> got ${item.is_nomination ? "nominated" : "voted"}` : `<strong>${escapeHTML(item.voted_for_name || item.contact_name || "A classmate")}</strong> got voted`;
         const detail = formatVoterHint(item);
@@ -661,7 +681,7 @@ function renderFeed() {
             </div>
             <button class="upvote-button ${item.user_has_upvoted ? "active" : ""}" type="button" data-upvote="${item.question_answer_id}" aria-label="Upvote">${item.user_has_upvoted ? "♥" : "♡"}<span>${item.upvote_count || 0}</span></button>
         </article>`;
-    }).join("");
+    }).join("")}`;
 }
 
 function renderFeedClassmateResults() {
@@ -754,7 +774,9 @@ function renderFeedDetail() {
 function openFeedDetail(answerId) {
     state.selectedFeedItemId = answerId;
     renderFeedDetail();
-    $("#feedDetailDialog").showModal();
+    const detail = $("#feedDetailDialog");
+    detail.classList.remove("hidden");
+    detail.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 async function shareFeedItem() {
@@ -818,7 +840,7 @@ async function moderateFeedItem(action) {
         else await api.reportQuestion(api.user.id, item.question_id);
         state.feedItems = state.feedItems.filter((candidate) => candidate.question_id !== item.question_id);
         state.selectedFeedItemId = null;
-        $("#feedDetailDialog").close();
+        $("#feedDetailDialog").classList.add("hidden");
         renderFeed();
         showToast(action === "block" ? "Submitter blocked" : "Question reported");
     } catch (error) {
@@ -958,7 +980,9 @@ async function shareAnonymousAnswer(platform) {
 async function openAnonymousQuestionDialog(questionId) {
     state.selectedAnonymousQuestionId = questionId;
     renderAnonymousQuestionDialog();
-    $("#anonymousQuestionDialog").showModal();
+    const detail = $("#anonymousQuestionDialog");
+    detail.classList.remove("hidden");
+    detail.scrollIntoView({ behavior: "smooth", block: "nearest" });
     const question = selectedAnonymousQuestion();
     if (!question || question.opened_at) return;
     try {
@@ -1013,7 +1037,7 @@ async function handleAnonymousSafetyAction(action) {
         if (action === "delete") await api.deleteAnonymousQuestion(api.user.id, question.id);
         state.anonymousInbox.questions = state.anonymousInbox.questions.filter((item) => String(item.id) !== String(question.id));
         state.selectedAnonymousQuestionId = null;
-        $("#anonymousQuestionDialog").close();
+        $("#anonymousQuestionDialog").classList.add("hidden");
         renderAnonymousInbox();
         showToast(action === "block" ? "Sender blocked" : action === "report" ? "Reported to Valid" : "Question deleted");
     } catch (error) {
@@ -1113,7 +1137,7 @@ function choicesForQuestion(question) {
 }
 
 function choiceMarkup(choice) {
-    return `<button class="choice-button" type="button" data-choice="${escapeHTML(choice.user_id)}">${avatarMarkup(choice, "choice-avatar")}<span>${escapeHTML(displayName(choice))}</span></button>`;
+    return `<button class="choice-button" type="button" data-choice="${escapeHTML(choice.user_id)}"><span>${escapeHTML(displayName(choice))}</span></button>`;
 }
 
 function renderInviteUnlock() {
@@ -1200,12 +1224,12 @@ function renderPlay() {
         <h3>${escapeHTML(question.question_text)}</h3>
         ${attribution}
         <div class="question-artwork">${artworkURL ? `<img src="${escapeHTML(artworkURL)}" alt="">` : `<div class="artwork-placeholder"><img src="../assets/app/pencil-clipboard.png" alt=""><span>Question artwork</span></div>`}</div>
+        <div class="choice-grid">${choices.map(choiceMarkup).join("")}</div>
         <div class="play-actions">
-            <button class="play-action-button" data-shuffle type="button">↻ Shuffle</button>
-            <button class="play-action-button nominate" data-nominate type="button">♛ Nominate</button>
+            <button class="play-action-button" data-shuffle type="button"><span aria-hidden="true">↻</span> Shuffle</button>
+            <button class="play-action-button nominate" data-nominate type="button"><img src="../assets/app/crown.png" alt="">Nominate</button>
             <button class="play-action-button" data-skip="${question.id}" type="button" ${remainingSkips < 1 ? "disabled" : ""}>Skip (${remainingSkips})</button>
         </div>
-        <div class="choice-grid">${choices.map(choiceMarkup).join("")}</div>
         ${safetyActions}
     </article>`;
 }
@@ -1420,10 +1444,9 @@ function renderAskLink() {
     const link = state.askLink;
     if (!link) return;
     $("#askLinkCard").innerHTML = `<article class="ask-link-card">
-        <div class="ask-link-heading"><div><strong>Get messages</strong><span>Share your link in a story. New messages show up in Inbox.</span></div><img class="ask-mascot" src="../assets/app/anonymous.png" alt=""></div>
+        <div class="ask-link-heading"><img class="ask-message-icon" src="../assets/app/message.png" alt=""><div><strong>Get messages</strong><span>Share your link in a story. New messages show up in Inbox.</span></div></div>
         <button class="ask-url" type="button" data-copy-link aria-label="Copy ask link"><span>🔗</span><span>${escapeHTML(link.share_url.replace(/^https:\/\//, ""))}</span><strong>Copy</strong></button>
         ${link.is_active ? `<div class="share-platform-row"><span class="share-platform-label">Open on:</span><button class="share-platform-button snapchat" type="button" data-share-link="snapchat" aria-label="Share ask link to Snapchat">${shareIconMarkup("snapchat")}</button><button class="share-platform-button instagram" type="button" data-share-link="instagram" aria-label="Share ask link to Instagram">${shareIconMarkup("instagram")}</button></div>` : `<button class="primary-button" type="button" data-toggle-link>Resume ask link</button>`}
-        <div class="button-row"><button class="mini-button" type="button" data-toggle-link>${link.is_active ? "Pause link" : "Turn on"}</button><button class="mini-button" type="button" data-rotate-link>Reset link</button></div>
     </article>`;
 }
 
@@ -1864,6 +1887,8 @@ async function installWebApp() {
 }
 
 function bindEvents() {
+    const anonymousSection = $("#anonymousInboxSection");
+    anonymousSection.parentNode.insertBefore(anonymousSection, $("#loadMoreFeed"));
     $("#passkeyButton").addEventListener("click", handlePasskeySignIn);
     $("#createAccountButton").addEventListener("click", openSignupDialog);
     $("#signupForm").addEventListener("submit", createAccount);
@@ -1918,6 +1943,10 @@ function bindEvents() {
         }
     });
     $("#feedDetailDialog").addEventListener("click", (event) => {
+        if (event.target.closest("[data-close-feed-detail]")) {
+            state.selectedFeedItemId = null;
+            $("#feedDetailDialog").classList.add("hidden");
+        }
         if (event.target.closest("#revealFeedSenderButton")) revealFeedSender();
         if (event.target.closest("[data-share-feed-item]")) shareFeedItem();
         if (event.target.closest("[data-report-feed-item]")) moderateFeedItem("report");
@@ -1932,6 +1961,10 @@ function bindEvents() {
     });
     $("#anonymousAnswerForm").addEventListener("submit", answerAnonymousQuestion);
     $("#anonymousQuestionDialog").addEventListener("click", (event) => {
+        if (event.target.closest("[data-close-anonymous]")) {
+            state.selectedAnonymousQuestionId = null;
+            $("#anonymousQuestionDialog").classList.add("hidden");
+        }
         const action = event.target.closest("[data-anonymous-action]");
         const share = event.target.closest("[data-share-anonymous]");
         if (action) handleAnonymousSafetyAction(action.dataset.anonymousAction);
@@ -1968,6 +2001,8 @@ function bindEvents() {
     $("#profilePanel").addEventListener("click", (event) => {
         if (event.target.closest("[data-edit-photo]")) $("#profilePictureInput").click();
         if (event.target.closest("[data-edit-bio]")) openBioDialog();
+        if (event.target.closest("[data-edit-profile]")) openProfileDialog();
+        if (event.target.closest("#viewClassmatesButton")) openClassmateDirectory();
         const poll = event.target.closest("[data-top-poll]");
         if (poll) openTopPoll(poll.dataset.topPoll);
         const purchase = event.target.closest("[data-buy-aura]");
@@ -1976,17 +2011,14 @@ function bindEvents() {
         if (purchase?.dataset.buyAura === "question") openQuestionDialog();
     });
     $("#pollSummaryDialog").addEventListener("click", (event) => { if (event.target.closest("[data-share-top-poll]")) shareTopPoll(); });
-    $("#editProfileButton").addEventListener("click", openProfileDialog);
     $("#profilePictureInput").addEventListener("change", changeProfilePicture);
     $("#addPasskeyButton").addEventListener("click", addBackupPasskey);
-    $("#viewClassmatesButton").addEventListener("click", openClassmateDirectory);
     $("#classmateDirectorySearch").addEventListener("input", renderClassmateDirectory);
     $("#classmateDirectoryList").addEventListener("click", (event) => {
         const classmate = event.target.closest("[data-directory-classmate]");
         if (classmate) openClassmateProfile(classmate.dataset.directoryClassmate);
     });
     $("#backToClassmatesButton").addEventListener("click", backToClassmates);
-    $("#findClassmatesButton").addEventListener("click", openClassmatesDialog);
     $("#chooseContactsButton").addEventListener("click", chooseContacts);
     $("#shareClassmateInviteButton").addEventListener("click", shareClassmateInvite);
     $("#targetedBoostSearch").addEventListener("input", renderTargetedBoostList);
@@ -1999,7 +2031,6 @@ function bindEvents() {
         }
     });
     $("#confirmAuraSpend").addEventListener("click", confirmAuraSpend);
-    $("#deleteAccountButton").addEventListener("click", openDeleteAccountDialog);
     $("#deleteAccountForm").addEventListener("submit", requestAccountDeletion);
     $("#cancelDeletionButton").addEventListener("click", cancelAccountDeletion);
     $("#pendingDeletionLogout").addEventListener("click", logoutAndReset);
