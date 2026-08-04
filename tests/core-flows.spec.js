@@ -147,8 +147,10 @@ test("android shell surfaces connectivity and install affordances", async ({ pag
 test("feed navigation, filtering, and upvotes work", async ({ page }) => {
     await signInToDemo(page);
     await expect(page.getByText("Who always knows how to make people laugh?")).toBeVisible();
+    await expect(page.locator("#feedList .feed-section-heading small")).toHaveCount(0);
     await page.getByRole("button", { name: "School", exact: true }).click();
     await expect(page.getByText("Who has the best music taste?")).toBeVisible();
+    await expect(page.locator("#feedList .feed-section-heading small")).toHaveCount(0);
     await page.getByPlaceholder("Search names, questions...").fill("company");
     await expect(page.getByText("Who is most likely to start a company?")).toBeVisible();
     await expect(page.getByText("Who has the best music taste?")).toBeHidden();

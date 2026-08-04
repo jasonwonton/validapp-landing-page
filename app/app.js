@@ -687,7 +687,7 @@ function renderFeed() {
         list.innerHTML = `<div class="empty-card">${escapeHTML(text)}</div>`;
         return;
     }
-    list.innerHTML = `<div class="feed-section-heading"><span>${query ? "MATCHING POLLS" : "POLLS"}</span><small>${visible.length}</small></div>${visible.map((item) => {
+    list.innerHTML = `<div class="feed-section-heading"><span>${query ? "MATCHING POLLS" : "POLLS"}</span></div>${visible.map((item) => {
         const isPersonal = state.feedType === "personal";
         const title = isPersonal ? `${item.is_nomination ? "👑 " : ""}<strong>You</strong> got ${item.is_nomination ? "nominated" : "voted"}` : `<strong>${escapeHTML(item.voted_for_name || item.contact_name || "A classmate")}</strong> got voted`;
         const detail = formatVoterHint(item);
