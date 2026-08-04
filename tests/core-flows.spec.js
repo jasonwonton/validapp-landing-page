@@ -223,7 +223,11 @@ test("anonymous inbox supports private answers and safety controls", async ({ pa
     await expect(page.locator("#feedList [data-anonymous-answer]")).toHaveCount(1);
     await expect(page.locator("#feedList [data-anonymous-question]")).toHaveCount(2);
     await expect(page.locator("#feedList [data-feed-detail]")).toHaveCount(2);
-    await expect(page.locator("#feedList > *").first()).toHaveAttribute("data-anonymous-answer", "answer-demo-1");
+    await expect(page.locator("#feedList > *").nth(0)).toHaveAttribute("data-feed-detail", "9001");
+    await expect(page.locator("#feedList > *").nth(1)).toHaveAttribute("data-anonymous-question", "ask-demo-1");
+    await expect(page.locator("#feedList > *").nth(2)).toHaveAttribute("data-anonymous-answer", "answer-demo-1");
+    await expect(page.locator("#feedList > *").nth(3)).toHaveAttribute("data-feed-detail", "9002");
+    await expect(page.locator("#feedList > *").nth(4)).toHaveAttribute("data-anonymous-question", "ask-demo-2");
     await expect(page.getByRole("heading", { name: "Anonymous questions" })).toHaveCount(0);
     await page.getByRole("button", { name: /What is something you are genuinely proud/ }).click();
     const answerDialog = page.locator("#anonymousQuestionDialog");

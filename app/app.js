@@ -699,20 +699,20 @@ function feedAvatar(item) {
 }
 
 function anonymousInboxRows() {
-    if (state.feedType !== "personal" || !state.anonymousInbox || state.feedSearch.trim()) return "";
+    if (state.feedType !== "personal" || !state.anonymousInbox || state.feedSearch.trim()) return [];
     const questions = state.anonymousInbox.questions || [];
     const answers = state.anonymousInbox.answers || [];
-    const answerRows = answers.map((answer) => `<button class="anonymous-reply-row" type="button" data-anonymous-answer="${escapeHTML(answer.id)}">
+    const answerRows = answers.map((answer) => ({ timestamp: answer.answered_at, html: `<button class="anonymous-reply-row" type="button" data-anonymous-answer="${escapeHTML(answer.id)}">
         ${avatarMarkup({ first_name: answer.recipient_display_name, profile_picture_url: answer.recipient_profile_picture_url }, "anonymous-row-icon reply")}
         <span class="anonymous-row-copy"><strong>${escapeHTML(answer.recipient_display_name)} replied to you</strong><span class="anonymous-row-message">${escapeHTML(answer.answer_text)}</span><span class="anonymous-row-meta"><span>Your message: ${escapeHTML(answer.question_body)}</span><time>${escapeHTML(relativeTime(answer.answered_at))}</time></span></span>
         <span class="anonymous-row-state" aria-hidden="true">›</span>
-    </button>`).join("");
-    const questionRows = questions.map((question) => `<button class="anonymous-question-row ${question.opened_at ? "" : "unread"} ${question.status === "answered" ? "answered" : ""}" type="button" data-anonymous-question="${escapeHTML(question.id)}">
+    </button>` }));
+    const questionRows = questions.map((question) => ({ timestamp: question.created_at, html: `<button class="anonymous-question-row ${question.opened_at ? "" : "unread"} ${question.status === "answered" ? "answered" : ""}" type="button" data-anonymous-question="${escapeHTML(question.id)}">
         <span class="anonymous-row-icon" aria-hidden="true">?</span>
         <span class="anonymous-row-copy"><span class="anonymous-row-title"><strong>${escapeHTML(question.provenance_label)}</strong>${question.opened_at ? "" : `<span class="anonymous-new-pill">New</span>`}</span><span class="anonymous-row-message">${escapeHTML(question.body)}</span><span class="anonymous-row-meta"><span>${escapeHTML(question.source_platform ? `From ${question.source_platform[0].toUpperCase()}${question.source_platform.slice(1)}` : "Anonymous")}</span><time>${escapeHTML(relativeTime(question.created_at))}</time></span></span>
         <span class="anonymous-row-state" aria-hidden="true">›</span>
-    </button>`).join("");
-    return `${answerRows}${questionRows}`;
+    </button>` }));
+    return [...answerRows, ...questionRows];
 }
 
 function renderFeed() {
@@ -721,7 +721,7 @@ function renderFeed() {
     renderFeedClassmateResults();
     const visible = query ? state.feedItems.filter((item) => [item.question_text, item.voted_for_name, item.contact_name, item.voter_name].some((value) => String(value || "").toLowerCase().includes(query))) : state.feedItems;
     const anonymousRows = anonymousInboxRows();
-    if (!visible.length && !anonymousRows) {
+    if (!visible.length && !anonymousRows.length) {
         const text = state.feedSearch ? "No matching votes." : state.myVotesOnly ? "You haven't voted yet. Answer questions in Play to see your votes here." : "No votes here yet. Play a few rounds and check back soon.";
         list.innerHTML = `<div class="empty-card">${escapeHTML(text)}</div>`;
         return;
@@ -730,7 +730,7 @@ function renderFeed() {
         const isPersonal = state.feedType === "personal";
         const title = isPersonal ? `${item.is_nomination ? "👑 " : ""}<strong>You</strong> got ${item.is_nomination ? "nominated" : "voted"}` : `<strong>${escapeHTML(item.voted_for_name || item.contact_name || "A classmate")}</strong> got voted`;
         const detail = formatVoterHint(item);
-        return `<article class="feed-card" data-answer-id="${item.question_answer_id}" data-feed-detail="${item.question_answer_id}" role="button" tabindex="0" aria-label="Open poll details: ${escapeHTML(item.question_text)}">
+        return { timestamp: item.timestamp, html: `<article class="feed-card" data-answer-id="${item.question_answer_id}" data-feed-detail="${item.question_answer_id}" role="button" tabindex="0" aria-label="Open poll details: ${escapeHTML(item.question_text)}">
             ${feedAvatar(item)}
             <div class="feed-body">
                 <div class="feed-meta"><span>${title}</span><time>${escapeHTML(relativeTime(item.timestamp))}</time></div>
@@ -738,9 +738,12 @@ function renderFeed() {
                 ${detail ? `<div class="feed-answer">${escapeHTML(detail)}</div>` : ""}
             </div>
             <button class="upvote-button ${item.user_has_upvoted ? "active" : ""}" type="button" data-upvote="${item.question_answer_id}" aria-label="Upvote">${item.user_has_upvoted ? "♥" : "♡"}<span>${item.upvote_count || 0}</span></button>
-        </article>`;
-    }).join("");
-    list.innerHTML = `${anonymousRows}${voteRows}`;
+        </article>` };
+    });
+    list.innerHTML = [...anonymousRows, ...voteRows]
+        .sort((left, right) => (Date.parse(right.timestamp) || 0) - (Date.parse(left.timestamp) || 0))
+        .map((row) => row.html)
+        .join("");
 }
 
 function renderFeedClassmateResults() {
