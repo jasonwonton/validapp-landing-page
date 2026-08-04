@@ -218,6 +218,19 @@ function formatVoterHint(item) {
     return emoji ? `from ${emoji}` : "";
 }
 
+function formatVoterStatement(item) {
+    if (item.current_user_voted) return `${displayName(state.profile)} (you 🫵) said`;
+    if (item.voter_name) return `${item.voter_name} said`;
+    const gender = String(item.voter_gender || "").toLowerCase();
+    const emoji = ["female", "girl"].includes(gender) ? "👧💗" : ["male", "boy"].includes(gender) ? "👦💙" : gender === "non-binary" ? "🧑💛" : "";
+    const genderWord = ["female", "girl"].includes(gender) ? "Girl" : ["male", "boy"].includes(gender) ? "Boy" : gender === "non-binary" ? "Person" : "";
+    const grade = formatGrade(item.voter_grade || "").replace(/\s*\([^)]*\)\s*$/, "");
+    const article = /^[aeiou8]/i.test(grade) || /^(11|18)/.test(grade) ? "An" : "A";
+    if (grade && genderWord) return `${article} ${grade} ${emoji} ${genderWord} said`;
+    if (genderWord) return `A ${emoji} ${genderWord} said`;
+    return "Poll";
+}
+
 function renderProfilePolls(container, questions, emptyMessage) {
     if (!questions?.length) {
         container.innerHTML = `<div class="profile-poll-empty">${escapeHTML(emptyMessage)}</div>`;
@@ -810,17 +823,16 @@ function renderFeedDetail() {
         || (item.item_type === "received_vote" ? displayName(state.profile) : "A classmate");
     const options = Array.isArray(item.presented_options) ? item.presented_options : [];
     const artworkURL = api.assetURL(item.image_url);
-    const hint = formatVoterHint(item);
     const revealed = item.voter_name ? `<div class="revealed-sender-card">${avatarMarkup({ first_name: item.voter_name, profile_picture_url: item.voter_profile_picture_url }, "row-avatar")}<span><small>Sent by</small><strong>${escapeHTML(item.voter_name)}</strong></span></div>` : "";
+    $("#feedDetailDialog .detail-screen-header > strong").textContent = formatVoterStatement(item);
     $("#feedDetailBody").innerHTML = `<article class="feed-detail-card">
         <h3>${escapeHTML(item.question_text)}</h3>
-        ${artworkURL ? `<div class="feed-detail-art"><img src="${escapeHTML(artworkURL)}" alt=""></div>` : ""}
-        <div class="feed-detail-result"><span>${avatarMarkup({ first_name: selectedName, profile_picture_url: item.voted_for_profile_picture_url }, "choice-avatar")}</span><div><small>Picked</small><strong>${escapeHTML(selectedName)}</strong>${hint ? `<span>${escapeHTML(hint)}</span>` : ""}</div></div>
+        <div class="feed-detail-art">${artworkURL ? `<img src="${escapeHTML(artworkURL)}" alt="">` : `<div class="artwork-placeholder"><img src="../assets/app/pencil-clipboard.png" alt=""><span>Image unavailable</span></div>`}</div>
         ${options.length ? `<div class="feed-detail-options">${options.map((option) => {
             const name = option.name || option.contact_name || "A classmate";
             const selected = name === selectedName;
-            return `<div class="feed-detail-option ${selected ? "selected" : ""}"><span>${selected ? "✓" : ""}</span><strong>${escapeHTML(name)}</strong></div>`;
-        }).join("")}</div>` : ""}
+            return `<div class="feed-detail-option ${selected ? "selected" : ""}"><strong>${escapeHTML(name)}</strong>${selected ? `<span class="feed-detail-selection-indicator" aria-label="Picked">👆</span>` : ""}</div>`;
+        }).join("")}</div>` : `<div class="feed-detail-legacy-selection"><strong>Selected: ${escapeHTML(selectedName)}</strong><small>Options not available for this older vote</small></div>`}
         ${revealed}
     </article>`;
     $("#blockFeedSubmitterButton").classList.toggle("hidden", !item.question_submitted_by_user_id);
@@ -1917,6 +1929,7 @@ async function logoutAndReset() {
 
 function switchPanel(panel) {
     state.activePanel = panel;
+    document.body.classList.toggle("play-active", panel === "play");
     $$(".panel").forEach((element) => element.classList.add("hidden"));
     $(`#${panel}Panel`).classList.remove("hidden");
     $$(".nav-item").forEach((button) => button.classList.toggle("active", button.dataset.panel === panel));

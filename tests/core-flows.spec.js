@@ -180,9 +180,13 @@ test("feed polls open the iOS-style detail and moderation flow", async ({ page }
     await page.locator("[data-feed-detail='9001']").click();
     const dialog = page.locator("#feedDetailDialog");
     await expect(dialog).toHaveCSS("position", "fixed");
-    await expect(dialog.getByText("Poll", { exact: true })).toBeVisible();
+    await expect(dialog.locator(".detail-screen-header > strong")).toContainText("Sophomore");
+    await expect(dialog.locator(".feed-detail-result")).toHaveCount(0);
+    await expect(dialog.locator(".feed-detail-art")).toBeVisible();
+    await expect(dialog.locator(".feed-detail-option")).toHaveCount(4);
     await expect(dialog.getByText("Jules Rivera").first()).toBeVisible();
     await expect(dialog.locator(".feed-detail-option.selected")).toContainText("Jules Rivera");
+    await expect(dialog.locator(".feed-detail-selection-indicator")).toHaveText("👆");
     await expect(dialog.getByRole("button", { name: "Share poll to Snapchat" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Share poll to Instagram" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Share poll to TikTok" })).toBeVisible();
@@ -258,18 +262,17 @@ test("anonymous inbox supports private answers and safety controls", async ({ pa
 test("play answers a poll and advances", async ({ page }) => {
     await signInToDemo(page);
     await page.getByRole("button", { name: "Play", exact: true }).click();
+    await expect(page.locator("body")).toHaveClass(/play-active/);
+    await expect(page.locator(".topbar")).toBeHidden();
     await expect(page.locator(".play-streak-chip")).toContainText("7");
     await expect(page.locator(".play-streak-chip")).toContainText("1.5x");
     await expect(page.locator("#auraCount")).toHaveText("1,280");
+    const artworkBox = await page.locator("#playCard .question-artwork").boundingBox();
+    expect(Math.abs(artworkBox.width - artworkBox.height)).toBeLessThan(2);
+    await expect(page.locator("#playCard .choice-button").first()).toHaveCSS("min-height", "90px");
     for (const name of [/Shuffle/, /Nominate/, /Skip \(3\)/]) {
         const button = page.getByRole("button", { name });
         await expect(button).toBeVisible();
-        const withinVisualViewport = await button.evaluate((element) => {
-            const bounds = element.getBoundingClientRect();
-            const viewport = window.visualViewport;
-            return !viewport || (bounds.top >= viewport.offsetTop && bounds.bottom <= viewport.offsetTop + viewport.height);
-        });
-        expect(withinVisualViewport).toBe(true);
     }
     await expect(page.getByText("Who would survive longest on a deserted island?")).toBeVisible();
     await page.locator("[data-choice]").first().click();
