@@ -97,6 +97,8 @@ function avatarMarkup(profile, className = "row-avatar", fallbackURL = null) {
 }
 
 function showSignedOut(message = "") {
+    clearInterval(state.playLockTimer);
+    state.playLockTimer = null;
     $("#authView").classList.remove("hidden");
     $("#appView").classList.add("hidden");
     $("#bottomNav").classList.add("hidden");
@@ -278,6 +280,7 @@ function setSignupStep(index) {
     $$('[data-signup-step]').forEach((step) => step.classList.toggle("hidden", Number(step.dataset.signupStep) !== state.signupStep));
     $$(".signup-progress span").forEach((segment, segmentIndex) => segment.classList.toggle("active", segmentIndex <= state.signupStep));
     $("#signupStatus").textContent = "";
+    requestAnimationFrame(() => { $("#signupDialog").scrollTop = 0; });
     if (state.signupStep === 2) {
         $("#signupReview").innerHTML = `<strong>${escapeHTML($("#signupFirstName").value.trim())} ${escapeHTML($("#signupLastName").value.trim())}</strong><span>@${escapeHTML($("#signupUsername").value.trim().toLowerCase())} · ${escapeHTML($("#signupGrade").value)}</span><span>${escapeHTML($("#signupSchool").value.trim())} · ${escapeHTML($("#signupCity").value.trim())}, ${escapeHTML($("#signupState").value.trim().toUpperCase())}</span>`;
     }

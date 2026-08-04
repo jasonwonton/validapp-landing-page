@@ -42,6 +42,25 @@ test("new users can complete passkey-only school onboarding", async ({ page }) =
     await expect(page.getByRole("dialog").getByText("No one will be texted.")).toBeVisible();
 });
 
+test("onboarding keeps each step heading visible on compact phones", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 640 });
+    await page.goto("/app/?demo=1");
+    await page.getByRole("button", { name: "Create an account" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("First name").fill("Taylor");
+    await dialog.getByLabel("Last name").fill("Jordan");
+    await dialog.getByLabel("Username").fill("taylor_j");
+    await dialog.getByLabel("Birthday").fill("2008-05-12");
+    await dialog.getByLabel("Gender").selectOption("non-binary");
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await dialog.getByLabel("School name").fill("Westview High School");
+    await dialog.getByLabel("City").fill("San Diego");
+    await dialog.getByLabel("State").fill("CA");
+    await dialog.getByLabel("Grade").selectOption("Senior");
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await expect(dialog.getByRole("heading", { name: "Create your account" })).toBeInViewport();
+});
+
 test("mobile shell stays within interaction performance budgets", async ({ page }) => {
     await page.addInitScript(() => {
         window.__validMetrics = { cls: 0, longTasks: 0 };

@@ -1,0 +1,21 @@
+validapp.lol {
+	tls internal
+
+	handle /api/v1/* {
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	root * {$VALID_WEB_ROOT}
+	file_server
+}
+
+six7.lol {
+	tls internal
+
+	handle /.well-known/webauthn {
+		root * {$SIX7_ROOT}/six7-landing-page
+		file_server
+	}
+
+	respond 404
+}

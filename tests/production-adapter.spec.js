@@ -3,6 +3,15 @@ import { expect, test } from "@playwright/test";
 const API_ORIGIN = "https://api.six7.lol";
 const USER_ID = "11111111-1111-1111-1111-111111111111";
 
+test("local integration mode uses only the same-origin API proxy", async ({ page }) => {
+    await page.goto("/app/?local-api=1");
+    const baseURL = await page.evaluate(async () => {
+        const { ValidAPI } = await import("/app/api.js");
+        return new ValidAPI().baseURL;
+    });
+    expect(baseURL).toBe("http://127.0.0.1:4173/api/v1");
+});
+
 function profile(firstName = "Jordan", auraPoints = 500) {
     return {
         user_id: USER_ID,

@@ -1,4 +1,14 @@
 const DEFAULT_API_BASE = "https://api.six7.lol/api/v1";
+
+function apiBaseURL() {
+    // Local integration tests can opt into a same-origin reverse proxy. Never
+    // accept an arbitrary URL here: a public query-string override could send
+    // authentication material to an untrusted server.
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("local-api") === "1") return `${window.location.origin}/api/v1`;
+    return window.VALID_API_BASE_URL || DEFAULT_API_BASE;
+}
+
 export class APIError extends Error {
     constructor(message, status, detail, retryAfterSeconds = null) {
         super(message);
@@ -27,7 +37,7 @@ function retryMessage(seconds) {
 
 export class ValidAPI {
     constructor() {
-        this.baseURL = window.VALID_API_BASE_URL || DEFAULT_API_BASE;
+        this.baseURL = apiBaseURL();
         // Keep bearer material in memory only. A refresh intentionally requires
         // another passkey gesture instead of leaving a reusable secret in web storage.
         this.token = null;
