@@ -4,6 +4,9 @@ This branch contains the installable, passkey-only web client at `/app/`. It
 uses the Six7 backend branch `validapp-webapp-backend-changes`. There is no
 password, phone-number, or SMS authentication path in the web client.
 
+For a short two-repository setup guide on a new machine, start with
+[LOCAL_WEBAPP_SETUP.md](LOCAL_WEBAPP_SETUP.md).
+
 ## Before testing
 
 Use these branches:
