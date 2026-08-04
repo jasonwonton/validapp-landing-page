@@ -11,8 +11,10 @@ these exact web settings:
 ```text
 PASSKEY_EXPECTED_ORIGINS=https://six7.lol,https://validapp.lol
 CORS_ALLOWED_ORIGINS=https://six7.lol,https://www.six7.lol,https://validapp.lol,https://www.validapp.lol
-WEB_RATE_LIMIT_MODE=observe
+WEB_RATE_LIMIT_MODE=off
 WEB_RATE_LIMIT_PER_MINUTE=300
+WEB_AUTHENTICATED_RATE_LIMIT_PER_MINUTE=300
+WEB_AUTHENTICATED_IP_RATE_LIMIT_PER_MINUTE=3000
 WEB_PASSKEY_RATE_LIMIT_PER_MINUTE=20
 WEB_AUTH_RATE_LIMIT_PER_MINUTE=30
 WEB_WRITE_RATE_LIMIT_PER_MINUTE=90
@@ -30,9 +32,12 @@ per-IP limits, stricter auth rules, body and connection caps, and alerts for
 origin bandwidth, 429s, and concurrent connections. The backend scaling runbook
 contains the operational details.
 
-Start with `WEB_RATE_LIMIT_MODE=observe`. It uses the real counters but cannot
-return a new 429 or 413 to iOS or web clients. Review at least one normal peak
-traffic window, then change it to `enforce`. If existing-client behavior changes,
+Start with `WEB_RATE_LIMIT_MODE=off` for the current-App-Store smoke test. Then
+move to `observe`; it uses the real counters but cannot return a new 429 or 413
+to iOS or web clients. Authenticated sessions get independent ordinary budgets,
+with a higher per-IP ceiling so students behind one school NAT do not consume a
+single pooled allowance. Review at least one normal peak traffic window, then
+change it to `enforce`. If existing-client behavior changes,
 set it to `off` and redeploy; off bypasses both Redis counters and the new body
 cap. Keep edge protection active throughout because it does not require this
 application switch. Use the admin-authenticated `/metrics` response's
