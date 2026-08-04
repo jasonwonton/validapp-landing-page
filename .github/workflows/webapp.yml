@@ -34,3 +34,34 @@ jobs:
           name: playwright-failure-artifacts
           path: test-results/
           if-no-files-found: ignore
+
+  passkey-integration:
+    if: vars.SIX7_INTEGRATION_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out the matching private Six7 backend branch
+        uses: actions/checkout@v4
+        with:
+          repository: christophertran/six7
+          ref: validapp-webapp-backend-changes
+          path: _six7
+          ssh-key: ${{ secrets.SIX7_DEPLOY_KEY }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: _six7/requirements.txt
+      - run: npm ci
+      - run: pip install -r _six7/requirements.txt
+      - run: npx playwright install --with-deps chromium
+      - name: Run a real related-origin WebAuthn ceremony
+        env:
+          SIX7_REPO: ${{ github.workspace }}/_six7
+          SIX7_PYTHON: python
+        run: npm run test:passkey-integration

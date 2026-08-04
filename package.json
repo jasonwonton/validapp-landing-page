@@ -4,6 +4,7 @@
   "scripts": {
     "test:e2e": "playwright test",
     "test:e2e:update": "playwright test --update-snapshots",
+    "test:passkey-integration": "node scripts/test-passkey-backend.mjs",
     "test:production": "node scripts/check-production.mjs"
   },
   "devDependencies": {

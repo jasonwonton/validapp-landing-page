@@ -34,6 +34,31 @@ npm run test:e2e
 The suite exercises the core flows in Pixel 7 and desktop Chrome profiles. It
 uses browser-level API contracts and demo data; it never calls production.
 
+For the cryptographic passkey integration check, keep the Six7 repository in a
+sibling directory with its virtual environment installed, then run:
+
+```bash
+cd /path/to/validapp-landing-page
+npm run test:passkey-integration
+```
+
+This launches an isolated in-memory backend and a temporary HTTPS server. A
+Chromium virtual authenticator performs a real WebAuthn registration and
+discoverable sign-in with RP `six7.lol` and related origin `validapp.lol`. The
+test covers signup, authenticated profile loading, logout/revocation, fresh
+sign-in, and another authenticated profile load. It uses the production route,
+frontend, and cryptographic verification code, but no database, Redis service,
+SMS provider, production endpoint, `/etc/hosts` change, or persistent passkey.
+Set `SIX7_REPO` and optionally `SIX7_PYTHON` if the repositories are not
+siblings.
+
+The same ceremony has an opt-in GitHub Actions job. To enable it without
+granting write access, an administrator of `christophertran/six7` must add a
+dedicated read-only deploy key, store its private half as the landing-page
+repository secret `SIX7_DEPLOY_KEY`, and set the landing-page repository
+variable `SIX7_INTEGRATION_ENABLED=true`. The ordinary browser CI remains
+independent and green until that least-privilege key is configured.
+
 ## 2. Quick hands-on UI check
 
 ```bash
