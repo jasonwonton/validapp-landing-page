@@ -159,9 +159,29 @@
             <label for="questionImage">Artwork <span>(required in the app flow)</span></label>
             <input id="questionImage" type="file" required accept="image/jpeg,image/png,image/webp">
             <label class="check-row"><input id="questionPermission" type="checkbox" required> I have permission to use this image.</label>
+            <div class="question-cost-row">
+                <span><small>Cost to submit</small><strong><span id="questionAuraCost">200</span> aura</strong></span>
+                <span><small>Your aura</small><strong id="questionCurrentAura">0</strong></span>
+            </div>
+            <p class="refund-note">If moderators deny the submission, your aura is refunded.</p>
             <p id="questionStatus" class="status-message" role="status"></p>
-            <button class="primary-button" type="submit">Submit for review</button>
+            <button id="questionSubmitButton" class="primary-button" type="submit">Submit for review</button>
         </form>
+    </dialog>
+
+    <dialog id="questionConfirmDialog" class="modal">
+        <div class="aura-confirm-content">
+            <span class="eyebrow">CONFIRM SUBMISSION</span>
+            <h2>Submit this poll?</h2>
+            <p>Spend <strong><span id="questionConfirmCost">200</span> aura</strong> to send your question for review.</p>
+            <div class="question-cost-row">
+                <span><small>Current aura</small><strong id="questionConfirmCurrent">0</strong></span>
+                <span><small>After submission</small><strong id="questionConfirmRemaining">0</strong></span>
+            </div>
+            <p class="refund-note">Denied submissions are refunded automatically.</p>
+            <button id="confirmQuestionSubmit" class="primary-button" type="button">Spend 200 aura</button>
+            <button class="secondary-button" type="button" data-close-dialog>Keep editing</button>
+        </div>
     </dialog>
 
     <dialog id="feedDetailDialog" class="modal">
@@ -216,6 +236,10 @@
                 <legend>Secure your account</legend>
                 <div class="passkey-explainer"><span aria-hidden="true">🔑</span><div><strong>No password. No phone number.</strong><p>Your face, fingerprint, or device PIN unlocks a passkey that stays on your device.</p></div></div>
                 <div id="signupReview" class="signup-review"></div>
+                <div class="signup-photo-picker">
+                    <span id="signupPhotoPreview" class="signup-photo-preview" aria-hidden="true">+</span>
+                    <label>Profile photo <small>(optional, up to 5 MB)</small><input id="signupPicture" type="file" accept="image/jpeg,image/png,image/webp"></label>
+                </div>
                 <label class="check-row"><input id="signupAgeConsent" type="checkbox" required> I confirm I meet Valid's minimum age requirement and agree to the <a href="../terms.html" target="_blank">Terms</a>.</label>
                 <div class="signup-button-row"><button class="secondary-button" type="button" data-signup-back>Back</button><button class="primary-button" type="submit">Create with passkey</button></div>
             </fieldset>

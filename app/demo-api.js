@@ -269,7 +269,13 @@ export class DemoAPI {
     }
 
     async getConfig() {
-        return { nomination_aura_cost: 100 };
+        return {
+            nomination_aura_cost: 100,
+            question_submission_aura_cost: 200,
+            max_custom_question_length: 280,
+            max_skips_per_set: 3,
+            play_lock_time_seconds: 60,
+        };
     }
 
     async getClassmates() {
@@ -311,7 +317,8 @@ export class DemoAPI {
     async submitQuestion(_userId, formData) {
         const questionText = String(formData.get("question_text") || "").trim();
         if (questionText.length < 3) throw new Error("Question is too short");
-        return { id: crypto.randomUUID(), status: "pending" };
+        this.profile.aura_points -= 200;
+        return { id: crypto.randomUUID(), status: "pending", aura_spent: 200, is_duplicate: false };
     }
 
     async getInviteStatus() {

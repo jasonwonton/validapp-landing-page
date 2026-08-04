@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 const API_ORIGIN = "https://api.six7.lol";
 const USER_ID = "11111111-1111-1111-1111-111111111111";
 
-function profile(firstName = "Jordan") {
+function profile(firstName = "Jordan", auraPoints = 500) {
     return {
         user_id: USER_ID,
         first_name: firstName,
@@ -13,7 +13,7 @@ function profile(firstName = "Jordan") {
         school_name: "Westview High School",
         grade: "Junior",
         gender: "non-binary",
-        aura_points: 50,
+        aura_points: auraPoints,
         vote_count: 4,
         current_streak: 1,
         can_change_information: true,
@@ -50,8 +50,9 @@ async function installCredentialStub(page, operation) {
     }, operation);
 }
 
-async function interceptProductionAPI(page, { signup = false } = {}) {
+async function interceptProductionAPI(page, { signup = false, profileAura = 500, questionFailureCount = 0 } = {}) {
     const requests = [];
+    let questionAttempts = 0;
     await page.route(`${API_ORIGIN}/api/v1/**`, async (route) => {
         const request = route.request();
         const url = new URL(request.url());
@@ -99,9 +100,9 @@ async function interceptProductionAPI(page, { signup = false } = {}) {
             });
         }
         if (path === "/api/v1/auth/passkey/signup/complete") {
-            return fulfill({ access_token: "session-token", user: { id: USER_ID }, profile: profile("Taylor") });
+            return fulfill({ access_token: "session-token", user: { id: USER_ID }, profile: profile("Taylor", profileAura) });
         }
-        if (path === `/api/v1/users/${USER_ID}/profile`) return fulfill(profile(signup ? "Taylor" : "Jordan"));
+        if (path === `/api/v1/users/${USER_ID}/profile`) return fulfill(profile(signup ? "Taylor" : "Jordan", profileAura));
         if (path === `/api/v1/users/${USER_ID}/classmates/status`) {
             return fulfill({ is_unlocked: true, lock_reasons: [], votes_cast: 3, required_votes: 3 });
         }
@@ -121,7 +122,13 @@ async function interceptProductionAPI(page, { signup = false } = {}) {
             ]);
         }
         if (path === `/api/v1/users/${USER_ID}/invites/status`) return fulfill({ limit: 3, sent_today: 0, remaining: 3 });
-        if (path === "/api/v1/config") return fulfill({ nomination_aura_cost: 100 });
+        if (path === "/api/v1/config") return fulfill({
+            nomination_aura_cost: 100,
+            question_submission_aura_cost: 200,
+            max_custom_question_length: 280,
+            max_skips_per_set: 3,
+            play_lock_time_seconds: 60,
+        });
         if (path === `/api/v1/users/${USER_ID}/question-answers`) {
             return fulfill({ aura_points_earned: 5, total_aura_points: 55, current_streak: 1, streak_multiplier: 1 });
         }
@@ -130,8 +137,16 @@ async function interceptProductionAPI(page, { signup = false } = {}) {
             return fulfill({ share_url: "https://validapp.lol/a/contract", is_active: true });
         }
         if (path === `/api/v1/users/${USER_ID}/question-submissions`) {
-            return fulfill({ id: "61111111-1111-1111-1111-111111111111", status: "pending" });
+            questionAttempts += 1;
+            if (questionAttempts <= questionFailureCount) return fulfill({ detail: "Temporary upstream failure" }, 500);
+            return fulfill({
+                id: "61111111-1111-1111-1111-111111111111",
+                status: "pending",
+                aura_spent: 200,
+                is_duplicate: questionFailureCount > 0,
+            });
         }
+        if (path === `/api/v1/users/${USER_ID}/profile-picture`) return fulfill({ url: "https://cdn.example/avatar.jpg" });
         if (path === "/api/v1/auth/logout") return fulfill(null, 204);
         return fulfill({ detail: `Unexpected production-adapter request: ${request.method()} ${path}` }, 500);
     });
@@ -183,6 +198,11 @@ test("real adapter completes passkey-only signup without an SMS request", async 
     await dialog.getByLabel("Grade").selectOption("Senior");
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel(/minimum age requirement/).check();
+    await dialog.getByLabel(/Profile photo/).setInputFiles({
+        name: "avatar.png",
+        mimeType: "image/png",
+        buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    });
     await dialog.getByRole("button", { name: "Create with passkey" }).click();
     await expect(page.getByText("Hey, Taylor")).toBeVisible();
 
@@ -206,6 +226,9 @@ test("real adapter completes passkey-only signup without an SMS request", async 
         },
     });
     expect(completion.body.deviceInstallationId.length).toBeGreaterThanOrEqual(8);
+    const photo = requests.find((request) => request.path.endsWith("/profile-picture"));
+    expect(photo.authorization).toBe("Bearer session-token");
+    expect(photo.contentType).toMatch(/^multipart\/form-data; boundary=/);
     expect(requests.some((request) => /sms|phone\/(request|confirm)/i.test(request.path))).toBe(false);
 });
 
@@ -241,6 +264,9 @@ test("real adapter submits a Play vote and multipart school question", async ({ 
     });
     await dialog.getByLabel(/permission to use this image/i).check();
     await dialog.getByRole("button", { name: "Submit for review" }).click();
+    const confirmation = page.getByRole("dialog").filter({ hasText: "Submit this poll?" });
+    await expect(confirmation.getByText("200 aura", { exact: true })).toBeVisible();
+    await confirmation.getByRole("button", { name: "Spend 200 aura" }).click();
     await expect.poll(() => requests.some((request) => request.path.endsWith("/question-submissions"))).toBe(true);
     await expect(dialog).toBeHidden();
     await expect(page.locator("#toast")).toContainText("Question sent for review");
@@ -268,4 +294,53 @@ test("real adapter gives rate-limited users an actionable wait time", async ({ p
     await page.getByRole("button", { name: /sign in with a passkey/i }).click();
 
     await expect(page.locator("#authStatus")).toHaveText("Too many requests. Try again in 42 seconds.");
+});
+
+test("question submission refuses an aura overdraft before calling the API", async ({ page }) => {
+    await installCredentialStub(page, "get");
+    const requests = await interceptProductionAPI(page, { profileAura: 50 });
+    await page.goto("/app/");
+    await page.getByRole("button", { name: /sign in with a passkey/i }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: /Submit a school question/i }).click();
+    const dialog = page.getByRole("dialog").filter({ hasText: "Submit a school question" });
+    await dialog.getByLabel("What should your school vote on?").fill("Who makes school more welcoming?");
+    await dialog.getByLabel(/Artwork/).setInputFiles({
+        name: "art.png",
+        mimeType: "image/png",
+        buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    });
+    await dialog.getByLabel(/permission to use this image/i).check();
+    await dialog.getByRole("button", { name: "Submit for review" }).click();
+    await expect(dialog.locator("#questionStatus")).toHaveText("You need 200 aura to submit this question.");
+    expect(requests.filter((request) => request.path.endsWith("/question-submissions"))).toHaveLength(0);
+});
+
+test("ambiguous question retries reuse one idempotency key and never double-charge", async ({ page }) => {
+    await installCredentialStub(page, "get");
+    const requests = await interceptProductionAPI(page, { questionFailureCount: 1 });
+    await page.goto("/app/");
+    await page.getByRole("button", { name: /sign in with a passkey/i }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: /Submit a school question/i }).click();
+    const dialog = page.getByRole("dialog").filter({ hasText: "Submit a school question" });
+    await dialog.getByLabel("What should your school vote on?").fill("Who always makes people feel included?");
+    await dialog.getByLabel(/Artwork/).setInputFiles({
+        name: "art.png",
+        mimeType: "image/png",
+        buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    });
+    await dialog.getByLabel(/permission to use this image/i).check();
+    await dialog.getByRole("button", { name: "Submit for review" }).click();
+    await page.getByRole("dialog").filter({ hasText: "Submit this poll?" })
+        .getByRole("button", { name: "Spend 200 aura" }).click();
+    await expect(dialog.locator("#questionStatus")).toContainText("couldn't confirm the result");
+    await dialog.getByRole("button", { name: "Check submission" }).click();
+    await expect(page.locator("#toast")).toContainText("Already submitted");
+
+    const submissions = requests.filter((request) => request.path.endsWith("/question-submissions"));
+    expect(submissions).toHaveLength(2);
+    const key = (body) => String(body).match(/name="idempotency_key"\r\n\r\n([^\r\n]+)/)?.[1];
+    expect(key(submissions[0].body)).toBeTruthy();
+    expect(key(submissions[1].body)).toBe(key(submissions[0].body));
 });

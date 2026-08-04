@@ -232,6 +232,7 @@ export class ValidAPI {
         return this.request(`/users/${userId}/question-submissions`, {
             method: "POST",
             body: formData,
+            timeoutMs: 45_000,
         });
     }
 
@@ -266,6 +267,7 @@ export class ValidAPI {
         return this.request(`/users/${userId}/profile-picture`, {
             method: "POST",
             body: formData,
+            timeoutMs: 45_000,
         });
     }
 

@@ -21,9 +21,10 @@ python3 -m http.server 4173
 Open `http://127.0.0.1:4173/app/?demo=1`. Add `&locked=1` to exercise the
 iOS-style vote-to-unlock Feed state. Test Feed and School switching,
 anonymous Inbox answer/report/block/delete, a complete Play set, shuffle and
-nomination, profile editing, Ask me link controls, question submission, install
-prompt, selected-contact classmate discovery, offline banner, logout, and the
-reversible account-deletion flow.
+nomination, the three-skip limit and live cooldown, profile editing, Ask me link
+controls, aura-confirmed/idempotent question submission, optional onboarding
+photo, selected-contact classmate discovery, install prompt, offline banner,
+logout, and the reversible account-deletion flow.
 
 ## Real passkey staging check
 
@@ -64,11 +65,15 @@ The related-origin file on `six7.lol` must contain
 On an actual Android phone in current Chrome:
 
 1. Create an account with name, birthday, school, grade, and a passkey. Confirm
-   there is no phone-number or SMS step.
+   there is no phone-number or SMS step. Add an optional profile photo and
+   confirm the selected-contact/invite prompt appears after signup.
 2. Close the tab, return, and sign in with the same passkey.
 3. Install Valid from Profile, launch it from the home screen, and exercise Feed,
    Play, Profile, selected-contact discovery, invites, question submission, and
-   the anonymous Inbox. Confirm contact selection sends no message or SMS.
+   the anonymous Inbox. Confirm Play enforces three skips and its cooldown
+   unlocks without a refresh. Confirm question submission shows the server aura
+   cost and safely checks an ambiguous submission without charging twice.
+   Confirm contact selection sends no message or SMS.
 4. Test on Wi-Fi and cellular, with a slow-network throttle, after backgrounding
    Chrome, and once with biometric cancellation.
 5. Schedule account deletion, sign in again, and choose **Keep my account**.

@@ -29,11 +29,17 @@ test("new users can complete passkey-only school onboarding", async ({ page }) =
     await dialog.getByLabel("Grade").selectOption("Senior");
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(dialog.getByText("No password. No phone number.")).toBeVisible();
+    await dialog.getByLabel(/Profile photo/).setInputFiles({
+        name: "avatar.png",
+        mimeType: "image/png",
+        buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    });
     await dialog.getByLabel(/minimum age requirement/).check();
     await dialog.getByRole("button", { name: "Create with passkey" }).click();
     await expect(page.getByText("Hey, Taylor")).toBeVisible();
     await expect(page.locator("#profileSchool")).toHaveText("Westview High School");
     await expect(page.locator("#toast")).toContainText("Welcome to Valid");
+    await expect(page.getByRole("dialog").getByText("No one will be texted.")).toBeVisible();
 });
 
 test("mobile shell stays within interaction performance budgets", async ({ page }) => {
@@ -184,6 +190,27 @@ test("play supports shuffle and paid classmate nominations", async ({ page }) =>
     await expect(page.locator("#toast")).toContainText(`You nominated ${name}`);
 });
 
+test("play matches the iOS per-set skip limit", async ({ page }) => {
+    await signInToDemo(page);
+    await page.getByRole("button", { name: "Play", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Skip (3)" })).toBeVisible();
+    await page.getByRole("button", { name: "Skip (3)" }).click();
+    await page.getByRole("button", { name: "Skip (2)" }).click();
+    await page.getByRole("button", { name: "Skip (1)" }).click();
+    await expect(page.getByRole("button", { name: "Skip (0)" })).toBeDisabled();
+});
+
+test("play exposes safety controls for classmate-submitted polls", async ({ page }) => {
+    await signInToDemo(page);
+    await page.getByRole("button", { name: "Play", exact: true }).click();
+    await page.locator("[data-choice]").first().click();
+    await expect(page.getByText("Who should plan the senior trip?")).toBeVisible();
+    page.once("dialog", (confirmation) => confirmation.accept());
+    await page.getByRole("button", { name: "Report question" }).click();
+    await expect(page.locator("#toast")).toContainText("Reported to Valid");
+    await expect(page.getByText("Who gives the best advice?")).toBeVisible();
+});
+
 test("completing a poll set celebrates earned aura before cooldown", async ({ page }) => {
     await signInToDemo(page);
     await page.getByRole("button", { name: "Play", exact: true }).click();
@@ -195,6 +222,7 @@ test("completing a poll set celebrates earned aura before cooldown", async ({ pa
     await expect(page.locator("#auraCount")).toHaveText("1,300");
     await page.getByRole("button", { name: "W aura" }).click();
     await expect(page.getByRole("heading", { name: "Next Poll Set Locked" })).toBeVisible();
+    await expect(page.locator("#playLockMessage")).toContainText(/Unlocks in (0:5\d|1:00)/);
 });
 
 test("profile exposes editing, ask link, and school question flows", async ({ page }) => {

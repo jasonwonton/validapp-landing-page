@@ -23,8 +23,12 @@ const state = {
     playLocked: null,
     playComplete: false,
     playAuraEarned: 0,
+    skipsUsedInSet: 0,
+    playLockTimer: null,
     inviteStatus: null,
     config: null,
+    pendingQuestionSubmissionKey: null,
+    pendingQuestionDraft: null,
     askLink: null,
     anonymousInbox: null,
     selectedAnonymousQuestionId: null,
@@ -106,12 +110,20 @@ async function showSignedIn() {
     $("#bottomNav").classList.remove("hidden");
     $("#logoutButton").classList.remove("hidden");
     try {
-        const [profile, classmatesStatus] = await Promise.all([
+        const [profile, classmatesStatus, config] = await Promise.all([
             api.getProfile(api.user.id),
             api.getClassmatesStatus(api.user.id).catch(() => null),
+            api.getConfig().catch(() => ({
+                nomination_aura_cost: 100,
+                question_submission_aura_cost: 200,
+                max_custom_question_length: 280,
+                max_skips_per_set: 3,
+                play_lock_time_seconds: 60,
+            })),
         ]);
         state.profile = profile;
         state.classmatesStatus = classmatesStatus;
+        state.config = config;
         renderProfileHeader();
         renderFeedGate();
         if (!isFeedVoteLocked()) await loadFeed(true);
@@ -256,6 +268,7 @@ function openSignupDialog() {
     const cutoff = new Date();
     cutoff.setUTCFullYear(cutoff.getUTCFullYear() - 13);
     $("#signupBirthday").max = cutoff.toISOString().slice(0, 10);
+    $("#signupPhotoPreview").textContent = "+";
     setSignupStep(0);
     $("#signupDialog").showModal();
 }
@@ -292,6 +305,7 @@ async function createAccount(event) {
         return;
     }
     const username = $("#signupUsername").value.trim().toLowerCase();
+    const profilePicture = $("#signupPicture").files[0];
     const schoolPayload = {
         school_name: $("#signupSchool").value.trim(),
         city: $("#signupCity").value.trim(),
@@ -329,10 +343,17 @@ async function createAccount(event) {
             });
         }
         api.saveSession(login);
+        let photoUploadFailed = false;
+        if (profilePicture) {
+            try { await api.uploadProfilePicture(api.user.id, profilePicture); }
+            catch (_) { photoUploadFailed = true; }
+        }
         form.reset();
+        $("#signupPhotoPreview").textContent = "+";
         $("#signupDialog").close();
         await showSignedIn();
-        showToast("Welcome to Valid ✨");
+        showToast(photoUploadFailed ? "Welcome! Add your photo from Profile when you're ready." : "Welcome to Valid ✨");
+        setTimeout(() => { if (api.hasSession()) openClassmatesDialog(); }, 700);
     } catch (error) {
         $("#signupStatus").textContent = error.message || "Could not create your account.";
     } finally {
@@ -692,14 +713,35 @@ function renderInviteUnlock() {
 
 function renderLockedPlay() {
     const until = state.playLocked?.locked_until;
-    const message = until ? `Unlocks ${relativeTime(until)}` : "New polls drop soon.";
+    clearInterval(state.playLockTimer);
+    state.playLockTimer = null;
     $("#playCard").innerHTML = `<article class="locked-play-card">
         <h3>Next Poll Set Locked</h3>
         <img class="lock-art" src="../assets/app/lock.png" alt="">
-        <p>${escapeHTML(message)}</p>
+        <p id="playLockMessage">${until ? "Checking unlock time..." : "New polls drop soon."}</p>
         ${renderInviteUnlock()}
         <button class="question-secondary-action" type="button" data-open-question><img src="../assets/app/pencil-clipboard.png" alt="">Submit a school question</button>
     </article>`;
+    if (until) {
+        const tick = () => {
+            const remaining = Math.max(0, Math.ceil((new Date(until).getTime() - Date.now()) / 1000));
+            const message = $("#playLockMessage");
+            if (message) message.textContent = remaining
+                ? `Unlocks in ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`
+                : "Unlocking your next polls...";
+            if (remaining > 0) return;
+            clearInterval(state.playLockTimer);
+            state.playLockTimer = null;
+            state.playLocked = null;
+            state.questions = [];
+            state.questionIndex = 0;
+            state.choicesByQuestion.clear();
+            state.skipsUsedInSet = 0;
+            loadPlay();
+        };
+        tick();
+        if (state.playLocked?.locked_until === until) state.playLockTimer = setInterval(tick, 1000);
+    }
 }
 
 function renderPlayCongrats() {
@@ -736,6 +778,8 @@ function renderPlay() {
     }
     const artworkURL = api.assetURL(question.image_url);
     const attribution = question.is_user_submitted ? `<div class="question-attribution">${question.is_anonymous ? avatarMarkup({ first_name: "Anonymous", profile_picture_url: "../assets/app/anonymous.png" }, "attribution-avatar") : avatarMarkup({ first_name: question.submitted_by_name || "A classmate", profile_picture_url: question.submitted_by_avatar_url }, "attribution-avatar")}<span><small>Question submitted by</small><strong>${escapeHTML(question.is_anonymous ? "Someone at your school" : question.submitted_by_name || "A classmate")}</strong></span></div>` : "";
+    const remainingSkips = Math.max(0, Number(state.config?.max_skips_per_set ?? 3) - state.skipsUsedInSet);
+    const safetyActions = question.is_user_submitted ? `<div class="play-safety-actions"><button type="button" data-play-question-action="report">Report question</button><button type="button" data-play-question-action="block">Block submitter</button></div>` : "";
     card.innerHTML = `<article class="play-card">
         <h3>${escapeHTML(question.question_text)}</h3>
         ${attribution}
@@ -744,8 +788,9 @@ function renderPlay() {
         <div class="play-actions">
             <button class="play-action-button" data-shuffle type="button">↻ Shuffle</button>
             <button class="play-action-button nominate" data-nominate type="button">♛ Nominate</button>
-            <button class="play-action-button" data-skip="${question.id}" type="button">Skip</button>
+            <button class="play-action-button" data-skip="${question.id}" type="button" ${remainingSkips < 1 ? "disabled" : ""}>Skip (${remainingSkips})</button>
         </div>
+        ${safetyActions}
     </article>`;
 }
 
@@ -757,7 +802,13 @@ async function loadPlay() {
             api.getPlayQuestions(api.user.id),
             api.getClassmates(api.user.id),
             api.getInviteStatus(api.user.id).catch(() => null),
-            api.getConfig().catch(() => ({ nomination_aura_cost: 100 })),
+            state.config ? Promise.resolve(state.config) : api.getConfig().catch(() => ({
+                nomination_aura_cost: 100,
+                question_submission_aura_cost: 200,
+                max_custom_question_length: 280,
+                max_skips_per_set: 3,
+                play_lock_time_seconds: 60,
+            })),
         ]);
         state.questions = questionBatch.questions || [];
         state.classmates = classmates || [];
@@ -877,17 +928,41 @@ async function answerPlayQuestion(choiceId) {
 
 function finishPlaySet() {
     state.playComplete = false;
-    state.playLocked = {};
+    state.playAuraEarned = 0;
+    state.skipsUsedInSet = 0;
+    state.questions = [];
+    state.questionIndex = 0;
+    state.choicesByQuestion.clear();
+    const lockSeconds = Math.max(1, Number(state.config?.play_lock_time_seconds ?? 60));
+    state.playLocked = { locked_until: new Date(Date.now() + lockSeconds * 1000).toISOString() };
     renderLockedPlay();
 }
 
 async function skipPlayQuestion(questionId) {
+    const remaining = Math.max(0, Number(state.config?.max_skips_per_set ?? 3) - state.skipsUsedInSet);
+    if (remaining < 1) return showToast("You've used all skips for this poll set.");
+    state.skipsUsedInSet += 1;
+    state.questionIndex += 1;
+    renderPlay();
+    try { await api.skipQuestion(api.user.id, questionId); }
+    catch (_) { showToast("Skipped here. We'll sync it when the connection recovers."); }
+}
+
+async function moderatePlayQuestion(action) {
+    const question = state.questions[state.questionIndex];
+    if (!question?.is_user_submitted) return;
+    const prompt = action === "block"
+        ? "Block this question's submitter and skip the poll?"
+        : "Report this question to Valid and skip the poll?";
+    if (!confirm(prompt)) return;
     try {
-        await api.skipQuestion(api.user.id, questionId);
+        if (action === "block") await api.blockQuestionSubmitter(api.user.id, question.id);
+        else await api.reportQuestion(api.user.id, question.id);
         state.questionIndex += 1;
         renderPlay();
+        showToast(action === "block" ? "Submitter blocked" : "Reported to Valid");
     } catch (error) {
-        showToast(error.message || "Could not skip that question.");
+        showToast(error.message || `Could not ${action} this question.`);
     }
 }
 
@@ -1007,36 +1082,130 @@ async function saveProfile(event) {
     } finally { setButtonLoading(button, false); }
 }
 
-async function submitQuestion(event) {
+function questionSubmissionCost() {
+    return Math.max(0, Number(state.config?.question_submission_aura_cost ?? 200));
+}
+
+function questionDraftFingerprint() {
+    const image = $("#questionImage").files[0];
+    return JSON.stringify({
+        text: $("#questionText").value.trim(),
+        identity: $("input[name=questionIdentity]:checked")?.value,
+        image: image ? [image.name, image.size, image.lastModified] : null,
+    });
+}
+
+function updateQuestionSubmissionUI() {
+    const cost = questionSubmissionCost();
+    const aura = Math.max(0, Number(state.profile?.aura_points || 0));
+    $("#questionAuraCost").textContent = cost.toLocaleString();
+    $("#questionCurrentAura").textContent = aura.toLocaleString();
+    $("#questionConfirmCost").textContent = cost.toLocaleString();
+    $("#questionConfirmCurrent").textContent = aura.toLocaleString();
+    $("#questionConfirmRemaining").textContent = Math.max(0, aura - cost).toLocaleString();
+    $("#confirmQuestionSubmit").textContent = `Spend ${cost.toLocaleString()} aura`;
+    $("#questionSubmitButton").textContent = state.pendingQuestionSubmissionKey ? "Check submission" : "Submit for review";
+}
+
+function resetQuestionSubmissionIfDraftChanged() {
+    if (!state.pendingQuestionSubmissionKey || questionDraftFingerprint() === state.pendingQuestionDraft) return;
+    state.pendingQuestionSubmissionKey = null;
+    state.pendingQuestionDraft = null;
+    $("#questionStatus").textContent = "";
+    updateQuestionSubmissionUI();
+}
+
+function reviewQuestionSubmission(event) {
     event.preventDefault();
-    const form = event.currentTarget;
-    const button = form.querySelector("button[type=submit]");
     const image = $("#questionImage").files[0];
     if (!image) {
         $("#questionStatus").textContent = "Please attach artwork before submitting.";
         return;
     }
+    if (image.size > 5 * 1024 * 1024) {
+        $("#questionStatus").textContent = "Question artwork must be 5 MB or smaller.";
+        return;
+    }
+    const cost = questionSubmissionCost();
+    const aura = Math.max(0, Number(state.profile?.aura_points || 0));
+    if (!state.pendingQuestionSubmissionKey && aura < cost) {
+        $("#questionStatus").textContent = `You need ${cost.toLocaleString()} aura to submit this question.`;
+        return;
+    }
+    if (state.pendingQuestionSubmissionKey) return confirmQuestionSubmission();
+    updateQuestionSubmissionUI();
+    $("#questionConfirmDialog").showModal();
+}
+
+async function confirmQuestionSubmission() {
+    const form = $("#questionForm");
+    const image = $("#questionImage").files[0];
+    if (!image) return;
+    const fingerprint = questionDraftFingerprint();
+    if (!state.pendingQuestionSubmissionKey || state.pendingQuestionDraft !== fingerprint) {
+        state.pendingQuestionSubmissionKey = crypto.randomUUID();
+        state.pendingQuestionDraft = fingerprint;
+    }
     const formData = new FormData();
     formData.set("question_text", $("#questionText").value.trim());
     formData.set("include_name", String($("input[name=questionIdentity]:checked").value === "named"));
-    formData.set("idempotency_key", crypto.randomUUID());
+    formData.set("idempotency_key", state.pendingQuestionSubmissionKey);
     formData.set("image", image);
+    $("#questionConfirmDialog").close();
+    const button = $("#questionSubmitButton");
     setButtonLoading(button, true, "Submitting...");
     $("#questionStatus").textContent = "";
     try {
-        await api.submitQuestion(api.user.id, formData);
+        const result = await api.submitQuestion(api.user.id, formData);
+        state.pendingQuestionSubmissionKey = null;
+        state.pendingQuestionDraft = null;
         form.reset();
         $("#questionDialog").close();
-        refreshProfile();
-        showToast("Question sent for review ✨");
+        await refreshProfile();
+        showToast(result.is_duplicate ? "Already submitted · waiting for review" : "Question sent for review ✨");
     } catch (error) {
-        $("#questionStatus").textContent = error.message || "Could not submit your question.";
-    } finally { setButtonLoading(button, false); }
+        const definitive = error.status >= 400 && error.status < 500 && ![408, 429].includes(error.status);
+        if (definitive) {
+            state.pendingQuestionSubmissionKey = null;
+            state.pendingQuestionDraft = null;
+            $("#questionStatus").textContent = error.message || "Could not submit your question.";
+        } else {
+            $("#questionStatus").textContent = error.status === 429
+                ? error.message
+                : "We couldn't confirm the result. Tap “Check submission” — you won't be charged twice.";
+        }
+    } finally {
+        setButtonLoading(button, false);
+        updateQuestionSubmissionUI();
+    }
 }
 
 function openQuestionDialog() {
     $("#questionStatus").textContent = "";
+    const maxLength = Math.max(3, Number(state.config?.max_custom_question_length ?? 280));
+    $("#questionText").maxLength = maxLength;
+    updateQuestionSubmissionUI();
     $("#questionDialog").showModal();
+}
+
+function previewSignupPhoto() {
+    const input = $("#signupPicture");
+    const file = input.files[0];
+    const preview = $("#signupPhotoPreview");
+    if (!file) {
+        preview.textContent = "+";
+        return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+        input.value = "";
+        preview.textContent = "+";
+        $("#signupStatus").textContent = "Profile photos must be 5 MB or smaller.";
+        return;
+    }
+    const reader = new FileReader();
+    reader.addEventListener("load", () => { preview.innerHTML = `<img src="${escapeHTML(reader.result)}" alt="">`; }, { once: true });
+    reader.addEventListener("error", () => { preview.textContent = "+"; }, { once: true });
+    reader.readAsDataURL(file);
 }
 
 function contactsPickerSupported() {
@@ -1203,6 +1372,7 @@ function bindEvents() {
     $("#passkeyButton").addEventListener("click", handlePasskeySignIn);
     $("#createAccountButton").addEventListener("click", openSignupDialog);
     $("#signupForm").addEventListener("submit", createAccount);
+    $("#signupPicture").addEventListener("change", previewSignupPhoto);
     $("#signupDialog").addEventListener("click", (event) => {
         if (event.target.closest("[data-signup-next]")) advanceSignup();
         if (event.target.closest("[data-signup-back]")) setSignupStep(state.signupStep - 1);
@@ -1267,6 +1437,8 @@ function bindEvents() {
         if (event.target.closest("[data-find-classmates]")) openClassmatesDialog();
         if (event.target.closest("[data-shuffle]")) shufflePlayChoices();
         if (event.target.closest("[data-nominate]")) openNominationDialog();
+        const safetyAction = event.target.closest("[data-play-question-action]");
+        if (safetyAction) moderatePlayQuestion(safetyAction.dataset.playQuestionAction);
         if (event.target.closest("[data-finish-play]")) finishPlaySet();
         if (event.target.closest("[data-open-question]")) openQuestionDialog();
     });
@@ -1292,7 +1464,10 @@ function bindEvents() {
     $("#cancelDeletionButton").addEventListener("click", cancelAccountDeletion);
     $("#pendingDeletionLogout").addEventListener("click", logoutAndReset);
     $("#installAppButton").addEventListener("click", installWebApp);
-    $("#questionForm").addEventListener("submit", submitQuestion);
+    $("#questionForm").addEventListener("submit", reviewQuestionSubmission);
+    $("#questionForm").addEventListener("input", resetQuestionSubmissionIfDraftChanged);
+    $("#questionForm").addEventListener("change", resetQuestionSubmissionIfDraftChanged);
+    $("#confirmQuestionSubmit").addEventListener("click", confirmQuestionSubmission);
     $("#profileForm").addEventListener("submit", saveProfile);
     $$("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
     addEventListener("valid:session-expired", () => showSignedOut("Your session expired. Sign in with your passkey again."));
