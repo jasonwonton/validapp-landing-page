@@ -1009,7 +1009,8 @@ async function saveProfile(event) {
 
 async function submitQuestion(event) {
     event.preventDefault();
-    const button = event.currentTarget.querySelector("button[type=submit]");
+    const form = event.currentTarget;
+    const button = form.querySelector("button[type=submit]");
     const image = $("#questionImage").files[0];
     if (!image) {
         $("#questionStatus").textContent = "Please attach artwork before submitting.";
@@ -1024,7 +1025,7 @@ async function submitQuestion(event) {
     $("#questionStatus").textContent = "";
     try {
         await api.submitQuestion(api.user.id, formData);
-        event.currentTarget.reset();
+        form.reset();
         $("#questionDialog").close();
         refreshProfile();
         showToast("Question sent for review ✨");
