@@ -10,7 +10,7 @@ these exact web settings:
 
 ```text
 PASSKEY_EXPECTED_ORIGINS=https://six7.lol,https://validapp.lol
-CORS_ALLOWED_ORIGINS=https://validapp.lol,https://www.validapp.lol
+CORS_ALLOWED_ORIGINS=https://six7.lol,https://www.six7.lol,https://validapp.lol,https://www.validapp.lol
 WEB_RATE_LIMIT_MODE=observe
 WEB_RATE_LIMIT_PER_MINUTE=300
 WEB_PASSKEY_RATE_LIMIT_PER_MINUTE=20

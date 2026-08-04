@@ -31,7 +31,7 @@ logout, and the reversible account-deletion flow.
 Deploy the Six7 backend branch before the web branch. The environment must have:
 
 - `PASSKEY_EXPECTED_ORIGINS=https://six7.lol,https://validapp.lol`
-- `CORS_ALLOWED_ORIGINS=https://validapp.lol,https://www.validapp.lol`
+- `CORS_ALLOWED_ORIGINS=https://six7.lol,https://www.six7.lol,https://validapp.lol,https://www.validapp.lol`
 - Redis available for one-time passkey challenges and shared rate limits
 - the `WEB_*` limits from the backend `.env.example`
 - `ENABLE_NGL_LINK_BACKEND=1` if the anonymous Inbox and Ask me link are enabled
