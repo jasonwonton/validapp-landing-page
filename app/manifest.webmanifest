@@ -1,0 +1,18 @@
+{
+  "name": "Valid",
+  "short_name": "Valid",
+  "description": "Answer polls, see your feed, and use your anonymous link.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f2fffd",
+  "theme_color": "#f2fffd",
+  "icons": [
+    {
+      "src": "../assets/AppIconV2.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

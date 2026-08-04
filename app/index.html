@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#f2fffd">
+    <meta name="referrer" content="no-referrer">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'self'; connect-src https://api.six7.lol; font-src 'self'; form-action 'self'; img-src 'self' data: https:; manifest-src 'self'; object-src 'none'; script-src 'self'; style-src 'self'; worker-src 'self'">
+    <meta name="description" content="Answer polls, see your feed, and share your anonymous Valid link from any device.">
+    <title>Valid on the web</title>
+    <link rel="icon" type="image/png" href="../assets/AppIconV2.png">
+    <link rel="apple-touch-icon" href="../assets/AppIconV2.png">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header class="topbar">
+        <a class="wordmark" href="../index.html" aria-label="Valid home">
+            <img src="../assets/valid_logo.png" alt="Valid">
+        </a>
+        <button id="logoutButton" class="text-button hidden" type="button">Log out</button>
+    </header>
+
+    <main>
+        <section id="authView" class="auth-view">
+            <div class="auth-copy">
+                <span class="eyebrow">VALID, EVERYWHERE</span>
+                <h1>Your feed is ready.</h1>
+                <p>Use the same passkey as the Valid iPhone app. No password, no code, just you.</p>
+            </div>
+            <div class="passkey-card">
+                <img src="../assets/AppIconV2.png" alt="" class="app-icon">
+                <button id="passkeyButton" class="primary-button" type="button">
+                    <span aria-hidden="true">🔑</span>
+                    Sign in with a passkey
+                </button>
+                <p id="authStatus" class="status-message" role="status"></p>
+                <p class="fine-print">Your fingerprint or face stays on your device. Valid never receives it. For security, closing or refreshing this tab signs you out.</p>
+            </div>
+        </section>
+
+        <section id="appView" class="app-view hidden" aria-live="polite">
+            <section class="profile-strip">
+                <div id="profileAvatar" class="profile-avatar" aria-hidden="true">V</div>
+                <div class="profile-copy">
+                    <span id="profileGreeting">Welcome back</span>
+                    <strong id="profileSchool">Valid</strong>
+                </div>
+                <div class="aura-pill"><img class="aura-icon" src="../assets/app/aura.png" alt=""><span id="auraCount">0</span></div>
+            </section>
+
+            <section id="feedPanel" class="panel active-panel">
+                <div class="panel-heading">
+                    <div>
+                        <span class="eyebrow">WHAT'S HAPPENING</span>
+                        <h2>Feed</h2>
+                    </div>
+                </div>
+                <div class="segmented-control" role="group" aria-label="Feed type">
+                    <button class="segment active" data-feed="personal" type="button">Inbox</button>
+                    <button class="segment" data-feed="school" type="button">School</button>
+                </div>
+                <div class="feed-tools">
+                    <label class="feed-search"><span aria-hidden="true">⌕</span><input id="feedSearch" type="search" placeholder="Search names, questions..." autocomplete="off"></label>
+                    <button id="myVotesFilter" class="filter-button hidden" type="button" aria-pressed="false">○ My Votes</button>
+                </div>
+                <div id="feedStatus" class="inline-status" role="status"></div>
+                <div id="feedList" class="card-list"></div>
+                <button id="loadMoreFeed" class="secondary-button hidden" type="button">Load more</button>
+            </section>
+
+            <section id="playPanel" class="panel hidden">
+                <div class="panel-heading">
+                    <div>
+                        <span class="eyebrow">PICK A CLASSMATE</span>
+                        <h2>Play</h2>
+                    </div>
+                    <span id="playProgress" class="counter-pill"></span>
+                </div>
+                <div id="playStatus" class="inline-status" role="status"></div>
+                <div id="playCard"></div>
+            </section>
+
+            <section id="profilePanel" class="panel hidden">
+                <div class="panel-heading">
+                    <div>
+                        <span class="eyebrow">YOUR PROFILE</span>
+                        <h2>Profile</h2>
+                    </div>
+                </div>
+                <div id="profileStatus" class="inline-status" role="status"></div>
+                <div id="profileCard"></div>
+                <section class="profile-actions" aria-label="Profile actions">
+                    <button id="editProfileButton" class="settings-row" type="button"><span class="settings-icon" aria-hidden="true">✎</span><span><strong>Edit profile</strong><small>Photo, bio and profile information</small></span><span aria-hidden="true">›</span></button>
+                    <button id="profileSubmitQuestion" class="settings-row" type="button"><img src="../assets/app/pencil-clipboard.png" alt=""><span><strong>Submit a school question</strong><small>Create a poll for your school</small></span><span aria-hidden="true">›</span></button>
+                </section>
+                <section class="profile-polls-section" aria-labelledby="askLinkHeading">
+                    <h3 id="askLinkHeading">Ask me link</h3>
+                    <div id="askStatus" class="inline-status" role="status"></div>
+                    <div id="askLinkCard"></div>
+                </section>
+                <section class="profile-polls-section" aria-labelledby="weeklyPollsHeading">
+                    <h3 id="weeklyPollsHeading">Top Polls This Week</h3>
+                    <div id="weeklyPolls" class="profile-poll-list"></div>
+                </section>
+                <section class="profile-polls-section" aria-labelledby="allTimePollsHeading">
+                    <h3 id="allTimePollsHeading">Top Polls All Time</h3>
+                    <div id="allTimePolls" class="profile-poll-list"></div>
+                </section>
+            </section>
+        </section>
+    </main>
+
+    <nav id="bottomNav" class="bottom-nav hidden" aria-label="App navigation">
+        <button class="nav-item active" data-panel="feed" type="button"><span aria-hidden="true">🏠</span>Feed</button>
+        <button class="nav-item" data-panel="play" type="button"><span aria-hidden="true">🎯</span>Play</button>
+        <button class="nav-item" data-panel="profile" type="button"><span aria-hidden="true">👤</span>Profile</button>
+    </nav>
+
+    <dialog id="questionDialog" class="modal">
+        <form id="questionForm" method="dialog">
+            <div class="modal-heading">
+                <div class="modal-title-row">
+                    <img class="modal-art" src="../assets/app/pencil-clipboard.png" alt="">
+                    <h2>Submit a school question</h2>
+                </div>
+                <button class="icon-button" value="cancel" aria-label="Close" type="button" data-close-dialog>×</button>
+            </div>
+            <label for="questionText">What should your school vote on?</label>
+            <textarea id="questionText" name="question_text" minlength="3" maxlength="280" required placeholder="Who would survive the longest on a deserted island?"></textarea>
+            <fieldset class="identity-picker">
+                <legend>Anonymity</legend>
+                <label><input type="radio" name="questionIdentity" value="anonymous"><img src="../assets/app/anonymous.png" alt=""><span><strong>Stay anonymous</strong><small>Your name will not be on the question</small></span></label>
+                <label><input type="radio" name="questionIdentity" value="named" checked><span id="questionIdentityAvatar" class="tiny-avatar">V</span><span><strong id="questionIdentityName">Your name</strong><small>Your name appears next to the question</small></span></label>
+            </fieldset>
+            <label for="questionImage">Artwork <span>(required in the app flow)</span></label>
+            <input id="questionImage" type="file" required accept="image/jpeg,image/png,image/webp">
+            <label class="check-row"><input id="questionPermission" type="checkbox" required> I have permission to use this image.</label>
+            <p id="questionStatus" class="status-message" role="status"></p>
+            <button class="primary-button" type="submit">Submit for review</button>
+        </form>
+    </dialog>
+
+    <dialog id="profileDialog" class="modal">
+        <form id="profileForm" method="dialog">
+            <div class="modal-heading">
+                <h2>Edit profile</h2>
+                <button class="icon-button" value="cancel" aria-label="Close" type="button" data-close-dialog>×</button>
+            </div>
+            <label for="profilePicture">Profile picture</label>
+            <input id="profilePicture" type="file" accept="image/jpeg,image/png,image/webp">
+            <div class="two-field-row">
+                <label>First name<input id="profileFirstName" maxlength="50" required></label>
+                <label>Last name<input id="profileLastName" maxlength="50" required></label>
+            </div>
+            <label>Username<input id="profileUsername" minlength="3" maxlength="30" pattern="[a-z0-9_]+" required></label>
+            <label>School<input id="profileSchoolName" readonly aria-describedby="profileEditHint"></label>
+            <label>Grade<select id="profileGrade" required><option>6th Grade</option><option>7th Grade</option><option>8th Grade</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select></label>
+            <label>Bio<textarea id="profileBio" maxlength="160" placeholder="Say something about yourself..."></textarea></label>
+            <p id="profileEditHint" class="form-hint"></p>
+            <p id="profileEditStatus" class="status-message" role="status"></p>
+            <button class="primary-button" type="submit">Save changes</button>
+        </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="app.js"></script>
+</body>
+</html>

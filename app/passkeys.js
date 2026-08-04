@@ -1,0 +1,68 @@
+function normalizeBase64(value) {
+    const standard = value.replace(/-/g, "+").replace(/_/g, "/");
+    return standard + "=".repeat((4 - (standard.length % 4)) % 4);
+}
+
+function base64ToBytes(value) {
+    const binary = atob(normalizeBase64(value));
+    return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
+function bytesToBase64(value) {
+    if (!value) return null;
+    const bytes = new Uint8Array(value);
+    let binary = "";
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary);
+}
+
+export function passkeysSupported() {
+    return Boolean(window.PublicKeyCredential && navigator.credentials);
+}
+
+export async function signInWithPasskey(api) {
+    if (!passkeysSupported()) {
+        throw new Error("This browser does not support passkeys. Try Chrome or Safari on a recent device.");
+    }
+
+    const challenge = await api.getPasskeyChallenge();
+    const allowCredentials = challenge.allowCredentials?.map((credentialId) => ({
+        id: base64ToBytes(credentialId),
+        type: "public-key",
+        transports: ["internal", "hybrid"],
+    }));
+
+    let credential;
+    try {
+        credential = await navigator.credentials.get({
+            publicKey: {
+                challenge: base64ToBytes(challenge.challenge),
+                rpId: challenge.rpId,
+                allowCredentials: allowCredentials || [],
+                timeout: challenge.timeout || 60_000,
+                userVerification: "required",
+            },
+        });
+    } catch (error) {
+        if (error?.name === "NotAllowedError") {
+            throw new Error("Passkey sign-in was canceled or no matching passkey was available.");
+        }
+        if (error?.name === "SecurityError") {
+            throw new Error("Passkey access for validapp.lol is not enabled yet. Please try again shortly.");
+        }
+        throw error;
+    }
+
+    if (!credential?.response) {
+        throw new Error("The browser did not return a passkey response.");
+    }
+
+    return api.authenticatePasskey({
+        credentialId: bytesToBase64(credential.rawId),
+        authenticatorData: bytesToBase64(credential.response.authenticatorData),
+        signature: bytesToBase64(credential.response.signature),
+        clientDataJSON: bytesToBase64(credential.response.clientDataJSON),
+        userHandle: bytesToBase64(credential.response.userHandle),
+        correlationId: challenge.correlationId || null,
+    });
+}
