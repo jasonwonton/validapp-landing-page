@@ -192,7 +192,6 @@ function renderProfileHeader() {
     const profile = state.profile;
     if (!profile) return;
     $("#auraCount").textContent = Number(profile.aura_points || 0).toLocaleString();
-    $$('[data-aura-total]').forEach((element) => { element.textContent = Number(profile.aura_points || 0).toLocaleString(); });
     $("#playStreakCount").textContent = Math.max(0, Number(profile.current_streak || 0)).toLocaleString();
     const multiplier = Math.max(1, Number(profile.streak_multiplier || 1));
     const multiplierElement = $("#playStreakMultiplier");
@@ -263,10 +262,32 @@ function renderProfilePanel() {
 
 function renderSchoolCard() {
     const container = $("#schoolCard");
-    const classmates = (state.classmateDirectory || state.classmates || []).slice(0, 4);
+    const classmates = [...(state.classmateDirectory || state.classmates || [])];
+    if (state.profile && !classmates.some((classmate) => String(classmate.user_id) === String(state.profile.user_id))) {
+        classmates.push(state.profile);
+    }
+    const ranked = classmates
+        .map((classmate, index) => ({ classmate, index }))
+        .sort((first, second) => {
+            const weeklyDifference = Number(second.classmate.weekly_vote_count || 0) - Number(first.classmate.weekly_vote_count || 0);
+            if (weeklyDifference) return weeklyDifference;
+            const totalDifference = Number(second.classmate.vote_count || 0) - Number(first.classmate.vote_count || 0);
+            return totalDifference || first.index - second.index;
+        })
+        .map(({ classmate }) => classmate)
+        .slice(0, 20);
     container.innerHTML = `<article class="school-card">
-        <div class="school-card-heading"><span class="school-card-icon" aria-hidden="true">🏫</span><span><strong>${escapeHTML(state.profile?.school_name || "Your school")}</strong><small>${escapeHTML(formatGrade(state.profile?.grade || ""))}</small></span></div>
-        ${classmates.length ? `<div class="school-classmate-preview">${classmates.map((classmate) => `<span title="${escapeHTML(displayName(classmate))}">${avatarMarkup(classmate, "school-preview-avatar")}</span>`).join("")}<small>${Number((state.classmateDirectory || state.classmates || []).length).toLocaleString()} classmates</small></div>` : `<p>See the people and polls in your school community.</p>`}
+        <div class="school-card-heading"><span><strong>School</strong><small>${escapeHTML(state.profile?.school_name || "Your school")}</small></span></div>
+        <p>Spotlight on classmates with the most votes this week.</p>
+        ${ranked.length ? `<div class="school-leaderboard" role="list" aria-label="Classmates ranked by weekly votes">${ranked.map((classmate, index) => {
+            const isCurrentUser = String(classmate.user_id) === String(state.profile?.user_id);
+            return `<button class="school-rank-card" type="button" role="listitem" ${isCurrentUser ? `disabled aria-current="true"` : `data-school-classmate="${escapeHTML(classmate.user_id)}"`} aria-label="#${index + 1} ${escapeHTML(displayName(classmate))}, ${Number(classmate.weekly_vote_count || 0).toLocaleString()} votes this week">
+                <span class="school-rank-number">#${index + 1}</span>
+                ${avatarMarkup(classmate, "school-rank-avatar")}
+                <strong>${escapeHTML(isCurrentUser ? `${displayName(classmate)} (You)` : displayName(classmate))}</strong>
+                <small><span aria-hidden="true">♥</span> ${Number(classmate.weekly_vote_count || 0).toLocaleString()} this week</small>
+            </button>`;
+        }).join("")}</div>` : `<p>No classmates on Valid yet.</p>`}
         <button id="viewClassmatesButton" class="secondary-button" type="button">View classmates</button>
     </article>`;
 }
@@ -677,17 +698,35 @@ function feedAvatar(item) {
     return avatarMarkup(votedFor);
 }
 
+function anonymousInboxRows() {
+    if (state.feedType !== "personal" || !state.anonymousInbox || state.feedSearch.trim()) return "";
+    const questions = state.anonymousInbox.questions || [];
+    const answers = state.anonymousInbox.answers || [];
+    const answerRows = answers.map((answer) => `<button class="anonymous-reply-row" type="button" data-anonymous-answer="${escapeHTML(answer.id)}">
+        ${avatarMarkup({ first_name: answer.recipient_display_name, profile_picture_url: answer.recipient_profile_picture_url }, "anonymous-row-icon reply")}
+        <span class="anonymous-row-copy"><strong>${escapeHTML(answer.recipient_display_name)} replied to you</strong><span class="anonymous-row-message">${escapeHTML(answer.answer_text)}</span><span class="anonymous-row-meta"><span>Your message: ${escapeHTML(answer.question_body)}</span><time>${escapeHTML(relativeTime(answer.answered_at))}</time></span></span>
+        <span class="anonymous-row-state" aria-hidden="true">›</span>
+    </button>`).join("");
+    const questionRows = questions.map((question) => `<button class="anonymous-question-row ${question.opened_at ? "" : "unread"} ${question.status === "answered" ? "answered" : ""}" type="button" data-anonymous-question="${escapeHTML(question.id)}">
+        <span class="anonymous-row-icon" aria-hidden="true">?</span>
+        <span class="anonymous-row-copy"><span class="anonymous-row-title"><strong>${escapeHTML(question.provenance_label)}</strong>${question.opened_at ? "" : `<span class="anonymous-new-pill">New</span>`}</span><span class="anonymous-row-message">${escapeHTML(question.body)}</span><span class="anonymous-row-meta"><span>${escapeHTML(question.source_platform ? `From ${question.source_platform[0].toUpperCase()}${question.source_platform.slice(1)}` : "Anonymous")}</span><time>${escapeHTML(relativeTime(question.created_at))}</time></span></span>
+        <span class="anonymous-row-state" aria-hidden="true">›</span>
+    </button>`).join("");
+    return `${answerRows}${questionRows}`;
+}
+
 function renderFeed() {
     const list = $("#feedList");
     const query = state.feedSearch.trim().toLowerCase();
     renderFeedClassmateResults();
     const visible = query ? state.feedItems.filter((item) => [item.question_text, item.voted_for_name, item.contact_name, item.voter_name].some((value) => String(value || "").toLowerCase().includes(query))) : state.feedItems;
-    if (!visible.length) {
+    const anonymousRows = anonymousInboxRows();
+    if (!visible.length && !anonymousRows) {
         const text = state.feedSearch ? "No matching votes." : state.myVotesOnly ? "You haven't voted yet. Answer questions in Play to see your votes here." : "No votes here yet. Play a few rounds and check back soon.";
         list.innerHTML = `<div class="empty-card">${escapeHTML(text)}</div>`;
         return;
     }
-    list.innerHTML = `<div class="feed-section-heading"><span>${query ? "MATCHING POLLS" : "POLLS"}</span></div>${visible.map((item) => {
+    const voteRows = visible.map((item) => {
         const isPersonal = state.feedType === "personal";
         const title = isPersonal ? `${item.is_nomination ? "👑 " : ""}<strong>You</strong> got ${item.is_nomination ? "nominated" : "voted"}` : `<strong>${escapeHTML(item.voted_for_name || item.contact_name || "A classmate")}</strong> got voted`;
         const detail = formatVoterHint(item);
@@ -700,7 +739,8 @@ function renderFeed() {
             </div>
             <button class="upvote-button ${item.user_has_upvoted ? "active" : ""}" type="button" data-upvote="${item.question_answer_id}" aria-label="Upvote">${item.user_has_upvoted ? "♥" : "♡"}<span>${item.upvote_count || 0}</span></button>
         </article>`;
-    }).join("")}`;
+    }).join("");
+    list.innerHTML = `${anonymousRows}${voteRows}`;
 }
 
 function renderFeedClassmateResults() {
@@ -920,32 +960,7 @@ async function refreshFeedGateStatus() {
 }
 
 function renderAnonymousInbox() {
-    const section = $("#anonymousInboxSection");
-    if (state.feedType !== "personal" || !state.anonymousInbox || state.feedSearch.trim()) {
-        section.classList.add("hidden");
-        return;
-    }
-    section.classList.remove("hidden");
-    const questions = state.anonymousInbox.questions || [];
-    const answers = state.anonymousInbox.answers || [];
-    const unread = questions.filter((question) => !question.opened_at).length;
-    const unreadBadge = $("#anonymousUnreadCount");
-    unreadBadge.textContent = unread ? `${unread} new` : "";
-    unreadBadge.classList.toggle("hidden", unread === 0);
-
-    const questionRows = questions.map((question) => `<button class="anonymous-question-row ${question.opened_at ? "" : "unread"} ${question.status === "answered" ? "answered" : ""}" type="button" data-anonymous-question="${escapeHTML(question.id)}">
-        <span class="anonymous-row-icon" aria-hidden="true">?</span>
-        <span class="anonymous-row-copy"><span class="anonymous-row-title"><strong>${escapeHTML(question.provenance_label)}</strong>${question.opened_at ? "" : `<span class="anonymous-new-pill">New</span>`}</span><span class="anonymous-row-message">${escapeHTML(question.body)}</span><span class="anonymous-row-meta"><span>${escapeHTML(question.source_platform ? `From ${question.source_platform[0].toUpperCase()}${question.source_platform.slice(1)}` : "Anonymous")}</span><time>${escapeHTML(relativeTime(question.created_at))}</time></span></span>
-        <span class="anonymous-row-state" aria-hidden="true">›</span>
-    </button>`).join("");
-    const answerRows = answers.map((answer) => `<button class="anonymous-reply-row" type="button" data-anonymous-answer="${escapeHTML(answer.id)}">
-        ${avatarMarkup({ first_name: answer.recipient_display_name, profile_picture_url: answer.recipient_profile_picture_url }, "anonymous-row-icon reply")}
-        <span class="anonymous-row-copy"><strong>${escapeHTML(answer.recipient_display_name)} replied to you</strong><span class="anonymous-row-message">${escapeHTML(answer.answer_text)}</span><span class="anonymous-row-meta"><span>Your message: ${escapeHTML(answer.question_body)}</span><time>${escapeHTML(relativeTime(answer.answered_at))}</time></span></span>
-        <span class="anonymous-row-state" aria-hidden="true">›</span>
-    </button>`).join("");
-    $("#anonymousInboxList").innerHTML = questionRows || answerRows
-        ? `${questionRows}${answerRows}`
-        : `<div class="anonymous-empty"><img src="../assets/app/anonymous.png" alt=""><span>No anonymous questions yet. Share your link from Settings to get messages.</span></div>`;
+    renderFeed();
 }
 
 function openAnonymousAnswerDialog(answerId) {
@@ -965,21 +980,17 @@ function openAnonymousAnswerDialog(answerId) {
 
 async function loadAnonymousInbox() {
     const generation = ++state.anonymousInboxGeneration;
-    const status = $("#anonymousInboxStatus");
-    status.textContent = "Checking for questions...";
     try {
         state.anonymousInbox = await api.getAnonymousInbox(api.user.id, 30, 0);
         if (generation !== state.anonymousInboxGeneration || state.feedType !== "personal") return;
-        status.textContent = "";
         renderAnonymousInbox();
     } catch (error) {
         if (generation !== state.anonymousInboxGeneration || state.feedType !== "personal") return;
         if (error.status === 404) {
             state.anonymousInbox = null;
-            $("#anonymousInboxSection").classList.add("hidden");
+            renderFeed();
         } else {
-            $("#anonymousInboxSection").classList.remove("hidden");
-            status.textContent = error.message || "Could not load anonymous questions.";
+            $("#feedStatus").textContent = error.message || "Could not load anonymous messages.";
         }
     }
 }
@@ -1927,8 +1938,6 @@ async function installWebApp() {
 }
 
 function bindEvents() {
-    const anonymousSection = $("#anonymousInboxSection");
-    anonymousSection.parentNode.insertBefore(anonymousSection, $("#loadMoreFeed"));
     $("#passkeyButton").addEventListener("click", handlePasskeySignIn);
     $("#createAccountButton").addEventListener("click", openSignupDialog);
     $("#signupForm").addEventListener("submit", createAccount);
@@ -1959,7 +1968,6 @@ function bindEvents() {
     $("#feedSearch").addEventListener("input", (event) => {
         state.feedSearch = event.currentTarget.value;
         state.feedClassmateResults = [];
-        renderAnonymousInbox();
         renderFeed();
         scheduleFeedSearch();
     });
@@ -1969,6 +1977,10 @@ function bindEvents() {
     });
     $("#loadMoreFeed").addEventListener("click", () => loadFeed(false));
     $("#feedList").addEventListener("click", (event) => {
+        const anonymousQuestion = event.target.closest("[data-anonymous-question]");
+        const anonymousAnswer = event.target.closest("[data-anonymous-answer]");
+        if (anonymousQuestion) return openAnonymousQuestionDialog(anonymousQuestion.dataset.anonymousQuestion);
+        if (anonymousAnswer) return openAnonymousAnswerDialog(anonymousAnswer.dataset.anonymousAnswer);
         const upvote = event.target.closest("[data-upvote]");
         if (upvote) return toggleUpvote(upvote);
         const detail = event.target.closest("[data-feed-detail]");
@@ -1994,12 +2006,6 @@ function bindEvents() {
         if (event.target.closest("[data-block-feed-submitter]")) moderateFeedItem("block");
     });
     $("#feedGateLock").addEventListener("click", (event) => { if (event.target.closest("[data-vote-to-unlock]")) switchPanel("play"); });
-    $("#anonymousInboxList").addEventListener("click", (event) => {
-        const question = event.target.closest("[data-anonymous-question]");
-        const answer = event.target.closest("[data-anonymous-answer]");
-        if (question) openAnonymousQuestionDialog(question.dataset.anonymousQuestion);
-        if (answer) openAnonymousAnswerDialog(answer.dataset.anonymousAnswer);
-    });
     $("#anonymousAnswerForm").addEventListener("submit", answerAnonymousQuestion);
     $("#anonymousQuestionDialog").addEventListener("click", (event) => {
         if (event.target.closest("[data-close-anonymous]")) {
@@ -2044,6 +2050,8 @@ function bindEvents() {
         if (event.target.closest("[data-edit-bio]")) openBioDialog();
         if (event.target.closest("[data-edit-profile]")) openProfileDialog();
         if (event.target.closest("#viewClassmatesButton")) openClassmateDirectory();
+        const rankedClassmate = event.target.closest("[data-school-classmate]");
+        if (rankedClassmate) openClassmateProfile(rankedClassmate.dataset.schoolClassmate);
         const poll = event.target.closest("[data-top-poll]");
         if (poll) openTopPoll(poll.dataset.topPoll);
         const purchase = event.target.closest("[data-buy-aura]");

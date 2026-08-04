@@ -139,12 +139,12 @@ export class DemoAPI {
             { id: 204, question_text: "Who is secretly the funniest person here?", image_url: "../assets/AppIconV2.png" },
         ];
         this.classmates = [
-            { user_id: "classmate-1", first_name: "Maya", last_name: "Chen", username: "maya_c", grade: "Senior", school_name: "Westview High School", bio: "Student council and bad puns.", vote_count: 61, profile_picture_url: "../assets/app/anonymous.png" },
-            { user_id: "classmate-2", first_name: "Noah", last_name: "Williams", username: "noahw", grade: "Sophomore", school_name: "Westview High School", vote_count: 44, profile_picture_url: "../assets/app/lock.png" },
-            { user_id: "classmate-3", first_name: "Ava", last_name: "Patel", username: "avap", grade: "Junior", school_name: "Westview High School", vote_count: 39, profile_picture_url: "../assets/app/pencil-clipboard.png" },
-            { user_id: "classmate-4", first_name: "Eli", last_name: "Brooks", username: "elib", grade: "Junior", school_name: "Westview High School", vote_count: 31, profile_picture_url: "../assets/AppIconV2.png" },
-            { user_id: "classmate-5", first_name: "Sofia", last_name: "Kim", username: "sofiak", grade: "Freshman", school_name: "Westview High School", vote_count: 27, profile_picture_url: "../assets/app/aura.png" },
-            { user_id: "classmate-6", first_name: "Mateo", last_name: "Lee", username: "mateol", grade: "Senior", school_name: "Westview High School", vote_count: 24, profile_picture_url: "../assets/valid_logo.png" },
+            { user_id: "classmate-1", first_name: "Maya", last_name: "Chen", username: "maya_c", grade: "Senior", school_name: "Westview High School", bio: "Student council and bad puns.", vote_count: 61, weekly_vote_count: 22, profile_picture_url: "../assets/app/anonymous.png" },
+            { user_id: "classmate-2", first_name: "Noah", last_name: "Williams", username: "noahw", grade: "Sophomore", school_name: "Westview High School", vote_count: 44, weekly_vote_count: 19, profile_picture_url: "../assets/app/lock.png" },
+            { user_id: "classmate-3", first_name: "Ava", last_name: "Patel", username: "avap", grade: "Junior", school_name: "Westview High School", vote_count: 39, weekly_vote_count: 14, profile_picture_url: "../assets/app/pencil-clipboard.png" },
+            { user_id: "classmate-4", first_name: "Eli", last_name: "Brooks", username: "elib", grade: "Junior", school_name: "Westview High School", vote_count: 31, weekly_vote_count: 11, profile_picture_url: "../assets/AppIconV2.png" },
+            { user_id: "classmate-5", first_name: "Sofia", last_name: "Kim", username: "sofiak", grade: "Freshman", school_name: "Westview High School", vote_count: 27, weekly_vote_count: 9, profile_picture_url: "../assets/app/aura.png" },
+            { user_id: "classmate-6", first_name: "Mateo", last_name: "Lee", username: "mateol", grade: "Senior", school_name: "Westview High School", vote_count: 24, weekly_vote_count: 7, profile_picture_url: "../assets/valid_logo.png" },
         ];
         this.inviteStatus = { limit: 3, sent_today: 1, remaining: 2, next_reset_at: ago(-720), qualifying_invites: 0, aura_reward_progress: 0, aura_reward_goal: 3, aura_reward_amount: 50, aura_rewards_claimed: 0, aura_rewards_max: 1, aura_reward_max_reached: false };
         this.askLink = {
