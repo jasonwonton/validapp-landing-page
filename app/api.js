@@ -1,11 +1,28 @@
 const DEFAULT_API_BASE = "https://api.six7.lol/api/v1";
 export class APIError extends Error {
-    constructor(message, status, detail) {
+    constructor(message, status, detail, retryAfterSeconds = null) {
         super(message);
         this.name = "APIError";
         this.status = status;
         this.detail = detail;
+        this.retryAfterSeconds = retryAfterSeconds;
     }
+}
+
+function retryAfterSeconds(value) {
+    if (!value) return null;
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric >= 0) return Math.min(86_400, Math.max(1, Math.ceil(numeric)));
+    const date = Date.parse(value);
+    if (Number.isNaN(date)) return null;
+    return Math.min(86_400, Math.max(1, Math.ceil((date - Date.now()) / 1000)));
+}
+
+function retryMessage(seconds) {
+    if (!seconds) return "Too many requests. Please try again shortly.";
+    if (seconds < 60) return `Too many requests. Try again in ${seconds} second${seconds === 1 ? "" : "s"}.`;
+    const minutes = Math.ceil(seconds / 60);
+    return `Too many requests. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`;
 }
 
 export class ValidAPI {
@@ -74,10 +91,15 @@ export class ValidAPI {
                 window.dispatchEvent(new CustomEvent("valid:session-expired"));
             }
             const detail = payload?.detail ?? payload;
-            const message = typeof detail === "string"
+            const waitSeconds = response.status === 429
+                ? retryAfterSeconds(response.headers.get("retry-after"))
+                : null;
+            const message = response.status === 429
+                ? retryMessage(waitSeconds)
+                : typeof detail === "string"
                 ? detail
                 : detail?.message || `Request failed (${response.status})`;
-            throw new APIError(message, response.status, detail);
+            throw new APIError(message, response.status, detail, waitSeconds);
         }
 
         return payload;

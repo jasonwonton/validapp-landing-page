@@ -252,3 +252,20 @@ test("real adapter submits a Play vote and multipart school question", async ({ 
     expect(String(submission.body)).toContain("idempotency_key");
     expect(String(submission.body)).toContain("art.png");
 });
+
+test("real adapter gives rate-limited users an actionable wait time", async ({ page }) => {
+    await page.route(`${API_ORIGIN}/api/v1/auth/passkey/authenticate/challenge`, (route) => route.fulfill({
+        status: 429,
+        contentType: "application/json",
+        headers: {
+            "Retry-After": "42",
+            "Access-Control-Expose-Headers": "Retry-After",
+        },
+        body: JSON.stringify({ detail: "Too many requests. Please try again shortly." }),
+    }));
+
+    await page.goto("/app/");
+    await page.getByRole("button", { name: /sign in with a passkey/i }).click();
+
+    await expect(page.locator("#authStatus")).toHaveText("Too many requests. Try again in 42 seconds.");
+});
