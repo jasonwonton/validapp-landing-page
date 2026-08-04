@@ -211,4 +211,6 @@ debugging.
 Production order, iOS rollback gates, routing, and DDoS controls are documented
 in [PRODUCTION_DEPLOYMENT.md](PRODUCTION_DEPLOYMENT.md). The current Swift-to-web
 coverage and deliberate platform differences are recorded in
-[IOS_WEB_PARITY.md](IOS_WEB_PARITY.md).
+[IOS_WEB_PARITY.md](IOS_WEB_PARITY.md). The recommended pricing, current Apple
+policy boundary, and provider-neutral Stripe design are in
+[WEB_BILLING_PLAN.md](WEB_BILLING_PLAN.md).

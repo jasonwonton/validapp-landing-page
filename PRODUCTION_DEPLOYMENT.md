@@ -20,6 +20,7 @@ WEB_ACCOUNT_WRITE_RATE_LIMIT_PER_MINUTE=60
 WEB_UPLOAD_RATE_LIMIT_PER_HOUR=30
 WEB_SCHOOL_REQUEST_RATE_LIMIT_PER_HOUR=60
 WEB_MAX_REQUEST_BODY_BYTES=12582912
+LEGACY_SUBSCRIPTION_TOGGLE_MODE=observe
 ```
 
 Leave `TRUST_PROXY_HEADERS=false` unless every production request passes through
@@ -37,6 +38,15 @@ cap. Keep edge protection active throughout because it does not require this
 application switch. Use the admin-authenticated `/metrics` response's
 identity-free `request_rate_limits.would_reject_by_policy` deltas to decide
 whether enforcement is safe.
+
+`LEGACY_SUBSCRIPTION_TOGGLE_MODE=observe` preserves an old subscription-toggle
+contract for native iOS accounts while logging every call. Passkey-only
+web accounts are rejected even in observe mode, so they cannot self-grant God
+Mode. The current iOS purchase implementation uses the receipt-validated Apple
+renewal endpoint; after the App Store canary shows no legacy toggle calls, set
+this mode to `enforce` before opening the web app publicly. Re-test purchase and
+restore on iOS after enforcing. `allow` exists only as an emergency
+compatibility rollback and should not be the steady state.
 
 The `six7.lol` site must publish the backend branch's
 `six7-landing-page/.well-known/webauthn` as JSON. It authorizes the
@@ -62,11 +72,13 @@ rollbackable throughout this check.
 ### Existing iOS release gate
 
 Before changing any public web routing, deploy the backend with
-`WEB_RATE_LIMIT_MODE=off` and smoke-test the current App Store build—not a local
-future build. With an existing account, verify passkey and phone login, Inbox and
-School feeds, a full Play set, profile editing/photo upload, contact sync, invite
-creation, anonymous Inbox, subscription status, logout, and a relaunch. Watch
-API 5xx/401 latency and crash reporting during the canary.
+`WEB_RATE_LIMIT_MODE=off` and `LEGACY_SUBSCRIPTION_TOGGLE_MODE=observe`, then
+smoke-test the current App Store build—not a local future build. With an
+existing account, verify passkey and phone login, Inbox and School feeds, a full
+Play set, profile editing/photo upload, contact sync, invite creation, anonymous
+Inbox, a real sandbox subscription purchase/restore, subscription status,
+logout, and a relaunch. Watch API 5xx/401 latency, legacy subscription-toggle
+warnings, and crash reporting during the canary.
 
 Only after that smoke test is clean should the limiter move to `observe`. A
 non-zero would-reject count is not automatically bad, but it must be explained
