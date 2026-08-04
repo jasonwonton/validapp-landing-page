@@ -1103,7 +1103,7 @@ function animateAuraChange(amount) {
     if (!chip || !Number.isFinite(Number(amount)) || Number(amount) === 0) return;
     chip.animate([
         { transform: "scale(1)", background: "rgba(255,255,255,.92)" },
-        { transform: "scale(1.16)", background: Number(amount) > 0 ? "#c8f6ec" : "#ffd2dc", offset: .45 },
+        { transform: "scale(1.16)", background: Number(amount) > 0 ? "#ccf7f4" : "#ffb8d6", offset: .45 },
         { transform: "scale(1)", background: "rgba(255,255,255,.92)" },
     ], { duration: 520, easing: "cubic-bezier(.2,.8,.2,1)" });
 }
