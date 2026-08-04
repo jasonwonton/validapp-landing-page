@@ -55,12 +55,18 @@ Verify these public files and routes before creating a test account:
 curl -i https://six7.lol/.well-known/webauthn
 curl -i https://validapp.lol/app/
 curl -i -H 'Origin: https://validapp.lol' https://api.six7.lol/api/v1/config
+curl -i -X OPTIONS \
+  -H 'Origin: https://validapp.lol' \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: content-type' \
+  https://api.six7.lol/api/v1/auth/passkey/signup/challenge
 npm run test:production
 ```
 
 The related-origin file on `six7.lol` must contain
 `https://validapp.lol`. The API response must return
-`Access-Control-Allow-Origin: https://validapp.lol`.
+`Access-Control-Allow-Origin: https://validapp.lol`; wildcard CORS is a failed
+release gate. The passkey preflight must allow `POST` from that exact origin.
 
 On an actual Android phone in current Chrome:
 

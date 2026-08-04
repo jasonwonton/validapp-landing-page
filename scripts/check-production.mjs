@@ -34,8 +34,31 @@ const checks = [
             headers: { Origin: "https://validapp.lol" },
         });
         assert.equal(config.headers.get("access-control-allow-origin"), "https://validapp.lol", "API CORS does not authorize the web app");
+        assert.match(config.headers.get("vary") || "", /origin/i, "API CORS response must vary by Origin");
         const payload = await config.json();
         assert.ok(Number(payload.question_limit) > 0, "API config payload is invalid");
+
+        const passkeyPreflight = await fetch("https://api.six7.lol/api/v1/auth/passkey/signup/challenge", {
+            method: "OPTIONS",
+            headers: {
+                Origin: "https://validapp.lol",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        });
+        assert.ok([200, 204].includes(passkeyPreflight.status), `passkey preflight returned ${passkeyPreflight.status}`);
+        assert.equal(passkeyPreflight.headers.get("access-control-allow-origin"), "https://validapp.lol", "passkey preflight must authorize only the exact web origin");
+        assert.match(passkeyPreflight.headers.get("access-control-allow-methods") || "", /POST/i, "passkey preflight must allow POST");
+
+        const untrustedPreflight = await fetch("https://api.six7.lol/api/v1/auth/passkey/signup/challenge", {
+            method: "OPTIONS",
+            headers: {
+                Origin: "https://untrusted.invalid",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        });
+        assert.notEqual(untrustedPreflight.headers.get("access-control-allow-origin"), "https://untrusted.invalid", "API CORS must reject an untrusted origin");
     }],
 ];
 

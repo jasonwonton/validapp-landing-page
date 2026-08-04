@@ -107,7 +107,8 @@ npm run test:production
 ```
 
 `test:production` must pass all four checks: app shell/security headers, PWA
-assets, related-origin passkeys, and API CORS. Then complete the real Android
+assets, related-origin passkeys, and exact-origin API CORS (including passkey
+preflight and untrusted-origin rejection). Then complete the real Android
 and cross-device passkey checklist in `WEBAPP_TESTING.md`. In particular, sign
 in once using an account/passkey originally created by the iOS app; a newly
 created web passkey alone does not prove related-origin behavior.
