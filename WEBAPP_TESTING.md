@@ -22,8 +22,9 @@ Open `http://127.0.0.1:4173/app/?demo=1`. Add `&locked=1` to exercise the
 iOS-style vote-to-unlock Feed state, or `&godmode=1` to exercise an active God
 Mode entitlement and sender reveals. Test Feed and School switching,
 anonymous Inbox answer/report/block/delete, a complete Play set, shuffle and
-nomination, the three-skip limit and live cooldown, profile editing, Ask me link
-controls, aura-confirmed/idempotent question submission, optional onboarding
+nomination, the three-skip limit and live cooldown, direct photo/bio editing,
+tappable Top Polls, Ask me link controls, boost spending,
+aura-confirmed/idempotent question submission, optional onboarding
 photo, selected-contact classmate discovery, install prompt, offline banner,
 logout, and the reversible account-deletion flow.
 
@@ -75,10 +76,10 @@ On an actual Android phone in current Chrome:
    there is no phone-number or SMS step. Add an optional profile photo and
    confirm the selected-contact/invite prompt appears after signup.
 2. Close the tab, return, and sign in with the same passkey.
-   Add a backup passkey from Profile, confirm the count increases, sign out, and
+   Add a backup passkey from Settings, confirm the count increases, sign out, and
    verify a fresh passkey sign-in still reaches the same account.
-3. Install Valid from Profile, launch it from the home screen, and exercise Feed,
-   Play, Profile, selected-contact discovery, invites, question submission, and
+3. Install Valid from Settings, launch it from the home screen, and exercise Feed,
+   Play, Settings, selected-contact discovery, invites, question submission, and
    the anonymous Inbox. Browse/search classmates and open one public classmate
    profile. If the account has God Mode, reveal a sender and confirm its weekly
    reveal balance decrements. Confirm Play enforces three skips and its cooldown

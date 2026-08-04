@@ -144,6 +144,10 @@ export class ValidAPI {
         });
     }
 
+    checkUsernameAvailability(username) {
+        return this.request(`/users/username-available/${encodeURIComponent(username)}`, { auth: false });
+    }
+
     completeWebSignup(payload) {
         return this.request("/auth/passkey/signup/complete", {
             method: "POST",
@@ -220,6 +224,17 @@ export class ValidAPI {
 
     revealSender(userId, questionAnswerId) {
         return this.request(`/users/${userId}/reveals/${questionAnswerId}`, { method: "POST" });
+    }
+
+    purchaseGlobalBoost(userId) {
+        return this.request(`/users/${userId}/visibility-boosts/global`, { method: "POST" });
+    }
+
+    purchaseTargetedBoost(userId, targetUserId) {
+        return this.request(`/users/${userId}/visibility-boosts/targeted`, {
+            method: "POST",
+            body: JSON.stringify({ target_user_id: targetUserId }),
+        });
     }
 
     reportQuestion(userId, questionId, reason = "inappropriate") {

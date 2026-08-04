@@ -44,6 +44,43 @@ test("real adapter sends bounded, encoded unified-search queries", async ({ page
     ].sort());
 });
 
+test("real adapter uses the scoped aura boost endpoints", async ({ page }) => {
+    const requests = [];
+    await page.route(`${API_ORIGIN}/api/v1/**`, async (route) => {
+        const request = route.request();
+        requests.push({
+            method: request.method(),
+            path: new URL(request.url()).pathname,
+            body: request.postDataJSON(),
+            authorization: request.headers().authorization,
+        });
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ aura_points: 100 }) });
+    });
+    await page.goto("/app/");
+    await page.evaluate(async ({ userId, targetId }) => {
+        const { ValidAPI } = await import("/app/api.js");
+        const api = new ValidAPI();
+        api.saveSession({ access_token: "boost-token", user: { id: userId } });
+        await api.purchaseGlobalBoost(userId);
+        await api.purchaseTargetedBoost(userId, targetId);
+    }, { userId: USER_ID, targetId: "21111111-1111-1111-1111-111111111111" });
+
+    expect(requests).toEqual([
+        {
+            method: "POST",
+            path: `/api/v1/users/${USER_ID}/visibility-boosts/global`,
+            body: null,
+            authorization: "Bearer boost-token",
+        },
+        {
+            method: "POST",
+            path: `/api/v1/users/${USER_ID}/visibility-boosts/targeted`,
+            body: { target_user_id: "21111111-1111-1111-1111-111111111111" },
+            authorization: "Bearer boost-token",
+        },
+    ]);
+});
+
 function profile(firstName = "Jordan", auraPoints = 500) {
     return {
         user_id: USER_ID,
@@ -129,6 +166,7 @@ async function interceptProductionAPI(page, { signup = false, profileAura = 500,
             return fulfill({ access_token: "session-token", user: { id: USER_ID, subscribed_user: false } });
         }
         if (path === "/api/v1/auth/passkey/status") return fulfill({ registered: true, credentialCount: 1 });
+        if (path === "/api/v1/users/username-available/taylor_j") return fulfill({ available: true, username: "taylor_j" });
         if (path === "/api/v1/highschools/request") {
             return fulfill({ school: { id: 77, name: body.school_name, city: body.city, state: body.state } });
         }
@@ -209,7 +247,7 @@ test("real adapter signs in, authenticates API calls, and revokes logout", async
 
     await page.goto("/app/");
     await page.getByRole("button", { name: /sign in with a passkey/i }).click();
-    await expect(page.getByText("Hey, Jordan")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
 
     const assertion = requests.find((request) => request.path === "/api/v1/auth/passkey/authenticate");
     expect(assertion.authorization).toBeNull();
@@ -234,7 +272,7 @@ test("unified search debounces rapid typing into one bounded request pair", asyn
     const requests = await interceptProductionAPI(page);
     await page.goto("/app/");
     await page.getByRole("button", { name: /sign in with a passkey/i }).click();
-    await expect(page.getByText("Hey, Jordan")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
     requests.length = 0;
 
     await page.getByPlaceholder("Search names, questions...").pressSequentially("Maya", { delay: 25 });
@@ -269,7 +307,7 @@ test("real adapter completes passkey-only signup without an SMS request", async 
         buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
     });
     await dialog.getByRole("button", { name: "Create with passkey" }).click();
-    await expect(page.getByText("Hey, Taylor")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
 
     const challenge = requests.find((request) => request.path === "/api/v1/auth/passkey/signup/challenge");
     expect(challenge.body).toEqual({ username: "taylor_j" });
@@ -303,7 +341,7 @@ test("real adapter submits a Play vote and multipart school question", async ({ 
 
     await page.goto("/app/");
     await page.getByRole("button", { name: /sign in with a passkey/i }).click();
-    await expect(page.getByText("Hey, Jordan")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: "Play", exact: true }).click();
     await expect(page.getByText("Who gives the best advice?")).toBeVisible();
@@ -318,7 +356,7 @@ test("real adapter submits a Play vote and multipart school question", async ({ 
     expect(vote.body.selected_contact_user_id).toBeTruthy();
     expect(vote.body.presented_options).toHaveLength(4);
 
-    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.getByRole("button", { name: "View classmates" }).click();
     const directory = page.getByRole("dialog").filter({ hasText: "YOUR SCHOOL" });
     await directory.getByRole("button", { name: /Maya Chen/ }).click();
@@ -374,7 +412,7 @@ test("question submission refuses an aura overdraft before calling the API", asy
     const requests = await interceptProductionAPI(page, { profileAura: 50 });
     await page.goto("/app/");
     await page.getByRole("button", { name: /sign in with a passkey/i }).click();
-    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.getByRole("button", { name: /Submit a school question/i }).click();
     const dialog = page.getByRole("dialog").filter({ hasText: "Submit a school question" });
     await dialog.getByLabel("What should your school vote on?").fill("Who makes school more welcoming?");
@@ -394,7 +432,7 @@ test("ambiguous question retries reuse one idempotency key and never double-char
     const requests = await interceptProductionAPI(page, { questionFailureCount: 1 });
     await page.goto("/app/");
     await page.getByRole("button", { name: /sign in with a passkey/i }).click();
-    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.getByRole("button", { name: /Submit a school question/i }).click();
     const dialog = page.getByRole("dialog").filter({ hasText: "Submit a school question" });
     await dialog.getByLabel("What should your school vote on?").fill("Who always makes people feel included?");

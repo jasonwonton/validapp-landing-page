@@ -19,6 +19,7 @@ const state = {
     feedCursor: null,
     feedGeneration: 0,
     selectedFeedItemId: null,
+    selectedTopPoll: null,
     questions: [],
     classmates: [],
     classmatesStatus: null,
@@ -42,12 +43,25 @@ const state = {
     classmateDirectory: null,
     selectedClassmateProfile: null,
     passkeyStatus: null,
+    pendingAuraPurchase: null,
+    targetedBoostClassmates: null,
     signupStep: 0,
     installPrompt: null,
 };
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
+
+function syncVisualViewport() {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const bottomInset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+    document.documentElement.style.setProperty("--visual-viewport-bottom", `${bottomInset}px`);
+    document.documentElement.style.setProperty("--visual-viewport-center", `${viewport.offsetLeft + viewport.width / 2}px`);
+    document.documentElement.style.setProperty("--visual-viewport-middle", `${viewport.offsetTop + viewport.height / 2}px`);
+    document.documentElement.style.setProperty("--visual-viewport-width", `${viewport.width}px`);
+    document.documentElement.style.setProperty("--visual-viewport-height", `${viewport.height}px`);
+}
 
 function escapeHTML(value = "") {
     return String(value)
@@ -103,6 +117,13 @@ function avatarMarkup(profile, className = "row-avatar", fallbackURL = null) {
         : `<span>${escapeHTML(initials(profile))}</span>`}</span>`;
 }
 
+function shareIconMarkup(platform) {
+    if (platform === "instagram") {
+        return `<svg viewBox="0 0 64 64" role="img" aria-label="Instagram"><defs><radialGradient id="igGlow" cx="30%" cy="105%" r="105%"><stop offset="0" stop-color="#ffd600"/><stop offset=".38" stop-color="#ff7a00"/><stop offset=".7" stop-color="#ff0169"/><stop offset="1" stop-color="#d300c5"/></radialGradient></defs><rect width="64" height="64" rx="15" fill="url(#igGlow)"/><rect x="15" y="15" width="34" height="34" rx="10" fill="none" stroke="white" stroke-width="4"/><circle cx="32" cy="32" r="8" fill="none" stroke="white" stroke-width="4"/><circle cx="44" cy="20" r="2.5" fill="white"/></svg>`;
+    }
+    return `<svg viewBox="0 0 64 64" role="img" aria-label="Snapchat"><path d="M32 9c-9 0-13 7-13 15v7c-1 3-4 5-8 6 1 4 5 5 8 6 1 4 4 4 7 4l6 5 6-5c3 0 6 0 7-4 3-1 7-2 8-6-4-1-7-3-8-6v-7c0-8-4-15-13-15Z" fill="white" stroke="#050914" stroke-width="3" stroke-linejoin="round"/></svg>`;
+}
+
 function showSignedOut(message = "") {
     clearInterval(state.playLockTimer);
     state.playLockTimer = null;
@@ -118,6 +139,9 @@ async function showSignedIn() {
     $("#appView").classList.remove("hidden");
     $("#bottomNav").classList.remove("hidden");
     $("#logoutButton").classList.remove("hidden");
+    syncVisualViewport();
+    requestAnimationFrame(() => requestAnimationFrame(syncVisualViewport));
+    setTimeout(syncVisualViewport, 120);
     try {
         const [profile, currentUser, classmatesStatus, config] = await Promise.all([
             api.getProfile(api.user.id),
@@ -148,14 +172,14 @@ async function showSignedIn() {
 function renderProfileHeader() {
     const profile = state.profile;
     if (!profile) return;
-    $("#profileGreeting").textContent = `Hey, ${profile.first_name || profile.username || "there"}`;
-    $("#profileSchool").textContent = profile.school_name || `@${profile.username}`;
     $("#auraCount").textContent = Number(profile.aura_points || 0).toLocaleString();
-    const avatar = $("#profileAvatar");
+    $$('[data-aura-total]').forEach((element) => { element.textContent = Number(profile.aura_points || 0).toLocaleString(); });
+    $("#playStreakCount").textContent = Math.max(0, Number(profile.current_streak || 0)).toLocaleString();
+    const multiplier = Math.max(1, Number(profile.streak_multiplier || 1));
+    const multiplierElement = $("#playStreakMultiplier");
+    multiplierElement.textContent = `(${multiplier.toFixed(1)}x)`;
+    multiplierElement.classList.toggle("hidden", multiplier <= 1);
     const imageURL = api.assetURL(profile.profile_picture_url_thumb || profile.profile_picture_url);
-    avatar.innerHTML = imageURL
-        ? `<img src="${escapeHTML(imageURL)}" alt="${escapeHTML(displayName(profile))}">`
-        : escapeHTML(initials(profile));
     $("#questionIdentityName").textContent = displayName(profile);
     $("#questionIdentityAvatar").innerHTML = imageURL
         ? `<img src="${escapeHTML(imageURL)}" alt="">`
@@ -183,10 +207,12 @@ function renderProfilePolls(container, questions, emptyMessage) {
     }
     container.innerHTML = questions.map((question, index) => {
         const imageURL = api.assetURL(question.image_url);
-        return `<article class="profile-poll-row">
+        const pollKey = `${question.question_id || question.id || index}`;
+        return `<button class="profile-poll-row" type="button" data-top-poll="${escapeHTML(pollKey)}" aria-label="Open poll: ${escapeHTML(question.question_text)}">
             <div class="profile-poll-art">${imageURL ? `<img src="${escapeHTML(imageURL)}" alt="">` : `<span>${index + 1}</span>`}</div>
             <div class="profile-poll-copy"><strong>${escapeHTML(question.question_text)}</strong><span>♥ ${Number(question.vote_count || 0).toLocaleString()} votes</span></div>
-        </article>`;
+            <span class="profile-poll-chevron" aria-hidden="true">›</span>
+        </button>`;
     }).join("");
 }
 
@@ -195,22 +221,22 @@ function renderProfilePanel() {
     if (!profile) return;
     const imageURL = api.assetURL(profile.profile_picture_url_medium || profile.profile_picture_url);
     $("#profileCard").innerHTML = `<article class="full-profile-card">
-        <button class="profile-photo-button" type="button" data-edit-profile aria-label="Change profile picture">
+        <button class="profile-photo-button" type="button" data-edit-photo aria-label="Change profile picture">
             <span class="full-profile-avatar">${imageURL ? `<img src="${escapeHTML(imageURL)}" alt="${escapeHTML(displayName(profile))}">` : `<span>${escapeHTML(initials(profile))}</span>`}</span>
             <span class="photo-edit-badge" aria-hidden="true">✎</span>
         </button>
         <h3>${escapeHTML(displayName(profile))}</h3>
-        <div class="profile-handle">@${escapeHTML(profile.username || "valid")}${profile.current_streak > 0 ? ` <span>🔥 ${Number(profile.current_streak)}</span>` : ""}</div>
-        ${profile.bio ? `<p class="profile-bio">${escapeHTML(profile.bio)}</p>` : `<button class="add-bio-button" type="button" data-edit-profile>+ Add a bio</button>`}
+        <div class="profile-handle">@${escapeHTML(profile.username || "valid")}</div>
+        <button class="profile-bio-button ${profile.bio ? "" : "empty"}" type="button" data-edit-bio>${profile.bio ? escapeHTML(profile.bio) : "+ Add bio"}</button>
         <div class="profile-school-meta"><span>🏫 ${escapeHTML(profile.school_name || "Your school")}</span>${profile.grade ? `<span>🎓 ${escapeHTML(formatGrade(profile.grade))}</span>` : ""}</div>
-        <div class="profile-stats-grid">
-            <div class="profile-stat-card"><strong><img class="profile-aura-icon" src="../assets/app/aura.png" alt="">${Number(profile.aura_points || 0).toLocaleString()}</strong><span>Aura</span></div>
+        <div class="profile-stats-grid single">
             <div class="profile-stat-card"><strong><span class="heart">♥</span>${Number(profile.vote_count || 0).toLocaleString()}</strong><span>Votes Received</span></div>
         </div>
     </article>`;
     renderProfilePolls($("#weeklyPolls"), state.topQuestionsWeekly, "No polls this week yet");
     renderProfilePolls($("#allTimePolls"), state.topQuestionsAllTime, "No polls yet");
     renderGodModeCard();
+    renderAuraPurchases();
     renderPasskeyStatus();
 }
 
@@ -234,6 +260,117 @@ function renderGodModeCard() {
         ? `<p>Your subscription is recognized on web · ${remainingReveals} weekly ${remainingReveals === 1 ? "reveal" : "reveals"} left. Billing stays with the store where you subscribed.</p>`
         : `<p>Web checkout is being finalized. An existing iOS subscription will be recognized here.</p>`}
     </article>`;
+}
+
+function auraCost(kind) {
+    if (kind === "global") return Math.max(0, Number(state.config?.global_visibility_boost_cost ?? 400));
+    if (kind === "targeted") return Math.max(0, Number(state.config?.targeted_visibility_boost_cost ?? 200));
+    return questionSubmissionCost();
+}
+
+function activeBoost(kind, targetId = null) {
+    if (kind === "global") return state.profile?.active_global_boost || null;
+    return (state.profile?.active_targeted_boosts || []).find((boost) => !targetId || String(boost.target_user_id) === String(targetId)) || null;
+}
+
+function renderAuraPurchases() {
+    const container = $("#auraPurchases");
+    if (!container || !state.profile) return;
+    const globalCost = auraCost("global");
+    const targetedCost = auraCost("targeted");
+    const questionCost = auraCost("question");
+    const globalBoost = activeBoost("global");
+    container.innerHTML = `<article class="purchase-row"><span><strong>Get boosted</strong><small>Jump to the top of classmates' polls for 5 days or until you get voted 10 times.</small></span><button class="aura-price-button" type="button" data-buy-aura="global" aria-label="${globalBoost ? "Global boost active" : `Get boosted for ${globalCost.toLocaleString()} aura`}" ${globalBoost ? "disabled" : ""}>${globalBoost ? "Active" : `<span>${globalCost.toLocaleString()}</span><img src="../assets/app/aura.png" alt="aura">`}</button></article>
+        <article class="purchase-row"><span><strong>See what your crush thinks about you</strong><small>Your crush stays top secret. You appear more often in their polls.</small></span><button class="aura-price-button" type="button" data-buy-aura="targeted" aria-label="Choose a crush for ${targetedCost.toLocaleString()} aura"><span>${targetedCost.toLocaleString()}</span><img src="../assets/app/aura.png" alt="aura"></button></article>
+        <article class="purchase-row"><span><strong>Submit a school question</strong><small>Anonymously create a poll that your school will answer.</small></span><button class="aura-price-button" type="button" data-buy-aura="question" aria-label="Submit a school question for ${questionCost.toLocaleString()} aura"><span>${questionCost.toLocaleString()}</span><img src="../assets/app/aura.png" alt="aura"></button></article>`;
+}
+
+function openTopPoll(pollKey) {
+    const polls = [...(state.topQuestionsWeekly || []), ...(state.topQuestionsAllTime || [])];
+    const question = polls.find((item) => String(item.question_id || item.id) === String(pollKey));
+    if (!question) return;
+    state.selectedTopPoll = question;
+    const imageURL = api.assetURL(question.image_url);
+    $("#pollSummaryBody").innerHTML = `<article class="poll-summary-card">
+        ${imageURL ? `<div class="profile-poll-art"><img src="${escapeHTML(imageURL)}" alt=""></div>` : ""}
+        <h3>${escapeHTML(question.question_text)}</h3>
+        <span class="poll-summary-votes"><span aria-hidden="true">♥</span><strong>${Number(question.vote_count || 0).toLocaleString()} votes</strong></span>
+        <button class="primary-button" type="button" data-share-top-poll>Share poll</button>
+    </article>`;
+    $("#pollSummaryDialog").showModal();
+}
+
+async function shareTopPoll() {
+    const question = state.selectedTopPoll;
+    if (!question) return;
+    const text = `${question.question_text}\n${Number(question.vote_count || 0).toLocaleString()} votes on Valid`;
+    try {
+        if (navigator.share) await navigator.share({ title: "A poll on Valid", text, url: "https://validapp.lol/app/" });
+        else {
+            await navigator.clipboard.writeText(`${text}\nhttps://validapp.lol/app/`);
+            showToast("Poll copied to share");
+        }
+    } catch (error) {
+        if (error.name !== "AbortError") showToast("Could not share this poll.");
+    }
+}
+
+function openAuraSpend(kind, target = null) {
+    const cost = auraCost(kind);
+    const aura = Math.max(0, Number(state.profile?.aura_points || 0));
+    if (aura < cost) return showToast(`You need ${cost.toLocaleString()} aura.`);
+    const details = kind === "global"
+        ? ["Get Boosted", "Jump to the top of your classmates' polls for 5 days or until you get voted 10 times."]
+        : ["Boost toward your crush", `Show up more often in ${displayName(target)}'s polls. They will not be told.`];
+    state.pendingAuraPurchase = { kind, target };
+    $("#auraSpendTitle").textContent = details[0];
+    $("#auraSpendMessage").textContent = details[1];
+    $("#auraSpendCost").textContent = `${cost.toLocaleString()} aura`;
+    $("#auraSpendRemaining").textContent = `${Math.max(0, aura - cost).toLocaleString()} aura`;
+    $("#confirmAuraSpend").textContent = `Spend ${cost.toLocaleString()} aura`;
+    $("#auraSpendStatus").textContent = "";
+    $("#auraSpendDialog").showModal();
+}
+
+async function confirmAuraSpend() {
+    const purchase = state.pendingAuraPurchase;
+    if (!purchase) return;
+    const button = $("#confirmAuraSpend");
+    setButtonLoading(button, true, "Purchasing...");
+    $("#auraSpendStatus").textContent = "";
+    try {
+        if (purchase.kind === "global") await api.purchaseGlobalBoost(api.user.id);
+        else await api.purchaseTargetedBoost(api.user.id, purchase.target.user_id);
+        $("#auraSpendDialog").close();
+        state.pendingAuraPurchase = null;
+        await refreshProfile();
+        showToast(purchase.kind === "global" ? "You're boosted 🚀" : `Boosted toward ${displayName(purchase.target)} ✨`);
+    } catch (error) {
+        $("#auraSpendStatus").textContent = error.message || "Could not purchase this boost.";
+    } finally { setButtonLoading(button, false); }
+}
+
+function renderTargetedBoostList() {
+    const query = $("#targetedBoostSearch").value.trim().toLowerCase();
+    const classmates = (state.targetedBoostClassmates || []).filter((classmate) => !query || `${displayName(classmate)} ${classmate.username || ""}`.toLowerCase().includes(query));
+    const cost = auraCost("targeted");
+    $("#targetedBoostList").innerHTML = classmates.length ? classmates.map((classmate) => {
+        const active = activeBoost("targeted", classmate.user_id);
+        return `<button class="nomination-row" type="button" data-targeted-boost="${escapeHTML(classmate.user_id)}" ${active ? "disabled" : ""}>${avatarMarkup(classmate, "choice-avatar")}<span><strong>${escapeHTML(displayName(classmate))}</strong><small>${active ? "Boost active" : `@${escapeHTML(classmate.username || "classmate")}`}</small></span><span class="nomination-cost">${active ? "Active" : `${cost.toLocaleString()} <img src="../assets/app/aura.png" alt="aura">`}</span></button>`;
+    }).join("") : `<div class="profile-poll-empty">No matching classmates.</div>`;
+}
+
+async function openTargetedBoostPicker() {
+    $("#targetedBoostSearch").value = "";
+    $("#targetedBoostStatus").textContent = "Loading classmates...";
+    $("#targetedBoostDialog").showModal();
+    try {
+        state.targetedBoostClassmates ||= await api.getClassmates(api.user.id, "", 500);
+        $("#targetedBoostStatus").textContent = "";
+        renderTargetedBoostList();
+    } catch (error) {
+        $("#targetedBoostStatus").textContent = error.message || "Could not load classmates.";
+    }
 }
 
 function renderClassmateDirectory() {
@@ -404,7 +541,7 @@ function setSignupStep(index) {
     }
 }
 
-function advanceSignup() {
+async function advanceSignup(button) {
     const step = $(`[data-signup-step="${state.signupStep}"]`);
     const fields = [...step.querySelectorAll("input, select")];
     const invalid = fields.find((field) => !field.checkValidity());
@@ -412,6 +549,19 @@ function advanceSignup() {
     if (state.signupStep === 0 && !isAtLeastThirteen($("#signupBirthday").value)) {
         $("#signupStatus").textContent = "You must be at least 13 to use Valid.";
         return;
+    }
+    if (state.signupStep === 0) {
+        setButtonLoading(button, true, "Checking username...");
+        try {
+            const result = await api.checkUsernameAvailability($("#signupUsername").value.trim().toLowerCase());
+            if (!result.available) {
+                $("#signupStatus").textContent = "That username is not available. Try another one.";
+                return;
+            }
+        } catch (error) {
+            $("#signupStatus").textContent = error.message || "Could not check that username.";
+            return;
+        } finally { setButtonLoading(button, false); }
     }
     setSignupStep(state.signupStep + 1);
 }
@@ -719,19 +869,19 @@ function renderAnonymousInbox() {
     unreadBadge.textContent = unread ? `${unread} new` : "";
     unreadBadge.classList.toggle("hidden", unread === 0);
 
-    const questionRows = questions.slice(0, 4).map((question) => `<button class="anonymous-question-row ${question.opened_at ? "" : "unread"} ${question.status === "answered" ? "answered" : ""}" type="button" data-anonymous-question="${escapeHTML(question.id)}">
+    const questionRows = questions.map((question) => `<button class="anonymous-question-row ${question.opened_at ? "" : "unread"} ${question.status === "answered" ? "answered" : ""}" type="button" data-anonymous-question="${escapeHTML(question.id)}">
         <span class="anonymous-row-icon" aria-hidden="true">?</span>
-        <span class="anonymous-row-copy"><strong>${escapeHTML(question.body)}</strong><small>${escapeHTML(question.provenance_label)} · ${escapeHTML(relativeTime(question.created_at))}</small></span>
-        <span class="anonymous-row-state">${question.status === "answered" ? "Answered" : "›"}</span>
+        <span class="anonymous-row-copy"><span class="anonymous-row-title"><strong>${escapeHTML(question.provenance_label)}</strong>${question.opened_at ? "" : `<span class="anonymous-new-pill">New</span>`}</span><span class="anonymous-row-message">${escapeHTML(question.body)}</span><span class="anonymous-row-meta"><span>${escapeHTML(question.source_platform ? `From ${question.source_platform[0].toUpperCase()}${question.source_platform.slice(1)}` : "Anonymous")}</span><time>${escapeHTML(relativeTime(question.created_at))}</time></span></span>
+        <span class="anonymous-row-state" aria-hidden="true">›</span>
     </button>`).join("");
-    const answerRows = answers.slice(0, 2).map((answer) => `<button class="anonymous-reply-row" type="button" data-anonymous-answer="${escapeHTML(answer.id)}">
-        <span class="anonymous-row-icon reply" aria-hidden="true">↩</span>
-        <span class="anonymous-row-copy"><strong>${escapeHTML(answer.recipient_display_name)} replied to you</strong><small>${escapeHTML(answer.answer_text)} · ${escapeHTML(relativeTime(answer.answered_at))}</small></span>
+    const answerRows = answers.map((answer) => `<button class="anonymous-reply-row" type="button" data-anonymous-answer="${escapeHTML(answer.id)}">
+        ${avatarMarkup({ first_name: answer.recipient_display_name, profile_picture_url: answer.recipient_profile_picture_url }, "anonymous-row-icon reply")}
+        <span class="anonymous-row-copy"><strong>${escapeHTML(answer.recipient_display_name)} replied to you</strong><span class="anonymous-row-message">${escapeHTML(answer.answer_text)}</span><span class="anonymous-row-meta"><span>Your message: ${escapeHTML(answer.question_body)}</span><time>${escapeHTML(relativeTime(answer.answered_at))}</time></span></span>
         <span class="anonymous-row-state" aria-hidden="true">›</span>
     </button>`).join("");
     $("#anonymousInboxList").innerHTML = questionRows || answerRows
         ? `${questionRows}${answerRows}`
-        : `<div class="anonymous-empty"><img src="../assets/app/anonymous.png" alt=""><span>No anonymous questions yet. Share your Ask me link from Profile.</span></div>`;
+        : `<div class="anonymous-empty"><img src="../assets/app/anonymous.png" alt=""><span>No anonymous questions yet. Share your link from Settings to get messages.</span></div>`;
 }
 
 function openAnonymousAnswerDialog(answerId) {
@@ -783,9 +933,26 @@ function renderAnonymousQuestionDialog() {
     $("#anonymousAnswerText").readOnly = answered;
     $("#anonymousAnswerLabel").textContent = "Your answer";
     $("#anonymousAnswerButton").classList.toggle("hidden", answered);
+    $("#anonymousAnswerShare").classList.toggle("hidden", !answered);
     $("#anonymousAnswerStatus").textContent = answered
         ? `Answered ${relativeTime(question.answered_at)}${question.aura_points_earned ? ` · +${question.aura_points_earned} aura` : ""}`
         : "";
+}
+
+async function shareAnonymousAnswer(platform) {
+    const question = selectedAnonymousQuestion();
+    if (!question?.answer_text) return;
+    const text = `${question.body}\n\n${question.answer_text}`;
+    try {
+        if (navigator.share) await navigator.share({ title: "My anonymous answer on Valid", text, url: state.askLink?.share_url || "https://validapp.lol/app/" });
+        else {
+            await navigator.clipboard.writeText(text);
+            showToast("Answer copied to share");
+        }
+        api.trackAskShare(api.user.id, platform).catch(() => null);
+    } catch (error) {
+        if (error.name !== "AbortError") showToast("Could not share your answer.");
+    }
 }
 
 async function openAnonymousQuestionDialog(questionId) {
@@ -907,6 +1074,16 @@ function softHaptic() {
     if (navigator.vibrate) navigator.vibrate(8);
 }
 
+function animateAuraChange(amount) {
+    const chip = $("#auraCount")?.closest(".play-aura-chip");
+    if (!chip || !Number.isFinite(Number(amount)) || Number(amount) === 0) return;
+    chip.animate([
+        { transform: "scale(1)", background: "rgba(255,255,255,.92)" },
+        { transform: "scale(1.16)", background: Number(amount) > 0 ? "#c8f6ec" : "#ffd2dc", offset: .45 },
+        { transform: "scale(1)", background: "rgba(255,255,255,.92)" },
+    ], { duration: 520, easing: "cubic-bezier(.2,.8,.2,1)" });
+}
+
 async function toggleUpvote(button) {
     const item = state.feedItems.find((candidate) => String(candidate.question_answer_id) === button.dataset.upvote);
     if (!item) return;
@@ -1018,20 +1195,17 @@ function renderPlay() {
     const artworkURL = api.assetURL(question.image_url);
     const attribution = question.is_user_submitted ? `<div class="question-attribution">${question.is_anonymous ? avatarMarkup({ first_name: "Anonymous", profile_picture_url: "../assets/app/anonymous.png" }, "attribution-avatar") : avatarMarkup({ first_name: question.submitted_by_name || "A classmate", profile_picture_url: question.submitted_by_avatar_url }, "attribution-avatar")}<span><small>Question submitted by</small><strong>${escapeHTML(question.is_anonymous ? "Someone at your school" : question.submitted_by_name || "A classmate")}</strong></span></div>` : "";
     const remainingSkips = Math.max(0, Number(state.config?.max_skips_per_set ?? 3) - state.skipsUsedInSet);
-    const currentStreak = Math.max(0, Number(state.profile?.current_streak || 0));
-    const streakMultiplier = Math.max(1, Number(state.profile?.streak_multiplier || 1));
     const safetyActions = question.is_user_submitted ? `<div class="play-safety-actions"><button type="button" data-play-question-action="report">Report question</button><button type="button" data-play-question-action="block">Block submitter</button></div>` : "";
     card.innerHTML = `<article class="play-card">
-        <div class="play-live-stats"><span class="play-streak-chip">🔥 <strong>${currentStreak}</strong>${streakMultiplier > 1 ? `<small>(${streakMultiplier.toFixed(1)}x)</small>` : ""}</span><span class="play-aura-chip"><img src="../assets/app/aura.png" alt=""><strong>${Number(state.profile?.aura_points || 0).toLocaleString()}</strong></span></div>
         <h3>${escapeHTML(question.question_text)}</h3>
         ${attribution}
         <div class="question-artwork">${artworkURL ? `<img src="${escapeHTML(artworkURL)}" alt="">` : `<div class="artwork-placeholder"><img src="../assets/app/pencil-clipboard.png" alt=""><span>Question artwork</span></div>`}</div>
-        <div class="choice-grid">${choices.map(choiceMarkup).join("")}</div>
         <div class="play-actions">
             <button class="play-action-button" data-shuffle type="button">↻ Shuffle</button>
             <button class="play-action-button nominate" data-nominate type="button">♛ Nominate</button>
             <button class="play-action-button" data-skip="${question.id}" type="button" ${remainingSkips < 1 ? "disabled" : ""}>Skip (${remainingSkips})</button>
         </div>
+        <div class="choice-grid">${choices.map(choiceMarkup).join("")}</div>
         ${safetyActions}
     </article>`;
 }
@@ -1128,6 +1302,7 @@ async function nominateClassmate(candidateId) {
         }
         $("#nominationDialog").close();
         showToast(`You nominated ${displayName(candidate)} 👑`);
+        animateAuraChange(-Math.max(0, Number(state.config?.nomination_aura_cost ?? 100)));
         softHaptic();
         state.questionIndex += 1;
         renderPlay();
@@ -1157,14 +1332,16 @@ async function answerPlayQuestion(choiceId) {
             presented_options: choices.map((choice) => ({ phone: "", name: displayName(choice) })),
             is_nomination: false,
         });
-        state.playAuraEarned += Math.max(0, Number(result.aura_points_earned || 0));
+        const auraEarned = Math.max(0, Number(result.aura_points_earned || 0));
+        state.playAuraEarned += auraEarned;
         if (state.profile && Number.isFinite(Number(result.total_aura_points))) {
             state.profile.aura_points = Number(result.total_aura_points);
             state.profile.current_streak = Math.max(0, Number(result.current_streak ?? state.profile.current_streak ?? 0));
             state.profile.streak_multiplier = Math.max(1, Number(result.streak_multiplier ?? state.profile.streak_multiplier ?? 1));
             renderProfileHeader();
         }
-        showToast(`You picked ${displayName(selected)} ✨`);
+        animateAuraChange(auraEarned);
+        showToast(`${auraEarned ? `+${auraEarned} aura · ` : ""}You picked ${displayName(selected)} ✨`);
         state.questionIndex += 1;
         renderPlay();
         refreshProfile();
@@ -1243,13 +1420,14 @@ function renderAskLink() {
     const link = state.askLink;
     if (!link) return;
     $("#askLinkCard").innerHTML = `<article class="ask-link-card">
-        <div class="ask-link-heading"><div><strong>${link.is_active ? "Your link is live" : "Your link is paused"}</strong><span>Let friends ask you something anonymously.</span></div><img class="ask-mascot" src="../assets/app/anonymous.png" alt=""></div>
-        <div class="ask-url">${escapeHTML(link.share_url)}</div>
-        <div class="button-row"><button class="mini-button" type="button" data-share-link>${navigator.share ? "Share link" : "Copy link"}</button><button class="mini-button" type="button" data-toggle-link>${link.is_active ? "Pause" : "Turn on"}</button><button class="mini-button" type="button" data-copy-link>Copy</button><button class="mini-button" type="button" data-rotate-link>New link</button></div>
+        <div class="ask-link-heading"><div><strong>Get messages</strong><span>Share your link in a story. New messages show up in Inbox.</span></div><img class="ask-mascot" src="../assets/app/anonymous.png" alt=""></div>
+        <button class="ask-url" type="button" data-copy-link aria-label="Copy ask link"><span>🔗</span><span>${escapeHTML(link.share_url.replace(/^https:\/\//, ""))}</span><strong>Copy</strong></button>
+        ${link.is_active ? `<div class="share-platform-row"><span class="share-platform-label">Open on:</span><button class="share-platform-button snapchat" type="button" data-share-link="snapchat" aria-label="Share ask link to Snapchat">${shareIconMarkup("snapchat")}</button><button class="share-platform-button instagram" type="button" data-share-link="instagram" aria-label="Share ask link to Instagram">${shareIconMarkup("instagram")}</button></div>` : `<button class="primary-button" type="button" data-toggle-link>Resume ask link</button>`}
+        <div class="button-row"><button class="mini-button" type="button" data-toggle-link>${link.is_active ? "Pause link" : "Turn on"}</button><button class="mini-button" type="button" data-rotate-link>Reset link</button></div>
     </article>`;
 }
 
-async function shareAskLink(forceCopy) {
+async function shareAskLink(forceCopy, platform = "other") {
     if (!state.askLink) return;
     try {
         if (!forceCopy && navigator.share) await navigator.share({ title: "Ask me on Valid", text: "Ask me anything anonymously", url: state.askLink.share_url });
@@ -1257,7 +1435,7 @@ async function shareAskLink(forceCopy) {
             await navigator.clipboard.writeText(state.askLink.share_url);
             showToast("Ask me link copied");
         }
-        api.trackAskShare(api.user.id, forceCopy ? "copy" : "other").catch(() => null);
+        api.trackAskShare(api.user.id, forceCopy ? "copy" : platform).catch(() => null);
     } catch (error) {
         if (error.name !== "AbortError") showToast("Could not share that link.");
     }
@@ -1285,16 +1463,17 @@ function openProfileDialog() {
     $("#profileLastName").value = profile.last_name || "";
     $("#profileUsername").value = profile.username || "";
     $("#profileSchoolName").value = profile.school_name || "";
-    $("#profileBio").value = profile.bio || "";
+    $("#profileSchoolCity").value = "";
+    $("#profileSchoolState").value = "";
     const grade = profile.grade || "Junior";
     const select = $("#profileGrade");
     if (![...select.options].some((option) => option.value === grade)) select.add(new Option(grade, grade));
     select.value = grade;
     const informationLocked = profile.can_change_information === false;
-    [$("#profileFirstName"), $("#profileLastName"), $("#profileUsername"), $("#profileGrade")].forEach((field) => { field.disabled = informationLocked; });
+    [$("#profileFirstName"), $("#profileLastName"), $("#profileUsername"), $("#profileSchoolName"), $("#profileSchoolCity"), $("#profileSchoolState"), $("#profileGrade")].forEach((field) => { field.disabled = informationLocked; });
     $("#profileEditHint").textContent = profile.can_change_information === false
-        ? `Profile information can be changed again ${relativeTime(profile.next_information_change_at)}. Photo and bio can still be updated.`
-        : "Name, username and grade share the iOS profile-information cooldown.";
+        ? `Profile information can be changed again ${relativeTime(profile.next_information_change_at)}. Tap your photo or bio to change either one now.`
+        : "Name, username, school and grade share the same cooldown as iOS.";
     $("#profileEditStatus").textContent = "";
     $("#profileDialog").showModal();
 }
@@ -1302,24 +1481,28 @@ function openProfileDialog() {
 async function saveProfile(event) {
     event.preventDefault();
     const button = event.currentTarget.querySelector("button[type=submit]");
+    let schoolId = state.profile.school_id || null;
+    const schoolName = $("#profileSchoolName").value.trim();
+    const schoolChanged = schoolName !== (state.profile.school_name || "");
     const nextInfo = {
         first_name: $("#profileFirstName").value.trim(),
         last_name: $("#profileLastName").value.trim(),
         username: $("#profileUsername").value.trim().toLowerCase(),
         grade: $("#profileGrade").value,
-        school_id: state.profile.school_id || null,
+        school_id: schoolId,
     };
-    const bio = $("#profileBio").value.trim();
-    const picture = $("#profilePicture").files[0];
-    const infoChanged = ["first_name", "last_name", "username", "grade"].some((key) => nextInfo[key] !== (state.profile[key] || ""));
-    const bioChanged = bio !== (state.profile.bio || "");
+    const infoChanged = schoolChanged || ["first_name", "last_name", "username", "grade"].some((key) => nextInfo[key] !== (state.profile[key] || ""));
     setButtonLoading(button, true, "Saving...");
     $("#profileEditStatus").textContent = "";
     try {
-        if (picture) await api.uploadProfilePicture(api.user.id, picture);
-        if (bioChanged) state.profile = await api.updateBio(api.user.id, bio || null);
+        if (schoolChanged) {
+            const city = $("#profileSchoolCity").value.trim();
+            const region = $("#profileSchoolState").value.trim().toUpperCase();
+            if (!city || !region) throw new Error("Add the city and two-letter state when changing schools.");
+            const resolved = await api.resolveSchool({ school_name: schoolName, city, state: region });
+            nextInfo.school_id = resolved.school.id;
+        }
         if (infoChanged) state.profile = await api.updateInformation(api.user.id, nextInfo);
-        if (picture) state.profile = await api.getProfile(api.user.id);
         renderProfileHeader();
         renderProfilePanel();
         $("#profileForm").reset();
@@ -1329,6 +1512,46 @@ async function saveProfile(event) {
         await refreshProfile();
         $("#profileEditStatus").textContent = error.message || "Could not save all profile changes.";
     } finally { setButtonLoading(button, false); }
+}
+
+function openBioDialog() {
+    $("#profileBio").value = state.profile?.bio || "";
+    $("#bioEditStatus").textContent = "";
+    $("#bioDialog").showModal();
+}
+
+async function saveBio(event) {
+    event.preventDefault();
+    const button = event.currentTarget.querySelector("button[type=submit]");
+    setButtonLoading(button, true, "Saving...");
+    $("#bioEditStatus").textContent = "";
+    try {
+        state.profile = await api.updateBio(api.user.id, $("#profileBio").value.trim() || null);
+        renderProfileHeader();
+        renderProfilePanel();
+        $("#bioDialog").close();
+        showToast("Bio updated");
+    } catch (error) {
+        $("#bioEditStatus").textContent = error.message || "Could not update your bio.";
+    } finally { setButtonLoading(button, false); }
+}
+
+async function changeProfilePicture(event) {
+    const input = event.currentTarget;
+    const file = input.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+        input.value = "";
+        return showToast("Profile photos must be 5 MB or smaller.");
+    }
+    showToast("Uploading photo...");
+    try {
+        await api.uploadProfilePicture(api.user.id, file);
+        await refreshProfile();
+        showToast("Profile photo updated");
+    } catch (error) {
+        showToast(error.message || "Could not update your photo.");
+    } finally { input.value = ""; }
 }
 
 function questionSubmissionCost() {
@@ -1646,7 +1869,8 @@ function bindEvents() {
     $("#signupForm").addEventListener("submit", createAccount);
     $("#signupPicture").addEventListener("change", previewSignupPhoto);
     $("#signupDialog").addEventListener("click", (event) => {
-        if (event.target.closest("[data-signup-next]")) advanceSignup();
+        const next = event.target.closest("[data-signup-next]");
+        if (next) advanceSignup(next);
         if (event.target.closest("[data-signup-back]")) setSignupStep(state.signupStep - 1);
     });
     $("#logoutButton").addEventListener("click", logoutAndReset);
@@ -1709,7 +1933,9 @@ function bindEvents() {
     $("#anonymousAnswerForm").addEventListener("submit", answerAnonymousQuestion);
     $("#anonymousQuestionDialog").addEventListener("click", (event) => {
         const action = event.target.closest("[data-anonymous-action]");
+        const share = event.target.closest("[data-share-anonymous]");
         if (action) handleAnonymousSafetyAction(action.dataset.anonymousAction);
+        if (share) shareAnonymousAnswer(share.dataset.shareAnonymous);
     });
     $$(".nav-item").forEach((button) => button.addEventListener("click", () => switchPanel(button.dataset.panel)));
     $("#playCard").addEventListener("click", (event) => {
@@ -1733,13 +1959,25 @@ function bindEvents() {
         if (candidate) nominateClassmate(candidate.dataset.nomination);
     });
     $("#askLinkCard").addEventListener("click", (event) => {
-        if (event.target.closest("[data-share-link]")) shareAskLink(false);
+        const share = event.target.closest("[data-share-link]");
+        if (share) shareAskLink(false, share.dataset.shareLink || "other");
         if (event.target.closest("[data-copy-link]")) shareAskLink(true);
         if (event.target.closest("[data-toggle-link]")) toggleAskLink();
         if (event.target.closest("[data-rotate-link]")) rotateAskLink();
     });
-    $("#profilePanel").addEventListener("click", (event) => { if (event.target.closest("[data-edit-profile]")) openProfileDialog(); });
+    $("#profilePanel").addEventListener("click", (event) => {
+        if (event.target.closest("[data-edit-photo]")) $("#profilePictureInput").click();
+        if (event.target.closest("[data-edit-bio]")) openBioDialog();
+        const poll = event.target.closest("[data-top-poll]");
+        if (poll) openTopPoll(poll.dataset.topPoll);
+        const purchase = event.target.closest("[data-buy-aura]");
+        if (purchase?.dataset.buyAura === "global") openAuraSpend("global");
+        if (purchase?.dataset.buyAura === "targeted") openTargetedBoostPicker();
+        if (purchase?.dataset.buyAura === "question") openQuestionDialog();
+    });
+    $("#pollSummaryDialog").addEventListener("click", (event) => { if (event.target.closest("[data-share-top-poll]")) shareTopPoll(); });
     $("#editProfileButton").addEventListener("click", openProfileDialog);
+    $("#profilePictureInput").addEventListener("change", changeProfilePicture);
     $("#addPasskeyButton").addEventListener("click", addBackupPasskey);
     $("#viewClassmatesButton").addEventListener("click", openClassmateDirectory);
     $("#classmateDirectorySearch").addEventListener("input", renderClassmateDirectory);
@@ -1751,7 +1989,16 @@ function bindEvents() {
     $("#findClassmatesButton").addEventListener("click", openClassmatesDialog);
     $("#chooseContactsButton").addEventListener("click", chooseContacts);
     $("#shareClassmateInviteButton").addEventListener("click", shareClassmateInvite);
-    $("#profileSubmitQuestion").addEventListener("click", openQuestionDialog);
+    $("#targetedBoostSearch").addEventListener("input", renderTargetedBoostList);
+    $("#targetedBoostList").addEventListener("click", (event) => {
+        const row = event.target.closest("[data-targeted-boost]");
+        const target = state.targetedBoostClassmates?.find((classmate) => String(classmate.user_id) === String(row?.dataset.targetedBoost));
+        if (target) {
+            $("#targetedBoostDialog").close();
+            openAuraSpend("targeted", target);
+        }
+    });
+    $("#confirmAuraSpend").addEventListener("click", confirmAuraSpend);
     $("#deleteAccountButton").addEventListener("click", openDeleteAccountDialog);
     $("#deleteAccountForm").addEventListener("submit", requestAccountDeletion);
     $("#cancelDeletionButton").addEventListener("click", cancelAccountDeletion);
@@ -1762,6 +2009,7 @@ function bindEvents() {
     $("#questionForm").addEventListener("change", resetQuestionSubmissionIfDraftChanged);
     $("#confirmQuestionSubmit").addEventListener("click", confirmQuestionSubmission);
     $("#profileForm").addEventListener("submit", saveProfile);
+    $("#bioForm").addEventListener("submit", saveBio);
     $$("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
     addEventListener("valid:session-expired", () => showSignedOut("Your session expired. Sign in with your passkey again."));
     addEventListener("offline", updateNetworkStatus);
@@ -1778,6 +2026,12 @@ function bindEvents() {
     });
 }
 
+$$('[data-share-anonymous="snapchat"]').forEach((button) => { button.innerHTML = shareIconMarkup("snapchat"); });
+$$('[data-share-anonymous="instagram"]').forEach((button) => { button.innerHTML = shareIconMarkup("instagram"); });
+syncVisualViewport();
+window.visualViewport?.addEventListener("resize", syncVisualViewport);
+window.visualViewport?.addEventListener("scroll", syncVisualViewport);
+addEventListener("resize", syncVisualViewport);
 bindEvents();
 if (!navigator.onLine) updateNetworkStatus();
 if ("serviceWorker" in navigator && !demoMode) {

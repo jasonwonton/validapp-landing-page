@@ -71,7 +71,7 @@ python3 -m http.server 4173
 ```
 
 Open <http://127.0.0.1:4173/app/?demo=1>. This is the fastest way to inspect
-layout, motion, Feed, Play, Profile, onboarding, selected-contact discovery,
+layout, motion, Feed, Play, Settings, onboarding, selected-contact discovery,
 question submission, anonymous Inbox, install UI, and account-deletion UI.
 Demo mode cannot send an API request or an SMS.
 
@@ -183,16 +183,19 @@ On current Android Chrome (and once in desktop Chrome), verify:
 1. Create an account with birthday, school, grade, optional photo, and passkey.
    Confirm there is no phone or SMS step.
 2. Close the tab, reopen it, and sign in with the passkey.
-   From Profile, add a backup passkey and confirm the registered count increases.
+   From Settings, add a backup passkey and confirm the registered count increases.
 3. Switch Inbox/School feeds, search, open a poll, upvote, report, and block.
-4. Complete a Play set, shuffle, nominate, use all three skips, and watch the
-   cooldown unlock without a page refresh.
-5. Edit Profile, browse/search classmates, share/rotate the Ask link, submit an
-   aura-confirmed question, and verify an ambiguous retry cannot double-charge.
+4. Confirm streak, multiplier, question progress, and aura are visible in Play.
+   Complete a set, shuffle, nominate, use all three skips, and watch earned aura
+   update before the cooldown unlocks without a page refresh.
+5. In Settings, tap the photo and bio to edit them directly. Open Top Polls,
+   browse/search classmates, share/rotate the Ask link, spend aura on a boost,
+   submit an aura-confirmed question, and verify an ambiguous retry cannot double-charge.
    On a God Mode account, reveal one sender and confirm the weekly balance drops.
 6. Use the browser Contact Picker. Confirm only selected contacts are uploaded
    and no message or SMS is sent.
-7. Answer/report/block/delete an anonymous Inbox item.
+7. Answer/report/block/delete an anonymous Inbox item and confirm its Snapchat,
+   Instagram, and system share actions appear after answering.
 8. Install the PWA, launch it from the home screen, background/reopen it, test
    Wi-Fi and cellular, cancel one biometric prompt, and exercise offline mode.
 9. Schedule deletion only on the disposable account, sign back in, and choose

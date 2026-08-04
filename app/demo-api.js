@@ -46,6 +46,8 @@ export class DemoAPI {
             profile_picture_url_medium: "../assets/AppIconV2.png",
             can_change_information: true,
             next_information_change_at: null,
+            active_global_boost: null,
+            active_targeted_boosts: [],
         };
         this.topQuestions = {
             weekly: [
@@ -210,6 +212,13 @@ export class DemoAPI {
         return { school: { id: 77, name: payload.school_name, city: payload.city, state: payload.state } };
     }
 
+    async checkUsernameAvailability(username) {
+        const normalized = String(username || "").trim().toLowerCase();
+        const skeleton = normalized.replace(/[^a-z0-9]/g, "").replace(/[01345789]/g, (value) => ({ 0: "o", 1: "i", 3: "e", 4: "a", 5: "s", 7: "t", 8: "b", 9: "g" })[value]);
+        const inappropriate = /p+o+r+n+(?:o+)?|f+a+g+(?:o+t+)?(?![aeiu])|n+i+g{2,}(?:e+r+|a+)/.test(skeleton);
+        return { available: /^[a-z0-9_]{3,30}$/.test(normalized) && !inappropriate && normalized !== "taken" };
+    }
+
     async demoSignup(payload) {
         Object.assign(this.profile, payload.profile, {
             user_id: "demo-user",
@@ -324,6 +333,8 @@ export class DemoAPI {
             max_skips_per_set: 3,
             play_lock_time_seconds: 60,
             full_reveal_aura_cost: 200,
+            global_visibility_boost_cost: 400,
+            targeted_visibility_boost_cost: 200,
         };
     }
 
@@ -368,6 +379,23 @@ export class DemoAPI {
         if (questionText.length < 3) throw new Error("Question is too short");
         this.profile.aura_points -= 200;
         return { id: crypto.randomUUID(), status: "pending", aura_spent: 200, is_duplicate: false };
+    }
+
+    async purchaseGlobalBoost() {
+        if (this.profile.active_global_boost) throw new Error("You already have an active global boost.");
+        if (this.profile.aura_points < 400) throw new Error("You need 400 aura for this boost.");
+        this.profile.aura_points -= 400;
+        this.profile.active_global_boost = { id: crypto.randomUUID(), boost_type: "global", remaining_uses: 10, expires_at: new Date(Date.now() + 5 * 86_400_000).toISOString() };
+        return { ...this.profile.active_global_boost };
+    }
+
+    async purchaseTargetedBoost(_userId, targetUserId) {
+        if (this.profile.active_targeted_boosts.some((boost) => boost.target_user_id === targetUserId)) throw new Error("You already have an active boost for this classmate.");
+        if (this.profile.aura_points < 200) throw new Error("You need 200 aura for this boost.");
+        this.profile.aura_points -= 200;
+        const boost = { id: crypto.randomUUID(), boost_type: "targeted", target_user_id: targetUserId, remaining_uses: 1, expires_at: new Date(Date.now() + 86_400_000).toISOString() };
+        this.profile.active_targeted_boosts.push(boost);
+        return { ...boost };
     }
 
     async getInviteStatus() {
