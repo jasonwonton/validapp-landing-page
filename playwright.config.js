@@ -9,6 +9,9 @@ export default defineConfig({
     use: {
         baseURL: "http://127.0.0.1:4173",
         trace: "retain-on-failure",
+        launchOptions: {
+            args: process.env.CI ? ["--disable-gpu"] : [],
+        },
     },
     projects: [
         { name: "android", use: { ...devices["Pixel 7"] } },
