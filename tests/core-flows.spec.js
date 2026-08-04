@@ -177,14 +177,29 @@ test("feed polls open the iOS-style detail and moderation flow", async ({ page }
     await signInToDemo(page);
     await page.locator("[data-feed-detail='9001']").click();
     const dialog = page.locator("#feedDetailDialog");
-    await expect(dialog.getByRole("heading", { name: "What happened" })).toBeVisible();
+    await expect(dialog).toHaveCSS("position", "fixed");
+    await expect(dialog.getByText("Poll", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Jules Rivera").first()).toBeVisible();
     await expect(dialog.locator(".feed-detail-option.selected")).toContainText("Jules Rivera");
+    await expect(dialog.getByRole("button", { name: "Share poll to Snapchat" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Share poll to Instagram" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Share poll to TikTok" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Get God Mode to Reveal who sent this" })).toBeVisible();
     page.once("dialog", (confirmation) => confirmation.accept());
     await dialog.getByRole("button", { name: "Report question" }).click();
     await expect(dialog).toBeHidden();
     await expect(page.locator("#toast")).toContainText("Question reported");
     await expect(page.locator("[data-feed-detail='9001']")).toHaveCount(0);
+});
+
+test("non-subscribers can reach God Mode from a received vote", async ({ page }) => {
+    await signInToDemo(page);
+    await page.locator("[data-feed-detail='9001']").click();
+    await page.getByRole("button", { name: "Get God Mode to Reveal who sent this" }).click();
+    await expect(page.getByText("God Mode", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "Start God Mode in iPhone app" })).toHaveAttribute("href", /apps\.apple\.com/);
+    await expect(page.locator("#godModeCard")).toHaveClass(/attention/);
+    await expect(page.locator("#feedDetailDialog")).toBeHidden();
 });
 
 test("new users vote to unlock Feed just like iOS", async ({ page }) => {
@@ -207,12 +222,14 @@ test("anonymous inbox supports private answers and safety controls", async ({ pa
     await expect(page.locator("#anonymousUnreadCount")).toHaveText("1 new");
     await page.getByRole("button", { name: /What is something you are genuinely proud/ }).click();
     const answerDialog = page.locator("#anonymousQuestionDialog");
+    await expect(answerDialog).toHaveCSS("position", "fixed");
     await expect(answerDialog.getByText("Fully anonymous guest")).toBeVisible();
-    await answerDialog.getByLabel("Your answer").fill("Helping my friends through a hard semester.");
-    await answerDialog.getByRole("button", { name: "Answer privately" }).click();
+    await answerDialog.getByLabel("Your reply").fill("Helping my friends through a hard semester.");
+    await answerDialog.getByRole("button", { name: "Send reply" }).click();
     await expect(answerDialog.getByText(/Answered.*10 aura/)).toBeVisible();
     await expect(answerDialog.getByRole("button", { name: "Share answer to Snapchat" })).toBeVisible();
     await expect(answerDialog.getByRole("button", { name: "Share answer to Instagram" })).toBeVisible();
+    await expect(answerDialog.getByRole("button", { name: "Share answer to TikTok" })).toBeVisible();
     await expect(page.locator("#auraCount")).toHaveText("1,290");
     await answerDialog.getByRole("button", { name: "Close" }).click();
 
@@ -309,7 +326,7 @@ test("settings exposes iOS-style editing, polls, ask link, and aura purchases", 
     await expect(page.getByRole("heading", { name: "Jules Rivera" })).toBeVisible();
     await expect(page.getByText("Get messages", { exact: true })).toBeVisible();
     await expect(page.getByText("God Mode", { exact: true }).first()).toBeVisible();
-    await expect(page.getByText("Web checkout is being finalized.")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Start God Mode in iPhone app" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Change profile picture" })).toBeVisible();
     await expect(page.getByRole("button", { name: /Open poll: Who always knows/ })).toBeVisible();
     await page.getByRole("button", { name: /Open poll: Who always knows/ }).click();
@@ -367,8 +384,8 @@ test("God Mode subscribers can reveal a vote sender and consume one weekly revea
     await page.getByRole("button", { name: /sign in with a passkey/i }).click();
     await page.locator("[data-feed-detail='9001']").click();
     const detail = page.locator("#feedDetailDialog");
-    await expect(detail.getByRole("button", { name: "Reveal sender · 3 left" })).toBeVisible();
-    await detail.getByRole("button", { name: "Reveal sender · 3 left" }).click();
+    await expect(detail.getByRole("button", { name: "Reveal who sent this (3 remaining)" })).toBeVisible();
+    await detail.getByRole("button", { name: "Reveal who sent this (3 remaining)" }).click();
     await expect(detail.getByText("Sent by")).toBeVisible();
     await expect(detail.locator(".revealed-sender-card").getByText("Maya Chen", { exact: true })).toBeVisible();
     await expect(page.locator("#toast")).toContainText("Revealed: Maya Chen");

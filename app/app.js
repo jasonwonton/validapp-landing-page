@@ -47,6 +47,7 @@ const state = {
     targetedBoostClassmates: null,
     signupStep: 0,
     installPrompt: null,
+    detailReturnFocus: null,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -119,9 +120,27 @@ function avatarMarkup(profile, className = "row-avatar", fallbackURL = null) {
 
 function shareIconMarkup(platform) {
     if (platform === "instagram") {
-        return `<svg viewBox="0 0 64 64" role="img" aria-label="Instagram"><defs><radialGradient id="igGlow" cx="30%" cy="105%" r="105%"><stop offset="0" stop-color="#ffd600"/><stop offset=".38" stop-color="#ff7a00"/><stop offset=".7" stop-color="#ff0169"/><stop offset="1" stop-color="#d300c5"/></radialGradient></defs><rect width="64" height="64" rx="15" fill="url(#igGlow)"/><rect x="15" y="15" width="34" height="34" rx="10" fill="none" stroke="white" stroke-width="4"/><circle cx="32" cy="32" r="8" fill="none" stroke="white" stroke-width="4"/><circle cx="44" cy="20" r="2.5" fill="white"/></svg>`;
+        return `<svg viewBox="0 0 64 64" role="img" aria-label="Instagram"><rect x="15" y="15" width="34" height="34" rx="10" fill="none" stroke="white" stroke-width="4"/><circle cx="32" cy="32" r="8" fill="none" stroke="white" stroke-width="4"/><circle cx="44" cy="20" r="2.5" fill="white"/></svg>`;
+    }
+    if (platform === "tiktok") {
+        return `<svg viewBox="0 0 64 64" role="img" aria-label="TikTok"><rect width="64" height="64" rx="15" fill="#000"/><path d="M37 14c1 7 5 11 12 12v8c-5 0-9-2-12-4v13c0 9-7 14-15 12-7-2-11-9-9-16 2-6 7-10 14-10v8c-4 0-6 2-6 5 0 4 3 6 6 5 2-1 3-3 3-6V14h7Z" fill="#25f4ee" transform="translate(-2 1)"/><path d="M39 13c1 7 5 11 12 12v7c-5 0-9-2-12-4v14c0 8-7 14-15 12-6-2-10-8-9-14 1-7 7-11 14-11v7c-4 0-6 2-6 5 0 4 3 6 6 5 2-1 3-3 3-6V13h7Z" fill="#fe2c55" transform="translate(2 -1)"/><path d="M38 14c1 6 5 10 11 11v6c-4 0-8-1-11-4v14c0 7-6 12-13 11-6-1-10-7-8-13 1-5 5-8 11-8v6c-3 0-5 2-5 5 0 3 3 5 6 4 2-1 3-3 3-6V14h6Z" fill="#fff"/></svg>`;
     }
     return `<img src="../assets/app/snapchat-logo.png" alt="Snapchat">`;
+}
+
+function openDetailScreen(screen) {
+    state.detailReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    screen.classList.remove("hidden");
+    screen.scrollTop = 0;
+    document.body.classList.add("detail-screen-open");
+    screen.querySelector("[aria-label='Close']")?.focus({ preventScroll: true });
+}
+
+function closeDetailScreen(screen) {
+    screen.classList.add("hidden");
+    if (!$(".detail-screen:not(.hidden)")) document.body.classList.remove("detail-screen-open");
+    state.detailReturnFocus?.focus?.({ preventScroll: true });
+    state.detailReturnFocus = null;
 }
 
 function showSignedOut(message = "") {
@@ -270,7 +289,7 @@ function renderGodModeCard() {
         <ul><li>Weekly reveals and first-letter hints</li><li>${multiplier}× aura on every answer</li><li>Priority placement in classmates' polls</li></ul>
         ${active
         ? `<p>Your subscription is recognized on web · ${remainingReveals} weekly ${remainingReveals === 1 ? "reveal" : "reveals"} left. Billing stays with the store where you subscribed.</p>`
-        : `<p>Web checkout is being finalized. An existing iOS subscription will be recognized here.</p>`}
+        : `<p>Start God Mode in the iPhone app. Your subscription and weekly reveals sync here automatically.</p><a class="god-mode-start-button" href="https://apps.apple.com/us/app/valid-compliment-classmates/id6755367062">Start God Mode in iPhone app</a>`}
     </article>`;
 }
 
@@ -742,7 +761,10 @@ function selectedFeedItem() {
 function renderFeedDetail() {
     const item = selectedFeedItem();
     if (!item) return;
-    const selectedName = item.selected_contact_name || item.voted_for_name || item.contact_name || "A classmate";
+    const selectedName = item.selected_contact_name
+        || item.voted_for_name
+        || item.contact_name
+        || (item.item_type === "received_vote" ? displayName(state.profile) : "A classmate");
     const options = Array.isArray(item.presented_options) ? item.presented_options : [];
     const artworkURL = api.assetURL(item.image_url);
     const hint = formatVoterHint(item);
@@ -760,13 +782,17 @@ function renderFeedDetail() {
     </article>`;
     $("#blockFeedSubmitterButton").classList.toggle("hidden", !item.question_submitted_by_user_id);
     const revealButton = $("#revealFeedSenderButton");
-    const canRevealThisVote = api.user?.subscribed_user === true && item.item_type === "received_vote" && !item.voter_name;
+    const canRevealThisVote = item.item_type === "received_vote" && !item.voter_name;
     revealButton.classList.toggle("hidden", !canRevealThisVote);
     if (canRevealThisVote) {
         const remaining = Math.max(0, Number(state.profile?.remaining_reveals || 0));
         const auraCost = Math.max(0, Number(state.config?.full_reveal_aura_cost ?? 200));
-        revealButton.textContent = remaining > 0 ? `Reveal sender · ${remaining} left` : `Reveal sender · ${auraCost.toLocaleString()} aura`;
-        revealButton.disabled = remaining === 0 && Number(state.profile?.aura_points || 0) < auraCost;
+        const subscribed = api.user?.subscribed_user === true;
+        const label = subscribed
+            ? (remaining > 0 ? `Reveal who sent this (${remaining} remaining)` : `Reveal who sent this (${auraCost.toLocaleString()} aura)`)
+            : "Get God Mode to Reveal who sent this";
+        revealButton.innerHTML = `<img src="../assets/app/crown.png" alt=""><span>${escapeHTML(label)}</span>`;
+        revealButton.disabled = subscribed && remaining === 0 && Number(state.profile?.aura_points || 0) < auraCost;
     }
     $("#feedDetailStatus").textContent = "";
 }
@@ -774,20 +800,22 @@ function renderFeedDetail() {
 function openFeedDetail(answerId) {
     state.selectedFeedItemId = answerId;
     renderFeedDetail();
-    const detail = $("#feedDetailDialog");
-    detail.classList.remove("hidden");
-    detail.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    openDetailScreen($("#feedDetailDialog"));
 }
 
-async function shareFeedItem() {
+async function shareFeedItem(platform = "other") {
     const item = selectedFeedItem();
     if (!item) return;
-    const text = `${item.question_text}\n${item.voted_for_name || item.contact_name || "A classmate"} got picked on Valid`;
+    const pickedName = item.selected_contact_name
+        || item.voted_for_name
+        || item.contact_name
+        || (item.item_type === "received_vote" ? displayName(state.profile) : "A classmate");
+    const text = `${item.question_text}\n${pickedName} got picked on Valid`;
     try {
         if (navigator.share) await navigator.share({ title: "A poll on Valid", text, url: "https://validapp.lol/app/" });
         else {
             await navigator.clipboard.writeText(`${text}\nhttps://validapp.lol/app/`);
-            showToast("Poll copied to share");
+            showToast(`Poll copied for ${platform === "other" ? "sharing" : platform[0].toUpperCase() + platform.slice(1)}`);
         }
     } catch (error) {
         if (error.name !== "AbortError") $("#feedDetailStatus").textContent = "Could not share this poll.";
@@ -796,7 +824,21 @@ async function shareFeedItem() {
 
 async function revealFeedSender() {
     const item = selectedFeedItem();
-    if (!item || api.user?.subscribed_user !== true || item.voter_name) return;
+    if (!item || item.voter_name) return;
+    if (api.user?.subscribed_user !== true) {
+        closeDetailScreen($("#feedDetailDialog"));
+        state.selectedFeedItemId = null;
+        switchPanel("profile");
+        const focusGodModeCard = () => {
+            $("#godModeCard")?.scrollIntoView({ behavior: "smooth", block: "center" });
+            $("#godModeCard")?.classList.add("attention");
+            setTimeout(() => $("#godModeCard")?.classList.remove("attention"), 1200);
+        };
+        requestAnimationFrame(focusGodModeCard);
+        setTimeout(focusGodModeCard, 450);
+        showToast("Start God Mode in the Valid iPhone app; it syncs here automatically.");
+        return;
+    }
     const button = $("#revealFeedSenderButton");
     const remaining = Math.max(0, Number(state.profile?.remaining_reveals || 0));
     const auraCost = Math.max(0, Number(state.config?.full_reveal_aura_cost ?? 200));
@@ -840,7 +882,7 @@ async function moderateFeedItem(action) {
         else await api.reportQuestion(api.user.id, item.question_id);
         state.feedItems = state.feedItems.filter((candidate) => candidate.question_id !== item.question_id);
         state.selectedFeedItemId = null;
-        $("#feedDetailDialog").classList.add("hidden");
+        closeDetailScreen($("#feedDetailDialog"));
         renderFeed();
         showToast(action === "block" ? "Submitter blocked" : "Question reported");
     } catch (error) {
@@ -953,7 +995,7 @@ function renderAnonymousQuestionDialog() {
     const answered = question.status === "answered";
     $("#anonymousAnswerText").value = question.answer_text || "";
     $("#anonymousAnswerText").readOnly = answered;
-    $("#anonymousAnswerLabel").textContent = "Your answer";
+    $("#anonymousAnswerLabel").textContent = "Your reply";
     $("#anonymousAnswerButton").classList.toggle("hidden", answered);
     $("#anonymousAnswerShare").classList.toggle("hidden", !answered);
     $("#anonymousAnswerStatus").textContent = answered
@@ -980,9 +1022,7 @@ async function shareAnonymousAnswer(platform) {
 async function openAnonymousQuestionDialog(questionId) {
     state.selectedAnonymousQuestionId = questionId;
     renderAnonymousQuestionDialog();
-    const detail = $("#anonymousQuestionDialog");
-    detail.classList.remove("hidden");
-    detail.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    openDetailScreen($("#anonymousQuestionDialog"));
     const question = selectedAnonymousQuestion();
     if (!question || question.opened_at) return;
     try {
@@ -1037,7 +1077,7 @@ async function handleAnonymousSafetyAction(action) {
         if (action === "delete") await api.deleteAnonymousQuestion(api.user.id, question.id);
         state.anonymousInbox.questions = state.anonymousInbox.questions.filter((item) => String(item.id) !== String(question.id));
         state.selectedAnonymousQuestionId = null;
-        $("#anonymousQuestionDialog").classList.add("hidden");
+        closeDetailScreen($("#anonymousQuestionDialog"));
         renderAnonymousInbox();
         showToast(action === "block" ? "Sender blocked" : action === "report" ? "Reported to Valid" : "Question deleted");
     } catch (error) {
@@ -1945,10 +1985,11 @@ function bindEvents() {
     $("#feedDetailDialog").addEventListener("click", (event) => {
         if (event.target.closest("[data-close-feed-detail]")) {
             state.selectedFeedItemId = null;
-            $("#feedDetailDialog").classList.add("hidden");
+            closeDetailScreen($("#feedDetailDialog"));
         }
         if (event.target.closest("#revealFeedSenderButton")) revealFeedSender();
-        if (event.target.closest("[data-share-feed-item]")) shareFeedItem();
+        const share = event.target.closest("[data-share-feed-platform]");
+        if (share) shareFeedItem(share.dataset.shareFeedPlatform);
         if (event.target.closest("[data-report-feed-item]")) moderateFeedItem("report");
         if (event.target.closest("[data-block-feed-submitter]")) moderateFeedItem("block");
     });
@@ -1963,7 +2004,7 @@ function bindEvents() {
     $("#anonymousQuestionDialog").addEventListener("click", (event) => {
         if (event.target.closest("[data-close-anonymous]")) {
             state.selectedAnonymousQuestionId = null;
-            $("#anonymousQuestionDialog").classList.add("hidden");
+            closeDetailScreen($("#anonymousQuestionDialog"));
         }
         const action = event.target.closest("[data-anonymous-action]");
         const share = event.target.closest("[data-share-anonymous]");
@@ -2057,8 +2098,11 @@ function bindEvents() {
     });
 }
 
-$$('[data-share-anonymous="snapchat"]').forEach((button) => { button.innerHTML = shareIconMarkup("snapchat"); });
-$$('[data-share-anonymous="instagram"]').forEach((button) => { button.innerHTML = shareIconMarkup("instagram"); });
+$$('[data-share-anonymous], [data-share-feed-platform]').forEach((button) => {
+    const platform = button.dataset.shareAnonymous || button.dataset.shareFeedPlatform;
+    const label = platform ? `${platform[0].toUpperCase()}${platform.slice(1)}` : "Share";
+    button.innerHTML = `${shareIconMarkup(platform)}${button.classList.contains("expanded") ? `<span>Share on ${escapeHTML(label)}</span>` : ""}`;
+});
 syncVisualViewport();
 window.visualViewport?.addEventListener("resize", syncVisualViewport);
 window.visualViewport?.addEventListener("scroll", syncVisualViewport);

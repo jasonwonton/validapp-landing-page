@@ -61,48 +61,61 @@
                         </div>
                         <div id="anonymousInboxStatus" class="inline-status" role="status"></div>
                         <div id="anonymousInboxList" class="anonymous-inbox-list"></div>
-                        <section id="anonymousQuestionDialog" class="inline-detail-card hidden" aria-label="Anonymous question">
+                        <section id="anonymousQuestionDialog" class="detail-screen hidden" role="dialog" aria-modal="true" aria-label="Anonymous question">
                             <form id="anonymousAnswerForm">
-                                <div class="inline-detail-heading">
-                                    <div><span class="eyebrow">PRIVATE QUESTION</span><h3>Your inbox</h3></div>
-                                    <button class="icon-button" aria-label="Close" type="button" data-close-anonymous>×</button>
+                                <div class="detail-screen-header">
+                                    <button class="detail-back-button" aria-label="Close" type="button" data-close-anonymous>‹ <span>Inbox</span></button>
+                                    <strong>Message</strong>
+                                    <span aria-hidden="true"></span>
                                 </div>
-                                <div id="anonymousQuestionBody" class="anonymous-question-detail"></div>
-                                <label id="anonymousAnswerLabel" for="anonymousAnswerText">Your answer</label>
-                                <textarea id="anonymousAnswerText" minlength="1" maxlength="500" required placeholder="Write an answer..."></textarea>
-                                <p id="anonymousAnswerStatus" class="status-message" role="status"></p>
-                                <button id="anonymousAnswerButton" class="primary-button" type="submit">Answer privately</button>
-                                <div id="anonymousAnswerShare" class="anonymous-share-section hidden">
-                                    <strong>Share your answer</strong>
-                                    <div class="share-platform-row">
-                                        <button class="share-platform-button snapchat" type="button" data-share-anonymous="snapchat" aria-label="Share answer to Snapchat"></button>
-                                        <button class="share-platform-button instagram" type="button" data-share-anonymous="instagram" aria-label="Share answer to Instagram"></button>
-                                        <button class="share-platform-button native" type="button" data-share-anonymous="other" aria-label="More sharing options"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#fff"/><path d="M32 39V12m0 0-10 10m10-10 10 10M17 31v18h30V31" fill="none" stroke="#050914" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                                <div class="detail-screen-content anonymous-detail-content">
+                                    <div id="anonymousQuestionBody" class="anonymous-question-detail"></div>
+                                    <label id="anonymousAnswerLabel" for="anonymousAnswerText">Your reply</label>
+                                    <textarea id="anonymousAnswerText" minlength="1" maxlength="500" required placeholder="Write a reply..."></textarea>
+                                    <p id="anonymousAnswerStatus" class="status-message" role="status"></p>
+                                    <button id="anonymousAnswerButton" class="primary-button" type="submit">Send reply</button>
+                                    <div id="anonymousAnswerShare" class="anonymous-share-section hidden">
+                                        <strong>Share your reply</strong>
+                                        <div class="share-platform-row detail-share-row">
+                                            <button class="share-platform-button snapchat expanded" type="button" data-share-anonymous="snapchat" aria-label="Share answer to Snapchat"></button>
+                                            <button class="share-platform-button instagram" type="button" data-share-anonymous="instagram" aria-label="Share answer to Instagram"></button>
+                                            <button class="share-platform-button tiktok" type="button" data-share-anonymous="tiktok" aria-label="Share answer to TikTok"></button>
+                                        </div>
                                     </div>
-                                </div>
-                                <div class="safety-actions" aria-label="Question safety actions">
-                                    <button type="button" data-anonymous-action="report">Report</button>
-                                    <button type="button" data-anonymous-action="block">Block sender</button>
-                                    <button type="button" data-anonymous-action="delete">Delete</button>
+                                    <div class="safety-actions" aria-label="Question safety actions">
+                                        <button type="button" data-anonymous-action="report">Report</button>
+                                        <button type="button" data-anonymous-action="block">Block sender</button>
+                                        <button type="button" data-anonymous-action="delete">Delete</button>
+                                    </div>
                                 </div>
                             </form>
                         </section>
                     </section>
                     <div id="feedStatus" class="inline-status" role="status"></div>
                     <div id="feedList" class="card-list"></div>
-                    <section id="feedDetailDialog" class="inline-detail-card hidden" aria-label="Poll details">
+                    <section id="feedDetailDialog" class="detail-screen hidden" role="dialog" aria-modal="true" aria-label="Poll details">
+                        <div class="detail-screen-header">
+                            <button class="detail-back-button" aria-label="Close" type="button" data-close-feed-detail>‹ <span>Feed</span></button>
+                            <strong>Poll</strong>
+                            <span aria-hidden="true"></span>
+                        </div>
                         <div class="feed-detail-content">
-                            <div class="inline-detail-heading">
-                                <div><span class="eyebrow">POLL DETAILS</span><h3>What happened</h3></div>
-                                <button class="icon-button" aria-label="Close" type="button" data-close-feed-detail>×</button>
-                            </div>
                             <div id="feedDetailBody"></div>
                             <p id="feedDetailStatus" class="status-message" role="status"></p>
                             <div class="feed-detail-actions">
+                                <div class="feed-detail-share">
+                                    <strong>Share this poll</strong>
+                                    <div class="share-platform-row detail-share-row">
+                                        <button class="share-platform-button snapchat expanded" type="button" data-share-feed-platform="snapchat" aria-label="Share poll to Snapchat"></button>
+                                        <button class="share-platform-button instagram" type="button" data-share-feed-platform="instagram" aria-label="Share poll to Instagram"></button>
+                                        <button class="share-platform-button tiktok" type="button" data-share-feed-platform="tiktok" aria-label="Share poll to TikTok"></button>
+                                    </div>
+                                </div>
                                 <button id="revealFeedSenderButton" class="secondary-button reveal-sender-button hidden" type="button">Reveal sender</button>
-                                <button class="primary-button" type="button" data-share-feed-item>Share poll</button>
-                                <button class="secondary-button danger-row" type="button" data-report-feed-item>Report question</button>
-                                <button id="blockFeedSubmitterButton" class="secondary-button danger-row hidden" type="button" data-block-feed-submitter>Block submitter</button>
+                                <div class="detail-safety-actions">
+                                    <button type="button" data-report-feed-item>Report question</button>
+                                    <button id="blockFeedSubmitterButton" class="hidden" type="button" data-block-feed-submitter>Block submitter</button>
+                                </div>
                             </div>
                         </div>
                     </section>
