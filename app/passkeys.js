@@ -20,6 +20,46 @@ export function passkeysSupported() {
     return Boolean(window.PublicKeyCredential && navigator.credentials);
 }
 
+async function createRegistrationCredential(options) {
+    let credential;
+    try {
+        credential = await navigator.credentials.create({
+            publicKey: {
+                challenge: base64ToBytes(options.challenge),
+                rp: { id: options.rpId, name: options.rpName },
+                user: {
+                    id: new TextEncoder().encode(options.userId),
+                    name: options.userName,
+                    displayName: options.userName,
+                },
+                pubKeyCredParams: [
+                    { type: "public-key", alg: -7 },
+                    { type: "public-key", alg: -257 },
+                ],
+                authenticatorSelection: {
+                    residentKey: "required",
+                    requireResidentKey: true,
+                    userVerification: "required",
+                },
+                timeout: 60_000,
+                attestation: "none",
+            },
+        });
+    } catch (error) {
+        if (error?.name === "NotAllowedError") throw new Error("Passkey setup was canceled.");
+        if (error?.name === "SecurityError") throw new Error("Passkey setup is not enabled for this domain yet.");
+        throw error;
+    }
+    if (!credential?.response) throw new Error("The browser did not create a passkey.");
+    return {
+        userId: options.userId,
+        credentialId: bytesToBase64(credential.rawId),
+        publicKey: bytesToBase64(credential.response.getPublicKey?.()) || "",
+        attestationObject: bytesToBase64(credential.response.attestationObject),
+        clientDataJSON: bytesToBase64(credential.response.clientDataJSON),
+    };
+}
+
 export async function signInWithPasskey(api) {
     if (!passkeysSupported()) {
         throw new Error("This browser does not support passkeys. Try Chrome or Safari on a recent device.");
@@ -72,41 +112,15 @@ export async function createSignupPasskey(api, username) {
         throw new Error("This browser does not support passkeys. Try current Chrome, Safari, or Edge.");
     }
     const options = await api.getWebSignupChallenge(username);
-    let credential;
-    try {
-        credential = await navigator.credentials.create({
-            publicKey: {
-                challenge: base64ToBytes(options.challenge),
-                rp: { id: options.rpId, name: options.rpName },
-                user: {
-                    id: new TextEncoder().encode(options.userId),
-                    name: options.userName,
-                    displayName: options.userName,
-                },
-                pubKeyCredParams: [
-                    { type: "public-key", alg: -7 },
-                    { type: "public-key", alg: -257 },
-                ],
-                authenticatorSelection: {
-                    residentKey: "required",
-                    requireResidentKey: true,
-                    userVerification: "required",
-                },
-                timeout: 60_000,
-                attestation: "none",
-            },
-        });
-    } catch (error) {
-        if (error?.name === "NotAllowedError") throw new Error("Passkey setup was canceled.");
-        if (error?.name === "SecurityError") throw new Error("Passkey setup is not enabled for this domain yet.");
-        throw error;
+    return createRegistrationCredential(options);
+}
+
+export async function createAdditionalPasskey(api, userId) {
+    if (!passkeysSupported()) {
+        throw new Error("This browser does not support passkeys. Try current Chrome, Safari, or Edge.");
     }
-    if (!credential?.response) throw new Error("The browser did not create a passkey.");
-    return {
-        userId: options.userId,
-        credentialId: bytesToBase64(credential.rawId),
-        publicKey: bytesToBase64(credential.response.getPublicKey?.()) || "",
-        attestationObject: bytesToBase64(credential.response.attestationObject),
-        clientDataJSON: bytesToBase64(credential.response.clientDataJSON),
-    };
+    const options = await api.getPasskeyRegistrationChallenge(userId);
+    const registration = await createRegistrationCredential(options);
+    await api.registerPasskey(registration);
+    return registration;
 }

@@ -22,6 +22,7 @@ export class DemoAPI {
         this.user = null;
         this.deletionRequestedAt = null;
         this.demoGodMode = new URLSearchParams(window.location.search).get("godmode") === "1";
+        this.passkeyCount = 1;
         this.feedVotesCast = new URLSearchParams(window.location.search).get("locked") === "1" ? 1 : 3;
         this.profile = {
             user_id: "demo-user",
@@ -250,6 +251,15 @@ export class DemoAPI {
 
     async getUser() {
         return { ...this.user };
+    }
+
+    async getPasskeyStatus() {
+        return { registered: this.passkeyCount > 0, credentialCount: this.passkeyCount };
+    }
+
+    async addDemoPasskey() {
+        this.passkeyCount += 1;
+        return { status: "ok" };
     }
 
     async getTopQuestions(_userId, period = "weekly", limit = 10) {

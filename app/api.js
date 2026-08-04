@@ -152,6 +152,22 @@ export class ValidAPI {
         });
     }
 
+    getPasskeyRegistrationChallenge(userId) {
+        const params = new URLSearchParams({ userId });
+        return this.request(`/auth/passkey/register/challenge?${params}`);
+    }
+
+    registerPasskey(payload) {
+        return this.request("/auth/passkey/register", {
+            method: "POST",
+            body: JSON.stringify(payload),
+        });
+    }
+
+    getPasskeyStatus() {
+        return this.request("/auth/passkey/status");
+    }
+
     resolveSchool(payload) {
         return this.request("/highschools/request", {
             method: "POST",

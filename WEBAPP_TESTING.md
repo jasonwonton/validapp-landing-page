@@ -75,6 +75,8 @@ On an actual Android phone in current Chrome:
    there is no phone-number or SMS step. Add an optional profile photo and
    confirm the selected-contact/invite prompt appears after signup.
 2. Close the tab, return, and sign in with the same passkey.
+   Add a backup passkey from Profile, confirm the count increases, sign out, and
+   verify a fresh passkey sign-in still reaches the same account.
 3. Install Valid from Profile, launch it from the home screen, and exercise Feed,
    Play, Profile, selected-contact discovery, invites, question submission, and
    the anonymous Inbox. Browse/search classmates and open one public classmate

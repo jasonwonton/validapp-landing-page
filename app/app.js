@@ -1,6 +1,6 @@
 import { ValidAPI } from "./api.js";
 import { DemoAPI, localDemoAllowed } from "./demo-api.js";
-import { createSignupPasskey, passkeysSupported, signInWithPasskey } from "./passkeys.js";
+import { createAdditionalPasskey, createSignupPasskey, passkeysSupported, signInWithPasskey } from "./passkeys.js";
 
 const demoMode = localDemoAllowed();
 const api = demoMode ? new DemoAPI() : new ValidAPI();
@@ -41,6 +41,7 @@ const state = {
     topQuestionsAllTime: null,
     classmateDirectory: null,
     selectedClassmateProfile: null,
+    passkeyStatus: null,
     signupStep: 0,
     installPrompt: null,
 };
@@ -210,6 +211,16 @@ function renderProfilePanel() {
     renderProfilePolls($("#weeklyPolls"), state.topQuestionsWeekly, "No polls this week yet");
     renderProfilePolls($("#allTimePolls"), state.topQuestionsAllTime, "No polls yet");
     renderGodModeCard();
+    renderPasskeyStatus();
+}
+
+function renderPasskeyStatus() {
+    const count = Math.max(0, Number(state.passkeyStatus?.credentialCount || 0));
+    const button = $("#addPasskeyButton");
+    button.querySelector("strong").textContent = count > 1 ? "Add another passkey" : "Add a backup passkey";
+    $("#passkeyStatusText").textContent = count
+        ? `${count} ${count === 1 ? "passkey" : "passkeys"} registered · no SMS recovery`
+        : "Add another secure way to sign in";
 }
 
 function renderGodModeCard() {
@@ -296,6 +307,7 @@ async function loadProfilePanel() {
     if (!state.topQuestionsWeekly) requests.push({ key: "weekly", promise: api.getTopQuestions(api.user.id, "weekly", 10) });
     if (!state.topQuestionsAllTime) requests.push({ key: "allTime", promise: api.getTopQuestions(api.user.id, "all_time", 3) });
     if (!state.askLink) requests.push({ key: "askLink", promise: api.getAskLink(api.user.id) });
+    if (!state.passkeyStatus) requests.push({ key: "passkeyStatus", promise: api.getPasskeyStatus() });
     const results = await Promise.allSettled(requests.map((request) => request.promise));
     let profileError = "";
     requests.forEach((request, index) => {
@@ -304,6 +316,7 @@ async function loadProfilePanel() {
             if (request.key === "weekly") state.topQuestionsWeekly = result.value;
             if (request.key === "allTime") state.topQuestionsAllTime = result.value;
             if (request.key === "askLink") state.askLink = result.value;
+            if (request.key === "passkeyStatus") state.passkeyStatus = result.value;
         } else if (request.key === "askLink" && result.reason?.status === 404) {
             $("#askLinkSection").classList.add("hidden");
         } else {
@@ -316,6 +329,24 @@ async function loadProfilePanel() {
     if (state.askLink) {
         $("#askLinkSection").classList.remove("hidden");
         renderAskLink();
+    }
+}
+
+async function addBackupPasskey() {
+    const button = $("#addPasskeyButton");
+    button.disabled = true;
+    $("#passkeyStatusText").textContent = "Confirm passkey setup on your device...";
+    try {
+        if (demoMode) await api.addDemoPasskey();
+        else await createAdditionalPasskey(api, api.user.id);
+        state.passkeyStatus = await api.getPasskeyStatus();
+        renderPasskeyStatus();
+        showToast("Backup passkey added 🔑");
+    } catch (error) {
+        showToast(error.message || "Could not add that passkey.");
+    } finally {
+        button.disabled = false;
+        renderPasskeyStatus();
     }
 }
 
@@ -1709,6 +1740,7 @@ function bindEvents() {
     });
     $("#profilePanel").addEventListener("click", (event) => { if (event.target.closest("[data-edit-profile]")) openProfileDialog(); });
     $("#editProfileButton").addEventListener("click", openProfileDialog);
+    $("#addPasskeyButton").addEventListener("click", addBackupPasskey);
     $("#viewClassmatesButton").addEventListener("click", openClassmateDirectory);
     $("#classmateDirectorySearch").addEventListener("input", renderClassmateDirectory);
     $("#classmateDirectoryList").addEventListener("click", (event) => {

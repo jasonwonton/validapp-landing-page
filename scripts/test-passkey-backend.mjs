@@ -117,7 +117,7 @@ async function waitForBackend() {
 
 async function runBrowserJourney(page) {
     return page.evaluate(async () => {
-        const { createSignupPasskey, signInWithPasskey } = await import("/app/passkeys.js");
+        const { createAdditionalPasskey, createSignupPasskey, signInWithPasskey } = await import("/app/passkeys.js");
 
         async function request(pathname, options = {}) {
             const response = await fetch(`/api/v1${pathname}`, {
@@ -146,6 +146,7 @@ async function runBrowserJourney(page) {
         }
 
         let lastAuthenticationPayload = null;
+        let activeToken = null;
         const api = {
             getWebSignupChallenge(username) {
                 return request("/auth/passkey/signup/challenge", {
@@ -160,6 +161,18 @@ async function runBrowserJourney(page) {
                 lastAuthenticationPayload = payload;
                 return request("/auth/passkey/authenticate", {
                     method: "POST",
+                    body: JSON.stringify(payload),
+                });
+            },
+            getPasskeyRegistrationChallenge(userId) {
+                return request(`/auth/passkey/register/challenge?userId=${encodeURIComponent(userId)}`, {
+                    headers: { authorization: `Bearer ${activeToken}` },
+                });
+            },
+            registerPasskey(payload) {
+                return request("/auth/passkey/register", {
+                    method: "POST",
+                    headers: { authorization: `Bearer ${activeToken}` },
                     body: JSON.stringify(payload),
                 });
             },
@@ -186,6 +199,7 @@ async function runBrowserJourney(page) {
             method: "POST",
             body: JSON.stringify(signupPayload),
         });
+        activeToken = signup.access_token;
         let registrationReplayStatus = null;
         try {
             await request("/auth/passkey/signup/complete", {
@@ -213,7 +227,11 @@ async function runBrowserJourney(page) {
         const signupProfile = await request(`/users/${signup.user.id}/profile`, {
             headers: authHeader(signup.access_token),
         });
-        const passkeyStatus = await request("/auth/passkey/status", {
+        const initialPasskeyStatus = await request("/auth/passkey/status", {
+            headers: authHeader(signup.access_token),
+        });
+        await createAdditionalPasskey(api, signup.user.id);
+        const backupPasskeyStatus = await request("/auth/passkey/status", {
             headers: authHeader(signup.access_token),
         });
 
@@ -250,8 +268,9 @@ async function runBrowserJourney(page) {
             username,
             signupProfileUsername: signupProfile.username,
             loginProfileUsername: loginProfile.username,
-            passkeyRegistered: passkeyStatus.registered,
-            credentialCount: passkeyStatus.credentialCount,
+            passkeyRegistered: initialPasskeyStatus.registered,
+            initialCredentialCount: initialPasskeyStatus.credentialCount,
+            credentialCount: backupPasskeyStatus.credentialCount,
             revokedStatus,
             registrationReplayStatus,
             authenticationReplayStatus,
@@ -332,7 +351,8 @@ try {
     assert.equal(result.signupProfileUsername, result.username);
     assert.equal(result.loginProfileUsername, result.username);
     assert.equal(result.passkeyRegistered, true);
-    assert.equal(result.credentialCount, 1);
+    assert.equal(result.initialCredentialCount, 1);
+    assert.equal(result.credentialCount, 2, "backup enrollment must add another credential");
     assert.equal(result.revokedStatus, 401, "logout must revoke the signup bearer token");
     assert.equal(result.registrationReplayStatus, 400, "registration challenge must be one-time");
     assert.equal(result.authenticationReplayStatus, 401, "sign-in challenge must be one-time");
@@ -341,7 +361,7 @@ try {
     assert.equal(result.signupPhoneVerification, null, "web signup must not invoke SMS");
     assert.equal(result.loginPhoneVerification, null, "passkey sign-in must not invoke SMS");
 
-    console.log("PASS real WebAuthn signup → profile → logout → passkey sign-in → profile");
+    console.log("PASS real WebAuthn signup → backup passkey → logout → passkey sign-in → profile");
     console.log(`     RP six7.lol related origin validapp.lol; credential count ${result.credentialCount}`);
 } catch (error) {
     if (backendOutput) console.error(backendOutput.trim());

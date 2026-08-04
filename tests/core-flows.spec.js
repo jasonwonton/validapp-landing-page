@@ -284,6 +284,10 @@ test("profile exposes editing, ask link, and school question flows", async ({ pa
     await expect(page.getByText("Your link is live")).toBeVisible();
     await expect(page.getByRole("heading", { name: "God Mode", exact: true })).toBeVisible();
     await expect(page.getByText("Web checkout is being finalized.")).toBeVisible();
+    await expect(page.getByText("1 passkey registered · no SMS recovery")).toBeVisible();
+    await page.getByRole("button", { name: "Add a backup passkey" }).click();
+    await expect(page.getByText("2 passkeys registered · no SMS recovery")).toBeVisible();
+    await expect(page.locator("#toast")).toContainText("Backup passkey added");
     await page.getByRole("button", { name: "Edit profile" }).click();
     await expect(page.getByRole("dialog").getByRole("heading", { name: "Edit profile" })).toBeVisible();
     await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();

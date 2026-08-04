@@ -45,10 +45,11 @@ npm run test:passkey-integration
 This launches an isolated in-memory backend and a temporary HTTPS server. A
 Chromium virtual authenticator performs a real WebAuthn registration and
 discoverable sign-in with RP `six7.lol` and related origin `validapp.lol`. The
-test covers signup, authenticated profile loading, logout/revocation, fresh
-sign-in, and another authenticated profile load. It uses the production route,
-frontend, and cryptographic verification code, but no database, Redis service,
-SMS provider, production endpoint, `/etc/hosts` change, or persistent passkey.
+test covers signup, a second backup-passkey enrollment, authoritative credential
+count, authenticated profile loading, logout/revocation, fresh sign-in, and
+another authenticated profile load. It uses the production route, frontend,
+and cryptographic verification code, but no database, Redis service, SMS
+provider, production endpoint, `/etc/hosts` change, or persistent passkey.
 Set `SIX7_REPO` and optionally `SIX7_PYTHON` if the repositories are not
 siblings.
 
@@ -179,6 +180,7 @@ On current Android Chrome (and once in desktop Chrome), verify:
 1. Create an account with birthday, school, grade, optional photo, and passkey.
    Confirm there is no phone or SMS step.
 2. Close the tab, reopen it, and sign in with the passkey.
+   From Profile, add a backup passkey and confirm the registered count increases.
 3. Switch Inbox/School feeds, search, open a poll, upvote, report, and block.
 4. Complete a Play set, shuffle, nominate, use all three skips, and watch the
    cooldown unlock without a page refresh.

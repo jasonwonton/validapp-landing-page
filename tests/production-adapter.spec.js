@@ -28,6 +28,9 @@ test("real adapter sends bounded, encoded unified-search queries", async ({ page
             api.getPersonalFeed(userId, 0, "Maya Chen"),
             api.getSchoolFeed(userId, null, "Maya Chen"),
             api.revealSender(userId, 9001),
+            api.getPasskeyStatus(),
+            api.getPasskeyRegistrationChallenge(userId),
+            api.registerPasskey({ userId, credentialId: "AQID", publicKey: "BAUG", attestationObject: "BwgJ", clientDataJSON: "CgsM" }),
         ]);
     }, USER_ID);
     expect(urls.map((url) => `${url.pathname}${url.search}`).sort()).toEqual([
@@ -35,6 +38,9 @@ test("real adapter sends bounded, encoded unified-search queries", async ({ page
         `/api/v1/users/${USER_ID}/feed/school?limit=20&search=Maya+Chen`,
         `/api/v1/users/${USER_ID}/feed?limit=20&offset=0&search=Maya+Chen`,
         `/api/v1/users/${USER_ID}/reveals/9001`,
+        "/api/v1/auth/passkey/register",
+        `/api/v1/auth/passkey/register/challenge?userId=${USER_ID}`,
+        "/api/v1/auth/passkey/status",
     ].sort());
 });
 
@@ -122,6 +128,7 @@ async function interceptProductionAPI(page, { signup = false, profileAura = 500,
         if (path === "/api/v1/auth/passkey/authenticate") {
             return fulfill({ access_token: "session-token", user: { id: USER_ID, subscribed_user: false } });
         }
+        if (path === "/api/v1/auth/passkey/status") return fulfill({ registered: true, credentialCount: 1 });
         if (path === "/api/v1/highschools/request") {
             return fulfill({ school: { id: 77, name: body.school_name, city: body.city, state: body.state } });
         }
