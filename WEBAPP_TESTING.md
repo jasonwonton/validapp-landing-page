@@ -35,6 +35,13 @@ Deploy the Six7 backend branch before the web branch. The environment must have:
 - the `WEB_*` limits from the backend `.env.example`
 - `ENABLE_NGL_LINK_BACKEND=1` if the anonymous Inbox and Ask me link are enabled
 
+The final passkey check is intentionally not performed on a random preview
+hostname. Serve the candidate at `https://validapp.lol/app/` behind an edge
+access policy or IP allowlist so the test team sees the exact production origin
+while the public still sees the existing site. Do not broaden the WebAuthn or
+CORS allowlists for a temporary hostname. Details and rollback order are in
+`PRODUCTION_DEPLOYMENT.md`.
+
 Begin with `WEB_RATE_LIMIT_MODE=observe`, validate an ordinary iOS peak-traffic
 window, and only then switch to `enforce`. `off` is the compatibility rollback.
 

@@ -42,6 +42,23 @@ The `six7.lol` site must publish the backend branch's
 `six7-landing-page/.well-known/webauthn` as JSON. It authorizes the
 `validapp.lol` related origin so existing iOS passkeys can sign in on the web.
 
+### Test on the real WebAuthn origin
+
+Do not add a temporary preview hostname to `PASSKEY_EXPECTED_ORIGINS` or the
+related-origin file just to make staging convenient. A passkey ceremony on a
+preview hostname has a different browser origin and does not validate the
+production relationship between the `six7.lol` relying-party ID and
+`https://validapp.lol`.
+
+After the backend canary and current-iOS smoke test pass, publish `/app/` at
+`https://validapp.lol` behind an edge access rule limited to the test team (for
+example, an identity-aware access policy or a small IP allowlist). Keep the
+browser-visible origin as exactly `https://validapp.lol`; do not redirect the
+testers to a preview domain. Run the production preflight and real-device
+checklist there, then remove only the access rule when the release is approved.
+The static deployment and backend revision must remain independently
+rollbackable throughout this check.
+
 ### Existing iOS release gate
 
 Before changing any public web routing, deploy the backend with
@@ -59,9 +76,10 @@ regressions; use `WEB_RATE_LIMIT_MODE=off` for limiter-only regressions.
 
 ## 2. Static site and routing
 
-Deploy this repository's `validapp-webapp` branch as the static site. Preserve
-these routing boundaries and evaluate the specific FastAPI routes before the
-static catch-all:
+Deploy this repository's `validapp-webapp` branch as the static site, initially
+with the private final-origin access rule described above. Preserve these
+routing boundaries and evaluate the specific FastAPI routes before the static
+catch-all:
 
 ```text
 validapp.lol/api/v1/a/*                         -> Six7 FastAPI
