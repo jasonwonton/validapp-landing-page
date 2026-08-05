@@ -213,7 +213,27 @@
             <fieldset class="signup-step" data-signup-step="0">
                 <h2>How old are you?</h2>
                 <p class="form-hint signup-terms">By entering your age, you agree to our <a href="../terms.html" target="_blank">Terms</a> and <a href="../privacy-policy.html" target="_blank">Privacy Policy</a>.</p>
-                <label class="signup-choice-label signup-age-picker">Age<select id="signupAge" required><option>13</option><option>14</option><option>15</option><option>16</option><option>17</option><option>18</option><option>19</option><option>20</option><option>21</option><option>22</option><option>23</option><option>24</option><option>25</option><option>26</option><option>27</option></select></label>
+                <div class="signup-age-picker">
+                    <strong id="signupAgeValue" aria-live="polite">13</strong>
+                    <div id="signupAgeWheel" class="signup-age-wheel" role="listbox" aria-label="Age" tabindex="0">
+                        <button type="button" role="option" aria-selected="true" data-signup-age="13">13</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="14">14</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="15">15</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="16">16</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="17">17</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="18">18</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="19">19</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="20">20</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="21">21</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="22">22</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="23">23</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="24">24</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="25">25</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="26">26</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="27">27</button>
+                    </div>
+                    <input id="signupAge" type="hidden" value="13">
+                </div>
                 <button class="primary-button" type="button" data-signup-next>Continue</button>
             </fieldset>
             <fieldset class="signup-step signup-school-step hidden" data-signup-step="1">
@@ -236,10 +256,12 @@
                 </div>
                 <button id="signupSchoolContinue" class="primary-button" type="button" data-signup-next disabled>Continue</button>
             </fieldset>
-            <fieldset class="signup-step hidden" data-signup-step="2">
+            <fieldset class="signup-step signup-grade-step hidden" data-signup-step="2">
                 <h2>What grade are you in?</h2>
-                <label class="signup-choice-label">Grade<select id="signupGrade" required><option value="">Choose your grade</option><option>6th Grade</option><option>7th Grade</option><option>8th Grade</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select></label>
-                <button class="primary-button" type="button" data-signup-next>Continue</button>
+                <p class="form-hint">This will affect who shows up in your polls!</p>
+                <div id="signupGradeOptions" class="signup-grade-options" role="radiogroup" aria-label="Grade"></div>
+                <input id="signupGrade" type="hidden" value="">
+                <button id="signupGradeContinue" class="primary-button" type="button" data-signup-next disabled>Continue</button>
             </fieldset>
             <fieldset class="signup-step hidden" data-signup-step="3">
                 <h2>What's your phone number?</h2>
@@ -259,7 +281,6 @@
             </fieldset>
             <fieldset class="signup-step hidden" data-signup-step="6">
                 <h2>Pick a username</h2>
-                <p class="form-hint">This is how classmates can find you.</p>
                 <label>Username<input id="signupUsername" autocomplete="username" minlength="3" maxlength="30" pattern="[a-z0-9_]+" placeholder="your_username" required></label>
                 <button class="primary-button" type="button" data-signup-next>Continue</button>
             </fieldset>

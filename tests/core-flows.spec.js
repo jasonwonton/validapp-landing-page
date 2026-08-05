@@ -8,14 +8,14 @@ async function signInToDemo(page) {
 
 async function fillSignupThroughUsername(dialog, username = "taylor_j") {
     await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
-    await dialog.getByLabel("Age").selectOption("16");
+    await dialog.locator('[data-signup-age="16"]').click();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("ZIP code").fill("90210");
     await dialog.getByRole("button", { name: "Show schools" }).click();
     await expect(dialog.locator("[data-signup-school]")).toHaveCount(50);
     await dialog.getByRole("option", { name: /Westview High School/ }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
-    await dialog.getByLabel("Grade").selectOption("Senior");
+    await dialog.getByRole("radio", { name: /Senior/ }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("Phone number").fill("4155550123");
     await dialog.getByRole("button", { name: "Continue" }).click();
@@ -75,7 +75,8 @@ test("onboarding keeps every action reachable on compact phones", async ({ page 
     await expect(dialog.locator(".signup-step .eyebrow")).toHaveCount(0);
     await expect(dialog.getByText("How old are you?")).toBeInViewport();
     await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
-    await expect(dialog.getByLabel("Age")).toHaveCSS("font-family", /Jua/);
+    await expect(dialog.getByRole("listbox", { name: "Age" })).toBeVisible();
+    await expect(dialog.locator('[data-signup-age="13"]')).toHaveCSS("font-family", /Jua/);
     await expect(dialog.getByRole("button", { name: "Continue" })).toBeInViewport();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(dialog.getByText("What school do you go to?")).toBeInViewport();
@@ -89,8 +90,10 @@ test("onboarding keeps every action reachable on compact phones", async ({ page 
     await dialog.getByRole("option", { name: /Westview High School/ }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(dialog.getByText("What grade are you in?")).toBeInViewport();
-    await expect(dialog.getByLabel("Grade")).toHaveCSS("font-family", /Jua/);
-    await dialog.getByLabel("Grade").selectOption("Senior");
+    const seniorGrade = dialog.getByRole("radio", { name: /Senior/ });
+    await expect(seniorGrade).toHaveCSS("font-family", /Jua/);
+    await seniorGrade.click();
+    await expect(seniorGrade).toHaveAttribute("aria-checked", "true");
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(dialog.getByText("What's your phone number?")).toBeInViewport();
     await dialog.getByLabel("Phone number").fill("4155550123");

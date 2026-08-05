@@ -667,6 +667,65 @@ function formatSignupPhone(value) {
     return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
+const signupGradeCatalog = [
+    { name: "6th Grade", gradeNumber: 6 },
+    { name: "7th Grade", gradeNumber: 7 },
+    { name: "8th Grade", gradeNumber: 8 },
+    { name: "Freshman", gradeNumber: 9 },
+    { name: "Sophomore", gradeNumber: 10 },
+    { name: "Junior", gradeNumber: 11 },
+    { name: "Senior", gradeNumber: 12 },
+];
+
+function selectSignupAge(value, { scroll = true, smooth = false } = {}) {
+    const age = Math.max(13, Math.min(27, Number(value) || 13));
+    $("#signupAge").value = String(age);
+    $("#signupAgeValue").textContent = String(age);
+    $$('[data-signup-age]').forEach((option) => {
+        const selected = Number(option.dataset.signupAge) === age;
+        option.setAttribute("aria-selected", String(selected));
+    });
+    if (scroll) {
+        $("#signupAgeWheel").scrollTo({ top: (age - 13) * 40, behavior: smooth ? "smooth" : "auto" });
+    }
+}
+
+function signupGraduationYear(gradeNumber, date = new Date()) {
+    const academicYearEnd = date.getFullYear() + (date.getMonth() >= 6 ? 1 : 0);
+    return academicYearEnd + (12 - gradeNumber);
+}
+
+function availableSignupGrades() {
+    const school = state.signupSelectedSchool;
+    const minGrade = Number.isFinite(Number(school?.min_grade)) ? Number(school.min_grade) : 6;
+    const maxGrade = Number.isFinite(Number(school?.max_grade)) ? Number(school.max_grade) : 12;
+    const available = signupGradeCatalog.filter(({ gradeNumber }) => gradeNumber >= minGrade && gradeNumber <= maxGrade);
+    return available.length ? available : signupGradeCatalog;
+}
+
+function selectSignupGrade(value) {
+    $("#signupGrade").value = value || "";
+    $$('[data-signup-grade]').forEach((option) => {
+        const selected = option.dataset.signupGrade === value;
+        option.classList.toggle("selected", selected);
+        option.setAttribute("aria-checked", String(selected));
+    });
+    $("#signupGradeContinue").disabled = !value;
+    $("#signupStatus").textContent = "";
+}
+
+function renderSignupGradeOptions() {
+    const grades = availableSignupGrades();
+    const currentGrade = $("#signupGrade").value;
+    const currentGradeAvailable = grades.some(({ name }) => name === currentGrade);
+    $("#signupGradeOptions").innerHTML = grades.map(({ name, gradeNumber }) => {
+        const selected = currentGradeAvailable && name === currentGrade;
+        return `<button class="signup-grade-option ${selected ? "selected" : ""}" type="button" role="radio" aria-checked="${selected}" data-signup-grade="${escapeHTML(name)}"><span><strong>${escapeHTML(name)}</strong><small>C/O ${signupGraduationYear(gradeNumber)}</small></span></button>`;
+    }).join("");
+    if (!currentGradeAvailable) $("#signupGrade").value = "";
+    $("#signupGradeContinue").disabled = !currentGradeAvailable;
+}
+
 function selectSignupGender(value) {
     $("#signupGender").value = value || "";
     $$('[data-signup-gender]').forEach((option) => {
@@ -682,8 +741,11 @@ function openSignupDialog() {
     $("#signupStatus").textContent = "";
     resetSignupPhotoPreview();
     resetSignupSchoolPicker();
+    selectSignupAge($("#signupAge").value || 13, { scroll: false });
+    renderSignupGradeOptions();
     setSignupStep(0);
     $("#signupDialog").showModal();
+    requestAnimationFrame(() => selectSignupAge($("#signupAge").value));
 }
 
 function resetSignupSchoolPicker() {
@@ -774,7 +836,8 @@ function selectSignupSchool(schoolId) {
     state.signupSelectedSchool = school;
     state.signupSchoolFallback = false;
     $("#signupSchoolContinue").disabled = false;
-    $("#signupStatus").textContent = `${school.name} selected.`;
+    $("#signupStatus").textContent = "";
+    renderSignupGradeOptions();
     renderSignupSchoolResults();
 }
 
@@ -799,6 +862,7 @@ function setSignupStep(index) {
     $("#signupStatus").textContent = "";
     requestAnimationFrame(() => { $("#signupDialog").scrollTop = 0; });
     $(".signup-back-button").classList.toggle("hidden", state.signupStep === 0);
+    if (state.signupStep === 2) renderSignupGradeOptions();
     if (state.signupStep === 8) {
         resetSignupPhotoPreview();
         $("#signupPicture").value = "";
@@ -814,6 +878,10 @@ async function advanceSignup(button) {
         $("#signupStatus").textContent = "Choose your school before continuing.";
         return;
     }
+    if (state.signupStep === 2 && !$("#signupGrade").value) {
+        $("#signupStatus").textContent = "Choose your grade before continuing.";
+        return;
+    }
     if (state.signupStep === 3) {
         const phoneNumber = signupPhoneDigits($("#signupPhone").value);
         if (phoneNumber.length !== 10) {
@@ -824,7 +892,9 @@ async function advanceSignup(button) {
         try {
             const result = await api.checkPhoneRegistration(phoneNumber, deviceInstallationId());
             if (result.exists) {
-                $("#signupStatus").textContent = "An account already exists for this phone number. Sign in instead.";
+                $("#signupDialog").close();
+                $("#authStatus").textContent = "An account already exists for this phone number. Sign in.";
+                requestAnimationFrame(() => $("#passkeyButton").focus());
                 return;
             }
             $("#signupPhone").value = formatSignupPhone(phoneNumber);
@@ -914,6 +984,8 @@ async function createAccount(event) {
             catch (_) { photoUploadFailed = true; }
         }
         form.reset();
+        selectSignupAge(13, { scroll: false });
+        selectSignupGrade("");
         selectSignupGender("");
         resetSignupSchoolPicker();
         resetSignupPhotoPreview();
@@ -2390,7 +2462,26 @@ function bindEvents() {
     });
     $("#signupShowSchoolFallback").addEventListener("click", () => showSignupSchoolFallback(true));
     $("#signupBackToNearby").addEventListener("click", () => showSignupSchoolFallback(false));
+    let signupAgeScrollFrame = null;
+    $("#signupAgeWheel").addEventListener("scroll", (event) => {
+        if (signupAgeScrollFrame) cancelAnimationFrame(signupAgeScrollFrame);
+        signupAgeScrollFrame = requestAnimationFrame(() => {
+            const age = 13 + Math.round(event.currentTarget.scrollTop / 40);
+            selectSignupAge(age, { scroll: false });
+            signupAgeScrollFrame = null;
+        });
+    }, { passive: true });
+    $("#signupAgeWheel").addEventListener("keydown", (event) => {
+        if (!['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+        event.preventDefault();
+        const direction = event.key === 'ArrowDown' ? 1 : -1;
+        selectSignupAge(Number($("#signupAge").value) + direction, { smooth: true });
+    });
     $("#signupDialog").addEventListener("click", (event) => {
+        const age = event.target.closest("[data-signup-age]");
+        if (age) selectSignupAge(age.dataset.signupAge, { smooth: true });
+        const grade = event.target.closest("[data-signup-grade]");
+        if (grade) selectSignupGrade(grade.dataset.signupGrade);
         const gender = event.target.closest("[data-signup-gender]");
         if (gender) selectSignupGender(gender.dataset.signupGender);
         const next = event.target.closest("[data-signup-next]");

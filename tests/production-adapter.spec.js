@@ -5,13 +5,13 @@ const USER_ID = "11111111-1111-1111-1111-111111111111";
 
 async function fillProductionSignupThroughGrade(dialog) {
     await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
-    await dialog.getByLabel("Age").selectOption("16");
+    await dialog.locator('[data-signup-age="16"]').click();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("ZIP code").fill("90210");
     await dialog.getByRole("button", { name: "Show schools" }).click();
     await dialog.getByRole("option", { name: /Westview High School/ }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
-    await dialog.getByLabel("Grade").selectOption("Senior");
+    await dialog.getByRole("radio", { name: /Senior/ }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
 }
 
@@ -382,10 +382,11 @@ test("signup sends existing phone identities back to sign in", async ({ page }) 
     await dialog.getByLabel("Phone number").fill("4155550123");
     await dialog.getByRole("button", { name: "Continue" }).click();
 
-    await expect(dialog.locator("#signupStatus")).toHaveText(
-        "An account already exists for this phone number. Sign in instead.",
+    await expect(dialog).toBeHidden();
+    await expect(page.locator("#authStatus")).toHaveText(
+        "An account already exists for this phone number. Sign in.",
     );
-    await expect(dialog.getByLabel("First name")).toBeHidden();
+    await expect(page.getByRole("button", { name: /^sign in$/i })).toBeFocused();
     expect(requests.some((request) => request.path === "/api/v1/auth/passkey/signup/challenge")).toBe(false);
 });
 

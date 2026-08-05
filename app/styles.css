@@ -643,7 +643,24 @@ body.play-active .play-actions { margin: 0; }
 .signup-school-check { justify-self: end; font-size: 1.3rem; }
 .signup-school-fallback-link { justify-self: center; min-height: 40px; }
 .signup-school-empty { margin: 0; padding: 18px; border: 2px dashed rgba(0,0,0,.35); border-radius: 15px; color: var(--muted); text-align: center; }
-.signup-age-picker select { min-height: 82px; font-size: 2rem; text-align: center; text-align-last: center; }
+.signup-age-picker { display: grid; justify-items: center; gap: 10px; }
+.signup-age-picker > strong { font-size: 3rem; line-height: 1; }
+.signup-age-wheel { position: relative; width: min(100%, 320px); height: 120px; overflow-y: auto; padding-block: 40px; border-radius: 16px; background: rgba(255,255,255,.55); box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); scroll-snap-type: y mandatory; scrollbar-width: none; }
+.signup-age-wheel::-webkit-scrollbar { display: none; }
+.signup-age-wheel::before, .signup-age-wheel::after { content: ""; position: sticky; z-index: 1; left: 0; display: block; width: 100%; height: 0; pointer-events: none; }
+.signup-age-wheel::before { top: 39px; border-top: 2px solid rgba(0,0,0,.12); }
+.signup-age-wheel::after { bottom: 39px; border-bottom: 2px solid rgba(0,0,0,.12); }
+.signup-age-wheel button { width: 100%; height: 40px; display: grid; place-items: center; padding: 0; border: 0; background: transparent; color: var(--ink); cursor: pointer; font-size: 1.45rem; opacity: .34; scroll-snap-align: center; transition: opacity .15s ease, transform .15s ease; }
+.signup-age-wheel button[aria-selected="true"] { opacity: 1; transform: scale(1.18); }
+.signup-grade-step { justify-items: center; text-align: center; }
+.signup-grade-step h2, .signup-grade-step > .form-hint { width: 100%; }
+.signup-grade-options { width: min(100%, 460px); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: center; gap: 11px; padding: 5px 4px; }
+.signup-grade-option { min-width: 0; min-height: 70px; display: grid; place-items: center; padding: 9px 5px; border: 3px solid rgba(128,128,128,.3); border-radius: 14px; background: var(--peach); color: var(--ink); cursor: pointer; line-height: 1.05; transition: min-height .2s ease, border-color .2s ease, transform .2s ease; }
+.signup-grade-option span { display: grid; gap: 3px; }
+.signup-grade-option strong { font-size: 1rem; }
+.signup-grade-option small { color: var(--ink); font-size: .72rem; }
+.signup-grade-option.selected { min-height: 85px; border-color: var(--ink); transform: scale(1.05); }
+.signup-grade-step > .primary-button { width: min(100%, 460px); }
 .signup-terms { max-width: 420px; font-size: .9rem; text-align: center; }
 .signup-terms a { color: var(--dark-teal); text-underline-offset: 2px; }
 .signup-phone-hint { max-width: 430px; font-size: 1rem; text-align: center; }
@@ -759,7 +776,11 @@ body.detail-screen-open { overflow: hidden; }
     .signup-school-picker { gap: 8px; }
     .signup-school-result { min-height: 62px; grid-template-columns: 42px minmax(0, 1fr) 20px; gap: 9px; padding: 8px; }
     .signup-school-logo { width: 42px; height: 42px; }
-    .signup-age-picker select { min-height: 72px; }
+    .signup-age-picker { gap: 7px; }
+    .signup-age-picker > strong { font-size: 2.7rem; }
+    .signup-grade-options { gap: 8px; }
+    .signup-grade-option { min-height: 64px; padding: 7px 4px; }
+    .signup-grade-option.selected { min-height: 76px; }
     .signup-terms { font-size: .82rem; }
     .signup-gender-step { gap: 10px; }
     .signup-gender-options { width: calc(100% - 22px); gap: 9px; }
