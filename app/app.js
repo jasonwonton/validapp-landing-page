@@ -230,7 +230,7 @@ function formatGrade(value = "") {
 }
 
 function formatVoterHint(item) {
-    if (item.current_user_voted) return `from ${displayName(state.profile)} (you 🫵)`;
+    if (item.current_user_voted) return `from ${displayName(state.profile)}`;
     if (item.voter_name) return `from ${item.voter_name}`;
     const gender = String(item.voter_gender || "").toLowerCase();
     const emoji = ["female", "girl"].includes(gender) ? "👧💗" : ["male", "boy"].includes(gender) ? "👦💙" : gender === "non-binary" ? "🧑💛" : "";
@@ -240,7 +240,7 @@ function formatVoterHint(item) {
 }
 
 function formatVoterStatement(item) {
-    if (item.current_user_voted) return `${displayName(state.profile)} (you 🫵) said`;
+    if (item.current_user_voted) return `${displayName(state.profile)} said`;
     if (item.voter_name) return `${item.voter_name} said`;
     const gender = String(item.voter_gender || "").toLowerCase();
     const emoji = ["female", "girl"].includes(gender) ? "👧💗" : ["male", "boy"].includes(gender) ? "👦💙" : gender === "non-binary" ? "🧑💛" : "";

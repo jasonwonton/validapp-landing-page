@@ -203,6 +203,17 @@ test("feed search includes classmates and filters their school activity", async 
     await expect(page.getByText("Who is most likely to start a company?")).toBeHidden();
 });
 
+test("own school votes do not show a you marker", async ({ page }) => {
+    await signInToDemo(page);
+    await page.getByRole("button", { name: "School", exact: true }).click();
+    const ownVote = page.locator("[data-feed-detail='9004']");
+    await expect(ownVote).toContainText("from Jules Rivera");
+    await expect(ownVote).not.toContainText("(you");
+    await ownVote.click();
+    await expect(page.locator("#feedDetailDialog .detail-screen-header > strong")).toHaveText("Jules Rivera said");
+    await expect(page.locator("#feedDetailDialog")).not.toContainText("(you");
+});
+
 test("feed polls open the iOS-style detail and moderation flow", async ({ page }) => {
     await signInToDemo(page);
     await page.locator("[data-feed-detail='9001']").click();
