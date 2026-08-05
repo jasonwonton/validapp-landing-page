@@ -1,14 +1,7 @@
-const DEFAULT_API_BASE = "https://api.six7.lol/api/v1";
-
 function apiBaseURL() {
-    // Local integration tests can opt into a same-origin reverse proxy. Never
-    // accept an arbitrary URL here: a public query-string override could send
-    // authentication material to an untrusted server.
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("local-api") === "1") return `${window.location.origin}/api/v1`;
-    const loopbackHost = window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost";
-    if (loopbackHost && window.location.port === "8443") return `${window.location.origin}/api/v1`;
-    return window.VALID_API_BASE_URL || DEFAULT_API_BASE;
+    // Browser auth is first-party: production hosting must reverse-proxy this
+    // path to the API just like the local HTTPS server does.
+    return window.VALID_API_BASE_URL || `${window.location.origin}/api/v1`;
 }
 
 export class APIError extends Error {
@@ -40,18 +33,18 @@ function retryMessage(seconds) {
 export class ValidAPI {
     constructor() {
         this.baseURL = apiBaseURL();
-        // Keep bearer material in memory only. A refresh intentionally requires
-        // another passkey gesture instead of leaving a reusable secret in web storage.
+        // Native clients keep bearer auth. Web sessions use an HttpOnly cookie,
+        // so no reusable browser credential is stored or exposed to JavaScript.
         this.token = null;
         this.user = null;
     }
 
     hasSession() {
-        return Boolean(this.token && this.user?.id);
+        return Boolean(this.user?.id);
     }
 
     saveSession(loginResponse) {
-        this.token = loginResponse.access_token;
+        this.token = loginResponse.access_token || null;
         this.user = loginResponse.user;
     }
 
@@ -61,6 +54,11 @@ export class ValidAPI {
     }
 
     async request(path, options = {}) {
+        const includeResponseHeaders = options.includeResponseHeaders === true;
+        const silentAuthFailure = options.silentAuthFailure === true;
+        const fetchOptions = { ...options };
+        delete fetchOptions.includeResponseHeaders;
+        delete fetchOptions.silentAuthFailure;
         const headers = new Headers(options.headers || {});
         headers.set("Accept", "application/json");
 
@@ -80,10 +78,10 @@ export class ValidAPI {
         let response;
         try {
             response = await fetch(`${this.baseURL}${path}`, {
-                ...options,
+                ...fetchOptions,
                 headers,
                 signal: controller.signal,
-                credentials: "omit",
+                credentials: "include",
             });
         } catch (error) {
             if (error.name === "AbortError") throw new APIError("That request took too long. Check your connection and try again.", 408);
@@ -100,7 +98,7 @@ export class ValidAPI {
         if (!response.ok) {
             if (response.status === 401) {
                 this.clearSession();
-                window.dispatchEvent(new CustomEvent("valid:session-expired"));
+                if (!silentAuthFailure) window.dispatchEvent(new CustomEvent("valid:session-expired"));
             }
             const detail = payload?.detail ?? payload;
             const waitSeconds = response.status === 429
@@ -114,7 +112,7 @@ export class ValidAPI {
             throw new APIError(message, response.status, detail, waitSeconds);
         }
 
-        return payload;
+        return includeResponseHeaders ? { data: payload, headers: response.headers } : payload;
     }
 
     assetURL(path) {
@@ -202,6 +200,10 @@ export class ValidAPI {
         return this.request("/auth/logout", { method: "POST" });
     }
 
+    restoreSession() {
+        return this.request("/auth/session", { auth: false, silentAuthFailure: true });
+    }
+
     getProfile(userId) {
         return this.request(`/users/${userId}/profile`);
     }
@@ -276,6 +278,18 @@ export class ValidAPI {
         const params = new URLSearchParams({ limit: String(limit) });
         if (search.trim()) params.set("search", search.trim());
         return this.request(`/users/${userId}/classmates?${params}`);
+    }
+
+    async getClassmatesWithMetadata(userId, search = "", limit = 500) {
+        const params = new URLSearchParams({ limit: String(limit) });
+        if (search.trim()) params.set("search", search.trim());
+        const response = await this.request(`/users/${userId}/classmates?${params}`, { includeResponseHeaders: true });
+        const activeHeader = response.headers.get("x-active-classmates-this-week");
+        const activeThisWeekCount = activeHeader === null ? null : Number(activeHeader);
+        return {
+            classmates: response.data,
+            activeThisWeekCount: Number.isFinite(activeThisWeekCount) ? activeThisWeekCount : null,
+        };
     }
 
     getClassmatesStatus(userId) {
@@ -356,6 +370,14 @@ export class ValidAPI {
 
     rotateAskLink(userId) {
         return this.request(`/users/${userId}/ask-link/rotate`, { method: "POST" });
+    }
+
+    createGodModeCheckout(userId) {
+        return this.request(`/users/${userId}/stripe/checkout-session`, { method: "POST" });
+    }
+
+    confirmGodModeCheckout(userId, sessionId) {
+        return this.request(`/users/${userId}/stripe/checkout-session/${encodeURIComponent(sessionId)}`);
     }
 
     trackAskShare(userId, platform) {

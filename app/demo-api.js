@@ -35,7 +35,7 @@ export class DemoAPI {
             gender: "female",
             bio: "Trying to make senior year unforgettable ✨",
             aura_points: 1280,
-            remaining_reveals: this.demoGodMode ? 3 : 0,
+            remaining_reveals: this.demoGodMode ? 2 : 0,
             god_mode_aura_multiplier: 2,
             vote_count: 84,
             weekly_vote_count: 16,
@@ -360,7 +360,7 @@ export class DemoAPI {
             max_skips_per_set: 3,
             play_lock_time_seconds: 60,
             full_reveal_aura_cost: 200,
-            max_full_reveals_per_week: 3,
+            max_full_reveals_per_week: 2,
             god_mode_price: 6.99,
             global_visibility_boost_cost: 400,
             targeted_visibility_boost_cost: 200,
@@ -369,6 +369,13 @@ export class DemoAPI {
 
     async getClassmates() {
         return this.classmates.map((classmate) => ({ ...classmate }));
+    }
+
+    async getClassmatesWithMetadata() {
+        return {
+            classmates: this.classmates.map((classmate) => ({ ...classmate })),
+            activeThisWeekCount: 6,
+        };
     }
 
     async getClassmatesStatus() {
@@ -473,8 +480,21 @@ export class DemoAPI {
         return { ...this.askLink };
     }
 
-    async trackAskShare() {
-        return { status: "tracked" };
+    async trackAskShare(_userId, platform = "other") {
+        return {
+            id: `demo-ask-share-${Date.now()}`,
+            platform,
+            share_url: this.askLink.share_url,
+            created_at: new Date().toISOString(),
+        };
+    }
+
+    async createGodModeCheckout() {
+        return { id: "cs_demo", url: "https://checkout.stripe.com/demo" };
+    }
+
+    async confirmGodModeCheckout() {
+        return { completed: false, subscribed: false };
     }
 
     async getAnonymousInbox() {
@@ -491,11 +511,12 @@ export class DemoAPI {
     async answerAnonymousQuestion(_userId, questionId, answerText) {
         const question = this.anonymousInbox.questions.find((item) => item.id === questionId);
         if (!question) throw new Error("Question not found");
+        const isFirstAnswer = question.status !== "answered";
         question.status = "answered";
         question.answer_text = answerText;
-        question.answered_at = new Date().toISOString();
-        question.aura_points_earned = 10;
-        this.profile.aura_points += 10;
+        question.answered_at ||= new Date().toISOString();
+        question.aura_points_earned = isFirstAnswer ? 10 : 0;
+        if (isFirstAnswer) this.profile.aura_points += 10;
         return { ...question };
     }
 

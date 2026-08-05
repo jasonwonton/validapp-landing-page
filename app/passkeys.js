@@ -88,7 +88,11 @@ export async function signInWithPasskey(api) {
             throw new Error("Passkey sign-in was canceled or no matching passkey was available.");
         }
         if (error?.name === "SecurityError") {
-            throw new Error("Passkey access for validapp.lol is not enabled yet. Please try again shortly.");
+            const localLoopback = ["127.0.0.1", "localhost"].includes(window.location.hostname);
+            if (localLoopback) {
+                throw new Error("Valid passkeys belong to six7.lol and cannot be used from 127.0.0.1. Open https://six7.lol:8443/app/ on your phone.");
+            }
+            throw new Error("Passkey access is not enabled for this domain yet.");
         }
         throw error;
     }
