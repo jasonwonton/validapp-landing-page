@@ -211,7 +211,9 @@ export class DemoAPI {
     }
 
     async resolveSchool(payload) {
-        return { school: { id: 77, name: payload.school_name, city: payload.city, state: payload.state } };
+        const school = { id: 1000 + (this.resolvedSchools?.length || 0), name: payload.school_name, city: payload.city, state: payload.state, min_grade: 6, max_grade: 12 };
+        this.resolvedSchools = [...(this.resolvedSchools || []), school];
+        return { school };
     }
 
     async getNearbySchools(zipCode, limit = 50) {
@@ -219,19 +221,21 @@ export class DemoAPI {
             "Westview High School", "Central High School", "Lincoln High School", "Roosevelt High School",
             "Washington High School", "Jefferson High School", "Northside High School", "Southridge High School",
         ];
+        const schools = Array.from({ length: Math.min(50, limit) }, (_, index) => ({
+            id: 77 + index,
+            name: index === 0 ? names[0] : `${names[1 + ((index - 1) % (names.length - 1))]} ${index + 1}`,
+            city: index % 2 ? "Beverly Hills" : "Los Angeles",
+            state: "CA",
+            logo_url: "",
+            member_count: Math.max(0, 25 - index),
+            min_grade: 9,
+            max_grade: 12,
+            distance_miles: Number((0.4 + index * 0.3).toFixed(1)),
+        }));
+        this.nearbySchools = schools;
         return {
             zip_code: zipCode,
-            schools: Array.from({ length: Math.min(50, limit) }, (_, index) => ({
-                id: 77 + index,
-                name: index === 0 ? names[0] : `${names[1 + ((index - 1) % (names.length - 1))]} ${index + 1}`,
-                city: index % 2 ? "Beverly Hills" : "Los Angeles",
-                state: "CA",
-                logo_url: "",
-                member_count: Math.max(0, 25 - index),
-                min_grade: 9,
-                max_grade: 12,
-                distance_miles: Number((0.4 + index * 0.3).toFixed(1)),
-            })),
+            schools,
         };
     }
 
@@ -451,6 +455,8 @@ export class DemoAPI {
 
     async updateInformation(_userId, information) {
         Object.assign(this.profile, information);
+        const school = [...(this.nearbySchools || []), ...(this.resolvedSchools || [])].find((candidate) => String(candidate.id) === String(information.school_id));
+        if (school) this.profile.school_name = school.name;
         return { ...this.profile };
     }
 

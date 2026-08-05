@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 async function signInToDemo(page) {
-    await page.goto("/app/?demo=1");
+    await page.goto("/app/?demo=1&signin=1");
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
 }
@@ -205,6 +205,25 @@ test("android shell surfaces connectivity and install affordances", async ({ pag
     await expect(page.getByRole("button", { name: "Install Valid" })).toBeHidden();
 });
 
+test("PWA ships install icons and Web Push worker handlers", async ({ request }) => {
+    const manifestResponse = await request.get("/app/manifest.webmanifest");
+    expect(manifestResponse.ok()).toBeTruthy();
+    const manifest = await manifestResponse.json();
+    expect(manifest.id).toBe("/app/");
+    expect(manifest.icons).toEqual(expect.arrayContaining([
+        expect.objectContaining({ sizes: "192x192", purpose: "any" }),
+        expect.objectContaining({ sizes: "512x512", purpose: "any" }),
+        expect.objectContaining({ sizes: "512x512", purpose: "maskable" }),
+    ]));
+
+    const workerResponse = await request.get("/app/service-worker.js");
+    expect(workerResponse.ok()).toBeTruthy();
+    const worker = await workerResponse.text();
+    expect(worker).toContain('addEventListener("push"');
+    expect(worker).toContain('addEventListener("notificationclick"');
+    expect(worker).toContain("safeNotificationURL");
+});
+
 test("feed navigation, filtering, and upvotes work", async ({ page }) => {
     await signInToDemo(page);
     await expect(page.getByText("Who always knows how to make people laugh?")).toBeVisible();
@@ -354,9 +373,10 @@ test("non-subscribers can reach God Mode from a received vote", async ({ page })
 });
 
 test("new users vote to unlock Feed just like iOS", async ({ page }) => {
-    await page.goto("/app/?demo=1&locked=1");
+    await page.goto("/app/?demo=1&locked=1&signin=1");
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await expect(page.getByRole("heading", { name: "Feed is locked" })).toBeVisible();
+    await expect(page.locator(".feed-gate-lock")).toHaveAttribute("src", "../assets/app/lock.png");
     await expect(page.getByText("1 / 3 votes cast")).toBeVisible();
     await page.getByRole("button", { name: "Vote now to unlock Feed" }).click();
     await expect(page.getByText("Who would survive longest on a deserted island?")).toBeVisible();
@@ -491,6 +511,36 @@ test("completing a poll set celebrates earned aura before cooldown", async ({ pa
     await expect(page.locator("#playLockMessage")).toContainText(/Unlocks in (0:5\d|1:00)/);
 });
 
+test("profile information matches the iOS correction and school-change flow", async ({ page }) => {
+    await signInToDemo(page);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Profile information" }).click();
+    const informationDialog = page.getByRole("dialog");
+    await expect(informationDialog.getByRole("heading", { name: "Correct profile information" })).toBeVisible();
+    await informationDialog.getByRole("button", { name: /School Westview High School/ }).click();
+    await expect(informationDialog.getByRole("heading", { name: "School" })).toBeVisible();
+    await informationDialog.getByLabel("ZIP code").fill("90210");
+    await informationDialog.getByRole("button", { name: "Show schools" }).click();
+    await expect(informationDialog.locator("[data-profile-school]")).toHaveCount(50);
+    await informationDialog.getByRole("option", { name: /Central High School 2 Beverly Hills/ }).click();
+    await expect(informationDialog.locator("#profileSchoolValue")).toHaveText("Central High School 2");
+    await informationDialog.getByRole("button", { name: /Name Jules Rivera/ }).click();
+    await informationDialog.getByLabel("First name").fill("Julia");
+    await informationDialog.getByRole("button", { name: "Done" }).click();
+    await informationDialog.getByRole("button", { name: /Username @jules/ }).click();
+    await informationDialog.getByLabel("Username").fill("julia_r");
+    await informationDialog.getByRole("button", { name: "Done" }).click();
+    await informationDialog.getByRole("button", { name: /Grade Junior/ }).click();
+    await informationDialog.getByRole("radio", { name: /Senior/ }).click();
+    await informationDialog.getByRole("button", { name: "Done" }).click();
+    await informationDialog.getByRole("button", { name: "Review 4 changes" }).click();
+    await expect(informationDialog.getByRole("heading", { name: "Review changes" })).toBeVisible();
+    await expect(informationDialog.getByText("Your classmates, polls, and school feed will switch to the new school immediately.", { exact: false })).toBeVisible();
+    await informationDialog.getByRole("button", { name: "Confirm and save" }).click();
+    await expect(page.locator("#toast")).toContainText("Profile updated");
+    await expect(page.locator("#profileCard")).toContainText("Central High School 2");
+});
+
 test("settings exposes iOS-style editing, polls, ask link, and aura purchases", async ({ page }) => {
     await signInToDemo(page);
     await page.getByRole("button", { name: "Settings", exact: true }).click();
@@ -518,12 +568,11 @@ test("settings exposes iOS-style editing, polls, ask link, and aura purchases", 
     await expect(page.locator("#addPasskeyButton")).toBeHidden();
     await expect(page.getByText(/passkeys? registered/)).toHaveCount(0);
     await page.getByRole("button", { name: "Profile information" }).click();
-    await expect(page.getByRole("dialog").getByRole("heading", { name: "Profile information" })).toBeVisible();
-    await expect(page.getByRole("dialog").getByLabel("Bio")).toHaveCount(0);
-    await expect(page.getByRole("dialog").getByLabel("School", { exact: true })).toHaveCount(0);
-    await expect(page.getByRole("dialog").getByLabel("City")).toHaveCount(0);
-    await expect(page.getByRole("dialog").getByLabel("State")).toHaveCount(0);
-    await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+    const informationDialog = page.getByRole("dialog");
+    await expect(informationDialog.getByRole("heading", { name: "Correct profile information" })).toBeVisible();
+    await expect(informationDialog.getByLabel("Bio")).toHaveCount(0);
+    await expect(informationDialog.getByRole("button", { name: /School Westview High School/ })).toBeVisible();
+    await informationDialog.getByRole("button", { name: "Cancel" }).click();
     await page.locator("[data-edit-bio]").click();
     const bioDialog = page.getByRole("dialog").filter({ hasText: "EDIT BIO" });
     await bioDialog.getByLabel("Bio").fill("Senior year, good music, better people.");

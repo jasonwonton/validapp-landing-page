@@ -1,4 +1,4 @@
-const CACHE_NAME = "valid-web-v22";
+const CACHE_NAME = "valid-web-v23";
 const APP_SHELL = [
     "./",
     "./styles.css",
@@ -8,6 +8,9 @@ const APP_SHELL = [
     "./passkeys.js",
     "./manifest.webmanifest",
     "../assets/AppIconV2.png",
+    "../assets/pwa/icon-192.png",
+    "../assets/pwa/icon-512.png",
+    "../assets/pwa/icon-maskable-512.png",
     "../assets/valid_logo.png",
     "../assets/Jua-Regular.ttf",
     "../assets/app/aura.png",
@@ -40,4 +43,44 @@ self.addEventListener("fetch", (event) => {
             })
             .catch(() => caches.match(event.request).then((cached) => cached || caches.match("./")))
     );
+});
+
+function safeNotificationURL(value) {
+    try {
+        const url = new URL(value || "/app/", self.location.origin);
+        if (url.origin === self.location.origin && url.pathname.startsWith("/app/")) return url.href;
+    } catch (_) {
+        // Use the app home when a provider payload is malformed.
+    }
+    return new URL("/app/", self.location.origin).href;
+}
+
+self.addEventListener("push", (event) => {
+    let payload = {};
+    try {
+        payload = event.data?.json() || {};
+    } catch (_) {
+        payload = { body: event.data?.text() || "You have a new update." };
+    }
+    event.waitUntil(self.registration.showNotification(payload.title || "Valid", {
+        body: payload.body || "You have a new update.",
+        icon: "/assets/pwa/icon-192.png",
+        tag: payload.tag || "valid-notification",
+        renotify: true,
+        data: { url: safeNotificationURL(payload.url) },
+    }));
+});
+
+self.addEventListener("notificationclick", (event) => {
+    event.notification.close();
+    const url = safeNotificationURL(event.notification.data?.url);
+    event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clients) => {
+        for (const client of clients) {
+            const clientURL = new URL(client.url);
+            if (clientURL.origin !== self.location.origin || !clientURL.pathname.startsWith("/app/")) continue;
+            client.postMessage({ type: "VALID_NOTIFICATION_CLICK", url });
+            return client.focus();
+        }
+        return self.clients.openWindow(url);
+    }));
 });

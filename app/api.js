@@ -290,6 +290,24 @@ export class ValidAPI {
         return this.request("/config", { auth: false });
     }
 
+    getWebPushConfig() {
+        return this.request("/web-push/config", { auth: false });
+    }
+
+    registerWebPushSubscription(userId, subscription) {
+        return this.request(`/users/${userId}/web-push-subscriptions`, {
+            method: "POST",
+            body: JSON.stringify(subscription),
+        });
+    }
+
+    deleteWebPushSubscription(userId, endpoint) {
+        return this.request(`/users/${userId}/web-push-subscriptions`, {
+            method: "DELETE",
+            body: JSON.stringify({ endpoint }),
+        });
+    }
+
     getClassmates(userId, search = "", limit = 500) {
         const params = new URLSearchParams({ limit: String(limit) });
         if (search.trim()) params.set("search", search.trim());

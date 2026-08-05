@@ -142,6 +142,7 @@
                 </section>
                 <section class="profile-actions" aria-label="Profile actions">
                     <button id="addPasskeyButton" class="settings-row" type="button"><span class="settings-icon" aria-hidden="true">🔑</span><span><strong>Add a backup passkey</strong><small id="passkeyStatusText">Add another secure way to sign in</small></span><span aria-hidden="true">›</span></button>
+                    <button id="notificationButton" class="settings-row hidden" type="button"><span class="settings-icon notification-settings-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M10 21h4"/></svg></span><span><strong>Notifications</strong><small id="notificationStatusText">Get updates from Valid</small></span><span aria-hidden="true">›</span></button>
                 </section>
                 <section id="askLinkSection" class="profile-polls-section messages-section" aria-label="Anonymous ask link">
                     <div id="askStatus" class="inline-status" role="status"></div>
@@ -328,34 +329,100 @@
         </form>
     </dialog>
 
-    <dialog id="profileDialog" class="modal">
+    <dialog id="profileDialog" class="modal profile-information-flow" aria-labelledby="profileEditorTitle">
         <form id="profileForm" method="dialog">
-            <div class="modal-heading">
-                <h2>Profile information</h2>
-                <button class="icon-button" value="cancel" aria-label="Close" type="button" data-close-dialog>×</button>
+            <div class="profile-editor-heading">
+                <button id="profileEditorBack" class="profile-editor-back hidden" type="button" aria-label="Back">‹</button>
+                <h2 id="profileEditorTitle">Correct profile information</h2>
+                <button id="profileEditorCancel" class="profile-editor-cancel" type="button">Cancel</button>
             </div>
-            <div class="two-field-row">
-                <label>First name<input id="profileFirstName" maxlength="50" required></label>
-                <label>Last name<input id="profileLastName" maxlength="50" required></label>
-            </div>
-            <label>Username<input id="profileUsername" minlength="3" maxlength="30" pattern="[a-z0-9_]+" required></label>
-            <label>Grade<select id="profileGrade" required><option>6th Grade</option><option>7th Grade</option><option>8th Grade</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select></label>
-            <p id="profileEditHint" class="profile-change-warning"></p>
-            <p id="profileEditStatus" class="status-message" role="status"></p>
-            <button class="primary-button" type="submit">Save changes</button>
-        </form>
-    </dialog>
 
-    <dialog id="profileInformationConfirmDialog" class="modal">
-        <div class="profile-information-confirm">
-            <span class="profile-change-calendar" aria-hidden="true">▣</span>
-            <h2>Save profile information?</h2>
-            <strong>You can change this information only once every 14 days.</strong>
-            <p>Saving starts the 14-day cooldown for your name, username, and grade.</p>
-            <p id="profileInformationConfirmStatus" class="status-message" role="status"></p>
-            <button id="confirmProfileInformationSave" class="primary-button" type="button">Confirm and save</button>
-            <button class="secondary-button" type="button" data-close-dialog>Keep editing</button>
-        </div>
+            <section id="profileEditorHub" class="profile-editor-panel" data-profile-panel="hub">
+                <div id="profileEditHint" class="profile-editor-availability"></div>
+                <div class="profile-editor-rows">
+                    <button class="profile-editor-row" type="button" data-profile-editor="username">
+                        <span class="profile-editor-row-icon" aria-hidden="true">@</span>
+                        <span><small>Username <em id="profileUsernameBadge"></em></small><strong id="profileUsernameValue"></strong></span>
+                        <span aria-hidden="true">›</span>
+                    </button>
+                    <button class="profile-editor-row" type="button" data-profile-editor="name">
+                        <span class="profile-editor-row-icon" aria-hidden="true">ID</span>
+                        <span><small>Name <em id="profileNameBadge"></em></small><strong id="profileNameValue"></strong></span>
+                        <span aria-hidden="true">›</span>
+                    </button>
+                    <button class="profile-editor-row" type="button" data-profile-editor="school">
+                        <span class="profile-editor-row-icon" aria-hidden="true">⌂</span>
+                        <span><small>School <em id="profileSchoolBadge"></em></small><strong id="profileSchoolValue"></strong></span>
+                        <span aria-hidden="true">›</span>
+                    </button>
+                    <button class="profile-editor-row" type="button" data-profile-editor="grade">
+                        <span class="profile-editor-row-icon profile-grade-icon" aria-hidden="true"></span>
+                        <span><small>Grade <em id="profileGradeBadge"></em></small><strong id="profileGradeValue"></strong></span>
+                        <span aria-hidden="true">›</span>
+                    </button>
+                </div>
+                <p id="profileEditStatus" class="status-message" role="status"></p>
+                <button id="profileReviewButton" class="primary-button" type="button" disabled>Review changes</button>
+            </section>
+
+            <section class="profile-editor-panel hidden" data-profile-panel="name">
+                <div class="two-field-row">
+                    <label>First name<input id="profileFirstName" autocomplete="given-name" maxlength="50" required></label>
+                    <label>Last name<input id="profileLastName" autocomplete="family-name" maxlength="50" required></label>
+                </div>
+                <p id="profileNameStatus" class="profile-editor-validation" role="status"></p>
+                <button class="primary-button" type="button" data-profile-done="name">Done</button>
+            </section>
+
+            <section class="profile-editor-panel hidden" data-profile-panel="username">
+                <label>Username
+                    <span class="profile-username-field"><span aria-hidden="true">@</span><input id="profileUsername" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="3" maxlength="30" pattern="[a-z0-9_]+" required></span>
+                </label>
+                <p id="profileUsernameStatus" class="profile-editor-validation" role="status"></p>
+                <button id="profileUsernameDone" class="primary-button" type="button" data-profile-done="username">Done</button>
+            </section>
+
+            <section class="profile-editor-panel profile-school-panel hidden" data-profile-panel="school">
+                <div class="profile-school-zip-row">
+                    <label>ZIP code<input id="profileSchoolZip" inputmode="numeric" autocomplete="postal-code" maxlength="5" pattern="[0-9]{5}" placeholder="90210"></label>
+                    <button id="profileSchoolLookup" class="secondary-button" type="button">Show schools</button>
+                </div>
+                <div id="profileSchoolPicker" class="profile-school-picker hidden">
+                    <label>Search nearby schools<input id="profileSchoolSearch" type="search" autocomplete="off" placeholder="Search these 50 schools..."></label>
+                    <div id="profileSchoolResults" class="signup-school-results" role="listbox" aria-label="Nearby schools"></div>
+                    <button id="profileShowSchoolFallback" class="text-button" type="button">Can't find your school?</button>
+                </div>
+                <div id="profileSchoolFallback" class="profile-school-fallback hidden">
+                    <p class="form-hint">Add the school only if it isn't in the nearby list.</p>
+                    <label>School name<input id="profileSchoolName" autocomplete="organization" maxlength="200" placeholder="Westview High School"></label>
+                    <div class="two-field-row"><label>City<input id="profileSchoolCity" autocomplete="address-level2" maxlength="100"></label><label>State<input id="profileSchoolState" autocomplete="address-level1" maxlength="2" pattern="[A-Za-z]{2}" placeholder="CA"></label></div>
+                    <button id="profileRequestSchool" class="primary-button" type="button">Use this school</button>
+                    <button id="profileBackToNearby" class="text-button" type="button">Back to nearby schools</button>
+                </div>
+                <p id="profileSchoolStatus" class="status-message" role="status"></p>
+            </section>
+
+            <section class="profile-editor-panel hidden" data-profile-panel="grade">
+                <p id="profileGradeHint" class="form-hint"></p>
+                <div id="profileGradeOptions" class="signup-grade-options" role="radiogroup" aria-label="Grade"></div>
+                <input id="profileGrade" type="hidden" value="">
+                <p id="profileGradeStatus" class="profile-editor-validation" role="status"></p>
+                <button class="primary-button" type="button" data-profile-done="grade">Done</button>
+            </section>
+
+            <section class="profile-editor-panel hidden" data-profile-panel="review">
+                <p class="profile-review-heading">Check every change before saving</p>
+                <div id="profileReviewRows" class="profile-review-rows"></div>
+                <p id="profileSchoolChangeNote" class="profile-school-change-note hidden">Your classmates, polls, and school feed will switch to the new school immediately. Past activity stays in its original school.</p>
+                <div class="profile-review-cooldown">
+                    <span class="profile-change-calendar" aria-hidden="true">▣</span>
+                    <strong>Your next profile change will be available in 14 days</strong>
+                    <span>Saving starts the 14-day cooldown for username, name, school, and grade.</span>
+                </div>
+                <p id="profileInformationConfirmStatus" class="status-message" role="status"></p>
+                <button id="confirmProfileInformationSave" class="primary-button" type="submit">Confirm and save</button>
+            </section>
+        </form>
     </dialog>
 
     <dialog id="bioDialog" class="modal">

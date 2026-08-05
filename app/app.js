@@ -70,9 +70,16 @@ const state = {
     questionArtworkProcessing: false,
     optimisticEarnedProfile: null,
     pendingProfileInformation: null,
+    profileDraft: null,
+    profileEditor: "hub",
+    profileNearbySchools: [],
+    profileSchoolLookupGeneration: 0,
+    profileCheckedUsername: null,
     viewportBaselineWidth: window.innerWidth,
     viewportBaselineHeight: window.innerHeight,
     installPrompt: null,
+    webPushSubscription: null,
+    webPushBusy: false,
     detailReturnFocus: null,
 };
 
@@ -256,6 +263,7 @@ async function showSignedIn() {
         state.config = config;
         renderProfileHeader();
         renderFeedGate();
+        refreshWebPushStatus({ sync: true });
         if (!isFeedVoteLocked()) await loadFeed(true);
         if (api.user?.deletion_requested_at) showPendingDeletion();
     } catch (error) {
@@ -436,10 +444,16 @@ function renderPasskeyStatus() {
     const count = Math.max(0, Number(state.passkeyStatus?.credentialCount || 0));
     const registered = state.passkeyStatus?.registered === true || count > 0;
     const button = $("#addPasskeyButton");
-    button.closest(".profile-actions").classList.toggle("hidden", !state.passkeyStatus || registered);
+    button.classList.toggle("hidden", !state.passkeyStatus || registered);
+    renderProfileActionsVisibility();
     if (!state.passkeyStatus || registered) return;
     button.querySelector("strong").textContent = "Register a passkey";
     $("#passkeyStatusText").textContent = "Add a secure way to sign in";
+}
+
+function renderProfileActionsVisibility() {
+    const section = $("#addPasskeyButton").closest(".profile-actions");
+    section.classList.toggle("hidden", [...section.querySelectorAll(".settings-row")].every((row) => row.classList.contains("hidden")));
 }
 
 function renderGodModeCard() {
@@ -2210,7 +2224,7 @@ function renderFeedGate() {
     const cast = Number(state.classmatesStatus?.votes_cast || 0);
     const required = Number(state.classmatesStatus?.required_votes || 0);
     $("#feedGateLock").innerHTML = `<article class="feed-gate-card">
-        <span class="feed-gate-lock" aria-hidden="true">🔒</span>
+        <img class="feed-gate-lock" src="../assets/app/lock.png" alt="" aria-hidden="true">
         <h3>Feed is locked</h3>
         <p>Answer a few polls to see what everyone is saying.</p>
         <progress class="feed-gate-progress" max="${Math.max(1, required)}" value="${Math.min(cast, Math.max(1, required))}" aria-label="Votes required to unlock Feed"></progress>
@@ -2517,8 +2531,8 @@ function animateAuraChange(amount, sourceElement = null) {
         document.body.append(flight);
         requestAnimationFrame(() => flight.classList.add("flying"));
         flight.addEventListener("animationend", () => flight.remove(), { once: true });
-        setTimeout(() => chip.classList.add("aura-arrived"), 520);
-        setTimeout(() => chip.classList.remove("aura-arrived"), 980);
+        setTimeout(() => chip.classList.add("aura-arrived"), 900);
+        setTimeout(() => chip.classList.remove("aura-arrived"), 1400);
         return;
     }
     chip.animate([
@@ -3055,64 +3069,314 @@ async function rotateAskLink() {
     } catch (error) { showToast(error.message || "Could not replace your link."); }
 }
 
+function profileOriginalInformation() {
+    return {
+        first_name: String(state.profile?.first_name || "").trim(),
+        last_name: String(state.profile?.last_name || "").trim(),
+        username: String(state.profile?.username || "").trim().toLowerCase(),
+        school_id: state.profile?.school_id ?? null,
+        school_name: currentProfileSchoolName(),
+        grade: String(state.profile?.grade || "").trim(),
+    };
+}
+
+function profileNameIsValid(draft = state.profileDraft) {
+    const validPart = (value) => value.length >= 2 && /^[\p{L}' -]+$/u.test(value);
+    return Boolean(draft && validPart(draft.first_name) && validPart(draft.last_name));
+}
+
+function profileUsernameIsValid(draft = state.profileDraft) {
+    return /^[a-z0-9_]{3,30}$/.test(draft?.username || "");
+}
+
+function availableProfileGrades() {
+    const school = state.profileDraft || {};
+    const minGrade = Number.isFinite(Number(school.min_grade)) ? Number(school.min_grade) : 6;
+    const maxGrade = Number.isFinite(Number(school.max_grade)) ? Number(school.max_grade) : 12;
+    const available = signupGradeCatalog.filter(({ gradeNumber }) => gradeNumber >= minGrade && gradeNumber <= maxGrade);
+    return available.length ? available : signupGradeCatalog;
+}
+
+function profileGradeIsValid() {
+    return availableProfileGrades().some(({ name }) => name === state.profileDraft?.grade);
+}
+
+function profileChangeFlags() {
+    const original = profileOriginalInformation();
+    const draft = state.profileDraft || original;
+    return {
+        username: draft.username !== original.username,
+        name: draft.first_name !== original.first_name || draft.last_name !== original.last_name,
+        school: String(draft.school_id ?? "") !== String(original.school_id ?? ""),
+        grade: draft.grade !== original.grade,
+    };
+}
+
+function profileChangedFieldCount() {
+    return Object.values(profileChangeFlags()).filter(Boolean).length;
+}
+
+function profileDraftIsValid() {
+    const draft = state.profileDraft;
+    const usernameChecked = !profileChangeFlags().username || state.profileCheckedUsername === draft?.username;
+    return Boolean(
+        state.profile?.can_change_information !== false
+        && profileChangedFieldCount()
+        && profileNameIsValid(draft)
+        && profileUsernameIsValid(draft)
+        && usernameChecked
+        && draft?.school_id != null
+        && profileGradeIsValid()
+    );
+}
+
+function setProfileBadge(element, changed, needsAttention) {
+    element.textContent = changed ? "Changed" : (needsAttention ? "Needs attention" : "");
+    element.className = changed ? "changed" : (needsAttention ? "attention" : "");
+}
+
+function syncProfileDraftFromInputs() {
+    if (!state.profileDraft) return;
+    state.profileDraft.first_name = $("#profileFirstName").value.trim();
+    state.profileDraft.last_name = $("#profileLastName").value.trim();
+    state.profileDraft.username = $("#profileUsername").value.trim().toLowerCase();
+}
+
+function renderProfileEditorHub() {
+    syncProfileDraftFromInputs();
+    const draft = state.profileDraft;
+    const flags = profileChangeFlags();
+    const informationLocked = state.profile?.can_change_information === false;
+    $("#profileUsernameValue").textContent = `@${draft.username}`;
+    $("#profileNameValue").textContent = `${draft.first_name} ${draft.last_name}`.trim() || "Add your name";
+    $("#profileSchoolValue").textContent = draft.school_name || "Choose your school";
+    $("#profileGradeValue").textContent = draft.grade || "Choose your grade";
+    setProfileBadge($("#profileUsernameBadge"), flags.username, !profileUsernameIsValid(draft) || (flags.username && state.profileCheckedUsername !== draft.username));
+    setProfileBadge($("#profileNameBadge"), flags.name, !profileNameIsValid(draft));
+    setProfileBadge($("#profileSchoolBadge"), flags.school, draft.school_id == null);
+    setProfileBadge($("#profileGradeBadge"), flags.grade, !profileGradeIsValid());
+    $$('[data-profile-editor]').forEach((button) => { button.disabled = informationLocked; });
+    const changeCount = profileChangedFieldCount();
+    $("#profileReviewButton").textContent = changeCount === 1 ? "Review 1 change" : `Review ${changeCount} changes`;
+    $("#profileReviewButton").disabled = !profileDraftIsValid();
+    $("#profileEditHint").innerHTML = informationLocked
+        ? `<strong>Profile changes are temporarily locked</strong><span>Username, name, school, and grade will be available again ${escapeHTML(relativeTime(state.profile.next_information_change_at))}.</span>`
+        : "<strong>Profile changes are available every 14 days</strong><span>Change any combination below. Nothing is saved until you review and confirm everything.</span>";
+}
+
+function renderProfileGradeOptions() {
+    const grades = availableProfileGrades();
+    const selected = state.profileDraft?.grade || "";
+    $("#profileGradeHint").textContent = state.profileDraft?.school_name
+        ? `Grades available at ${state.profileDraft.school_name}`
+        : "Choose a school first.";
+    $("#profileGradeOptions").innerHTML = grades.map(({ name, gradeNumber }) => `<button class="signup-grade-option ${selected === name ? "selected" : ""}" type="button" role="radio" aria-checked="${selected === name}" data-profile-grade="${escapeHTML(name)}"><span><strong>${escapeHTML(name)}</strong><small>C/O ${signupGraduationYear(gradeNumber)}</small></span></button>`).join("");
+    $("#profileGrade").value = selected;
+    $("#profileGradeStatus").textContent = profileGradeIsValid() ? "" : "Choose a grade available at this school.";
+    $('[data-profile-done="grade"]').disabled = !profileGradeIsValid();
+}
+
+function renderProfileSchoolResults() {
+    const query = $("#profileSchoolSearch").value.trim().toLowerCase();
+    const schools = state.profileNearbySchools.filter((school) => `${school.name} ${school.city || ""} ${school.state || ""}`.toLowerCase().includes(query));
+    const container = $("#profileSchoolResults");
+    if (!schools.length) {
+        container.innerHTML = `<p class="signup-school-empty">No nearby schools match that search.</p>`;
+        return;
+    }
+    container.innerHTML = schools.map((school) => {
+        const selected = String(state.profileDraft?.school_id) === String(school.id);
+        const logoURL = school.logo_url ? api.assetURL(school.logo_url) : "";
+        const initials = String(school.name || "S").split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase();
+        return `<button class="signup-school-result ${selected ? "selected" : ""}" type="button" role="option" aria-selected="${selected}" data-profile-school="${escapeHTML(school.id)}">
+            <span class="signup-school-logo">${logoURL ? `<img src="${escapeHTML(logoURL)}" alt="">` : escapeHTML(initials)}</span>
+            <span><strong>${escapeHTML(school.name)}</strong><small>${escapeHTML(schoolLocationLabel(school))}${Number.isFinite(Number(school.distance_miles)) ? ` · ${Number(school.distance_miles).toFixed(1)} mi` : ""}</small></span>
+            <span class="signup-school-check" aria-hidden="true">${selected ? "✓" : "›"}</span>
+        </button>`;
+    }).join("");
+}
+
+async function lookupProfileSchools() {
+    const zipCode = $("#profileSchoolZip").value.replace(/\D/g, "").slice(0, 5);
+    $("#profileSchoolZip").value = zipCode;
+    if (!/^\d{5}$/.test(zipCode)) {
+        $("#profileSchoolStatus").textContent = "Enter a 5-digit ZIP code.";
+        return;
+    }
+    const generation = ++state.profileSchoolLookupGeneration;
+    const button = $("#profileSchoolLookup");
+    setButtonLoading(button, true, "Finding schools...");
+    $("#profileSchoolStatus").textContent = "";
+    try {
+        const response = await api.getNearbySchools(zipCode, 50);
+        if (generation !== state.profileSchoolLookupGeneration) return;
+        state.profileNearbySchools = response.schools || [];
+        $("#profileSchoolSearch").value = "";
+        $("#profileSchoolPicker").classList.remove("hidden");
+        $("#profileSchoolFallback").classList.add("hidden");
+        renderProfileSchoolResults();
+        $("#profileSchoolStatus").textContent = state.profileNearbySchools.length
+            ? `Showing ${state.profileNearbySchools.length} schools near ${zipCode}.`
+            : "No schools were found near that ZIP code.";
+    } catch (error) {
+        if (generation !== state.profileSchoolLookupGeneration) return;
+        $("#profileSchoolStatus").textContent = error.message || "Couldn't load nearby schools.";
+    } finally { setButtonLoading(button, false); }
+}
+
+function selectProfileSchool(school) {
+    if (!school || !state.profileDraft) return;
+    state.profileDraft.school_id = school.id;
+    state.profileDraft.school_name = school.name || "";
+    state.profileDraft.min_grade = school.min_grade;
+    state.profileDraft.max_grade = school.max_grade;
+    if (!profileGradeIsValid()) state.profileDraft.grade = "";
+    setProfileEditor("hub");
+}
+
+async function requestProfileSchool() {
+    const schoolName = $("#profileSchoolName").value.trim();
+    const city = $("#profileSchoolCity").value.trim();
+    const schoolState = $("#profileSchoolState").value.trim().toUpperCase();
+    if (!schoolName || !city || !/^[A-Z]{2}$/.test(schoolState)) {
+        $("#profileSchoolStatus").textContent = "Enter the school name, city, and 2-letter state.";
+        return;
+    }
+    const button = $("#profileRequestSchool");
+    setButtonLoading(button, true, "Checking school...");
+    try {
+        const response = await api.resolveSchool({ school_name: schoolName, city, state: schoolState });
+        selectProfileSchool(response.school);
+    } catch (error) {
+        $("#profileSchoolStatus").textContent = error.message || "Could not use that school.";
+    } finally { setButtonLoading(button, false); }
+}
+
+function renderProfileReview() {
+    syncProfileDraftFromInputs();
+    const original = profileOriginalInformation();
+    const draft = state.profileDraft;
+    const flags = profileChangeFlags();
+    const rows = [];
+    const addRow = (title, oldValue, newValue) => rows.push(`<article class="profile-review-row"><small>${escapeHTML(title)}</small><span>${escapeHTML(oldValue || "Not set")}</span><i aria-hidden="true">↓</i><strong>${escapeHTML(newValue)}</strong></article>`);
+    if (flags.name) addRow("Name", `${original.first_name} ${original.last_name}`.trim(), `${draft.first_name} ${draft.last_name}`.trim());
+    if (flags.username) addRow("Username", `@${original.username}`, `@${draft.username}`);
+    if (flags.school) addRow("School", original.school_name, draft.school_name);
+    if (flags.grade) addRow("Grade", original.grade, draft.grade);
+    $("#profileReviewRows").innerHTML = rows.join("");
+    $("#profileSchoolChangeNote").classList.toggle("hidden", !flags.school);
+    $("#profileInformationConfirmStatus").textContent = "";
+}
+
+function setProfileEditor(editor) {
+    if (!state.profileDraft) return;
+    syncProfileDraftFromInputs();
+    state.profileEditor = editor;
+    $$('[data-profile-panel]').forEach((panel) => panel.classList.toggle("hidden", panel.dataset.profilePanel !== editor));
+    const titles = { hub: "Correct profile information", username: "Username", name: "Name", school: "School", grade: "Grade", review: "Review changes" };
+    $("#profileEditorTitle").textContent = titles[editor] || titles.hub;
+    $("#profileEditorBack").classList.toggle("hidden", editor === "hub");
+    $("#profileEditorCancel").classList.toggle("hidden", editor !== "hub");
+    if (editor === "hub") renderProfileEditorHub();
+    if (editor === "grade") renderProfileGradeOptions();
+    if (editor === "review") renderProfileReview();
+    const focusByEditor = { username: "#profileUsername", name: "#profileFirstName", school: "#profileSchoolZip" };
+    requestAnimationFrame(() => $(focusByEditor[editor])?.focus({ preventScroll: true }));
+}
+
 function openProfileDialog() {
-    const profile = state.profile;
-    $("#profileFirstName").value = profile.first_name || "";
-    $("#profileLastName").value = profile.last_name || "";
-    $("#profileUsername").value = profile.username || "";
-    const grade = profile.grade || "Junior";
-    const select = $("#profileGrade");
-    if (![...select.options].some((option) => option.value === grade)) select.add(new Option(grade, grade));
-    select.value = grade;
-    const informationLocked = profile.can_change_information === false;
-    [$("#profileFirstName"), $("#profileLastName"), $("#profileUsername"), $("#profileGrade")].forEach((field) => { field.disabled = informationLocked; });
-    const saveButton = $("#profileForm button[type=submit]");
-    saveButton.disabled = informationLocked;
-    saveButton.textContent = informationLocked ? "Changes locked" : "Review changes";
-    $("#profileEditHint").innerHTML = profile.can_change_information === false
-        ? `<strong>Profile changes are temporarily locked</strong><span>You can change this information again ${escapeHTML(relativeTime(profile.next_information_change_at))}. Your photo and bio can still be changed anytime.</span>`
-        : "<strong>You can change this only once every 14 days</strong><span>Saving starts the 14-day cooldown for your name, username, and grade.</span>";
+    const original = profileOriginalInformation();
+    state.profileDraft = { ...original, min_grade: null, max_grade: null };
+    state.profileNearbySchools = [];
+    state.profileCheckedUsername = original.username;
+    state.pendingProfileInformation = null;
+    $("#profileFirstName").value = original.first_name;
+    $("#profileLastName").value = original.last_name;
+    $("#profileUsername").value = original.username;
+    $("#profileGrade").value = original.grade;
+    $("#profileSchoolZip").value = "";
+    $("#profileSchoolSearch").value = "";
+    $("#profileSchoolPicker").classList.add("hidden");
+    $("#profileSchoolFallback").classList.add("hidden");
     $("#profileEditStatus").textContent = "";
+    setProfileEditor("hub");
     $("#profileDialog").showModal();
+}
+
+function cancelProfileEditor() {
+    if (profileChangedFieldCount() && !confirm("Discard your profile information changes?")) return;
+    state.profileDraft = null;
+    state.pendingProfileInformation = null;
+    $("#profileDialog").close();
+}
+
+async function finishProfileUsername() {
+    syncProfileDraftFromInputs();
+    const username = state.profileDraft.username;
+    if (!profileUsernameIsValid()) {
+        $("#profileUsernameStatus").textContent = "Use 3–30 lowercase letters, numbers, or underscores.";
+        return;
+    }
+    if (!profileChangeFlags().username) {
+        state.profileCheckedUsername = username;
+        setProfileEditor("hub");
+        return;
+    }
+    const button = $("#profileUsernameDone");
+    setButtonLoading(button, true, "Checking...");
+    $("#profileUsernameStatus").textContent = "";
+    try {
+        const result = await api.checkUsernameAvailability(username);
+        if (!result.available) {
+            $("#profileUsernameStatus").textContent = `@${username} is already taken.`;
+            return;
+        }
+        state.profileCheckedUsername = username;
+        setProfileEditor("hub");
+    } catch (error) {
+        $("#profileUsernameStatus").textContent = error.message || "Couldn't check availability. Please try again.";
+    } finally { setButtonLoading(button, false); }
 }
 
 async function saveProfile(event) {
     event.preventDefault();
-    const nextInfo = {
-        first_name: $("#profileFirstName").value.trim(),
-        last_name: $("#profileLastName").value.trim(),
-        username: $("#profileUsername").value.trim().toLowerCase(),
-        grade: $("#profileGrade").value,
-        school_id: state.profile.school_id || null,
-    };
-    const infoChanged = ["first_name", "last_name", "username", "grade"].some((key) => nextInfo[key] !== (state.profile[key] || ""));
-    $("#profileEditStatus").textContent = "";
-    if (!infoChanged) {
-        $("#profileDialog").close();
+    syncProfileDraftFromInputs();
+    if (!profileDraftIsValid()) {
+        setProfileEditor("hub");
+        $("#profileEditStatus").textContent = "Finish each highlighted field before reviewing.";
         return;
     }
-    state.pendingProfileInformation = nextInfo;
-    $("#profileInformationConfirmStatus").textContent = "";
-    $("#profileInformationConfirmDialog").showModal();
-}
-
-async function confirmProfileInformationSave() {
-    const nextInfo = state.pendingProfileInformation;
-    if (!nextInfo) return;
+    const flags = profileChangeFlags();
+    const draft = state.profileDraft;
+    const nextInfo = {
+        first_name: draft.first_name,
+        last_name: draft.last_name,
+        username: draft.username,
+        grade: draft.grade,
+        school_id: draft.school_id,
+    };
+    state.pendingProfileInformation = { payload: nextInfo, schoolName: draft.school_name, schoolChanged: flags.school };
     const button = $("#confirmProfileInformationSave");
     setButtonLoading(button, true, "Saving...");
     $("#profileInformationConfirmStatus").textContent = "";
     try {
-        state.profile = await api.updateInformation(api.user.id, nextInfo);
+        const updated = await api.updateInformation(api.user.id, nextInfo);
+        state.profile = { ...updated, school_name: updated.school_name || draft.school_name };
+        if (flags.school) {
+            state.classmateDirectory = null;
+            state.classmates = [];
+            state.activeClassmatesThisWeek = null;
+            state.targetedBoostClassmates = null;
+        }
         state.pendingProfileInformation = null;
+        state.profileDraft = null;
         renderProfileHeader();
         renderProfilePanel();
         $("#profileForm").reset();
-        $("#profileInformationConfirmDialog").close();
         $("#profileDialog").close();
         showToast("Profile updated");
+        if (flags.school) await loadProfilePanel();
     } catch (error) {
-        await refreshProfile();
         $("#profileInformationConfirmStatus").textContent = error.message || "Could not save all profile changes.";
     } finally { setButtonLoading(button, false); }
 }
@@ -3576,6 +3840,7 @@ async function cancelAccountDeletion() {
 }
 
 async function logoutAndReset() {
+    await detachWebPushSubscription().catch(() => null);
     await api.logout().catch(() => null);
     api.clearSession();
     location.href = "./?signin=1";
@@ -3605,6 +3870,126 @@ async function installWebApp() {
     await state.installPrompt.userChoice.catch(() => null);
     state.installPrompt = null;
     $("#installAppButton").classList.add("hidden");
+}
+
+function webPushSupported() {
+    return !demoMode
+        && window.isSecureContext
+        && "serviceWorker" in navigator
+        && "PushManager" in window
+        && "Notification" in window;
+}
+
+function urlBase64ToUint8Array(value) {
+    const padding = "=".repeat((4 - value.length % 4) % 4);
+    const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const raw = atob(base64);
+    return Uint8Array.from(raw, (character) => character.charCodeAt(0));
+}
+
+function renderWebPushStatus() {
+    const button = $("#notificationButton");
+    if (!webPushSupported()) {
+        button.classList.add("hidden");
+        renderProfileActionsVisibility();
+        return;
+    }
+    button.classList.remove("hidden");
+    renderProfileActionsVisibility();
+    const status = $("#notificationStatusText");
+    if (Notification.permission === "denied") {
+        status.textContent = "Blocked in browser settings";
+    } else if (state.webPushSubscription) {
+        status.textContent = "On · tap to turn off";
+    } else {
+        status.textContent = "Off · tap to turn on";
+    }
+}
+
+async function refreshWebPushStatus({ sync = false } = {}) {
+    if (!webPushSupported()) {
+        renderWebPushStatus();
+        return;
+    }
+    try {
+        const registration = await navigator.serviceWorker.ready;
+        state.webPushSubscription = await registration.pushManager.getSubscription();
+    } catch (_) {
+        state.webPushSubscription = null;
+    }
+    if (sync && state.webPushSubscription && api.user?.id) {
+        await api.registerWebPushSubscription(api.user.id, state.webPushSubscription.toJSON()).catch(() => null);
+    }
+    renderWebPushStatus();
+}
+
+async function detachWebPushSubscription() {
+    if (!webPushSupported() || !api.user?.id) return;
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = state.webPushSubscription || await registration.pushManager.getSubscription();
+    if (!subscription) return;
+    const endpoint = subscription.endpoint;
+    await subscription.unsubscribe();
+    state.webPushSubscription = null;
+    await api.deleteWebPushSubscription(api.user.id, endpoint).catch(() => null);
+    renderWebPushStatus();
+}
+
+async function toggleWebPush() {
+    const button = $("#notificationButton");
+    if (state.webPushBusy || !webPushSupported()) return;
+    if (Notification.permission === "denied") {
+        showToast("Allow notifications for Valid in your browser settings.");
+        return;
+    }
+
+    state.webPushBusy = true;
+    button.disabled = true;
+    try {
+        // Permission requests must begin in the original tap task. Awaiting the
+        // service worker first can consume transient user activation on mobile.
+        const permissionPromise = Notification.permission === "default"
+            ? Notification.requestPermission()
+            : Promise.resolve(Notification.permission);
+        const registration = await navigator.serviceWorker.ready;
+        const existing = state.webPushSubscription || await registration.pushManager.getSubscription();
+        if (existing) {
+            await detachWebPushSubscription();
+            showToast("Notifications turned off");
+            return;
+        }
+
+        const configPromise = api.getWebPushConfig();
+        const [permission, config] = await Promise.all([permissionPromise, configPromise]);
+        if (permission !== "granted") {
+            renderWebPushStatus();
+            showToast("Notifications were not enabled.");
+            return;
+        }
+        if (!config?.enabled || !config.vapid_public_key) {
+            throw new Error("Notifications are not configured yet.");
+        }
+
+        const subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(config.vapid_public_key),
+        });
+        try {
+            await api.registerWebPushSubscription(api.user.id, subscription.toJSON());
+        } catch (error) {
+            await subscription.unsubscribe().catch(() => null);
+            throw error;
+        }
+        state.webPushSubscription = subscription;
+        renderWebPushStatus();
+        showToast("Notifications are on ✨");
+    } catch (error) {
+        showToast(error.message || "Could not enable notifications.");
+        await refreshWebPushStatus();
+    } finally {
+        state.webPushBusy = false;
+        button.disabled = false;
+    }
 }
 
 function bindEvents() {
@@ -3887,6 +4272,7 @@ function bindEvents() {
     $("#cancelDeletionButton").addEventListener("click", cancelAccountDeletion);
     $("#pendingDeletionLogout").addEventListener("click", logoutAndReset);
     $("#installAppButton").addEventListener("click", installWebApp);
+    $("#notificationButton").addEventListener("click", toggleWebPush);
     $("#questionForm").addEventListener("submit", reviewQuestionSubmission);
     $("#questionForm").addEventListener("input", resetQuestionSubmissionIfDraftChanged);
     $("#questionForm").addEventListener("change", resetQuestionSubmissionIfDraftChanged);
@@ -3894,7 +4280,62 @@ function bindEvents() {
     $("#confirmQuestionSubmit").addEventListener("click", confirmQuestionSubmission);
     $("#closeQuestionPage").addEventListener("click", () => closeDetailScreen($("#questionDialog")));
     $("#profileForm").addEventListener("submit", saveProfile);
-    $("#confirmProfileInformationSave").addEventListener("click", confirmProfileInformationSave);
+    $("#profileEditorBack").addEventListener("click", () => setProfileEditor("hub"));
+    $("#profileEditorCancel").addEventListener("click", cancelProfileEditor);
+    $("#profileReviewButton").addEventListener("click", () => setProfileEditor("review"));
+    $("#profileSchoolLookup").addEventListener("click", lookupProfileSchools);
+    $("#profileSchoolSearch").addEventListener("input", renderProfileSchoolResults);
+    $("#profileShowSchoolFallback").addEventListener("click", () => {
+        $("#profileSchoolPicker").classList.add("hidden");
+        $("#profileSchoolFallback").classList.remove("hidden");
+        $("#profileSchoolStatus").textContent = "Enter the school exactly as it should appear.";
+        $("#profileSchoolName").focus();
+    });
+    $("#profileBackToNearby").addEventListener("click", () => {
+        $("#profileSchoolFallback").classList.add("hidden");
+        $("#profileSchoolPicker").classList.toggle("hidden", !state.profileNearbySchools.length);
+        $("#profileSchoolStatus").textContent = state.profileNearbySchools.length ? "Choose a nearby school." : "Enter a ZIP code to find nearby schools.";
+    });
+    $("#profileRequestSchool").addEventListener("click", requestProfileSchool);
+    $("#profileForm").addEventListener("click", (event) => {
+        const editor = event.target.closest("[data-profile-editor]");
+        if (editor) setProfileEditor(editor.dataset.profileEditor);
+        const school = event.target.closest("[data-profile-school]");
+        if (school) selectProfileSchool(state.profileNearbySchools.find((candidate) => String(candidate.id) === String(school.dataset.profileSchool)));
+        const grade = event.target.closest("[data-profile-grade]");
+        if (grade && state.profileDraft) {
+            state.profileDraft.grade = grade.dataset.profileGrade;
+            renderProfileGradeOptions();
+        }
+        const done = event.target.closest("[data-profile-done]");
+        if (done?.dataset.profileDone === "username") finishProfileUsername();
+        if (done?.dataset.profileDone === "name") {
+            syncProfileDraftFromInputs();
+            $("#profileNameStatus").textContent = profileNameIsValid() ? "" : "Use at least two letters for each name. Hyphens and apostrophes are okay.";
+            if (profileNameIsValid()) setProfileEditor("hub");
+        }
+        if (done?.dataset.profileDone === "grade" && profileGradeIsValid()) setProfileEditor("hub");
+    });
+    $("#profileFirstName").addEventListener("input", (event) => {
+        event.target.value = event.target.value.replace(/[^\p{L}' -]/gu, "");
+        syncProfileDraftFromInputs();
+        $("#profileNameStatus").textContent = profileNameIsValid() ? "" : "Use at least two letters for each name. Hyphens and apostrophes are okay.";
+    });
+    $("#profileLastName").addEventListener("input", (event) => {
+        event.target.value = event.target.value.replace(/[^\p{L}' -]/gu, "");
+        syncProfileDraftFromInputs();
+        $("#profileNameStatus").textContent = profileNameIsValid() ? "" : "Use at least two letters for each name. Hyphens and apostrophes are okay.";
+    });
+    $("#profileUsername").addEventListener("input", (event) => {
+        event.target.value = event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "");
+        syncProfileDraftFromInputs();
+        state.profileCheckedUsername = state.profileDraft.username === profileOriginalInformation().username ? state.profileDraft.username : null;
+        $("#profileUsernameStatus").textContent = profileUsernameIsValid() ? "" : "Use 3–30 lowercase letters, numbers, or underscores.";
+    });
+    $("#profileDialog").addEventListener("cancel", (event) => {
+        event.preventDefault();
+        cancelProfileEditor();
+    });
     $("#streakCelebration").addEventListener("click", hideStreakCelebration);
     $("#bioForm").addEventListener("submit", saveBio);
     $$("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
@@ -3902,6 +4343,7 @@ function bindEvents() {
     addEventListener("offline", updateNetworkStatus);
     addEventListener("online", updateNetworkStatus);
     addEventListener("focus", checkStripeCheckout);
+    addEventListener("focus", () => refreshWebPushStatus());
     addEventListener("beforeinstallprompt", (event) => {
         event.preventDefault();
         state.installPrompt = event;
@@ -3909,6 +4351,11 @@ function bindEvents() {
     });
     addEventListener("appinstalled", () => {
         state.installPrompt = null;
+        try {
+            localStorage.setItem("valid:pwa-installed", "1");
+        } catch (_) {
+            // Installation should still complete when storage is unavailable.
+        }
         $("#installAppButton").classList.add("hidden");
         showToast("Valid is on your home screen ✨");
     });
@@ -3931,7 +4378,12 @@ document.addEventListener("focusout", () => requestAnimationFrame(syncVisualView
 bindEvents();
 if (!navigator.onLine) updateNetworkStatus();
 if ("serviceWorker" in navigator && !demoMode) {
-    navigator.serviceWorker.register("./service-worker.js").catch(() => null);
+    navigator.serviceWorker.register("./service-worker.js").then(() => refreshWebPushStatus()).catch(() => null);
+    navigator.serviceWorker.addEventListener("message", (event) => {
+        if (event.data?.type !== "VALID_NOTIFICATION_CLICK") return;
+        const target = new URL(event.data.url || "./", location.origin);
+        if (target.origin === location.origin && target.pathname.startsWith("/app/")) location.href = target.href;
+    });
 }
 if (!passkeysSupported() && !demoMode) {
     $("#passkeyButton").disabled = true;
@@ -3954,7 +4406,8 @@ async function restoreOrStartAuthFlow() {
                 : "";
         }
     }
-    if (new URLSearchParams(window.location.search).get("signin") !== "1") {
+    const authParams = new URLSearchParams(window.location.search);
+    if (authParams.get("signup") === "1" || (!demoMode && authParams.get("signin") !== "1")) {
         requestAnimationFrame(openSignupDialog);
     }
 }

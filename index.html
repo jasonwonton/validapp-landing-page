@@ -156,6 +156,63 @@
             gap: 12px;
             margin-bottom: clamp(26px, 5vw, 42px);
         }
+        .android-install-card {
+            width: min(620px, 100%);
+            display: grid;
+            grid-template-columns: 56px minmax(0, 1fr) auto auto;
+            align-items: center;
+            gap: 14px;
+            margin: -16px auto clamp(30px, 5vw, 46px);
+            padding: 14px;
+            border: 3px solid var(--ink);
+            border-radius: 22px;
+            background: rgba(255, 255, 255, 0.92);
+            box-shadow: 0 7px 0 var(--ink);
+            text-align: left;
+        }
+        .android-install-card[hidden] {
+            display: none;
+        }
+        .android-install-card img {
+            width: 56px;
+            height: 56px;
+            object-fit: contain;
+        }
+        .android-install-copy {
+            display: grid;
+            gap: 3px;
+        }
+        .android-install-copy strong {
+            font-size: 1.08rem;
+        }
+        .android-install-copy span {
+            color: var(--muted);
+            font-size: 0.9rem;
+            line-height: 1.3;
+        }
+        .android-install-action {
+            min-height: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 16px;
+            border: 2px solid var(--ink);
+            border-radius: 15px;
+            background: var(--peach);
+            color: var(--ink);
+            text-decoration: none;
+            white-space: nowrap;
+        }
+        .android-install-dismiss {
+            width: 38px;
+            height: 38px;
+            border: 0;
+            background: transparent;
+            color: var(--muted);
+            cursor: pointer;
+            font: inherit;
+            font-size: 1.45rem;
+        }
         .button {
             display: inline-flex;
             align-items: center;
@@ -241,6 +298,23 @@
             .button {
                 width: 100%;
             }
+            .android-install-card {
+                grid-template-columns: 48px minmax(0, 1fr) 38px;
+                gap: 10px;
+                padding: 12px;
+            }
+            .android-install-card img {
+                width: 48px;
+                height: 48px;
+            }
+            .android-install-action {
+                grid-column: 1 / -1;
+                width: 100%;
+            }
+            .android-install-dismiss {
+                grid-column: 3;
+                grid-row: 1;
+            }
             .mockup img {
                 border-radius: 12px;
             }
@@ -269,6 +343,15 @@
             <div class="cta-row">
                 <a id="primaryCta" class="button" href="app/?signup=1">Sign up for Valid</a>
             </div>
+            <aside id="androidInstallCard" class="android-install-card" aria-label="Install Valid on Android" hidden>
+                <img src="assets/AppIconV2.png" alt="">
+                <span class="android-install-copy">
+                    <strong>Put Valid on your home screen</strong>
+                    <span>Open Valid in Chrome, then tap the menu and choose Install app.</span>
+                </span>
+                <a class="android-install-action" href="app/?signin=1&amp;install=1">Open Valid to install</a>
+                <button id="dismissAndroidInstall" class="android-install-dismiss" type="button" aria-label="Dismiss Android install message">×</button>
+            </aside>
         </section>
 
         <section class="mockup" aria-label="Valid app preview">
@@ -294,11 +377,37 @@
             var userAgent = navigator.userAgent || "";
             var isAppleMobile = /iPad|iPhone|iPod/i.test(userAgent)
                 || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+            var isAndroid = (navigator.userAgentData && navigator.userAgentData.platform === "Android")
+                || /Android/i.test(userAgent);
             var cta = document.getElementById("primaryCta");
-            if (!isAppleMobile) return;
-            cta.textContent = "Download on the App Store";
-            cta.href = "https://apps.apple.com/us/app/valid-compliment-classmates/id6755367062";
-            cta.dataset.deviceCta = "ios";
+            if (isAppleMobile) {
+                cta.textContent = "Download on the App Store";
+                cta.href = "https://apps.apple.com/us/app/valid-compliment-classmates/id6755367062";
+                cta.dataset.deviceCta = "ios";
+                return;
+            }
+            if (!isAndroid) return;
+            var isStandalone = window.matchMedia("(display-mode: standalone)").matches;
+            var alreadyInstalled = false;
+            var dismissed = false;
+            try {
+                alreadyInstalled = localStorage.getItem("valid:pwa-installed") === "1";
+                dismissed = sessionStorage.getItem("valid:android-install-dismissed") === "1";
+            } catch (_) {
+                // Storage can be unavailable in hardened browsing modes.
+            }
+            if (isStandalone || alreadyInstalled || dismissed) return;
+            var installCard = document.getElementById("androidInstallCard");
+            installCard.hidden = false;
+            cta.dataset.deviceCta = "android";
+            document.getElementById("dismissAndroidInstall").addEventListener("click", function () {
+                try {
+                    sessionStorage.setItem("valid:android-install-dismissed", "1");
+                } catch (_) {
+                    // The card can still be dismissed for the current page.
+                }
+                installCard.hidden = true;
+            });
         })();
     </script>
 </body>
