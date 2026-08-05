@@ -169,6 +169,9 @@ test("android shell surfaces connectivity and install affordances", async ({ pag
 test("feed navigation, filtering, and upvotes work", async ({ page }) => {
     await signInToDemo(page);
     await expect(page.getByText("Who always knows how to make people laugh?")).toBeVisible();
+    await page.locator("#loadMoreFeed").evaluate((button) => button.classList.remove("hidden"));
+    await expect(page.locator("#loadMoreFeed")).toHaveCSS("margin-top", "24px");
+    await expect(page.locator("#loadMoreFeed")).toHaveCSS("margin-bottom", "30px");
     await expect(page.locator("#feedList .feed-section-heading")).toHaveCount(0);
     await page.getByRole("button", { name: "School", exact: true }).click();
     await expect(page.getByText("Who has the best music taste?")).toBeVisible();
@@ -366,12 +369,15 @@ test("play answers a poll and advances", async ({ page }) => {
     await expect(page.locator(".play-streak-chip")).toContainText("1.5x");
     await expect(page.locator("#auraCount")).toHaveText("1,280");
     const artworkBox = await page.locator("#playCard .question-artwork").boundingBox();
-    expect(Math.abs(artworkBox.width - artworkBox.height)).toBeLessThan(2);
+    expect(Math.abs(artworkBox.width - artworkBox.height)).toBeLessThan(16);
     await expect(page.locator("#playCard .choice-button").first()).toHaveCSS("min-height", "90px");
     for (const name of [/Shuffle/, /Nominate/, /Skip \(3\)/]) {
         const button = page.getByRole("button", { name });
         await expect(button).toBeVisible();
     }
+    const playCardBox = await page.locator("#playCard .play-card").boundingBox();
+    const bottomNavBox = await page.locator("#bottomNav").boundingBox();
+    expect(playCardBox.y + playCardBox.height).toBeLessThanOrEqual(bottomNavBox.y + 1);
     await expect(page.getByText("Who would survive longest on a deserted island?")).toBeVisible();
     await page.locator("[data-choice]").first().click();
     await expect(page.getByText("Who should plan the senior trip?")).toBeVisible();
@@ -410,8 +416,13 @@ test("play exposes safety controls for classmate-submitted polls", async ({ page
     await page.getByRole("button", { name: "Play", exact: true }).click();
     await page.locator("[data-choice]").first().click();
     await expect(page.getByText("Who should plan the senior trip?")).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Report question" })).toBeHidden();
+    await expect(page.getByRole("menuitem", { name: "Block submitter" })).toBeHidden();
+    await page.getByRole("button", { name: "More question actions" }).click();
+    await expect(page.getByRole("menuitem", { name: "Report question" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Block submitter" })).toBeVisible();
     page.once("dialog", (confirmation) => confirmation.accept());
-    await page.getByRole("button", { name: "Report question" }).click();
+    await page.getByRole("menuitem", { name: "Report question" }).click();
     await expect(page.locator("#toast")).toContainText("Reported to Valid");
     await expect(page.getByText("Who gives the best advice?")).toBeVisible();
 });

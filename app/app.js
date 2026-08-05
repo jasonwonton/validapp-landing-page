@@ -1649,12 +1649,10 @@ function renderPlay() {
         return;
     }
     const artworkURL = api.assetURL(question.image_url);
-    const attribution = question.is_user_submitted ? `<div class="question-attribution">${question.is_anonymous ? avatarMarkup({ first_name: "Anonymous", profile_picture_url: "../assets/app/anonymous.png" }, "attribution-avatar") : avatarMarkup({ first_name: question.submitted_by_name || "A classmate", profile_picture_url: question.submitted_by_avatar_url }, "attribution-avatar")}<span><small>Question submitted by</small><strong>${escapeHTML(question.is_anonymous ? "Someone at your school" : question.submitted_by_name || "A classmate")}</strong></span></div>` : "";
+    const attribution = question.is_user_submitted ? `<div class="question-attribution">${question.is_anonymous ? avatarMarkup({ first_name: "Anonymous", profile_picture_url: "../assets/app/anonymous.png" }, "attribution-avatar") : avatarMarkup({ first_name: question.submitted_by_name || "A classmate", profile_picture_url: question.submitted_by_avatar_url }, "attribution-avatar")}<span><small>Question submitted by</small><strong>${escapeHTML(question.is_anonymous ? "Someone at your school" : question.submitted_by_name || "A classmate")}</strong></span><div class="detail-overflow play-overflow"><button class="detail-overflow-button play-overflow-button" type="button" data-toggle-play-menu aria-label="More question actions" aria-expanded="false">•••</button><div class="detail-overflow-menu hidden" role="menu" aria-label="Question actions"><button type="button" role="menuitem" data-play-question-action="report">Report question</button><button type="button" role="menuitem" data-play-question-action="block">Block submitter</button></div></div></div>` : "";
     const remainingSkips = Math.max(0, Number(state.config?.max_skips_per_set ?? 3) - state.skipsUsedInSet);
-    const safetyActions = question.is_user_submitted ? `<div class="play-safety-actions"><button type="button" data-play-question-action="report">Report question</button><button type="button" data-play-question-action="block">Block submitter</button></div>` : "";
     card.innerHTML = `<article class="play-card">
-        <h3>${escapeHTML(question.question_text)}</h3>
-        ${attribution}
+        <div class="play-question-copy"><h3>${escapeHTML(question.question_text)}</h3>${attribution}</div>
         <div class="question-artwork">${artworkURL ? `<img src="${escapeHTML(artworkURL)}" alt="">` : `<div class="artwork-placeholder"><img src="../assets/app/pencil-clipboard.png" alt=""><span>Question artwork</span></div>`}</div>
         <div class="choice-grid">${choices.map(choiceMarkup).join("")}</div>
         <div class="play-actions">
@@ -1662,7 +1660,6 @@ function renderPlay() {
             <button class="play-action-button nominate" data-nominate type="button"><img src="../assets/app/crown.png" alt="">Nominate</button>
             <button class="play-action-button" data-skip="${question.id}" type="button" ${remainingSkips < 1 ? "disabled" : ""}>Skip (${remainingSkips})</button>
         </div>
-        ${safetyActions}
     </article>`;
 }
 
@@ -2429,6 +2426,8 @@ function bindEvents() {
     });
     $$(".nav-item").forEach((button) => button.addEventListener("click", () => switchPanel(button.dataset.panel)));
     $("#playCard").addEventListener("click", (event) => {
+        const menuButton = event.target.closest("[data-toggle-play-menu]");
+        if (menuButton) toggleDetailActionMenu(menuButton);
         const choice = event.target.closest("[data-choice]");
         const skip = event.target.closest("[data-skip]");
         const invite = event.target.closest("[data-invite-unlock]");
@@ -2439,7 +2438,10 @@ function bindEvents() {
         if (event.target.closest("[data-shuffle]")) shufflePlayChoices();
         if (event.target.closest("[data-nominate]")) openNominationDialog();
         const safetyAction = event.target.closest("[data-play-question-action]");
-        if (safetyAction) moderatePlayQuestion(safetyAction.dataset.playQuestionAction);
+        if (safetyAction) {
+            closeDetailActionMenus();
+            moderatePlayQuestion(safetyAction.dataset.playQuestionAction);
+        }
         if (event.target.closest("[data-finish-play]")) finishPlaySet();
         if (event.target.closest("[data-open-question]")) openQuestionDialog();
     });
