@@ -151,6 +151,9 @@ test("feed navigation, filtering, and upvotes work", async ({ page }) => {
     await page.getByRole("button", { name: "School", exact: true }).click();
     await expect(page.getByText("Who has the best music taste?")).toBeVisible();
     await expect(page.locator("#feedList .feed-section-heading")).toHaveCount(0);
+    const searchBounds = await page.locator(".feed-tools > .feed-search").boundingBox();
+    const myVotesBounds = await page.locator("#myVotesFilter").boundingBox();
+    expect(Math.abs(searchBounds.y - myVotesBounds.y)).toBeLessThan(4);
     await page.getByPlaceholder("Search names, questions...").fill("company");
     await expect(page.getByText("Who is most likely to start a company?")).toBeVisible();
     await expect(page.getByText("Who has the best music taste?")).toBeHidden();
@@ -375,10 +378,12 @@ test("settings exposes iOS-style editing, polls, ask link, and aura purchases", 
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Jules Rivera" })).toBeVisible();
     await expect(page.getByText("Get messages", { exact: true })).toBeVisible();
+    await expect(page.locator("#askLinkCard .ask-link-heading img")).toHaveCount(0);
     await expect(page.getByText("God Mode", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("link", { name: "Start God Mode in iPhone app" })).toBeVisible();
     await expect(page.locator("#purchasesSection .settings-aura-balance")).toHaveCount(0);
     const schoolRanks = page.locator("#schoolCard .school-rank-card");
+    await expect(page.locator("#schoolCard")).toContainText("Westview High School");
     await expect(schoolRanks.nth(0)).toContainText("Maya Chen");
     await expect(schoolRanks.nth(0)).toContainText("22 this week");
     await expect(schoolRanks.nth(1)).toContainText("Noah Williams");
@@ -395,6 +400,9 @@ test("settings exposes iOS-style editing, polls, ask link, and aura purchases", 
     await page.getByRole("button", { name: "Profile information" }).click();
     await expect(page.getByRole("dialog").getByRole("heading", { name: "Profile information" })).toBeVisible();
     await expect(page.getByRole("dialog").getByLabel("Bio")).toHaveCount(0);
+    await expect(page.getByRole("dialog").getByLabel("School", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("dialog").getByLabel("City")).toHaveCount(0);
+    await expect(page.getByRole("dialog").getByLabel("State")).toHaveCount(0);
     await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
     await page.locator("[data-edit-bio]").click();
     const bioDialog = page.getByRole("dialog").filter({ hasText: "EDIT BIO" });

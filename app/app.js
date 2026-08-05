@@ -259,7 +259,7 @@ function renderProfilePanel() {
         <h3>${escapeHTML(displayName(profile))}</h3>
         <div class="profile-handle">@${escapeHTML(profile.username || "valid")}</div>
         <button class="profile-bio-button ${profile.bio ? "" : "empty"}" type="button" data-edit-bio>${profile.bio ? escapeHTML(profile.bio) : "+ Add bio"}</button>
-        <button class="profile-information-inline" type="button" data-edit-profile><span><strong>Profile information</strong><small>Name, username, school and grade</small></span><span aria-hidden="true">›</span></button>
+        <button class="profile-information-inline" type="button" data-edit-profile><span><strong>Profile information</strong><small>Name, username and grade</small></span><span aria-hidden="true">›</span></button>
         <div class="profile-stats-grid">
             <div class="profile-stat-card"><strong><img class="profile-aura-icon" src="../assets/app/aura.png" alt="">${Number(profile.aura_points || 0).toLocaleString()}</strong><span>Aura</span></div>
             <div class="profile-stat-card"><strong><span class="heart">♥</span>${Number(profile.vote_count || 0).toLocaleString()}</strong><span>Votes Received</span></div>
@@ -276,6 +276,12 @@ function renderProfilePanel() {
 function renderSchoolCard() {
     const container = $("#schoolCard");
     const classmates = [...(state.classmateDirectory || state.classmates || [])];
+    const profileSchoolName = String(state.profile?.school_name || "").trim();
+    const matchingClassmateSchoolName = classmates.find((classmate) => (
+        String(classmate.school_id || "") === String(state.profile?.school_id || "")
+        && String(classmate.school_name || "").trim()
+    ))?.school_name;
+    const schoolName = profileSchoolName || matchingClassmateSchoolName || "Your school";
     if (state.profile && !classmates.some((classmate) => String(classmate.user_id) === String(state.profile.user_id))) {
         classmates.push(state.profile);
     }
@@ -290,7 +296,7 @@ function renderSchoolCard() {
         .map(({ classmate }) => classmate)
         .slice(0, 20);
     container.innerHTML = `<article class="school-card">
-        <div class="school-card-heading"><span><strong>School</strong><small>${escapeHTML(state.profile?.school_name || "Your school")}</small></span></div>
+        <div class="school-card-heading"><span><strong>School</strong><small>${escapeHTML(schoolName)}</small></span></div>
         <p>Spotlight on classmates with the most votes this week.</p>
         ${ranked.length ? `<div class="school-leaderboard" role="list" aria-label="Classmates ranked by weekly votes">${ranked.map((classmate, index) => {
             const isCurrentUser = String(classmate.user_id) === String(state.profile?.user_id);
@@ -1699,7 +1705,7 @@ function renderAskLink() {
     const link = state.askLink;
     if (!link) return;
     $("#askLinkCard").innerHTML = `<article class="ask-link-card">
-        <div class="ask-link-heading"><img class="ask-message-icon" src="../assets/app/message.png" alt=""><div><strong>Get messages</strong><span>Share your link in a story. New messages show up in Inbox.</span></div></div>
+        <div class="ask-link-heading"><div><strong>Get messages</strong><span>Share your link in a story. New messages show up in Inbox.</span></div></div>
         <button class="ask-url" type="button" data-copy-link aria-label="Copy ask link"><span>🔗</span><span>${escapeHTML(link.share_url.replace(/^https:\/\//, ""))}</span><strong>Copy</strong></button>
         ${link.is_active ? `<div class="share-platform-row"><span class="share-platform-label">Open on:</span><button class="share-platform-button snapchat" type="button" data-share-link="snapchat" aria-label="Share ask link to Snapchat">${shareIconMarkup("snapchat")}</button><button class="share-platform-button instagram" type="button" data-share-link="instagram" aria-label="Share ask link to Instagram">${shareIconMarkup("instagram")}</button></div>` : `<button class="primary-button" type="button" data-toggle-link>Resume ask link</button>`}
     </article>`;
@@ -1740,18 +1746,15 @@ function openProfileDialog() {
     $("#profileFirstName").value = profile.first_name || "";
     $("#profileLastName").value = profile.last_name || "";
     $("#profileUsername").value = profile.username || "";
-    $("#profileSchoolName").value = profile.school_name || "";
-    $("#profileSchoolCity").value = "";
-    $("#profileSchoolState").value = "";
     const grade = profile.grade || "Junior";
     const select = $("#profileGrade");
     if (![...select.options].some((option) => option.value === grade)) select.add(new Option(grade, grade));
     select.value = grade;
     const informationLocked = profile.can_change_information === false;
-    [$("#profileFirstName"), $("#profileLastName"), $("#profileUsername"), $("#profileSchoolName"), $("#profileSchoolCity"), $("#profileSchoolState"), $("#profileGrade")].forEach((field) => { field.disabled = informationLocked; });
+    [$("#profileFirstName"), $("#profileLastName"), $("#profileUsername"), $("#profileGrade")].forEach((field) => { field.disabled = informationLocked; });
     $("#profileEditHint").textContent = profile.can_change_information === false
         ? `Profile information can be changed again ${relativeTime(profile.next_information_change_at)}. Tap your photo or bio to change either one now.`
-        : "Name, username, school and grade share the same cooldown as iOS.";
+        : "Name, username and grade share the same cooldown as iOS.";
     $("#profileEditStatus").textContent = "";
     $("#profileDialog").showModal();
 }
@@ -1759,27 +1762,17 @@ function openProfileDialog() {
 async function saveProfile(event) {
     event.preventDefault();
     const button = event.currentTarget.querySelector("button[type=submit]");
-    let schoolId = state.profile.school_id || null;
-    const schoolName = $("#profileSchoolName").value.trim();
-    const schoolChanged = schoolName !== (state.profile.school_name || "");
     const nextInfo = {
         first_name: $("#profileFirstName").value.trim(),
         last_name: $("#profileLastName").value.trim(),
         username: $("#profileUsername").value.trim().toLowerCase(),
         grade: $("#profileGrade").value,
-        school_id: schoolId,
+        school_id: state.profile.school_id || null,
     };
-    const infoChanged = schoolChanged || ["first_name", "last_name", "username", "grade"].some((key) => nextInfo[key] !== (state.profile[key] || ""));
+    const infoChanged = ["first_name", "last_name", "username", "grade"].some((key) => nextInfo[key] !== (state.profile[key] || ""));
     setButtonLoading(button, true, "Saving...");
     $("#profileEditStatus").textContent = "";
     try {
-        if (schoolChanged) {
-            const city = $("#profileSchoolCity").value.trim();
-            const region = $("#profileSchoolState").value.trim().toUpperCase();
-            if (!city || !region) throw new Error("Add the city and two-letter state when changing schools.");
-            const resolved = await api.resolveSchool({ school_name: schoolName, city, state: region });
-            nextInfo.school_id = resolved.school.id;
-        }
         if (infoChanged) state.profile = await api.updateInformation(api.user.id, nextInfo);
         renderProfileHeader();
         renderProfilePanel();
