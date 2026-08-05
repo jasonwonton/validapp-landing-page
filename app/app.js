@@ -4,6 +4,7 @@ import { createAdditionalPasskey, createSignupPasskey, passkeysSupported, signIn
 
 const demoMode = localDemoAllowed();
 const api = demoMode ? new DemoAPI() : new ValidAPI();
+const DEFAULT_FULL_REVEAL_AURA_COST = 1000;
 const state = {
     profile: null,
     activePanel: "feed",
@@ -61,6 +62,8 @@ const state = {
     signupSelectedSchool: null,
     signupSchoolFallback: false,
     signupSchoolLookupGeneration: 0,
+    signupPhoneVerified: false,
+    signupVerifiedPhone: null,
     contactOnboarding: false,
     questionArtworkFile: null,
     questionArtworkPreviewURL: null,
@@ -244,7 +247,7 @@ async function showSignedIn() {
                 max_custom_question_length: 280,
                 max_skips_per_set: 3,
                 play_lock_time_seconds: 60,
-                full_reveal_aura_cost: 200,
+                full_reveal_aura_cost: DEFAULT_FULL_REVEAL_AURA_COST,
             })),
         ]);
         api.user = { ...api.user, ...currentUser };
@@ -455,6 +458,10 @@ function renderGodModeCard() {
     </article>`;
 }
 
+function hasActiveGodMode() {
+    return api.user?.subscribed_user === true;
+}
+
 function godModeInviteProgressLabel() {
     const status = state.inviteStatus;
     if (!status) return "Loading invite progress...";
@@ -509,6 +516,11 @@ function renderGodModePitch() {
 }
 
 function openGodModePitch() {
+    if (hasActiveGodMode()) {
+        renderGodModeCard();
+        showToast("God Mode is already active 👑");
+        return;
+    }
     renderGodModePitch();
     const dialog = $("#godModePitchDialog");
     if (!dialog.open) dialog.showModal();
@@ -547,6 +559,12 @@ async function checkStripeCheckout() {
 }
 
 async function startGodModeCheckout(button) {
+    if (hasActiveGodMode()) {
+        if ($("#godModePitchDialog").open) $("#godModePitchDialog").close();
+        renderGodModeCard();
+        showToast("God Mode is already active 👑");
+        return;
+    }
     const checkoutWindow = window.open("about:blank", "_blank");
     const originalHTML = button.innerHTML;
     button.disabled = true;
@@ -554,6 +572,15 @@ async function startGodModeCheckout(button) {
     const status = $("#godModeCheckoutStatus");
     status.textContent = "";
     try {
+        const currentUser = await api.getUser(api.user.id).catch(() => api.user);
+        api.user = { ...api.user, ...currentUser };
+        if (hasActiveGodMode()) {
+            checkoutWindow?.close();
+            $("#godModePitchDialog").close();
+            renderGodModeCard();
+            showToast("God Mode is already active 👑");
+            return;
+        }
         const checkout = await api.createGodModeCheckout(api.user.id);
         state.stripeCheckoutSessionId = checkout.id;
         if (checkoutWindow) checkoutWindow.location.href = checkout.url;
@@ -687,17 +714,21 @@ async function shareTopPoll() {
 }
 
 function openAuraSpend(kind, target = null) {
-    const cost = auraCost(kind);
+    const cost = kind === "reveal"
+        ? Math.max(0, Number(state.config?.full_reveal_aura_cost ?? DEFAULT_FULL_REVEAL_AURA_COST))
+        : auraCost(kind);
     const aura = Math.max(0, Number(state.profile?.aura_points || 0));
     if (aura < cost) return showToast(`You need ${cost.toLocaleString()} aura.`);
     const details = kind === "global"
         ? ["Get Boosted", "Jump to the top of your classmates' polls for 5 days or until you get voted 10 times."]
-        : ["Boost toward your crush", `Show up more often in ${displayName(target)}'s polls. They will not be told.`];
+        : kind === "reveal"
+            ? ["Reveal who sent this?", `Spend ${cost.toLocaleString()} aura to see who voted for you.`]
+            : ["Boost toward your crush", `Show up more often in ${displayName(target)}'s polls. They will not be told.`];
     state.pendingAuraPurchase = { kind, target };
     const spendIcon = $("#auraSpendIcon");
     const targetImage = kind === "targeted" ? api.assetURL(target?.profile_picture_url_medium || target?.profile_picture_url) : null;
-    spendIcon.src = targetImage || "../assets/app/rocket.png";
-    spendIcon.alt = kind === "global" ? "Get Boosted" : displayName(target);
+    spendIcon.src = targetImage || (kind === "reveal" ? "../assets/app/magnifying_glass.png" : "../assets/app/rocket.png");
+    spendIcon.alt = kind === "global" ? "Get Boosted" : kind === "reveal" ? "Reveal sender" : displayName(target);
     spendIcon.closest(".aura-spend-icon").classList.toggle("profile", Boolean(targetImage));
     $("#auraSpendTitle").textContent = details[0];
     $("#auraSpendMessage").textContent = details[1];
@@ -714,22 +745,33 @@ async function confirmAuraSpend() {
     const purchase = state.pendingAuraPurchase;
     if (!purchase) return;
     const button = $("#confirmAuraSpend");
-    setButtonLoading(button, true, "Purchasing...");
+    setButtonLoading(button, true, purchase.kind === "reveal" ? "Revealing..." : "Purchasing...");
     $("#auraSpendStatus").textContent = "";
     try {
-        if (purchase.kind === "global") await api.purchaseGlobalBoost(api.user.id);
+        if (purchase.kind === "reveal") {
+            const result = await api.revealSender(api.user.id, purchase.target.question_answer_id);
+            applyFeedSenderReveal(purchase.target, result);
+        } else if (purchase.kind === "global") await api.purchaseGlobalBoost(api.user.id);
         else await api.purchaseTargetedBoost(api.user.id, purchase.target.user_id);
         clearOptimisticEarnedProfile();
         $("#auraSpendDialog").close();
         state.pendingAuraPurchase = null;
-        await refreshProfile();
-        showToast(purchase.kind === "global" ? "You're boosted 🚀" : `Boosted toward ${displayName(purchase.target)} ✨`);
+        if (purchase.kind !== "reveal") await refreshProfile();
+        showToast(purchase.kind === "reveal"
+            ? `Revealed: ${purchase.target.voter_name}`
+            : purchase.kind === "global"
+                ? "You're boosted 🚀"
+                : `Boosted toward ${displayName(purchase.target)} ✨`);
     } catch (error) {
-        $("#auraSpendStatus").textContent = error.message || "Could not purchase this boost.";
+        $("#auraSpendStatus").textContent = error.message || (purchase.kind === "reveal"
+            ? "Could not reveal this sender."
+            : "Could not purchase this boost.");
     } finally {
         setButtonLoading(button, false);
         if (state.pendingAuraPurchase) {
-            const cost = auraCost(state.pendingAuraPurchase.kind);
+            const cost = state.pendingAuraPurchase.kind === "reveal"
+                ? Math.max(0, Number(state.config?.full_reveal_aura_cost ?? DEFAULT_FULL_REVEAL_AURA_COST))
+                : auraCost(state.pendingAuraPurchase.kind);
             button.innerHTML = `<span>Spend ${cost.toLocaleString()} aura</span><img src="../assets/app/aura.png" alt="">`;
         }
     }
@@ -1032,6 +1074,9 @@ function openSignupDialog() {
     $("#signupStatus").textContent = "";
     resetSignupPhotoPreview();
     resetSignupSchoolPicker();
+    state.signupPhoneVerified = false;
+    state.signupVerifiedPhone = null;
+    $("#signupPhoneCode").value = "";
     selectSignupAge($("#signupAge").value || 13, { scroll: false });
     renderSignupGradeOptions();
     setSignupStep(0);
@@ -1143,14 +1188,15 @@ function showSignupSchoolFallback(show) {
 function setSignupStep(index) {
     const focused = document.activeElement;
     if (focused && $("#signupDialog").contains(focused) && focused.matches("input, select, textarea")) focused.blur();
-    state.signupStep = Math.max(0, Math.min(8, index));
+    state.signupStep = Math.max(0, Math.min(9, index));
     $$('[data-signup-step]').forEach((step) => step.classList.toggle("hidden", Number(step.dataset.signupStep) !== state.signupStep));
     $("#signupStatus").textContent = "";
     const autofocusByStep = {
         3: "#signupPhone",
-        4: "#signupFirstName",
-        5: "#signupLastName",
-        6: "#signupUsername",
+        4: "#signupPhoneCode",
+        5: "#signupFirstName",
+        6: "#signupLastName",
+        7: "#signupUsername",
     };
     const autofocusInput = $(autofocusByStep[state.signupStep]);
     if (autofocusInput) {
@@ -1165,7 +1211,7 @@ function setSignupStep(index) {
     });
     $(".signup-back-button").classList.toggle("hidden", state.signupStep === 0);
     if (state.signupStep === 2) renderSignupGradeOptions();
-    if (state.signupStep === 8) {
+    if (state.signupStep === 9) {
         resetSignupPhotoPreview();
         $("#signupPicture").value = "";
     }
@@ -1191,9 +1237,12 @@ async function advanceSignup(button) {
             return;
         }
         $("#signupPhone").value = formatSignupPhone(phoneNumber);
+        state.signupPhoneVerified = false;
+        state.signupVerifiedPhone = null;
+        $("#signupPhoneCode").value = "";
         // Keep this transition inside the tap gesture so mobile Safari and
-        // Chrome can open the next keyboard without requiring a second tap.
-        setSignupStep(4);
+        // Chrome can open the numeric code keyboard without requiring a second tap.
+        setSignupStep(demoMode ? 5 : 4);
         setButtonLoading(button, true, "Checking...");
         try {
             const result = await api.checkPhoneRegistration(phoneNumber, deviceInstallationId());
@@ -1203,18 +1252,53 @@ async function advanceSignup(button) {
                 requestAnimationFrame(() => $("#passkeyButton").focus());
                 return;
             }
+            if (!demoMode) {
+                const verification = await api.requestPhoneVerification(phoneNumber);
+                $("#signupCodeHint").textContent = `We sent a verification code to ${formatSignupPhone(phoneNumber)}.`;
+                $("#signupStatus").textContent = verification.can_resend
+                    ? "Enter the code from your text message."
+                    : "Enter the code from your text message.";
+            }
         } catch (error) {
+            if (error.status === 409) {
+                $("#signupDialog").close();
+                $("#authStatus").textContent = "An account already exists for this phone number. Sign in.";
+                requestAnimationFrame(() => $("#passkeyButton").focus());
+                return;
+            }
             setSignupStep(3);
             $("#signupStatus").textContent = error.message || "Could not check that phone number.";
             return;
         } finally { setButtonLoading(button, false); }
         return;
     }
-    if (state.signupStep === 7 && !$("#signupGender").value) {
+    if (state.signupStep === 4) {
+        const phoneNumber = signupPhoneDigits($("#signupPhone").value);
+        const code = $("#signupPhoneCode").value.replace(/\D/g, "");
+        if (!/^\d{4,10}$/.test(code)) {
+            $("#signupStatus").textContent = "Enter the verification code from your text message.";
+            return;
+        }
+        setButtonLoading(button, true, "Verifying...");
+        try {
+            const verification = await api.confirmPhoneVerification(phoneNumber, code);
+            if (!verification.is_approved) {
+                $("#signupStatus").textContent = "That code was not approved. Try again.";
+                return;
+            }
+            state.signupPhoneVerified = true;
+            state.signupVerifiedPhone = phoneNumber;
+            setSignupStep(5);
+        } catch (error) {
+            $("#signupStatus").textContent = error.message || "Could not verify that code.";
+        } finally { setButtonLoading(button, false); }
+        return;
+    }
+    if (state.signupStep === 8 && !$("#signupGender").value) {
         $("#signupStatus").textContent = "Choose a gender before continuing.";
         return;
     }
-    if (state.signupStep === 6) {
+    if (state.signupStep === 7) {
         setButtonLoading(button, true, "Checking username...");
         try {
             const result = await api.checkUsernameAvailability($("#signupUsername").value.trim().toLowerCase());
@@ -1230,6 +1314,33 @@ async function advanceSignup(button) {
     setSignupStep(state.signupStep + 1);
 }
 
+async function resendSignupPhoneCode(button) {
+    const phoneNumber = signupPhoneDigits($("#signupPhone").value);
+    if (phoneNumber.length !== 10) {
+        setSignupStep(3);
+        $("#signupStatus").textContent = "Enter a valid 10-digit phone number.";
+        return;
+    }
+    setButtonLoading(button, true, "Sending...");
+    $("#signupStatus").textContent = "";
+    try {
+        await api.requestPhoneVerification(phoneNumber);
+        $("#signupCodeHint").textContent = `We sent a new verification code to ${formatSignupPhone(phoneNumber)}.`;
+        $("#signupPhoneCode").value = "";
+        $("#signupPhoneCode").focus({ preventScroll: true });
+    } catch (error) {
+        if (error.status === 409) {
+            $("#signupDialog").close();
+            $("#authStatus").textContent = "An account already exists for this phone number. Sign in.";
+            requestAnimationFrame(() => $("#passkeyButton").focus());
+            return;
+        }
+        $("#signupStatus").textContent = error.message || "Could not send another code.";
+    } finally {
+        setButtonLoading(button, false);
+    }
+}
+
 async function createAccount(event) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -1240,6 +1351,12 @@ async function createAccount(event) {
         return;
     }
     const username = $("#signupUsername").value.trim().toLowerCase();
+    const signupPhone = signupPhoneDigits($("#signupPhone").value);
+    if (!demoMode && (!state.signupPhoneVerified || state.signupVerifiedPhone !== signupPhone)) {
+        setSignupStep(3);
+        $("#signupStatus").textContent = "Verify your phone number before creating your account.";
+        return;
+    }
     const profilePicture = $("#signupPicture").files[0];
     const submitButtons = [...form.querySelectorAll("button[type=submit]")];
     submitButtons.forEach((candidate) => { candidate.disabled = true; });
@@ -1278,7 +1395,7 @@ async function createAccount(event) {
             const credential = await createSignupPasskey(api, username);
             login = await api.completeWebSignup({
                 ...credential,
-                phoneNumber: signupPhoneDigits($("#signupPhone").value),
+                phoneNumber: signupPhone,
                 deviceInstallationId: deviceInstallationId(),
                 idempotencyKey: crypto.randomUUID(),
                 profile,
@@ -1294,6 +1411,8 @@ async function createAccount(event) {
         selectSignupAge(13, { scroll: false });
         selectSignupGrade("");
         selectSignupGender("");
+        state.signupPhoneVerified = false;
+        state.signupVerifiedPhone = null;
         resetSignupSchoolPicker();
         resetSignupPhotoPreview();
         $("#signupDialog").close();
@@ -1444,12 +1563,12 @@ function renderFeedDetail() {
     revealButton.classList.toggle("hidden", !canRevealThisVote);
     if (canRevealThisVote) {
         const remaining = Math.max(0, Number(state.profile?.remaining_reveals || 0));
-        const auraCost = Math.max(0, Number(state.config?.full_reveal_aura_cost ?? 200));
+        const auraCost = Math.max(0, Number(state.config?.full_reveal_aura_cost ?? DEFAULT_FULL_REVEAL_AURA_COST));
         const subscribed = api.user?.subscribed_user === true;
         const label = subscribed
             ? (remaining > 0 ? `Reveal who sent this (${remaining} remaining)` : `Reveal who sent this (${auraCost.toLocaleString()} aura)`)
             : "Get God Mode to Reveal who sent this";
-        revealButton.innerHTML = `<span>${escapeHTML(label)}</span>`;
+        revealButton.innerHTML = `<img class="reveal-sender-crown" src="../assets/app/crown.png" alt=""><span>${escapeHTML(label)}</span>`;
         revealButton.disabled = subscribed && remaining === 0 && Number(state.profile?.aura_points || 0) < auraCost;
     }
     $("#feedDetailStatus").textContent = "";
@@ -2024,34 +2143,38 @@ async function revealFeedSender() {
     }
     const button = $("#revealFeedSenderButton");
     const remaining = Math.max(0, Number(state.profile?.remaining_reveals || 0));
-    const auraCost = Math.max(0, Number(state.config?.full_reveal_aura_cost ?? 200));
+    const auraCost = Math.max(0, Number(state.config?.full_reveal_aura_cost ?? DEFAULT_FULL_REVEAL_AURA_COST));
     if (remaining === 0) {
         if (Number(state.profile?.aura_points || 0) < auraCost) {
             $("#feedDetailStatus").textContent = `You need ${auraCost.toLocaleString()} aura for another reveal.`;
             return;
         }
-        if (!confirm(`Use ${auraCost.toLocaleString()} aura to reveal who sent this vote?`)) return;
+        openAuraSpend("reveal", item);
+        return;
     }
     setButtonLoading(button, true, "Revealing...");
     $("#feedDetailStatus").textContent = "";
     try {
         const result = await api.revealSender(api.user.id, item.question_answer_id);
-        if (remaining === 0) clearOptimisticEarnedProfile();
-        item.voter_name = result.full_name;
-        item.voter_profile_picture_url = result.profile_picture_url;
-        if (state.profile) {
-            state.profile.remaining_reveals = Number(result.remaining_reveals || 0);
-            state.profile.aura_points = Number(result.total_aura_points ?? state.profile.aura_points ?? 0);
-        }
-        renderProfileHeader();
-        renderProfilePanel();
-        renderFeed();
-        renderFeedDetail();
+        applyFeedSenderReveal(item, result);
         showToast(`Revealed: ${result.full_name}`);
     } catch (error) {
         $("#feedDetailStatus").textContent = error.message || "Could not reveal this sender.";
         setButtonLoading(button, false);
     }
+}
+
+function applyFeedSenderReveal(item, result) {
+    item.voter_name = result.full_name;
+    item.voter_profile_picture_url = result.profile_picture_url;
+    if (state.profile) {
+        state.profile.remaining_reveals = Number(result.remaining_reveals || 0);
+        state.profile.aura_points = Number(result.total_aura_points ?? state.profile.aura_points ?? 0);
+    }
+    renderProfileHeader();
+    renderProfilePanel();
+    renderFeed();
+    renderFeedDetail();
 }
 
 async function moderateFeedItem(action) {
@@ -3495,6 +3618,16 @@ function bindEvents() {
     $("#signupPicture").addEventListener("change", previewSignupPhoto);
     $("#signupPhone").addEventListener("input", (event) => {
         event.currentTarget.value = formatSignupPhone(event.currentTarget.value);
+        const digits = signupPhoneDigits(event.currentTarget.value);
+        if (state.signupVerifiedPhone !== digits) {
+            state.signupPhoneVerified = false;
+            state.signupVerifiedPhone = null;
+            $("#signupPhoneCode").value = "";
+        }
+        $("#signupStatus").textContent = "";
+    });
+    $("#signupPhoneCode").addEventListener("input", (event) => {
+        event.currentTarget.value = event.currentTarget.value.replace(/\D/g, "").slice(0, 10);
         $("#signupStatus").textContent = "";
     });
     $("#signupUsername").addEventListener("input", (event) => {
@@ -3553,6 +3686,8 @@ function bindEvents() {
         if (gender) selectSignupGender(gender.dataset.signupGender);
         const next = event.target.closest("[data-signup-next]");
         if (next) advanceSignup(next);
+        const resendCode = event.target.closest("[data-signup-resend-code]");
+        if (resendCode) resendSignupPhoneCode(resendCode);
         if (event.target.closest("[data-signup-back]")) setSignupStep(state.signupStep - 1);
     });
     $("#logoutButton").addEventListener("click", logoutAndReset);
@@ -3745,6 +3880,9 @@ function bindEvents() {
         }
     });
     $("#confirmAuraSpend").addEventListener("click", confirmAuraSpend);
+    $("#auraSpendDialog").addEventListener("close", () => {
+        state.pendingAuraPurchase = null;
+    });
     $("#deleteAccountForm").addEventListener("submit", requestAccountDeletion);
     $("#cancelDeletionButton").addEventListener("click", cancelAccountDeletion);
     $("#pendingDeletionLogout").addEventListener("click", logoutAndReset);

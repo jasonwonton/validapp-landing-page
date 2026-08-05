@@ -159,6 +159,22 @@ export class ValidAPI {
         });
     }
 
+    requestPhoneVerification(phoneNumber) {
+        return this.request("/auth/phone/request", {
+            method: "POST",
+            auth: false,
+            body: JSON.stringify({ phone_number: phoneNumber, channel: "sms" }),
+        });
+    }
+
+    confirmPhoneVerification(phoneNumber, code) {
+        return this.request("/auth/phone/confirm", {
+            method: "POST",
+            auth: false,
+            body: JSON.stringify({ phone_number: phoneNumber, code }),
+        });
+    }
+
     completeWebSignup(payload) {
         return this.request("/auth/passkey/signup/complete", {
             method: "POST",

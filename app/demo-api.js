@@ -328,7 +328,7 @@ export class DemoAPI {
         item.voter_name = "Maya Chen";
         item.voter_profile_picture_url = "../assets/app/anonymous.png";
         if (this.profile.remaining_reveals > 0) this.profile.remaining_reveals -= 1;
-        else this.profile.aura_points -= 200;
+        else this.profile.aura_points -= 1000;
         return {
             question_answer_id: answerId,
             full_name: item.voter_name,
@@ -359,7 +359,7 @@ export class DemoAPI {
             max_custom_question_length: 280,
             max_skips_per_set: 3,
             play_lock_time_seconds: 60,
-            full_reveal_aura_cost: 200,
+            full_reveal_aura_cost: 1000,
             max_full_reveals_per_week: 2,
             god_mode_price: 6.99,
             global_visibility_boost_cost: 400,
