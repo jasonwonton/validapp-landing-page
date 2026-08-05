@@ -7,9 +7,9 @@ async function fillProductionSignup(dialog) {
     await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
     await dialog.getByLabel("Age").selectOption("16");
     await dialog.getByRole("button", { name: "Get Started!" }).click();
-    await dialog.getByLabel("School name").fill("Westview High School");
-    await dialog.getByLabel("City").fill("San Diego");
-    await dialog.getByLabel("State").fill("CA");
+    await dialog.getByLabel("ZIP code").fill("90210");
+    await dialog.getByRole("button", { name: "Show schools" }).click();
+    await dialog.getByRole("option", { name: /Westview High School/ }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("Grade").selectOption("Senior");
     await dialog.getByRole("button", { name: "Continue" }).click();
@@ -187,6 +187,12 @@ async function interceptProductionAPI(page, { signup = false, profileAura = 500,
         }
         if (path === "/api/v1/auth/passkey/status") return fulfill({ registered: true, credentialCount: 1 });
         if (path === "/api/v1/users/username-available/taylor_j") return fulfill({ available: true, username: "taylor_j" });
+        if (path === "/api/v1/highschools/nearby?zip_code=90210&limit=50") {
+            return fulfill({
+                zip_code: "90210",
+                schools: [{ id: 77, name: "Westview High School", city: "Los Angeles", state: "CA", logo_url: "", member_count: 12, min_grade: 9, max_grade: 12, distance_miles: 0.8 }],
+            });
+        }
         if (path === "/api/v1/highschools/request") {
             return fulfill({ school: { id: 77, name: body.school_name, city: body.city, state: body.state } });
         }
@@ -339,6 +345,9 @@ test("real adapter completes passkey-only signup without an SMS request", async 
         },
     });
     expect(completion.body.deviceInstallationId.length).toBeGreaterThanOrEqual(8);
+    const nearby = requests.find((request) => request.path === "/api/v1/highschools/nearby?zip_code=90210&limit=50");
+    expect(nearby.authorization).toBeNull();
+    expect(requests.some((request) => request.path === "/api/v1/highschools/request")).toBe(false);
     const photo = requests.find((request) => request.path.endsWith("/profile-picture"));
     expect(photo.authorization).toBe("Bearer session-token");
     expect(photo.contentType).toMatch(/^multipart\/form-data; boundary=/);

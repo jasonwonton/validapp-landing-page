@@ -47,6 +47,10 @@ const state = {
     pendingAuraPurchase: null,
     targetedBoostClassmates: null,
     signupStep: 0,
+    signupNearbySchools: [],
+    signupSelectedSchool: null,
+    signupSchoolFallback: false,
+    signupSchoolLookupGeneration: 0,
     installPrompt: null,
     detailReturnFocus: null,
 };
@@ -636,8 +640,115 @@ function dateOfBirthFromAge(value) {
 function openSignupDialog() {
     $("#signupStatus").textContent = "";
     $("#signupPhotoPreview").textContent = "+";
+    resetSignupSchoolPicker();
     setSignupStep(0);
     $("#signupDialog").showModal();
+}
+
+function resetSignupSchoolPicker() {
+    state.signupNearbySchools = [];
+    state.signupSelectedSchool = null;
+    state.signupSchoolFallback = false;
+    state.signupSchoolLookupGeneration += 1;
+    $("#signupSchoolPicker").classList.add("hidden");
+    $("#signupSchoolFallback").classList.add("hidden");
+    $("#signupSchoolResults").replaceChildren();
+    $("#signupSchoolSearch").value = "";
+    $("#signupSchoolContinue").disabled = true;
+    setButtonLoading($("#signupZipLookup"), false);
+    for (const input of [$("#signupSchool"), $("#signupCity"), $("#signupState")]) {
+        input.disabled = true;
+        input.required = false;
+    }
+}
+
+function schoolLocationLabel(school) {
+    return [school.city, school.state].filter(Boolean).join(", ");
+}
+
+function renderSignupSchoolResults() {
+    const query = $("#signupSchoolSearch").value.trim().toLowerCase();
+    const schools = state.signupNearbySchools.filter((school) => {
+        if (!query) return true;
+        return `${school.name} ${school.city || ""} ${school.state || ""}`.toLowerCase().includes(query);
+    });
+    const container = $("#signupSchoolResults");
+    if (!schools.length) {
+        container.innerHTML = `<p class="signup-school-empty">No nearby schools match that search.</p>`;
+        return;
+    }
+    container.innerHTML = schools.map((school) => {
+        const selected = String(state.signupSelectedSchool?.id) === String(school.id);
+        const logoURL = school.logo_url ? api.assetURL(school.logo_url) : "";
+        const initials = String(school.name || "S").split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase();
+        return `<button class="signup-school-result ${selected ? "selected" : ""}" type="button" role="option" aria-selected="${selected}" data-signup-school="${escapeHTML(school.id)}">
+            <span class="signup-school-logo">${logoURL ? `<img src="${escapeHTML(logoURL)}" alt="">` : escapeHTML(initials)}</span>
+            <span><strong>${escapeHTML(school.name)}</strong><small>${escapeHTML(schoolLocationLabel(school))}${Number.isFinite(Number(school.distance_miles)) ? ` · ${Number(school.distance_miles).toFixed(1)} mi` : ""}</small></span>
+            <span class="signup-school-check" aria-hidden="true">${selected ? "✓" : "›"}</span>
+        </button>`;
+    }).join("");
+}
+
+async function lookupSignupSchools() {
+    const zipCode = $("#signupZip").value.replace(/\D/g, "").slice(0, 5);
+    $("#signupZip").value = zipCode;
+    if (!/^\d{5}$/.test(zipCode)) {
+        $("#signupStatus").textContent = "Enter a 5-digit ZIP code.";
+        return;
+    }
+    const generation = ++state.signupSchoolLookupGeneration;
+    const button = $("#signupZipLookup");
+    setButtonLoading(button, true, "Finding schools...");
+    $("#signupStatus").textContent = "Finding the 50 closest schools...";
+    try {
+        const response = await api.getNearbySchools(zipCode, 50);
+        if (generation !== state.signupSchoolLookupGeneration) return;
+        state.signupNearbySchools = response.schools || [];
+        state.signupSelectedSchool = null;
+        state.signupSchoolFallback = false;
+        $("#signupSchoolSearch").value = "";
+        $("#signupSchoolPicker").classList.remove("hidden");
+        $("#signupSchoolFallback").classList.add("hidden");
+        $("#signupSchoolContinue").disabled = true;
+        setButtonLoading($("#signupZipLookup"), false);
+        renderSignupSchoolResults();
+        $("#signupStatus").textContent = state.signupNearbySchools.length
+            ? `Showing ${state.signupNearbySchools.length} schools near ${zipCode}.`
+            : "No schools were found near that ZIP code.";
+    } catch (error) {
+        if (generation !== state.signupSchoolLookupGeneration) return;
+        state.signupNearbySchools = [];
+        state.signupSelectedSchool = null;
+        $("#signupSchoolPicker").classList.add("hidden");
+        showSignupSchoolFallback(true);
+        $("#signupStatus").textContent = error.message || "Couldn't load nearby schools. Enter your school manually.";
+    } finally {
+        if (generation === state.signupSchoolLookupGeneration) setButtonLoading(button, false);
+    }
+}
+
+function selectSignupSchool(schoolId) {
+    const school = state.signupNearbySchools.find((candidate) => String(candidate.id) === String(schoolId));
+    if (!school) return;
+    state.signupSelectedSchool = school;
+    state.signupSchoolFallback = false;
+    $("#signupSchoolContinue").disabled = false;
+    $("#signupStatus").textContent = `${school.name} selected.`;
+    renderSignupSchoolResults();
+}
+
+function showSignupSchoolFallback(show) {
+    state.signupSchoolFallback = show;
+    state.signupSelectedSchool = show ? null : state.signupSelectedSchool;
+    $("#signupSchoolFallback").classList.toggle("hidden", !show);
+    $("#signupSchoolPicker").classList.toggle("hidden", show || !state.signupNearbySchools.length);
+    for (const input of [$("#signupSchool"), $("#signupCity"), $("#signupState")]) {
+        input.disabled = !show;
+        input.required = show;
+    }
+    $("#signupSchoolContinue").disabled = show ? false : !state.signupSelectedSchool;
+    $("#signupStatus").textContent = show ? "Enter the school exactly as it should appear." : "Choose a nearby school.";
+    if (show) $("#signupSchool").focus();
 }
 
 function setSignupStep(index) {
@@ -648,7 +759,11 @@ function setSignupStep(index) {
     requestAnimationFrame(() => { $("#signupDialog").scrollTop = 0; });
     $(".signup-back-button").classList.toggle("hidden", state.signupStep === 0);
     if (state.signupStep === 7) {
-        $("#signupReview").innerHTML = `<strong>${escapeHTML($("#signupFirstName").value.trim())} ${escapeHTML($("#signupLastName").value.trim())}</strong><span>@${escapeHTML($("#signupUsername").value.trim().toLowerCase())} · ${escapeHTML($("#signupGrade").value)}</span><span>${escapeHTML($("#signupSchool").value.trim())} · ${escapeHTML($("#signupCity").value.trim())}, ${escapeHTML($("#signupState").value.trim().toUpperCase())}</span>`;
+        const schoolName = state.signupSelectedSchool?.name || $("#signupSchool").value.trim();
+        const schoolLocation = state.signupSelectedSchool
+            ? schoolLocationLabel(state.signupSelectedSchool)
+            : [$("#signupCity").value.trim(), $("#signupState").value.trim().toUpperCase()].filter(Boolean).join(", ");
+        $("#signupReview").innerHTML = `<strong>${escapeHTML($("#signupFirstName").value.trim())} ${escapeHTML($("#signupLastName").value.trim())}</strong><span>@${escapeHTML($("#signupUsername").value.trim().toLowerCase())} · ${escapeHTML($("#signupGrade").value)}</span><span>${escapeHTML(schoolName)} · ${escapeHTML(schoolLocation)}</span>`;
     }
 }
 
@@ -657,6 +772,10 @@ async function advanceSignup(button) {
     const fields = [...step.querySelectorAll("input, select")];
     const invalid = fields.find((field) => !field.checkValidity());
     if (invalid) return invalid.reportValidity();
+    if (state.signupStep === 1 && !state.signupSelectedSchool && !state.signupSchoolFallback) {
+        $("#signupStatus").textContent = "Choose your school before continuing.";
+        return;
+    }
     if (state.signupStep === 5) {
         setButtonLoading(button, true, "Checking username...");
         try {
@@ -684,25 +803,29 @@ async function createAccount(event) {
     }
     const username = $("#signupUsername").value.trim().toLowerCase();
     const profilePicture = $("#signupPicture").files[0];
-    const schoolPayload = {
-        school_name: $("#signupSchool").value.trim(),
-        city: $("#signupCity").value.trim(),
-        state: $("#signupState").value.trim().toUpperCase(),
-        grades: "6-12",
-        min_grade: 6,
-        max_grade: 12,
-    };
     setButtonLoading(button, true, "Creating your passkey...");
-    $("#signupStatus").textContent = "Finding your school...";
+    $("#signupStatus").textContent = "Creating your account...";
     try {
-        const schoolResult = await api.resolveSchool(schoolPayload);
-        if (!schoolResult.school?.id) throw new Error("We couldn't set up that school. Check its name and location.");
+        let school = state.signupSelectedSchool;
+        if (!school) {
+            $("#signupStatus").textContent = "Checking your school...";
+            const schoolResult = await api.resolveSchool({
+                school_name: $("#signupSchool").value.trim(),
+                city: $("#signupCity").value.trim(),
+                state: $("#signupState").value.trim().toUpperCase(),
+                grades: "6-12",
+                min_grade: 6,
+                max_grade: 12,
+            });
+            school = schoolResult.school;
+        }
+        if (!school?.id) throw new Error("We couldn't set up that school. Check its name and location.");
         const profile = {
             first_name: $("#signupFirstName").value.trim(),
             last_name: $("#signupLastName").value.trim(),
             date_of_birth: dateOfBirth,
             gender: $("#signupGender").value,
-            school_id: schoolResult.school.id,
+            school_id: school.id,
             grade: $("#signupGrade").value,
             username,
             profile_picture_filename: null,
@@ -710,7 +833,7 @@ async function createAccount(event) {
         $("#signupStatus").textContent = "Confirm the passkey prompt on your device.";
         let login;
         if (demoMode) {
-            login = await api.demoSignup({ profile, school_name: schoolResult.school.name });
+            login = await api.demoSignup({ profile, school_name: school.name });
         } else {
             const credential = await createSignupPasskey(api, username);
             login = await api.completeWebSignup({
@@ -727,6 +850,7 @@ async function createAccount(event) {
             catch (_) { photoUploadFailed = true; }
         }
         form.reset();
+        resetSignupSchoolPicker();
         $("#signupPhotoPreview").textContent = "+";
         $("#signupDialog").close();
         await showSignedIn();
@@ -2158,6 +2282,31 @@ function bindEvents() {
     $("#createAccountButton").addEventListener("click", openSignupDialog);
     $("#signupForm").addEventListener("submit", createAccount);
     $("#signupPicture").addEventListener("change", previewSignupPhoto);
+    $("#signupZip").addEventListener("input", (event) => {
+        event.currentTarget.value = event.currentTarget.value.replace(/\D/g, "").slice(0, 5);
+        state.signupSchoolLookupGeneration += 1;
+        state.signupNearbySchools = [];
+        state.signupSelectedSchool = null;
+        state.signupSchoolFallback = false;
+        $("#signupSchoolPicker").classList.add("hidden");
+        $("#signupSchoolFallback").classList.add("hidden");
+        $("#signupSchoolContinue").disabled = true;
+        $("#signupStatus").textContent = "";
+    });
+    $("#signupZip").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            lookupSignupSchools();
+        }
+    });
+    $("#signupZipLookup").addEventListener("click", lookupSignupSchools);
+    $("#signupSchoolSearch").addEventListener("input", renderSignupSchoolResults);
+    $("#signupSchoolResults").addEventListener("click", (event) => {
+        const school = event.target.closest("[data-signup-school]");
+        if (school) selectSignupSchool(school.dataset.signupSchool);
+    });
+    $("#signupShowSchoolFallback").addEventListener("click", () => showSignupSchoolFallback(true));
+    $("#signupBackToNearby").addEventListener("click", () => showSignupSchoolFallback(false));
     $("#signupDialog").addEventListener("click", (event) => {
         const next = event.target.closest("[data-signup-next]");
         if (next) advanceSignup(next);

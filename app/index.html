@@ -219,13 +219,26 @@
                 <label class="signup-choice-label signup-age-picker">Age<select id="signupAge" required><option>13</option><option>14</option><option>15</option><option>16</option><option>17</option><option>18</option><option>19</option><option>20</option><option>21</option><option>22</option><option>23</option><option>24</option><option>25</option><option>26</option><option>27</option></select></label>
                 <button class="primary-button" type="button" data-signup-next>Get Started!</button>
             </fieldset>
-            <fieldset class="signup-step hidden" data-signup-step="1">
+            <fieldset class="signup-step signup-school-step hidden" data-signup-step="1">
                 <span class="eyebrow">YOUR COMMUNITY</span>
                 <h2>What school do you go to?</h2>
-                <p class="form-hint">Your school determines the people and polls you see.</p>
-                <label>School name<input id="signupSchool" autocomplete="organization" maxlength="200" placeholder="Westview High School" required></label>
-                <div class="two-field-row"><label>City<input id="signupCity" autocomplete="address-level2" maxlength="100" required></label><label>State<input id="signupState" autocomplete="address-level1" maxlength="2" pattern="[A-Za-z]{2}" placeholder="CA" required></label></div>
-                <button class="primary-button" type="button" data-signup-next>Continue</button>
+                <p class="form-hint">Enter your ZIP code and we'll show the 50 closest schools.</p>
+                <div class="signup-zip-row">
+                    <label>ZIP code<input id="signupZip" inputmode="numeric" autocomplete="postal-code" maxlength="5" pattern="[0-9]{5}" placeholder="90210" required></label>
+                    <button id="signupZipLookup" class="secondary-button" type="button">Show schools</button>
+                </div>
+                <div id="signupSchoolPicker" class="signup-school-picker hidden">
+                    <label>Search nearby schools<input id="signupSchoolSearch" type="search" autocomplete="off" placeholder="Search these 50 schools..."></label>
+                    <div id="signupSchoolResults" class="signup-school-results" role="listbox" aria-label="Nearby schools"></div>
+                    <button id="signupShowSchoolFallback" class="text-button signup-school-fallback-link" type="button">Can't find your school?</button>
+                </div>
+                <div id="signupSchoolFallback" class="signup-school-fallback hidden">
+                    <p class="form-hint">Add the school only if it isn't in the nearby list.</p>
+                    <label>School name<input id="signupSchool" autocomplete="organization" maxlength="200" placeholder="Westview High School" disabled></label>
+                    <div class="two-field-row"><label>City<input id="signupCity" autocomplete="address-level2" maxlength="100" disabled></label><label>State<input id="signupState" autocomplete="address-level1" maxlength="2" pattern="[A-Za-z]{2}" placeholder="CA" disabled></label></div>
+                    <button id="signupBackToNearby" class="text-button" type="button">Back to nearby schools</button>
+                </div>
+                <button id="signupSchoolContinue" class="primary-button" type="button" data-signup-next disabled>Continue</button>
             </fieldset>
             <fieldset class="signup-step hidden" data-signup-step="2">
                 <span class="eyebrow">YOUR COMMUNITY</span><h2>What grade are you in?</h2>

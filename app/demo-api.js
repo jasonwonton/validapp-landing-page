@@ -214,6 +214,27 @@ export class DemoAPI {
         return { school: { id: 77, name: payload.school_name, city: payload.city, state: payload.state } };
     }
 
+    async getNearbySchools(zipCode, limit = 50) {
+        const names = [
+            "Westview High School", "Central High School", "Lincoln High School", "Roosevelt High School",
+            "Washington High School", "Jefferson High School", "Northside High School", "Southridge High School",
+        ];
+        return {
+            zip_code: zipCode,
+            schools: Array.from({ length: Math.min(50, limit) }, (_, index) => ({
+                id: 77 + index,
+                name: index === 0 ? names[0] : `${names[1 + ((index - 1) % (names.length - 1))]} ${index + 1}`,
+                city: index % 2 ? "Beverly Hills" : "Los Angeles",
+                state: "CA",
+                logo_url: "",
+                member_count: Math.max(0, 25 - index),
+                min_grade: 9,
+                max_grade: 12,
+                distance_miles: Number((0.4 + index * 0.3).toFixed(1)),
+            })),
+        };
+    }
+
     async checkUsernameAvailability(username) {
         const normalized = String(username || "").trim().toLowerCase();
         const skeleton = normalized.replace(/[^a-z0-9]/g, "").replace(/[01345789]/g, (value) => ({ 0: "o", 1: "i", 3: "e", 4: "a", 5: "s", 7: "t", 8: "b", 9: "g" })[value]);

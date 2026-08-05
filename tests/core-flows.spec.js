@@ -10,9 +10,10 @@ async function fillSignupThroughUsername(dialog, username = "taylor_j") {
     await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
     await dialog.getByLabel("Age").selectOption("16");
     await dialog.getByRole("button", { name: "Get Started!" }).click();
-    await dialog.getByLabel("School name").fill("Westview High School");
-    await dialog.getByLabel("City").fill("San Diego");
-    await dialog.getByLabel("State").fill("CA");
+    await dialog.getByLabel("ZIP code").fill("90210");
+    await dialog.getByRole("button", { name: "Show schools" }).click();
+    await expect(dialog.locator("[data-signup-school]")).toHaveCount(50);
+    await dialog.getByRole("option", { name: /Westview High School/ }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("Grade").selectOption("Senior");
     await dialog.getByRole("button", { name: "Continue" }).click();
@@ -68,11 +69,29 @@ test("onboarding keeps each step heading visible on compact phones", async ({ pa
     await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
     await dialog.getByRole("button", { name: "Get Started!" }).click();
     await expect(dialog.getByText("What school do you go to?")).toBeInViewport();
-    await dialog.getByLabel("School name").fill("Westview High School");
-    await dialog.getByLabel("City").fill("San Diego");
-    await dialog.getByLabel("State").fill("CA");
+    await dialog.getByLabel("ZIP code").fill("90210");
+    await dialog.getByRole("button", { name: "Show schools" }).click();
+    await dialog.getByRole("option", { name: /Westview High School/ }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(dialog.getByText("What grade are you in?")).toBeInViewport();
+});
+
+test("signup ZIP picker lists, filters, and falls back from 50 nearby schools", async ({ page }) => {
+    await page.goto("/app/?demo=1");
+    await page.getByRole("button", { name: "Create an account" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Get Started!" }).click();
+    await dialog.getByLabel("ZIP code").fill("90210");
+    await dialog.getByRole("button", { name: "Show schools" }).click();
+    await expect(dialog.locator("[data-signup-school]")).toHaveCount(50);
+    await dialog.getByLabel("Search nearby schools").fill("Central High School 2 Beverly Hills");
+    await expect(dialog.locator("[data-signup-school]")).toHaveCount(1);
+    await dialog.getByRole("button", { name: "Can't find your school?" }).click();
+    await expect(dialog.getByLabel("School name")).toBeVisible();
+    await expect(dialog.getByLabel("School name")).toBeEnabled();
+    await dialog.getByRole("button", { name: "Back to nearby schools" }).click();
+    await expect(dialog.getByLabel("School name")).toBeHidden();
+    await expect(dialog.getByLabel("Search nearby schools")).toBeVisible();
 });
 
 test("mobile shell stays within interaction performance budgets", async ({ page }) => {

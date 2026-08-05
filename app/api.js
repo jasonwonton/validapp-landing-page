@@ -180,6 +180,11 @@ export class ValidAPI {
         });
     }
 
+    getNearbySchools(zipCode, limit = 50) {
+        const params = new URLSearchParams({ zip_code: zipCode, limit: String(Math.min(50, Math.max(1, limit))) });
+        return this.request(`/highschools/nearby?${params}`, { auth: false });
+    }
+
     logout() {
         return this.request("/auth/logout", { method: "POST" });
     }
