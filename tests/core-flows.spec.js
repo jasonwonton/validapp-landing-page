@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 async function signInToDemo(page) {
     await page.goto("/app/?demo=1");
-    await page.getByRole("button", { name: /sign in with a passkey/i }).click();
+    await page.getByRole("button", { name: /^sign in$/i }).click();
     await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
 }
 
@@ -30,8 +30,8 @@ test("signed-out experience goes straight to the passkey actions", async ({ page
     await expect(page.getByText("VALID, EVERYWHERE", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Your feed is ready.", { exact: true })).toHaveCount(0);
     await expect(page.getByText(/Use the same passkey as the Valid iPhone app/i)).toHaveCount(0);
-    await expect(page.getByRole("button", { name: /sign in with a passkey/i })).toBeVisible();
-    await expect(page.getByText(/fingerprint or face stays on your device/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /^sign in$/i })).toBeVisible();
+    await expect(page.getByText(/fingerprint or face stays on your device/i)).toHaveCount(0);
 });
 
 test("new users can complete passkey-only school onboarding", async ({ page }) => {
@@ -169,7 +169,7 @@ test("strict production CSP permits dynamic progress UI", async ({ page }) => {
         if (message.text().includes("Content Security Policy")) violations.push(message.text());
     });
     await page.goto("/app/?demo=1&locked=1");
-    await page.getByRole("button", { name: /sign in with a passkey/i }).click();
+    await page.getByRole("button", { name: /^sign in$/i }).click();
     await expect(page.locator(".feed-gate-progress")).toBeVisible();
     expect(violations).toEqual([]);
 });
@@ -344,7 +344,7 @@ test("non-subscribers can reach God Mode from a received vote", async ({ page })
 
 test("new users vote to unlock Feed just like iOS", async ({ page }) => {
     await page.goto("/app/?demo=1&locked=1");
-    await page.getByRole("button", { name: /sign in with a passkey/i }).click();
+    await page.getByRole("button", { name: /^sign in$/i }).click();
     await expect(page.getByRole("heading", { name: "Feed is locked" })).toBeVisible();
     await expect(page.getByText("1 / 3 votes cast")).toBeVisible();
     await page.getByRole("button", { name: "Vote now to unlock Feed" }).click();
@@ -555,7 +555,7 @@ test("settings browses and searches classmates with public profile details", asy
 
 test("God Mode subscribers can reveal a vote sender and consume one weekly reveal", async ({ page }) => {
     await page.goto("/app/?demo=1&godmode=1");
-    await page.getByRole("button", { name: /sign in with a passkey/i }).click();
+    await page.getByRole("button", { name: /^sign in$/i }).click();
     await page.locator("[data-feed-detail='9001']").click();
     const detail = page.locator("#feedDetailDialog");
     await expect(detail.getByRole("button", { name: "Reveal who sent this (3 remaining)" })).toBeVisible();

@@ -272,7 +272,7 @@ test("real adapter signs in, authenticates API calls, and revokes logout", async
     const requests = await interceptProductionAPI(page);
 
     await page.goto("/app/");
-    await page.getByRole("button", { name: /sign in with a passkey/i }).click();
+    await page.getByRole("button", { name: /^sign in$/i }).click();
     await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
 
     const assertion = requests.find((request) => request.path === "/api/v1/auth/passkey/authenticate");
@@ -297,7 +297,7 @@ test("unified search debounces rapid typing into one bounded request pair", asyn
     await installCredentialStub(page, "get");
     const requests = await interceptProductionAPI(page);
     await page.goto("/app/");
-    await page.getByRole("button", { name: /sign in with a passkey/i }).click();
+    await page.getByRole("button", { name: /^sign in$/i }).click();
     await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
     requests.length = 0;
 
@@ -359,7 +359,7 @@ test("real adapter submits a Play vote and multipart school question", async ({ 
     const requests = await interceptProductionAPI(page);
 
     await page.goto("/app/");
-    await page.getByRole("button", { name: /sign in with a passkey/i }).click();
+    await page.getByRole("button", { name: /^sign in$/i }).click();
     await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: "Play", exact: true }).click();
@@ -421,7 +421,7 @@ test("real adapter gives rate-limited users an actionable wait time", async ({ p
     }));
 
     await page.goto("/app/");
-    await page.getByRole("button", { name: /sign in with a passkey/i }).click();
+    await page.getByRole("button", { name: /^sign in$/i }).click();
 
     await expect(page.locator("#authStatus")).toHaveText("Too many requests. Try again in 42 seconds.");
 });
@@ -430,7 +430,7 @@ test("question submission refuses an aura overdraft before calling the API", asy
     await installCredentialStub(page, "get");
     const requests = await interceptProductionAPI(page, { profileAura: 50 });
     await page.goto("/app/");
-    await page.getByRole("button", { name: /sign in with a passkey/i }).click();
+    await page.getByRole("button", { name: /^sign in$/i }).click();
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.getByRole("button", { name: /Submit a school question/i }).click();
     const dialog = page.getByRole("dialog").filter({ hasText: "Submit a school question" });
@@ -450,7 +450,7 @@ test("ambiguous question retries reuse one idempotency key and never double-char
     await installCredentialStub(page, "get");
     const requests = await interceptProductionAPI(page, { questionFailureCount: 1 });
     await page.goto("/app/");
-    await page.getByRole("button", { name: /sign in with a passkey/i }).click();
+    await page.getByRole("button", { name: /^sign in$/i }).click();
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.getByRole("button", { name: /Submit a school question/i }).click();
     const dialog = page.getByRole("dialog").filter({ hasText: "Submit a school question" });
