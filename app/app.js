@@ -858,22 +858,211 @@ function openFeedDetail(answerId) {
     openDetailScreen($("#feedDetailDialog"));
 }
 
-async function shareFeedItem(platform = "other") {
-    const item = selectedFeedItem();
-    if (!item) return;
-    const pickedName = item.selected_contact_name
+function canvasRoundedRect(context, x, y, width, height, radius) {
+    const corner = Math.min(radius, width / 2, height / 2);
+    context.beginPath();
+    context.moveTo(x + corner, y);
+    context.arcTo(x + width, y, x + width, y + height, corner);
+    context.arcTo(x + width, y + height, x, y + height, corner);
+    context.arcTo(x, y + height, x, y, corner);
+    context.arcTo(x, y, x + width, y, corner);
+    context.closePath();
+}
+
+function canvasTextLines(context, text, maxWidth, maxLines = Infinity) {
+    const words = String(text || "").trim().split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+    const lines = [];
+    let current = words.shift();
+    for (const word of words) {
+        const candidate = `${current} ${word}`;
+        if (context.measureText(candidate).width <= maxWidth || !current) current = candidate;
+        else {
+            lines.push(current);
+            current = word;
+        }
+    }
+    lines.push(current);
+    if (lines.length <= maxLines) return lines;
+    const visible = lines.slice(0, maxLines);
+    let last = visible[maxLines - 1];
+    while (last && context.measureText(`${last}…`).width > maxWidth) last = last.slice(0, -1);
+    visible[maxLines - 1] = `${last}…`;
+    return visible;
+}
+
+function drawCenteredCanvasText(context, text, centerX, top, maxWidth, lineHeight, maxLines = Infinity) {
+    const lines = canvasTextLines(context, text, maxWidth, maxLines);
+    context.textAlign = "center";
+    context.textBaseline = "top";
+    lines.forEach((line, index) => context.fillText(line, centerX, top + index * lineHeight));
+    return top + lines.length * lineHeight;
+}
+
+function loadShareArtwork(url) {
+    if (!url) return Promise.resolve(null);
+    return new Promise((resolve) => {
+        const image = new Image();
+        image.crossOrigin = "anonymous";
+        image.onload = () => resolve(image);
+        image.onerror = () => resolve(null);
+        image.src = url;
+    });
+}
+
+function canvasBlob(canvas) {
+    return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Could not render poll image.")), "image/png");
+    });
+}
+
+async function createPollShareFile(item) {
+    await document.fonts?.ready;
+    const canvas = document.createElement("canvas");
+    canvas.width = 900;
+    canvas.height = 1600;
+    const context = canvas.getContext("2d");
+    const centerX = canvas.width / 2;
+    const selectedName = item.selected_contact_name
         || item.voted_for_name
         || item.contact_name
         || (item.item_type === "received_vote" ? displayName(state.profile) : "A classmate");
-    const text = `${item.question_text}\n${pickedName} got picked on Valid`;
+    const options = Array.isArray(item.presented_options) ? item.presented_options.slice(0, 4) : [];
+    const artwork = await loadShareArtwork(api.assetURL(item.image_url));
+
+    context.fillStyle = "#ccf7f4";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "#000000";
+    context.font = '44px "Jua", "Apple Color Emoji", sans-serif';
+    let contentBottom = drawCenteredCanvasText(context, formatVoterStatement(item), centerX, 60, 820, 52, 2);
+    context.font = '56px "Jua", "Apple Color Emoji", sans-serif';
+    contentBottom = drawCenteredCanvasText(context, item.question_text, centerX, contentBottom + 16, 820, 63, 3);
+
+    if (artwork) {
+        const availableSize = Math.max(360, Math.min(620, 1010 - contentBottom));
+        const scale = Math.min(availableSize / artwork.naturalWidth, availableSize / artwork.naturalHeight);
+        const width = artwork.naturalWidth * scale;
+        const height = artwork.naturalHeight * scale;
+        const x = centerX - width / 2;
+        const y = contentBottom + 24;
+        canvasRoundedRect(context, x, y, width, height, 24);
+        context.save();
+        context.clip();
+        context.drawImage(artwork, x, y, width, height);
+        context.restore();
+        context.strokeStyle = "#000000";
+        context.lineWidth = 6;
+        canvasRoundedRect(context, x, y, width, height, 24);
+        context.stroke();
+        contentBottom = y + height;
+    }
+
+    const gridTop = Math.max(contentBottom + 28, artwork ? 0 : 530);
+    if (options.length) {
+        const gap = 20;
+        const cardWidth = 400;
+        const cardHeight = 200;
+        options.forEach((option, index) => {
+            const name = option.name || option.contact_name || "A classmate";
+            const selected = name === selectedName;
+            const column = index % 2;
+            const row = Math.floor(index / 2);
+            const x = 40 + column * (cardWidth + gap);
+            const y = gridTop + row * (cardHeight + gap);
+            context.fillStyle = "#ffb15e";
+            canvasRoundedRect(context, x, y, cardWidth, cardHeight, 24);
+            context.fill();
+            context.strokeStyle = selected ? "#ffff00" : "#000000";
+            context.lineWidth = 6;
+            context.stroke();
+            context.fillStyle = "#000000";
+            context.font = '44px "Jua", "Apple Color Emoji", sans-serif';
+            const lines = canvasTextLines(context, name, cardWidth - 40, 2);
+            const nameTop = y + (cardHeight - lines.length * 52) / 2;
+            context.textAlign = "center";
+            context.textBaseline = "top";
+            lines.forEach((line, lineIndex) => context.fillText(line, x + cardWidth / 2, nameTop + lineIndex * 52));
+            if (selected) {
+                context.font = '60px "Apple Color Emoji", sans-serif';
+                context.textAlign = "center";
+                context.textBaseline = "middle";
+                context.lineJoin = "round";
+                context.lineWidth = 8;
+                context.strokeStyle = "#000000";
+                context.strokeText("👆", x + cardWidth / 2, y + cardHeight + 29);
+                context.fillText("👆", x + cardWidth / 2, y + cardHeight + 29);
+            }
+        });
+    } else {
+        const x = 40;
+        const y = gridTop;
+        const width = 820;
+        const height = 400;
+        context.fillStyle = "#ffb15e";
+        canvasRoundedRect(context, x, y, width, height, 32);
+        context.fill();
+        context.strokeStyle = "#000000";
+        context.lineWidth = 8;
+        context.stroke();
+        context.fillStyle = "#000000";
+        context.font = '64px "Jua", "Apple Color Emoji", sans-serif';
+        drawCenteredCanvasText(context, selectedName, centerX, y + 112, width - 70, 72, 2);
+    }
+
+    context.fillStyle = "#000000";
+    context.font = '52px "Jua", sans-serif';
+    context.textAlign = "center";
+    context.textBaseline = "alphabetic";
+    context.fillText("validapp.lol", centerX, 1550);
+    const blob = await canvasBlob(canvas);
+    const identifier = String(item.question_answer_id || item.question_id || "poll").replace(/[^a-z0-9_-]/gi, "");
+    return new File([blob], `valid-poll-${identifier}.png`, { type: "image/png" });
+}
+
+function downloadShareFile(file) {
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = file.name;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function shareFeedItem(platform = "other") {
+    const item = selectedFeedItem();
+    if (!item) return;
+    const button = $(`[data-share-feed-platform="${platform}"]`);
+    const platformLabel = platform === "other" ? "your app" : `${platform[0].toUpperCase()}${platform.slice(1)}`;
+    if (button) {
+        button.disabled = true;
+        button.setAttribute("aria-busy", "true");
+    }
+    $("#feedDetailStatus").textContent = `Creating poll photo for ${platformLabel}…`;
     try {
-        if (navigator.share) await navigator.share({ title: "A poll on Valid", text, url: "https://validapp.lol/app/" });
-        else {
-            await navigator.clipboard.writeText(`${text}\nhttps://validapp.lol/app/`);
-            showToast(`Poll copied for ${platform === "other" ? "sharing" : platform[0].toUpperCase() + platform.slice(1)}`);
+        const file = await createPollShareFile(item);
+        if (navigator.share && navigator.canShare?.({ files: [file] })) {
+            $("#feedDetailStatus").textContent = `Choose ${platformLabel} in the share sheet.`;
+            await navigator.share({
+                files: [file],
+                title: `Share to ${platformLabel}`,
+                text: "A poll on Valid · https://validapp.lol",
+            });
+            $("#feedDetailStatus").textContent = "";
+            showToast("Poll photo shared");
+        } else {
+            downloadShareFile(file);
+            $("#feedDetailStatus").textContent = `Poll photo saved. Open ${platformLabel} to post it.`;
         }
     } catch (error) {
-        if (error.name !== "AbortError") $("#feedDetailStatus").textContent = "Could not share this poll.";
+        if (error.name === "AbortError") $("#feedDetailStatus").textContent = "";
+        else $("#feedDetailStatus").textContent = "Could not create the poll photo. Please try again.";
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.removeAttribute("aria-busy");
+        }
     }
 }
 

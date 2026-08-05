@@ -198,6 +198,44 @@ test("feed polls open the iOS-style detail and moderation flow", async ({ page }
     await expect(page.locator("[data-feed-detail='9001']")).toHaveCount(0);
 });
 
+test("poll share buttons generate the iOS-style 9:16 photo", async ({ page }) => {
+    await page.addInitScript(() => {
+        Object.defineProperty(navigator, "canShare", { configurable: true, value: () => true });
+        Object.defineProperty(navigator, "share", {
+            configurable: true,
+            value: async ({ files, title, text }) => {
+                const bitmap = await createImageBitmap(files[0]);
+                window.__sharedPoll = {
+                    width: bitmap.width,
+                    height: bitmap.height,
+                    name: files[0].name,
+                    type: files[0].type,
+                    size: files[0].size,
+                    title,
+                    text,
+                };
+                bitmap.close();
+            },
+        });
+    });
+    await signInToDemo(page);
+    await page.locator("[data-feed-detail='9001']").click();
+    const dialog = page.locator("#feedDetailDialog");
+    await expect(dialog.getByText("Share this poll")).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Share poll to Snapchat" }).click();
+    await expect(page.locator("#toast")).toContainText("Poll photo shared");
+    const sharedPoll = await page.evaluate(() => window.__sharedPoll);
+    expect(sharedPoll).toMatchObject({
+        width: 900,
+        height: 1600,
+        type: "image/png",
+        title: "Share to Snapchat",
+        text: "A poll on Valid · https://validapp.lol",
+    });
+    expect(sharedPoll.name).toMatch(/^valid-poll-9001\.png$/);
+    expect(sharedPoll.size).toBeGreaterThan(10_000);
+});
+
 test("non-subscribers can reach God Mode from a received vote", async ({ page }) => {
     await signInToDemo(page);
     await page.locator("[data-feed-detail='9001']").click();
