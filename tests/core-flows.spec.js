@@ -25,9 +25,11 @@ async function fillSignupThroughUsername(dialog, username = "taylor_j") {
     await dialog.getByRole("button", { name: "Continue" }).click();
 }
 
-test("signed-out experience is clear and passkey-only", async ({ page }) => {
+test("signed-out experience goes straight to the passkey actions", async ({ page }) => {
     await page.goto("/app/?demo=1");
-    await expect(page.getByRole("heading", { name: "Your feed is ready." })).toBeVisible();
+    await expect(page.getByText("VALID, EVERYWHERE", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Your feed is ready.", { exact: true })).toHaveCount(0);
+    await expect(page.getByText(/Use the same passkey as the Valid iPhone app/i)).toHaveCount(0);
     await expect(page.getByRole("button", { name: /sign in with a passkey/i })).toBeVisible();
     await expect(page.getByText(/fingerprint or face stays on your device/i)).toBeVisible();
 });
