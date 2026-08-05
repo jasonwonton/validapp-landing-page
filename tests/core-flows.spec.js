@@ -62,20 +62,38 @@ test("signup rejects unavailable profile language before creating a passkey", as
     await expect(dialog.getByText("Pick a username")).toBeVisible();
 });
 
-test("onboarding keeps each step heading visible on compact phones", async ({ page }) => {
+test("onboarding keeps every action reachable on compact phones", async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 640 });
     await page.goto("/app/?demo=1");
     await page.getByRole("button", { name: "Create an account" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByText("How old are you?")).toBeInViewport();
     await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "Continue" })).toBeInViewport();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(dialog.getByText("What school do you go to?")).toBeInViewport();
+    await expect(dialog.getByRole("button", { name: "Show schools" })).toBeInViewport();
     await dialog.getByLabel("ZIP code").fill("90210");
     await dialog.getByRole("button", { name: "Show schools" }).click();
+    const schoolResults = dialog.locator("#signupSchoolResults");
+    const schoolScroll = await schoolResults.evaluate((element) => ({ clientHeight: element.clientHeight, scrollHeight: element.scrollHeight }));
+    expect(schoolScroll.scrollHeight).toBeGreaterThan(schoolScroll.clientHeight);
+    await expect(dialog.locator("#signupSchoolContinue")).toBeInViewport();
     await dialog.getByRole("option", { name: /Westview High School/ }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(dialog.getByText("What grade are you in?")).toBeInViewport();
+    await dialog.getByLabel("Grade").selectOption("Senior");
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await dialog.getByLabel("First name").fill("Taylor");
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await dialog.getByLabel("Last name").fill("Jordan");
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await dialog.getByLabel("Username").fill("mobile_taylor");
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await dialog.getByLabel("Gender").selectOption("non-binary");
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await expect(dialog.getByText("Add a photo and passkey")).toBeInViewport();
+    await expect(dialog.getByRole("button", { name: "Create with passkey" })).toBeInViewport();
 });
 
 test("signup ZIP picker lists, filters, and falls back from 50 nearby schools", async ({ page }) => {
