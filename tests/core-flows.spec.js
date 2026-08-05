@@ -7,13 +7,14 @@ async function signInToDemo(page) {
 }
 
 async function fillSignupThroughUsername(dialog, username = "taylor_j") {
+    await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
+    await dialog.getByLabel("Age").selectOption("16");
+    await dialog.getByRole("button", { name: "Get Started!" }).click();
     await dialog.getByLabel("School name").fill("Westview High School");
     await dialog.getByLabel("City").fill("San Diego");
     await dialog.getByLabel("State").fill("CA");
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("Grade").selectOption("Senior");
-    await dialog.getByRole("button", { name: "Continue" }).click();
-    await dialog.getByLabel("Birthday").fill("2008-05-12");
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("First name").fill("Taylor");
     await dialog.getByRole("button", { name: "Continue" }).click();
@@ -43,7 +44,6 @@ test("new users can complete passkey-only school onboarding", async ({ page }) =
         mimeType: "image/png",
         buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
     });
-    await dialog.getByLabel(/minimum age requirement/).check();
     await dialog.getByRole("button", { name: "Create with passkey" }).click();
     await expect(page.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
     await expect(page.locator("#toast")).toContainText("Welcome to Valid");
@@ -64,6 +64,9 @@ test("onboarding keeps each step heading visible on compact phones", async ({ pa
     await page.goto("/app/?demo=1");
     await page.getByRole("button", { name: "Create an account" }).click();
     const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("How old are you?")).toBeInViewport();
+    await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Get Started!" }).click();
     await expect(dialog.getByText("What school do you go to?")).toBeInViewport();
     await dialog.getByLabel("School name").fill("Westview High School");
     await dialog.getByLabel("City").fill("San Diego");

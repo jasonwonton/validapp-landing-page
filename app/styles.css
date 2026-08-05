@@ -576,6 +576,9 @@ body.play-active main { padding-top: max(16px, env(safe-area-inset-top)); }
 .signup-step h2 { margin: 0 0 2px; font-size: clamp(2.1rem, 10vw, 3rem); line-height: 1.03; }
 .signup-step > label { display: grid; gap: 7px; }
 .signup-step .primary-button { margin-top: 8px; }
+.signup-age-picker select { min-height: 82px; font-size: 2rem; text-align: center; text-align-last: center; }
+.signup-terms { max-width: 420px; font-size: .9rem; text-align: center; }
+.signup-terms a { color: var(--dark-teal); text-underline-offset: 2px; }
 .signup-button-row { display: grid; grid-template-columns: .65fr 1.35fr; gap: 10px; margin-top: 4px; }
 .passkey-explainer { display: grid; grid-template-columns: 54px 1fr; align-items: start; gap: 12px; padding: 16px; border: 2px solid var(--ink); border-radius: 16px; background: var(--white); }
 .passkey-explainer > span { font-size: 2rem; }

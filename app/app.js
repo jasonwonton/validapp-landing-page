@@ -590,19 +590,14 @@ function deviceInstallationId() {
     return value;
 }
 
-function isAtLeastThirteen(dateValue) {
-    const birthday = new Date(`${dateValue}T00:00:00Z`);
-    if (!Number.isFinite(birthday.getTime())) return false;
-    const cutoff = new Date();
-    cutoff.setUTCFullYear(cutoff.getUTCFullYear() - 13);
-    return birthday <= cutoff;
+function dateOfBirthFromAge(value) {
+    const age = Number(value);
+    if (!Number.isInteger(age) || age < 13 || age > 27) return null;
+    return `${new Date().getFullYear() - age}-01-01T00:00:00Z`;
 }
 
 function openSignupDialog() {
     $("#signupStatus").textContent = "";
-    const cutoff = new Date();
-    cutoff.setUTCFullYear(cutoff.getUTCFullYear() - 13);
-    $("#signupBirthday").max = cutoff.toISOString().slice(0, 10);
     $("#signupPhotoPreview").textContent = "+";
     setSignupStep(0);
     $("#signupDialog").showModal();
@@ -625,10 +620,6 @@ async function advanceSignup(button) {
     const fields = [...step.querySelectorAll("input, select")];
     const invalid = fields.find((field) => !field.checkValidity());
     if (invalid) return invalid.reportValidity();
-    if (state.signupStep === 2 && !isAtLeastThirteen($("#signupBirthday").value)) {
-        $("#signupStatus").textContent = "You must be at least 13 to use Valid.";
-        return;
-    }
     if (state.signupStep === 5) {
         setButtonLoading(button, true, "Checking username...");
         try {
@@ -649,9 +640,9 @@ async function createAccount(event) {
     event.preventDefault();
     const form = event.currentTarget;
     const button = form.querySelector("button[type=submit]");
-    const birthday = $("#signupBirthday").value;
-    if (!isAtLeastThirteen(birthday)) {
-        $("#signupStatus").textContent = "You must be at least 13 to use Valid.";
+    const dateOfBirth = dateOfBirthFromAge($("#signupAge").value);
+    if (!dateOfBirth) {
+        $("#signupStatus").textContent = "Choose an age between 13 and 27.";
         return;
     }
     const username = $("#signupUsername").value.trim().toLowerCase();
@@ -672,7 +663,7 @@ async function createAccount(event) {
         const profile = {
             first_name: $("#signupFirstName").value.trim(),
             last_name: $("#signupLastName").value.trim(),
-            date_of_birth: `${birthday}T00:00:00Z`,
+            date_of_birth: dateOfBirth,
             gender: $("#signupGender").value,
             school_id: schoolResult.school.id,
             grade: $("#signupGrade").value,

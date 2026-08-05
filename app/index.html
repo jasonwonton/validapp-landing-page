@@ -213,6 +213,13 @@
             </div>
             <div class="signup-progress" aria-label="Signup progress"><span class="active"></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
             <fieldset class="signup-step" data-signup-step="0">
+                <span class="eyebrow">GET STARTED</span>
+                <h2>How old are you?</h2>
+                <p class="form-hint signup-terms">By entering your age, you agree to our <a href="../terms.html" target="_blank">Terms</a> and <a href="../privacy-policy.html" target="_blank">Privacy Policy</a>.</p>
+                <label class="signup-choice-label signup-age-picker">Age<select id="signupAge" required><option>13</option><option>14</option><option>15</option><option>16</option><option>17</option><option>18</option><option>19</option><option>20</option><option>21</option><option>22</option><option>23</option><option>24</option><option>25</option><option>26</option><option>27</option></select></label>
+                <button class="primary-button" type="button" data-signup-next>Get Started!</button>
+            </fieldset>
+            <fieldset class="signup-step hidden" data-signup-step="1">
                 <span class="eyebrow">YOUR COMMUNITY</span>
                 <h2>What school do you go to?</h2>
                 <p class="form-hint">Your school determines the people and polls you see.</p>
@@ -220,15 +227,9 @@
                 <div class="two-field-row"><label>City<input id="signupCity" autocomplete="address-level2" maxlength="100" required></label><label>State<input id="signupState" autocomplete="address-level1" maxlength="2" pattern="[A-Za-z]{2}" placeholder="CA" required></label></div>
                 <button class="primary-button" type="button" data-signup-next>Continue</button>
             </fieldset>
-            <fieldset class="signup-step hidden" data-signup-step="1">
+            <fieldset class="signup-step hidden" data-signup-step="2">
                 <span class="eyebrow">YOUR COMMUNITY</span><h2>What grade are you in?</h2>
                 <label class="signup-choice-label">Grade<select id="signupGrade" required><option value="">Choose your grade</option><option>6th Grade</option><option>7th Grade</option><option>8th Grade</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select></label>
-                <button class="primary-button" type="button" data-signup-next>Continue</button>
-            </fieldset>
-            <fieldset class="signup-step hidden" data-signup-step="2">
-                <span class="eyebrow">ABOUT YOU</span><h2>When is your birthday?</h2>
-                <p class="form-hint">You must be at least 13 to use Valid.</p>
-                <label>Birthday<input id="signupBirthday" type="date" autocomplete="bday" required></label>
                 <button class="primary-button" type="button" data-signup-next>Continue</button>
             </fieldset>
             <fieldset class="signup-step hidden" data-signup-step="3">
@@ -260,7 +261,6 @@
                     <span id="signupPhotoPreview" class="signup-photo-preview" aria-hidden="true">+</span>
                     <label>Profile photo <small>(optional, up to 5 MB)</small><input id="signupPicture" type="file" accept="image/jpeg,image/png,image/webp"></label>
                 </div>
-                <label class="check-row"><input id="signupAgeConsent" type="checkbox" required> I confirm I meet Valid's minimum age requirement and agree to the <a href="../terms.html" target="_blank">Terms</a>.</label>
                 <button class="primary-button" type="submit">Create with passkey</button>
             </fieldset>
             <p id="signupStatus" class="status-message" role="status"></p>

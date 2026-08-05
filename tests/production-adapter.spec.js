@@ -4,13 +4,14 @@ const API_ORIGIN = "https://api.six7.lol";
 const USER_ID = "11111111-1111-1111-1111-111111111111";
 
 async function fillProductionSignup(dialog) {
+    await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
+    await dialog.getByLabel("Age").selectOption("16");
+    await dialog.getByRole("button", { name: "Get Started!" }).click();
     await dialog.getByLabel("School name").fill("Westview High School");
     await dialog.getByLabel("City").fill("San Diego");
     await dialog.getByLabel("State").fill("CA");
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("Grade").selectOption("Senior");
-    await dialog.getByRole("button", { name: "Continue" }).click();
-    await dialog.getByLabel("Birthday").fill("2008-05-12");
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("First name").fill("Taylor");
     await dialog.getByRole("button", { name: "Continue" }).click();
@@ -309,7 +310,6 @@ test("real adapter completes passkey-only signup without an SMS request", async 
     await page.getByRole("button", { name: "Create an account" }).click();
     const dialog = page.getByRole("dialog");
     await fillProductionSignup(dialog);
-    await dialog.getByLabel(/minimum age requirement/).check();
     await dialog.getByLabel(/Profile photo/).setInputFiles({
         name: "avatar.png",
         mimeType: "image/png",
@@ -335,6 +335,7 @@ test("real adapter completes passkey-only signup without an SMS request", async 
             gender: "non-binary",
             school_id: 77,
             grade: "Senior",
+            date_of_birth: `${new Date().getFullYear() - 16}-01-01T00:00:00Z`,
         },
     });
     expect(completion.body.deviceInstallationId.length).toBeGreaterThanOrEqual(8);
