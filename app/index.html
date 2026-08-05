@@ -59,7 +59,14 @@
                                 <div class="detail-screen-header">
                                     <button class="detail-back-button" aria-label="Close" type="button" data-close-anonymous>‹ <span>Inbox</span></button>
                                     <strong>Message</strong>
-                                    <span aria-hidden="true"></span>
+                                    <div class="detail-overflow">
+                                        <button class="detail-overflow-button" type="button" data-toggle-anonymous-menu aria-label="More message actions" aria-expanded="false">•••</button>
+                                        <div class="detail-overflow-menu hidden" role="menu" aria-label="Message actions">
+                                            <button type="button" role="menuitem" data-anonymous-action="report">Report</button>
+                                            <button type="button" role="menuitem" data-anonymous-action="block">Block sender</button>
+                                            <button type="button" role="menuitem" data-anonymous-action="delete">Delete</button>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="detail-screen-content anonymous-detail-content">
                                     <div id="anonymousQuestionBody" class="anonymous-question-detail"></div>
@@ -75,11 +82,6 @@
                                             <button class="share-platform-button tiktok" type="button" data-share-anonymous="tiktok" aria-label="Share answer to TikTok"></button>
                                         </div>
                                     </div>
-                                    <div class="safety-actions" aria-label="Question safety actions">
-                                        <button type="button" data-anonymous-action="report">Report</button>
-                                        <button type="button" data-anonymous-action="block">Block sender</button>
-                                        <button type="button" data-anonymous-action="delete">Delete</button>
-                                    </div>
                                 </div>
                             </form>
                     </section>
@@ -89,7 +91,13 @@
                         <div class="detail-screen-header">
                             <button class="detail-back-button" aria-label="Close" type="button" data-close-feed-detail>‹ <span>Feed</span></button>
                             <strong>Poll</strong>
-                            <span aria-hidden="true"></span>
+                            <div class="detail-overflow">
+                                <button class="detail-overflow-button" type="button" data-toggle-feed-menu aria-label="More poll actions" aria-expanded="false">•••</button>
+                                <div class="detail-overflow-menu hidden" role="menu" aria-label="Poll actions">
+                                    <button type="button" role="menuitem" data-report-feed-item>Report question</button>
+                                    <button id="blockFeedSubmitterButton" class="hidden" type="button" role="menuitem" data-block-feed-submitter>Block submitter</button>
+                                </div>
+                            </div>
                         </div>
                         <div class="feed-detail-content">
                             <div id="feedDetailBody"></div>
@@ -103,10 +111,6 @@
                                     </div>
                                 </div>
                                 <button id="revealFeedSenderButton" class="secondary-button reveal-sender-button hidden" type="button">Reveal sender</button>
-                                <div class="detail-safety-actions">
-                                    <button type="button" data-report-feed-item>Report question</button>
-                                    <button id="blockFeedSubmitterButton" class="hidden" type="button" data-block-feed-submitter>Block submitter</button>
-                                </div>
                             </div>
                         </div>
                     </section>

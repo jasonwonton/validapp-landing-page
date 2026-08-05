@@ -134,6 +134,7 @@ function shareIconMarkup(platform) {
 }
 
 function openDetailScreen(screen) {
+    closeDetailActionMenus();
     state.detailReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     screen.classList.remove("hidden");
     screen.scrollTop = 0;
@@ -142,10 +143,25 @@ function openDetailScreen(screen) {
 }
 
 function closeDetailScreen(screen) {
+    closeDetailActionMenus();
     screen.classList.add("hidden");
     if (!$(".detail-screen:not(.hidden)")) document.body.classList.remove("detail-screen-open");
     state.detailReturnFocus?.focus?.({ preventScroll: true });
     state.detailReturnFocus = null;
+}
+
+function closeDetailActionMenus() {
+    $$(".detail-overflow-menu").forEach((menu) => menu.classList.add("hidden"));
+    $$(".detail-overflow-button").forEach((button) => button.setAttribute("aria-expanded", "false"));
+}
+
+function toggleDetailActionMenu(button) {
+    const menu = button.closest(".detail-overflow")?.querySelector(".detail-overflow-menu");
+    if (!menu) return;
+    const willOpen = menu.classList.contains("hidden");
+    closeDetailActionMenus();
+    menu.classList.toggle("hidden", !willOpen);
+    button.setAttribute("aria-expanded", String(willOpen));
 }
 
 function showSignedOut(message = "") {
@@ -318,11 +334,12 @@ function renderSchoolCard() {
 
 function renderPasskeyStatus() {
     const count = Math.max(0, Number(state.passkeyStatus?.credentialCount || 0));
+    const registered = state.passkeyStatus?.registered === true || count > 0;
     const button = $("#addPasskeyButton");
-    button.querySelector("strong").textContent = count > 1 ? "Add another passkey" : "Add a backup passkey";
-    $("#passkeyStatusText").textContent = count
-        ? `${count} ${count === 1 ? "passkey" : "passkeys"} registered · no SMS recovery`
-        : "Add another secure way to sign in";
+    button.closest(".profile-actions").classList.toggle("hidden", !state.passkeyStatus || registered);
+    if (!state.passkeyStatus || registered) return;
+    button.querySelector("strong").textContent = "Register a passkey";
+    $("#passkeyStatusText").textContent = "Add a secure way to sign in";
 }
 
 function renderGodModeCard() {
@@ -1068,6 +1085,18 @@ function loadShareArtwork(url) {
     });
 }
 
+async function loadPollShareArtwork(item) {
+    const displayedArtwork = $("#feedDetailBody .feed-detail-art img")?.currentSrc;
+    const fallbackArtwork = new URL("../assets/app/pencil-clipboard.png", import.meta.url).href;
+    const candidates = [api.assetURL(item.image_url), displayedArtwork, fallbackArtwork]
+        .filter((url, index, urls) => url && urls.indexOf(url) === index);
+    for (const url of candidates) {
+        const artwork = await loadShareArtwork(url);
+        if (artwork) return artwork;
+    }
+    return null;
+}
+
 function canvasBlob(canvas) {
     return new Promise((resolve, reject) => {
         canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Could not render poll image.")), "image/png");
@@ -1086,7 +1115,7 @@ async function createPollShareFile(item) {
         || item.contact_name
         || (item.item_type === "received_vote" ? displayName(state.profile) : "A classmate");
     const options = Array.isArray(item.presented_options) ? item.presented_options.slice(0, 4) : [];
-    const artwork = await loadShareArtwork(api.assetURL(item.image_url));
+    const artwork = await loadPollShareArtwork(item);
 
     context.fillStyle = "#ccf7f4";
     context.fillRect(0, 0, canvas.width, canvas.height);
@@ -2360,6 +2389,8 @@ function bindEvents() {
         }
     });
     $("#feedDetailDialog").addEventListener("click", (event) => {
+        const menuButton = event.target.closest("[data-toggle-feed-menu]");
+        if (menuButton) toggleDetailActionMenu(menuButton);
         if (event.target.closest("[data-close-feed-detail]")) {
             state.selectedFeedItemId = null;
             closeDetailScreen($("#feedDetailDialog"));
@@ -2367,20 +2398,34 @@ function bindEvents() {
         if (event.target.closest("#revealFeedSenderButton")) revealFeedSender();
         const share = event.target.closest("[data-share-feed-platform]");
         if (share) shareFeedItem(share.dataset.shareFeedPlatform);
-        if (event.target.closest("[data-report-feed-item]")) moderateFeedItem("report");
-        if (event.target.closest("[data-block-feed-submitter]")) moderateFeedItem("block");
+        if (event.target.closest("[data-report-feed-item]")) {
+            closeDetailActionMenus();
+            moderateFeedItem("report");
+        }
+        if (event.target.closest("[data-block-feed-submitter]")) {
+            closeDetailActionMenus();
+            moderateFeedItem("block");
+        }
     });
     $("#feedGateLock").addEventListener("click", (event) => { if (event.target.closest("[data-vote-to-unlock]")) switchPanel("play"); });
     $("#anonymousAnswerForm").addEventListener("submit", answerAnonymousQuestion);
     $("#anonymousQuestionDialog").addEventListener("click", (event) => {
+        const menuButton = event.target.closest("[data-toggle-anonymous-menu]");
+        if (menuButton) toggleDetailActionMenu(menuButton);
         if (event.target.closest("[data-close-anonymous]")) {
             state.selectedAnonymousQuestionId = null;
             closeDetailScreen($("#anonymousQuestionDialog"));
         }
         const action = event.target.closest("[data-anonymous-action]");
         const share = event.target.closest("[data-share-anonymous]");
-        if (action) handleAnonymousSafetyAction(action.dataset.anonymousAction);
+        if (action) {
+            closeDetailActionMenus();
+            handleAnonymousSafetyAction(action.dataset.anonymousAction);
+        }
         if (share) shareAnonymousAnswer(share.dataset.shareAnonymous);
+    });
+    document.addEventListener("click", (event) => {
+        if (!event.target.closest(".detail-overflow")) closeDetailActionMenus();
     });
     $$(".nav-item").forEach((button) => button.addEventListener("click", () => switchPanel(button.dataset.panel)));
     $("#playCard").addEventListener("click", (event) => {

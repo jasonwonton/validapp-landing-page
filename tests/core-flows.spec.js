@@ -216,8 +216,11 @@ test("feed polls open the iOS-style detail and moderation flow", async ({ page }
     await expect(dialog.getByRole("button", { name: "Share poll to Instagram" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Share poll to TikTok" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Get God Mode to Reveal who sent this" })).toBeVisible();
+    await expect(dialog.getByRole("menuitem", { name: "Report question" })).toBeHidden();
+    await dialog.getByRole("button", { name: "More poll actions" }).click();
+    await expect(dialog.getByRole("menuitem", { name: "Report question" })).toBeVisible();
     page.once("dialog", (confirmation) => confirmation.accept());
-    await dialog.getByRole("button", { name: "Report question" }).click();
+    await dialog.getByRole("menuitem", { name: "Report question" }).click();
     await expect(dialog).toBeHidden();
     await expect(page.locator("#toast")).toContainText("Question reported");
     await expect(page.locator("[data-feed-detail='9001']")).toHaveCount(0);
@@ -230,6 +233,19 @@ test("poll share buttons generate the iOS-style 9:16 photo", async ({ page }) =>
             configurable: true,
             value: async ({ files, title, text }) => {
                 const bitmap = await createImageBitmap(files[0]);
+                const canvas = document.createElement("canvas");
+                canvas.width = bitmap.width;
+                canvas.height = bitmap.height;
+                const context = canvas.getContext("2d");
+                context.drawImage(bitmap, 0, 0);
+                const artworkBand = context.getImageData(160, 350, 580, 150).data;
+                let artworkPixels = 0;
+                for (let index = 0; index < artworkBand.length; index += 4) {
+                    const difference = Math.abs(artworkBand[index] - 204)
+                        + Math.abs(artworkBand[index + 1] - 247)
+                        + Math.abs(artworkBand[index + 2] - 244);
+                    if (difference > 45) artworkPixels += 1;
+                }
                 window.__sharedPoll = {
                     width: bitmap.width,
                     height: bitmap.height,
@@ -238,13 +254,15 @@ test("poll share buttons generate the iOS-style 9:16 photo", async ({ page }) =>
                     size: files[0].size,
                     title,
                     text,
+                    artworkPixels,
                 };
                 bitmap.close();
             },
         });
     });
     await signInToDemo(page);
-    await page.locator("[data-feed-detail='9001']").click();
+    await page.getByRole("button", { name: "School", exact: true }).click();
+    await page.locator("[data-feed-detail='9003']").click();
     const dialog = page.locator("#feedDetailDialog");
     await expect(dialog.getByText("Share this poll")).toHaveCount(0);
     await dialog.getByRole("button", { name: "Share poll to Snapchat" }).click();
@@ -257,8 +275,9 @@ test("poll share buttons generate the iOS-style 9:16 photo", async ({ page }) =>
         title: "Share to Snapchat",
         text: "A poll on Valid · https://validapp.lol",
     });
-    expect(sharedPoll.name).toMatch(/^valid-poll-9001\.png$/);
+    expect(sharedPoll.name).toMatch(/^valid-poll-9003\.png$/);
     expect(sharedPoll.size).toBeGreaterThan(10_000);
+    expect(sharedPoll.artworkPixels).toBeGreaterThan(5_000);
 });
 
 test("non-subscribers can reach God Mode from a received vote", async ({ page }) => {
@@ -326,8 +345,14 @@ test("anonymous inbox supports private answers and safety controls", async ({ pa
     await replyDialog.getByRole("button", { name: "Close" }).click();
 
     await page.getByRole("button", { name: /Who has been making school better lately/ }).click();
+    const safetyMenu = page.locator("#anonymousQuestionDialog");
+    await expect(safetyMenu.getByRole("menuitem", { name: "Report" })).toBeHidden();
+    await safetyMenu.getByRole("button", { name: "More message actions" }).click();
+    await expect(safetyMenu.getByRole("menuitem", { name: "Report" })).toBeVisible();
+    await expect(safetyMenu.getByRole("menuitem", { name: "Block sender" })).toBeVisible();
+    await expect(safetyMenu.getByRole("menuitem", { name: "Delete" })).toBeVisible();
     page.once("dialog", (confirmation) => confirmation.accept());
-    await page.locator("#anonymousQuestionDialog").getByRole("button", { name: "Report" }).click();
+    await page.locator("#anonymousQuestionDialog").getByRole("menuitem", { name: "Report" }).click();
     await expect(page.locator("#toast")).toContainText("Reported to Valid");
     await expect(page.getByRole("button", { name: /Who has been making school better lately/ })).toHaveCount(0);
 });
@@ -429,10 +454,8 @@ test("settings exposes iOS-style editing, polls, ask link, and aura purchases", 
     await page.getByRole("button", { name: /Open poll: Who always knows/ }).click();
     await expect(page.getByRole("dialog").getByRole("heading", { name: "Who always knows how to make people laugh?" })).toBeVisible();
     await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
-    await expect(page.getByText("1 passkey registered · no SMS recovery")).toBeVisible();
-    await page.getByRole("button", { name: "Add a backup passkey" }).click();
-    await expect(page.getByText("2 passkeys registered · no SMS recovery")).toBeVisible();
-    await expect(page.locator("#toast")).toContainText("Backup passkey added");
+    await expect(page.locator("#addPasskeyButton")).toBeHidden();
+    await expect(page.getByText(/passkeys? registered/)).toHaveCount(0);
     await page.getByRole("button", { name: "Profile information" }).click();
     await expect(page.getByRole("dialog").getByRole("heading", { name: "Profile information" })).toBeVisible();
     await expect(page.getByRole("dialog").getByLabel("Bio")).toHaveCount(0);

@@ -647,9 +647,6 @@ body.play-active main { padding-top: max(16px, env(safe-area-inset-top)); }
 .anonymous-question-detail blockquote { order: 2; margin: 0; padding: 8px 12px; border: 0; background: transparent; font-size: clamp(1.8rem, 8vw, 2.2rem); line-height: 1.12; }
 .anonymous-question-detail > div { order: 1; display: grid; gap: 3px; color: var(--muted); }
 .anonymous-question-detail span { color: var(--muted); font-family: system-ui, sans-serif; font-size: .82rem; line-height: 1.35; }
-.safety-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.safety-actions button { min-height: 42px; padding: 7px; border: 2px solid var(--ink); border-radius: 12px; background: var(--white); cursor: pointer; }
-.safety-actions button:first-child, .safety-actions button:last-child { color: #a3293c; }
 .deletion-warning { padding: 16px; border: 2px solid #a3293c; border-radius: 15px; background: #fff0f2; }
 .deletion-warning strong { display: block; margin-bottom: 6px; color: #8b1e31; font-size: 1.12rem; }
 .deletion-warning p { margin: 0; color: #5d4045; font-family: system-ui, sans-serif; font-size: .86rem; line-height: 1.4; }
@@ -677,14 +674,18 @@ body.play-active main { padding-top: max(16px, env(safe-area-inset-top)); }
 .feed-detail-share { display: grid; gap: 0; }
 .reveal-sender-button { min-height: 60px; display: flex; align-items: center; justify-content: center; gap: 9px; border: 0; border-radius: 20px; background: rgba(255,255,255,.92); box-shadow: none; }
 .reveal-sender-button img { width: 32px; height: 32px; object-fit: contain; }
-.detail-safety-actions { display: flex; justify-content: center; gap: 18px; margin-top: 12px; }
-.detail-safety-actions button { border: 0; background: transparent; color: #8b1e31; text-decoration: underline; cursor: pointer; }
 
 .detail-screen { position: fixed; z-index: 60; inset: 0; overflow: auto; overscroll-behavior: contain; background: var(--aqua); }
 .detail-screen-header { position: sticky; z-index: 3; top: 0; min-height: calc(54px + env(safe-area-inset-top)); display: grid; grid-template-columns: minmax(90px, 1fr) auto minmax(90px, 1fr); align-items: end; padding: env(safe-area-inset-top) 14px 10px; border-bottom: 1px solid rgba(0,0,0,.1); background: rgba(204,247,244,.95); backdrop-filter: blur(16px); }
 .detail-screen-header > strong { align-self: end; padding-bottom: 4px; font-size: 1.15rem; text-align: center; }
 #feedDetailDialog .detail-screen-header { grid-template-columns: 64px minmax(0, 1fr) 64px; }
 #feedDetailDialog .detail-screen-header > strong { overflow: hidden; font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }
+.detail-overflow { position: relative; justify-self: end; align-self: end; }
+.detail-overflow-button { width: 38px; height: 38px; display: grid; place-items: center; padding: 0 0 8px; border: 2px solid var(--ink); border-radius: 50%; background: transparent; color: var(--ink); cursor: pointer; font: 700 1rem/1 system-ui, sans-serif; letter-spacing: -2px; }
+.detail-overflow-menu { position: absolute; z-index: 8; top: calc(100% + 8px); right: 0; min-width: 190px; overflow: hidden; border: 2px solid var(--ink); border-radius: 15px; background: var(--white); box-shadow: 0 8px 24px rgba(0,0,0,.2); }
+.detail-overflow-menu button { width: 100%; min-height: 46px; display: block; padding: 10px 14px; border: 0; border-bottom: 1px solid rgba(0,0,0,.12); background: var(--white); color: #a3293c; cursor: pointer; font: 600 .95rem/1.2 system-ui, sans-serif; text-align: left; }
+.detail-overflow-menu button:last-child { border-bottom: 0; }
+.detail-overflow-menu button:active { background: #fff0f2; }
 .feed-detail-art .artwork-placeholder img { width: 70px; height: 70px; }
 .detail-back-button { justify-self: start; min-height: 38px; display: inline-flex; align-items: center; gap: 2px; padding: 0; border: 0; background: transparent; color: var(--ink); cursor: pointer; font-size: 2rem; }
 .detail-back-button span { font-size: 1rem; }
