@@ -1,8 +1,10 @@
 # Valid web app
 
-This branch contains the installable, passkey-only web client at `/app/`. It
-uses the Six7 backend branch `validapp-webapp-backend-changes`. There is no
-password, phone-number, or SMS authentication path in the web client.
+This branch contains the installable web client at `/app/`. It uses passkeys
+for authentication and the Six7 backend branch
+`validapp-webapp-backend-changes`. Signup collects a phone number so existing
+polls resolve to the new account, but there is no password, OTP, or outbound
+SMS step.
 
 For a short two-repository setup guide on a new machine, start with
 [LOCAL_WEBAPP_SETUP.md](LOCAL_WEBAPP_SETUP.md).

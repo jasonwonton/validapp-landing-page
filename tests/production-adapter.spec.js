@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 const API_ORIGIN = "https://api.six7.lol";
 const USER_ID = "11111111-1111-1111-1111-111111111111";
 
-async function fillProductionSignup(dialog) {
+async function fillProductionSignupThroughGrade(dialog) {
     await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
     await dialog.getByLabel("Age").selectOption("16");
     await dialog.getByRole("button", { name: "Continue" }).click();
@@ -12,6 +12,12 @@ async function fillProductionSignup(dialog) {
     await dialog.getByRole("option", { name: /Westview High School/ }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("Grade").selectOption("Senior");
+    await dialog.getByRole("button", { name: "Continue" }).click();
+}
+
+async function fillProductionSignup(dialog) {
+    await fillProductionSignupThroughGrade(dialog);
+    await dialog.getByLabel("Phone number").fill("4155550123");
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("First name").fill("Taylor");
     await dialog.getByRole("button", { name: "Continue" }).click();
@@ -148,7 +154,7 @@ async function installCredentialStub(page, operation) {
     }, operation);
 }
 
-async function interceptProductionAPI(page, { signup = false, profileAura = 500, questionFailureCount = 0 } = {}) {
+async function interceptProductionAPI(page, { signup = false, phoneExists = false, profileAura = 500, questionFailureCount = 0 } = {}) {
     const requests = [];
     let questionAttempts = 0;
     await page.route(`${API_ORIGIN}/api/v1/**`, async (route) => {
@@ -203,6 +209,14 @@ async function interceptProductionAPI(page, { signup = false, profileAura = 500,
                 userName: body.username,
                 rpId: "six7.lol",
                 rpName: "Valid",
+            });
+        }
+        if (path === "/api/v1/users/phone-check") {
+            return fulfill({
+                exists: phoneExists,
+                vote_count: 6,
+                status: phoneExists ? "existing_complete_account" : "available",
+                has_profile: phoneExists,
             });
         }
         if (path === "/api/v1/auth/passkey/signup/complete") {
@@ -308,7 +322,7 @@ test("unified search debounces rapid typing into one bounded request pair", asyn
     expect(requests.filter((request) => request.path.includes("/feed?limit=20&offset=0&search=")).length).toBe(1);
 });
 
-test("real adapter completes passkey-only signup without an SMS request", async ({ page }) => {
+test("real adapter links signup to the phone identity without an SMS request", async ({ page }) => {
     await installCredentialStub(page, "create");
     const requests = await interceptProductionAPI(page, { signup: true });
 
@@ -331,6 +345,7 @@ test("real adapter completes passkey-only signup without an SMS request", async 
     expect(completion.authorization).toBeNull();
     expect(completion.body).toMatchObject({
         userId: USER_ID,
+        phoneNumber: "4155550123",
         credentialId: "AQIDBA==",
         attestationObject: "Cww=",
         clientDataJSON: "DQ4=",
@@ -345,6 +360,10 @@ test("real adapter completes passkey-only signup without an SMS request", async 
         },
     });
     expect(completion.body.deviceInstallationId.length).toBeGreaterThanOrEqual(8);
+    const phoneCheck = requests.find((request) => request.path === "/api/v1/users/phone-check");
+    expect(phoneCheck.authorization).toBeNull();
+    expect(phoneCheck.body.phone_number).toBe("4155550123");
+    expect(phoneCheck.body.device_installation_id).toBe(completion.body.deviceInstallationId);
     const nearby = requests.find((request) => request.path === "/api/v1/highschools/nearby?zip_code=90210&limit=50");
     expect(nearby.authorization).toBeNull();
     expect(requests.some((request) => request.path === "/api/v1/highschools/request")).toBe(false);
@@ -352,6 +371,22 @@ test("real adapter completes passkey-only signup without an SMS request", async 
     expect(photo.authorization).toBe("Bearer session-token");
     expect(photo.contentType).toMatch(/^multipart\/form-data; boundary=/);
     expect(requests.some((request) => /sms|phone\/(request|confirm)/i.test(request.path))).toBe(false);
+});
+
+test("signup sends existing phone identities back to sign in", async ({ page }) => {
+    const requests = await interceptProductionAPI(page, { signup: true, phoneExists: true });
+    await page.goto("/app/");
+    await page.getByRole("button", { name: "Create an account" }).click();
+    const dialog = page.getByRole("dialog");
+    await fillProductionSignupThroughGrade(dialog);
+    await dialog.getByLabel("Phone number").fill("4155550123");
+    await dialog.getByRole("button", { name: "Continue" }).click();
+
+    await expect(dialog.locator("#signupStatus")).toHaveText(
+        "An account already exists for this phone number. Sign in instead.",
+    );
+    await expect(dialog.getByLabel("First name")).toBeHidden();
+    expect(requests.some((request) => request.path === "/api/v1/auth/passkey/signup/challenge")).toBe(false);
 });
 
 test("real adapter submits a Play vote and multipart school question", async ({ page }) => {

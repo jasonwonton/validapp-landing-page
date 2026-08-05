@@ -209,7 +209,7 @@
                 <img src="../assets/valid_logo.png" alt="Valid">
                 <button class="icon-button" aria-label="Close" type="button" data-close-dialog>×</button>
             </div>
-            <div class="signup-progress" aria-label="Signup progress"><span class="active"></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+            <div class="signup-progress" aria-label="Signup progress"><span class="active"></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
             <fieldset class="signup-step" data-signup-step="0">
                 <h2>How old are you?</h2>
                 <p class="form-hint signup-terms">By entering your age, you agree to our <a href="../terms.html" target="_blank">Terms</a> and <a href="../privacy-policy.html" target="_blank">Privacy Policy</a>.</p>
@@ -242,27 +242,33 @@
                 <button class="primary-button" type="button" data-signup-next>Continue</button>
             </fieldset>
             <fieldset class="signup-step hidden" data-signup-step="3">
+                <h2>What's your phone number?</h2>
+                <p class="form-hint signup-phone-hint">This will identify your account and find polls where classmates picked you.</p>
+                <label>Phone number<input id="signupPhone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" placeholder="(555) 123-4567" required></label>
+                <button class="primary-button" type="button" data-signup-next>Continue</button>
+            </fieldset>
+            <fieldset class="signup-step hidden" data-signup-step="4">
                 <h2>What's your first name?</h2>
                 <label>First name<input id="signupFirstName" autocomplete="given-name" maxlength="50" placeholder="First name" required></label>
                 <button class="primary-button" type="button" data-signup-next>Continue</button>
             </fieldset>
-            <fieldset class="signup-step hidden" data-signup-step="4">
+            <fieldset class="signup-step hidden" data-signup-step="5">
                 <h2>What's your last name?</h2>
                 <label>Last name<input id="signupLastName" autocomplete="family-name" maxlength="50" placeholder="Last name" required></label>
                 <button class="primary-button" type="button" data-signup-next>Continue</button>
             </fieldset>
-            <fieldset class="signup-step hidden" data-signup-step="5">
+            <fieldset class="signup-step hidden" data-signup-step="6">
                 <h2>Pick a username</h2>
                 <p class="form-hint">This is how classmates can find you.</p>
                 <label>Username<input id="signupUsername" autocomplete="username" minlength="3" maxlength="30" pattern="[a-z0-9_]+" placeholder="your_username" required></label>
                 <button class="primary-button" type="button" data-signup-next>Continue</button>
             </fieldset>
-            <fieldset class="signup-step hidden" data-signup-step="6">
+            <fieldset class="signup-step hidden" data-signup-step="7">
                 <h2>How do you identify?</h2>
                 <label class="signup-choice-label">Gender<select id="signupGender" required><option value="">Choose one</option><option value="female">Girl</option><option value="male">Boy</option><option value="non-binary">Non-binary</option></select></label>
                 <button class="primary-button" type="button" data-signup-next>Continue</button>
             </fieldset>
-            <fieldset class="signup-step signup-photo-step hidden" data-signup-step="7">
+            <fieldset class="signup-step signup-photo-step hidden" data-signup-step="8">
                 <h2>Add a profile photo</h2>
                 <p class="signup-photo-benefit">📷 Users with profile pictures<br>receive 2-3x more votes</p>
                 <div class="signup-photo-picker">

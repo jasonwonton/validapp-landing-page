@@ -9,8 +9,9 @@ your-workspace/
 └── six7/                   # branch: validapp-webapp-backend-changes
 ```
 
-The web app is passkey-only. It has no phone-number, OTP, or SMS signup flow.
-Nothing in this guide requires production credentials.
+The web app uses passkeys for authentication. Signup collects a phone number
+to connect the account to existing polls, but it has no OTP or outbound SMS
+step. Nothing in this guide requires production credentials.
 
 ## Get the matching branches
 

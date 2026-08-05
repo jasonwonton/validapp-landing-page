@@ -9,9 +9,9 @@ for the final current-App-Store and physical-Android release gates.
 
 | Area | iOS behavior carried to web | Automated evidence |
 | --- | --- | --- |
-| Authentication | Existing-passkey sign-in, related-origin `six7.lol` RP, passkey-only signup, backup-passkey enrollment/count, logout/revocation, memory-only bearer | adapter journeys plus `test-passkey-backend.mjs` real registration/backup/signature/replay verification |
-| Onboarding | Name, username, birthday/age, gender, school, grade, optional photo, review, passkey, post-signup classmate prompt | compact Android + desktop onboarding journeys |
-| No SMS | No phone field, OTP, password, or outbound-message step; contacts are user-selected and upload-only | signup and Contact Picker assertions |
+| Authentication | Existing-passkey sign-in, related-origin `six7.lol` RP, phone-linked passkey signup, backup-passkey enrollment/count, logout/revocation, memory-only bearer | adapter journeys plus `test-passkey-backend.mjs` real registration/backup/signature/replay verification |
+| Onboarding | Age, school, grade, phone identity, name, username, gender, optional photo, passkey, post-signup classmate prompt | compact Android + desktop onboarding journeys |
+| Phone identity | Phone is checked before signup and stored as the same protected identity used by iOS so historical polls resolve; there is no OTP or outbound-message step | signup, phone-check, and adapter contract assertions |
 | Feed | Inbox/School tabs, vote lock, paging, My Votes, instant + bounded server search, classmate results/filtering, upvote, details/share, report/block, God Mode sender reveals | Feed, search, vote-lock, detail, reveal, and moderation journeys |
 | Anonymous Inbox | Incoming questions, unread/open, answer/aura, report/block/delete, and received-reply detail with original message + response | anonymous Inbox journey |
 | Play | Question artwork, four choices, immediate selection feedback, live aura/streak multiplier, shuffle, three-skip cap, paid nomination, submitted-question attribution and safety controls | Play answer, nomination, skip, moderation, and streak journeys |
@@ -23,8 +23,8 @@ for the final current-App-Store and physical-Android release gates.
 
 ## Deliberate platform differences
 
-- **Phone/SMS authentication is intentionally absent.** This is a product
-  requirement, not a parity defect.
+- **SMS verification is intentionally absent from signup.** The phone number is
+  still collected and linked using the same protected identity as iOS.
 - Native Contacts permission screens become Android Chrome's Contact Picker.
   Valid receives only the contacts explicitly selected in that gesture.
 - Snapchat/iMessage/Instagram-specific sheets become the Web Share API or a

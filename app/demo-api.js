@@ -242,6 +242,10 @@ export class DemoAPI {
         return { available: /^[a-z0-9_]{3,30}$/.test(normalized) && !inappropriate && normalized !== "taken" };
     }
 
+    async checkPhoneRegistration() {
+        return { exists: false, vote_count: 3, status: "available", has_profile: false };
+    }
+
     async demoSignup(payload) {
         Object.assign(this.profile, payload.profile, {
             user_id: "demo-user",

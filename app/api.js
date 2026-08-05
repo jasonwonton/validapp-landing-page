@@ -150,6 +150,17 @@ export class ValidAPI {
         return this.request(`/users/username-available/${encodeURIComponent(username)}`, { auth: false });
     }
 
+    checkPhoneRegistration(phoneNumber, deviceInstallationId) {
+        return this.request("/users/phone-check", {
+            method: "POST",
+            auth: false,
+            body: JSON.stringify({
+                phone_number: phoneNumber,
+                device_installation_id: deviceInstallationId,
+            }),
+        });
+    }
+
     completeWebSignup(payload) {
         return this.request("/auth/passkey/signup/complete", {
             method: "POST",

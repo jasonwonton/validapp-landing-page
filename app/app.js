@@ -654,6 +654,19 @@ function dateOfBirthFromAge(value) {
     return `${new Date().getFullYear() - age}-01-01T00:00:00Z`;
 }
 
+function signupPhoneDigits(value) {
+    let digits = String(value || "").replace(/\D/g, "");
+    if (digits.length === 11 && digits.startsWith("1")) digits = digits.slice(1);
+    return digits.slice(0, 10);
+}
+
+function formatSignupPhone(value) {
+    const digits = signupPhoneDigits(value);
+    if (digits.length < 4) return digits;
+    if (digits.length < 7) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
 function openSignupDialog() {
     $("#signupStatus").textContent = "";
     resetSignupPhotoPreview();
@@ -769,13 +782,13 @@ function showSignupSchoolFallback(show) {
 }
 
 function setSignupStep(index) {
-    state.signupStep = Math.max(0, Math.min(7, index));
+    state.signupStep = Math.max(0, Math.min(8, index));
     $$('[data-signup-step]').forEach((step) => step.classList.toggle("hidden", Number(step.dataset.signupStep) !== state.signupStep));
     $$(".signup-progress span").forEach((segment, segmentIndex) => segment.classList.toggle("active", segmentIndex <= state.signupStep));
     $("#signupStatus").textContent = "";
     requestAnimationFrame(() => { $("#signupDialog").scrollTop = 0; });
     $(".signup-back-button").classList.toggle("hidden", state.signupStep === 0);
-    if (state.signupStep === 7) {
+    if (state.signupStep === 8) {
         resetSignupPhotoPreview();
         $("#signupPicture").value = "";
     }
@@ -790,7 +803,26 @@ async function advanceSignup(button) {
         $("#signupStatus").textContent = "Choose your school before continuing.";
         return;
     }
-    if (state.signupStep === 5) {
+    if (state.signupStep === 3) {
+        const phoneNumber = signupPhoneDigits($("#signupPhone").value);
+        if (phoneNumber.length !== 10) {
+            $("#signupStatus").textContent = "Enter a valid 10-digit phone number.";
+            return;
+        }
+        setButtonLoading(button, true, "Checking...");
+        try {
+            const result = await api.checkPhoneRegistration(phoneNumber, deviceInstallationId());
+            if (result.exists) {
+                $("#signupStatus").textContent = "An account already exists for this phone number. Sign in instead.";
+                return;
+            }
+            $("#signupPhone").value = formatSignupPhone(phoneNumber);
+        } catch (error) {
+            $("#signupStatus").textContent = error.message || "Could not check that phone number.";
+            return;
+        } finally { setButtonLoading(button, false); }
+    }
+    if (state.signupStep === 6) {
         setButtonLoading(button, true, "Checking username...");
         try {
             const result = await api.checkUsernameAvailability($("#signupUsername").value.trim().toLowerCase());
@@ -854,6 +886,7 @@ async function createAccount(event) {
             const credential = await createSignupPasskey(api, username);
             login = await api.completeWebSignup({
                 ...credential,
+                phoneNumber: signupPhoneDigits($("#signupPhone").value),
                 deviceInstallationId: deviceInstallationId(),
                 idempotencyKey: crypto.randomUUID(),
                 profile,
@@ -2312,6 +2345,10 @@ function bindEvents() {
     $("#createAccountButton").addEventListener("click", openSignupDialog);
     $("#signupForm").addEventListener("submit", createAccount);
     $("#signupPicture").addEventListener("change", previewSignupPhoto);
+    $("#signupPhone").addEventListener("input", (event) => {
+        event.currentTarget.value = formatSignupPhone(event.currentTarget.value);
+        $("#signupStatus").textContent = "";
+    });
     $("#signupZip").addEventListener("input", (event) => {
         event.currentTarget.value = event.currentTarget.value.replace(/\D/g, "").slice(0, 5);
         state.signupSchoolLookupGeneration += 1;

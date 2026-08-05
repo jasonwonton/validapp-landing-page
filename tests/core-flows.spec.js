@@ -17,6 +17,8 @@ async function fillSignupThroughUsername(dialog, username = "taylor_j") {
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("Grade").selectOption("Senior");
     await dialog.getByRole("button", { name: "Continue" }).click();
+    await dialog.getByLabel("Phone number").fill("4155550123");
+    await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("First name").fill("Taylor");
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("Last name").fill("Jordan");
@@ -89,6 +91,10 @@ test("onboarding keeps every action reachable on compact phones", async ({ page 
     await expect(dialog.getByText("What grade are you in?")).toBeInViewport();
     await expect(dialog.getByLabel("Grade")).toHaveCSS("font-family", /Jua/);
     await dialog.getByLabel("Grade").selectOption("Senior");
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await expect(dialog.getByText("What's your phone number?")).toBeInViewport();
+    await dialog.getByLabel("Phone number").fill("4155550123");
+    await expect(dialog.getByLabel("Phone number")).toHaveValue("(415) 555-0123");
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("First name").fill("Taylor");
     await dialog.getByRole("button", { name: "Continue" }).click();

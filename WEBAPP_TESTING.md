@@ -72,9 +72,11 @@ release gate. The passkey preflight must allow `POST` from that exact origin.
 
 On an actual Android phone in current Chrome:
 
-1. Create an account with name, birthday, school, grade, and a passkey. Confirm
-   there is no phone-number or SMS step. Add an optional profile photo and
-   confirm the selected-contact/invite prompt appears after signup.
+1. Create an account with age, school, grade, phone number, name, username,
+   gender, and a passkey. Confirm the phone is formatted and checked, no SMS or
+   OTP step appears, and existing polls for that number load after signup. Add
+   an optional profile photo and confirm the selected-contact/invite prompt
+   appears after signup.
 2. Close the tab, return, and sign in with the same passkey.
    Add a backup passkey from Settings, confirm the count increases, sign out, and
    verify a fresh passkey sign-in still reaches the same account.
