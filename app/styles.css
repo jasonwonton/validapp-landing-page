@@ -448,9 +448,12 @@ h3 { font-size: 1.45rem; }
 .god-mode-active { padding: 6px 9px; border-radius: 999px; background: rgba(28,151,98,.15); color: #136a47; font-size: .8rem; white-space: nowrap; }
 .god-mode-card ul { display: grid; gap: 6px; margin: 0; padding-left: 22px; }
 .god-mode-card p { margin: 0; font-size: .86rem; line-height: 1.4; }
-.god-mode-start-button { min-height: 52px; display: grid; place-items: center; padding: 10px 16px; border-radius: 20px; background: var(--peach); color: var(--ink); text-align: center; text-decoration: none; }
+.god-mode-benefits-heading { color: var(--ink) !important; font-size: 1rem !important; }
+.god-mode-start-button { min-height: 52px; display: grid; place-items: center; padding: 10px 16px; border: 0; border-radius: 20px; background: var(--peach); color: var(--ink); cursor: pointer; text-align: center; }
 .settings-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .settings-section-heading h3 { margin: 0; }
+.purchases-section { display: grid; gap: 0; padding: 18px; border: var(--line); border-radius: 18px; background: rgba(255,255,255,.85); }
+.purchases-section .settings-section-heading { margin-bottom: 16px; }
 .purchase-list { display: grid; gap: 10px; margin-top: 10px; }
 .purchase-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 14px; border: 2px solid var(--ink); border-radius: 18px; background: var(--white); }
 .purchase-row > span:first-child { display: grid; gap: 3px; }
@@ -458,6 +461,37 @@ h3 { font-size: 1.45rem; }
 .aura-price-button { min-width: 92px; min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 8px 13px; border: 0; border-radius: 999px; background: var(--peach); cursor: pointer; }
 .aura-price-button img { width: 18px; height: 20px; object-fit: contain; }
 .aura-price-button:disabled { opacity: .45; cursor: not-allowed; }
+.god-mode-pitch-dialog { position: fixed; inset: 0; width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; overflow: auto; overscroll-behavior: contain; padding: 0; border: 0; background: var(--aqua); }
+.god-mode-pitch-dialog::backdrop { background: var(--aqua); }
+.god-mode-pitch-content { width: min(600px, 100%); min-height: 100%; display: grid; align-content: start; gap: 16px; margin: 0 auto; padding: max(10px, env(safe-area-inset-top)) 18px calc(24px + env(safe-area-inset-bottom)); }
+.god-mode-sheet-handle { width: 42px; height: 5px; justify-self: center; padding: 0; border: 0; border-radius: 999px; background: rgba(0,0,0,.28); cursor: pointer; }
+.god-mode-pitch-hero { display: grid; justify-items: center; gap: 6px; text-align: center; }
+.god-mode-pitch-hero h2 { margin: 0; font-size: clamp(1.35rem, 5vw, 1.85rem); }
+.god-mode-pitch-brand { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: clamp(2.2rem, 11vw, 3.5rem); line-height: 1; }
+.god-mode-pitch-brand img { width: 62px; height: 62px; object-fit: contain; }
+.god-mode-benefit-carousel { display: flex; gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.god-mode-benefit-carousel::-webkit-scrollbar { display: none; }
+.god-mode-benefit-card { min-width: 100%; min-height: 330px; display: grid; align-content: center; justify-items: center; gap: 12px; padding: 24px; border: 2px solid var(--ink); border-radius: 24px; background: var(--white); scroll-snap-align: center; text-align: center; }
+.god-mode-benefit-card h3 { margin: 0; font-size: clamp(1.65rem, 8vw, 2.35rem); }
+.god-mode-benefit-card p { max-width: 360px; margin: 0; color: var(--muted); font-family: system-ui, sans-serif; font-size: 1rem; line-height: 1.4; }
+.god-mode-benefit-emoji { font-size: 5rem; }
+.god-mode-benefit-image { width: 84px; height: 100px; object-fit: contain; }
+.god-mode-reveal-preview { position: relative; width: 190px; height: 125px; }
+.god-mode-letter { position: absolute; left: 12px; top: 18px; font: 5.5rem/1 system-ui, sans-serif; transform: rotate(-7deg); }
+.god-mode-lens { position: absolute; right: 0; top: 0; width: 112px; height: 112px; display: grid; place-items: center; font: 5.6rem/1 system-ui, sans-serif; animation: god-mode-lens 2.8s ease-in-out infinite; }
+.god-mode-lens strong { position: absolute; top: 32px; left: 20px; color: var(--ink); font: 1rem/1.05 "Jua", system-ui, sans-serif; transform: rotate(-8deg); }
+.god-mode-page-dots { display: flex; justify-content: center; gap: 7px; }
+.god-mode-page-dots span { width: 8px; height: 8px; border-radius: 50%; background: rgba(0,0,0,.22); }
+.god-mode-page-dots .active { width: 21px; border-radius: 999px; background: var(--ink); }
+.god-mode-pitch-actions { display: grid; gap: 10px; }
+.god-mode-earn-button, .god-mode-checkout-button { min-height: 58px; display: grid; place-items: center; gap: 2px; padding: 9px 16px; border: 2px solid var(--ink); border-radius: 20px; color: var(--ink); cursor: pointer; text-align: center; text-decoration: none; }
+.god-mode-earn-button { background: var(--white); }
+.god-mode-checkout-button { background: var(--peach); }
+.god-mode-earn-button small, .god-mode-checkout-button small { font-size: .78rem; }
+.god-mode-maybe-button { min-height: 40px; border: 0; background: transparent; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.god-mode-legal { display: flex; justify-content: center; gap: 8px; margin: 0; font: .78rem system-ui, sans-serif; }
+.god-mode-legal a { color: inherit; }
+@keyframes god-mode-lens { 50% { transform: translate(-10px, -5px) rotate(3deg); } }
 .aura-spend-content { display: grid; justify-items: center; gap: 16px; padding: 24px; text-align: center; }
 .aura-spend-icon { width: 90px; height: 90px; display: grid; place-items: center; border: 2px solid var(--ink); border-radius: 50%; background: var(--white); }
 .aura-spend-icon img { width: 56px; height: 62px; object-fit: contain; }
@@ -678,8 +712,7 @@ body.detail-screen-open { overflow: hidden; }
     .profile-stats-grid { margin-top: 5px; }
     .profile-stat-card { padding: 10px 8px; }
     .profile-polls-section { margin-top: 20px; }
-    .purchase-row { grid-template-columns: 1fr; }
-    .aura-price-button { justify-self: stretch; }
+    .purchases-section { padding: 14px; }
     .identity-picker { grid-template-columns: 1fr; }
     .two-field-row { grid-template-columns: 1fr; }
     .safety-actions { grid-template-columns: 1fr; }

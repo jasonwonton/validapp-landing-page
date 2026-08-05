@@ -335,6 +335,8 @@ export class DemoAPI {
             max_skips_per_set: 3,
             play_lock_time_seconds: 60,
             full_reveal_aura_cost: 200,
+            max_full_reveals_per_week: 3,
+            god_mode_price: 6.99,
             global_visibility_boost_cost: 400,
             targeted_visibility_boost_cost: 200,
         };

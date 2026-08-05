@@ -246,10 +246,20 @@ test("non-subscribers can reach God Mode from a received vote", async ({ page })
     await signInToDemo(page);
     await page.locator("[data-feed-detail='9001']").click();
     await page.getByRole("button", { name: "Get God Mode to Reveal who sent this" }).click();
-    await expect(page.getByText("God Mode", { exact: true }).first()).toBeVisible();
-    await expect(page.getByRole("link", { name: "Start God Mode in iPhone app" })).toHaveAttribute("href", /apps\.apple\.com/);
-    await expect(page.locator("#godModeCard")).toHaveClass(/attention/);
-    await expect(page.locator("#feedDetailDialog")).toBeHidden();
+    const pitch = page.getByRole("dialog", { name: "God Mode" });
+    await expect(pitch.getByText("See who likes you with")).toBeVisible();
+    await expect(pitch.getByText("3 Reveals / Week")).toBeVisible();
+    await expect(pitch.getByRole("button", { name: /Earn God Mode/ })).toBeVisible();
+    await expect(pitch.getByRole("link", { name: /Start God Mode/ })).toHaveAttribute("href", /^https:\/\/buy\.stripe\.com\/test_/);
+    await expect(page.locator("#feedDetailDialog")).toBeVisible();
+    await pitch.getByRole("button", { name: /Earn God Mode/ }).click();
+    await expect(pitch).toBeHidden();
+    await expect(page.locator("#classmatesDialog")).toBeVisible();
+    await page.locator("#classmatesDialog").getByRole("button", { name: "Close" }).click();
+    await page.getByRole("button", { name: "Get God Mode to Reveal who sent this" }).click();
+    await pitch.getByRole("button", { name: "Maybe later" }).click();
+    await expect(pitch).toBeHidden();
+    await expect(page.locator("#feedDetailDialog")).toBeVisible();
 });
 
 test("new users vote to unlock Feed just like iOS", async ({ page }) => {
@@ -383,7 +393,11 @@ test("settings exposes iOS-style editing, polls, ask link, and aura purchases", 
     await expect(page.getByText("Get messages", { exact: true })).toBeVisible();
     await expect(page.locator("#askLinkCard .ask-link-heading img")).toHaveCount(0);
     await expect(page.getByText("God Mode", { exact: true }).first()).toBeVisible();
-    await expect(page.getByRole("link", { name: "Start God Mode in iPhone app" })).toBeVisible();
+    await expect(page.locator("#purchasesSection")).toHaveCSS("border-top-width", "3px");
+    await page.getByRole("button", { name: "Start God Mode", exact: true }).click();
+    const pitch = page.getByRole("dialog", { name: "God Mode" });
+    await expect(pitch.getByRole("link", { name: /Start God Mode/ })).toHaveAttribute("href", /^https:\/\/buy\.stripe\.com\/test_/);
+    await pitch.getByRole("button", { name: "Maybe later" }).click();
     await expect(page.locator("#purchasesSection .settings-aura-balance")).toHaveCount(0);
     const schoolRanks = page.locator("#schoolCard .school-rank-card");
     await expect(page.locator("#schoolCard")).toContainText("Westview High School");

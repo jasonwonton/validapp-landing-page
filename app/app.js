@@ -4,6 +4,7 @@ import { createAdditionalPasskey, createSignupPasskey, passkeysSupported, signIn
 
 const demoMode = localDemoAllowed();
 const api = demoMode ? new DemoAPI() : new ValidAPI();
+const GOD_MODE_CHECKOUT_URL = window.VALID_GOD_MODE_CHECKOUT_URL || "https://buy.stripe.com/test_placeholder";
 const state = {
     profile: null,
     activePanel: "feed",
@@ -324,13 +325,49 @@ function renderGodModeCard() {
     const active = api.user?.subscribed_user === true;
     const multiplier = Math.max(1, Number(state.profile?.god_mode_aura_multiplier || 2));
     const remainingReveals = Math.max(0, Number(state.profile?.remaining_reveals || 0));
+    const weeklyReveals = Math.max(1, Number(state.config?.max_full_reveals_per_week || 3));
+    const weeklyPrice = Math.max(0, Number(state.config?.god_mode_price || 6.99));
     $("#godModeCard").innerHTML = `<article class="god-mode-card ${active ? "active" : ""}">
-        <div class="god-mode-title"><span><img src="../assets/app/crown.png" alt=""></span><div><strong>${active ? "God Mode Active" : "God Mode"}</strong><small>${active ? "Everything unlocked" : "Optional power-ups for your account"}</small></div>${active ? `<span class="god-mode-active">✨ Active</span>` : ""}</div>
-        <ul><li>Weekly reveals and first-letter hints</li><li>${multiplier}× aura on every answer</li><li>Priority placement in classmates' polls</li></ul>
+        <div class="god-mode-title"><span><img src="../assets/app/crown.png" alt=""></span><div><strong>${active ? "God Mode Active" : "God Mode"}</strong><small>${active ? "Everything unlocked" : `$${weeklyPrice.toFixed(2)} / week`}</small></div>${active ? `<span class="god-mode-active">✨ Active</span>` : ""}</div>
+        <p class="god-mode-benefits-heading">${active ? "You're enjoying:" : "Go legendary with:"}</p>
+        <ul><li>${weeklyReveals} weekly reveals to see exactly who voted.</li><li>First-letter hints on every poll.</li><li>${multiplier}× aura on every answer you give.</li><li>Get boosted to the top of classmates' polls.</li></ul>
         ${active
         ? `<p>Your subscription is recognized on web · ${remainingReveals} weekly ${remainingReveals === 1 ? "reveal" : "reveals"} left. Billing stays with the store where you subscribed.</p>`
-        : `<p>Start God Mode in the iPhone app. Your subscription and weekly reveals sync here automatically.</p><a class="god-mode-start-button" href="https://apps.apple.com/us/app/valid-compliment-classmates/id6755367062">Start God Mode in iPhone app</a>`}
+        : `<button class="god-mode-start-button" type="button" data-open-god-mode>Start God Mode</button>`}
     </article>`;
+}
+
+function renderGodModePitch() {
+    const weeklyReveals = Math.max(1, Number(state.config?.max_full_reveals_per_week || 3));
+    const weeklyPrice = Math.max(0, Number(state.config?.god_mode_price || 6.99));
+    const multiplier = Math.max(1, Number(state.profile?.god_mode_aura_multiplier || 2));
+    $("#godModePitchBody").innerHTML = `<button class="god-mode-sheet-handle" type="button" data-close-dialog aria-label="Close God Mode"></button>
+        <section class="god-mode-pitch-hero">
+            <h2>See who likes you with</h2>
+            <div class="god-mode-pitch-brand"><img src="../assets/app/crown.png" alt=""><strong>God Mode</strong></div>
+        </section>
+        <div class="god-mode-benefit-carousel" aria-label="God Mode benefits">
+            <article class="god-mode-benefit-card">
+                <div class="god-mode-reveal-preview" aria-hidden="true"><span class="god-mode-letter">✉️</span><span class="god-mode-lens">🔍<strong>Jordan<br>Lee</strong></span></div>
+                <h3>${weeklyReveals} Reveals / Week</h3><p>See the full names on ${weeklyReveals} polls every week.</p>
+            </article>
+            <article class="god-mode-benefit-card"><span class="god-mode-benefit-emoji" aria-hidden="true">📜</span><h3>First-Letter Hints</h3><p>Get a hint about who voted on every poll.</p></article>
+            <article class="god-mode-benefit-card"><img class="god-mode-benefit-image" src="../assets/app/aura.png" alt=""><h3>${multiplier}× Aura Boost</h3><p>Earn ${multiplier}× aura on every answer you give.</p></article>
+            <article class="god-mode-benefit-card"><span class="god-mode-benefit-emoji" aria-hidden="true">🚀</span><h3>Get boosted</h3><p>Show up at the top of your classmates' polls.</p></article>
+        </div>
+        <div class="god-mode-page-dots" aria-hidden="true"><span class="active"></span><span></span><span></span><span></span></div>
+        <div class="god-mode-pitch-actions">
+            <button class="god-mode-earn-button" type="button" data-earn-god-mode><strong>Earn God Mode</strong><small>Invite friends for God Mode rewards</small></button>
+            <a class="god-mode-checkout-button" href="${escapeHTML(GOD_MODE_CHECKOUT_URL)}" target="_blank" rel="noopener"><strong>Start God Mode</strong><small>$${weeklyPrice.toFixed(2)} per week</small></a>
+            <button class="god-mode-maybe-button" type="button" data-close-dialog>Maybe later</button>
+            <p class="god-mode-legal"><a href="/terms.html">Terms</a><span>·</span><a href="/privacy-policy.html">Privacy Policy</a></p>
+        </div>`;
+}
+
+function openGodModePitch() {
+    renderGodModePitch();
+    const dialog = $("#godModePitchDialog");
+    if (!dialog.open) dialog.showModal();
 }
 
 function auraCost(kind) {
@@ -1067,17 +1104,7 @@ async function revealFeedSender() {
     const item = selectedFeedItem();
     if (!item || item.voter_name) return;
     if (api.user?.subscribed_user !== true) {
-        closeDetailScreen($("#feedDetailDialog"));
-        state.selectedFeedItemId = null;
-        switchPanel("profile");
-        const focusGodModeCard = () => {
-            $("#godModeCard")?.scrollIntoView({ behavior: "smooth", block: "center" });
-            $("#godModeCard")?.classList.add("attention");
-            setTimeout(() => $("#godModeCard")?.classList.remove("attention"), 1200);
-        };
-        requestAnimationFrame(focusGodModeCard);
-        setTimeout(focusGodModeCard, 450);
-        showToast("Start God Mode in the Valid iPhone app; it syncs here automatically.");
+        openGodModePitch();
         return;
     }
     const button = $("#revealFeedSenderButton");
@@ -2235,6 +2262,7 @@ function bindEvents() {
         if (event.target.closest("[data-rotate-link]")) rotateAskLink();
     });
     $("#profilePanel").addEventListener("click", (event) => {
+        if (event.target.closest("[data-open-god-mode]")) openGodModePitch();
         if (event.target.closest("[data-edit-photo]")) $("#profilePictureInput").click();
         if (event.target.closest("[data-edit-bio]")) openBioDialog();
         if (event.target.closest("[data-edit-profile]")) openProfileDialog();
@@ -2247,6 +2275,15 @@ function bindEvents() {
         if (purchase?.dataset.buyAura === "global") openAuraSpend("global");
         if (purchase?.dataset.buyAura === "targeted") openTargetedBoostPicker();
         if (purchase?.dataset.buyAura === "question") openQuestionDialog();
+    });
+    $("#godModePitchDialog").addEventListener("click", (event) => {
+        if (event.target.closest("[data-close-dialog]")) {
+            $("#godModePitchDialog").close();
+            return;
+        }
+        if (!event.target.closest("[data-earn-god-mode]")) return;
+        $("#godModePitchDialog").close();
+        openClassmatesDialog();
     });
     $("#pollSummaryDialog").addEventListener("click", (event) => { if (event.target.closest("[data-share-top-poll]")) shareTopPoll(); });
     $("#profilePictureInput").addEventListener("change", changeProfilePicture);
