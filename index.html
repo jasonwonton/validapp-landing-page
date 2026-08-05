@@ -5,14 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Valid - See who likes you</title>
     <meta name="description" content="Valid is the anonymous social polling app for school communities. Answer polls, receive app notifications, invite classmates, and reveal who voted for you.">
-    <script>
-        (function () {
-            var ua = navigator.userAgent || navigator.vendor || window.opera;
-            if (/Android/i.test(ua)) {
-                window.location.replace("/app/");
-            }
-        })();
-    </script>
     <link rel="canonical" href="https://validapp.lol/">
     <link rel="icon" type="image/png" href="assets/AppIconV2.png">
     <link rel="apple-touch-icon" href="assets/AppIconV2.png">
@@ -241,7 +233,6 @@
                 <img src="assets/valid_logo.png" alt="Valid logo">
             </a>
             <div class="nav-links">
-                <a href="app/">Open Valid</a>
                 <a href="index.html">Home</a>
                 <a href="about.html">About</a>
                 <a href="contact.html">Contact</a>
@@ -259,8 +250,7 @@
                 Answer polls and see what your classmates think about you &#x1F440;
             </p>
             <div class="cta-row">
-                <a class="button" href="app/">Open Valid on the web</a>
-                <a class="button" href="https://apps.apple.com/us/app/valid-compliment-classmates/id6755367062">Download on the App Store</a>
+                <a id="primaryCta" class="button" href="app/?signup=1">Sign up for Valid</a>
             </div>
         </section>
 
@@ -278,5 +268,17 @@
             <a href="contact.html">Contact</a>
         </span>
     </footer>
+    <script>
+        (function () {
+            var userAgent = navigator.userAgent || "";
+            var isAppleMobile = /iPad|iPhone|iPod/i.test(userAgent)
+                || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+            var cta = document.getElementById("primaryCta");
+            if (!isAppleMobile) return;
+            cta.textContent = "Download on the App Store";
+            cta.href = "https://apps.apple.com/us/app/valid-compliment-classmates/id6755367062";
+            cta.dataset.deviceCta = "ios";
+        })();
+    </script>
 </body>
 </html>

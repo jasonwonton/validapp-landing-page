@@ -2538,6 +2538,9 @@ window.visualViewport?.addEventListener("resize", syncVisualViewport);
 window.visualViewport?.addEventListener("scroll", syncVisualViewport);
 addEventListener("resize", syncVisualViewport);
 bindEvents();
+if (new URLSearchParams(window.location.search).get("signup") === "1") {
+    requestAnimationFrame(openSignupDialog);
+}
 if (!navigator.onLine) updateNetworkStatus();
 if ("serviceWorker" in navigator && !demoMode) {
     navigator.serviceWorker.register("./service-worker.js").catch(() => null);
