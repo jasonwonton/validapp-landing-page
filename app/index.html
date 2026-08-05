@@ -263,10 +263,15 @@
                 <label>Username<input id="signupUsername" autocomplete="username" minlength="3" maxlength="30" pattern="[a-z0-9_]+" placeholder="your_username" required></label>
                 <button class="primary-button" type="button" data-signup-next>Continue</button>
             </fieldset>
-            <fieldset class="signup-step hidden" data-signup-step="7">
-                <h2>How do you identify?</h2>
-                <label class="signup-choice-label">Gender<select id="signupGender" required><option value="">Choose one</option><option value="female">Girl</option><option value="male">Boy</option><option value="non-binary">Non-binary</option></select></label>
-                <button class="primary-button" type="button" data-signup-next>Continue</button>
+            <fieldset class="signup-step signup-gender-step hidden" data-signup-step="7">
+                <h2>What's your gender?</h2>
+                <div class="signup-gender-options" role="radiogroup" aria-label="Gender">
+                    <button class="signup-gender-option boy" type="button" role="radio" aria-checked="false" data-signup-gender="male"><span aria-hidden="true">👦</span><strong>Boy</strong></button>
+                    <button class="signup-gender-option girl" type="button" role="radio" aria-checked="false" data-signup-gender="female"><span aria-hidden="true">👧</span><strong>Girl</strong></button>
+                    <button class="signup-gender-option non-binary" type="button" role="radio" aria-checked="false" data-signup-gender="non-binary"><span aria-hidden="true">🧑</span><strong>Non-binary</strong></button>
+                </div>
+                <input id="signupGender" type="hidden" value="">
+                <button id="signupGenderContinue" class="primary-button" type="button" data-signup-next disabled>Continue</button>
             </fieldset>
             <fieldset class="signup-step signup-photo-step hidden" data-signup-step="8">
                 <h2>Add a profile photo</h2>

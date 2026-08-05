@@ -667,6 +667,17 @@ function formatSignupPhone(value) {
     return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
+function selectSignupGender(value) {
+    $("#signupGender").value = value || "";
+    $$('[data-signup-gender]').forEach((option) => {
+        const selected = option.dataset.signupGender === value;
+        option.classList.toggle("selected", selected);
+        option.setAttribute("aria-checked", String(selected));
+    });
+    $("#signupGenderContinue").disabled = !value;
+    $("#signupStatus").textContent = "";
+}
+
 function openSignupDialog() {
     $("#signupStatus").textContent = "";
     resetSignupPhotoPreview();
@@ -822,6 +833,10 @@ async function advanceSignup(button) {
             return;
         } finally { setButtonLoading(button, false); }
     }
+    if (state.signupStep === 7 && !$("#signupGender").value) {
+        $("#signupStatus").textContent = "Choose a gender before continuing.";
+        return;
+    }
     if (state.signupStep === 6) {
         setButtonLoading(button, true, "Checking username...");
         try {
@@ -899,6 +914,7 @@ async function createAccount(event) {
             catch (_) { photoUploadFailed = true; }
         }
         form.reset();
+        selectSignupGender("");
         resetSignupSchoolPicker();
         resetSignupPhotoPreview();
         $("#signupDialog").close();
@@ -2375,6 +2391,8 @@ function bindEvents() {
     $("#signupShowSchoolFallback").addEventListener("click", () => showSignupSchoolFallback(true));
     $("#signupBackToNearby").addEventListener("click", () => showSignupSchoolFallback(false));
     $("#signupDialog").addEventListener("click", (event) => {
+        const gender = event.target.closest("[data-signup-gender]");
+        if (gender) selectSignupGender(gender.dataset.signupGender);
         const next = event.target.closest("[data-signup-next]");
         if (next) advanceSignup(next);
         if (event.target.closest("[data-signup-back]")) setSignupStep(state.signupStep - 1);

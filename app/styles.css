@@ -648,6 +648,16 @@ body.play-active .play-actions { margin: 0; }
 .signup-terms a { color: var(--dark-teal); text-underline-offset: 2px; }
 .signup-phone-hint { max-width: 430px; font-size: 1rem; text-align: center; }
 .signup-button-row { display: grid; grid-template-columns: .65fr 1.35fr; gap: 10px; margin-top: 4px; }
+.signup-gender-step { justify-items: center; text-align: center; }
+.signup-gender-options { width: min(100% - 44px, 440px); display: grid; gap: 12px; }
+.signup-gender-option { width: 100%; min-height: 94px; display: grid; justify-items: center; align-content: center; gap: 6px; padding: 14px; border: 3px solid rgba(128,128,128,.3); border-radius: 15px; color: var(--ink); cursor: pointer; transition: border-color .2s ease, transform .2s ease; }
+.signup-gender-option.boy { background: rgb(128, 194, 255); }
+.signup-gender-option.girl { background: rgb(255, 163, 199); }
+.signup-gender-option.non-binary { background: rgb(255, 219, 71); }
+.signup-gender-option > span { font-family: system-ui, sans-serif; font-size: 45px; line-height: 1; }
+.signup-gender-option > strong { font-size: .9rem; }
+.signup-gender-option.selected { border-color: var(--ink); transform: scale(1.05); }
+.signup-gender-step > .primary-button { width: min(100% - 44px, 440px); }
 .signup-photo-step { justify-items: center; align-content: center; text-align: center; }
 .signup-photo-step h2 { width: 100%; }
 .signup-photo-benefit { margin: 0; color: var(--heart-pink); font-size: 1.12rem; line-height: 1.25; }
@@ -751,6 +761,11 @@ body.detail-screen-open { overflow: hidden; }
     .signup-school-logo { width: 42px; height: 42px; }
     .signup-age-picker select { min-height: 72px; }
     .signup-terms { font-size: .82rem; }
+    .signup-gender-step { gap: 10px; }
+    .signup-gender-options { width: calc(100% - 22px); gap: 9px; }
+    .signup-gender-option { min-height: 82px; padding: 10px; }
+    .signup-gender-option > span { font-size: 39px; }
+    .signup-gender-step > .primary-button { width: calc(100% - 22px); }
     .signup-photo-step { gap: 10px; }
     .signup-photo-benefit { font-size: 1rem; }
     .signup-photo-preview { width: 140px; height: 140px; }

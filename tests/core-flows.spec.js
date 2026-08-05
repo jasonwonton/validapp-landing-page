@@ -41,7 +41,7 @@ test("new users can complete passkey-only school onboarding", async ({ page }) =
     await page.getByRole("button", { name: "Create an account" }).click();
     const dialog = page.getByRole("dialog");
     await fillSignupThroughUsername(dialog);
-    await dialog.getByLabel("Gender").selectOption("non-binary");
+    await dialog.getByRole("radio", { name: "Non-binary" }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(dialog.getByRole("heading", { name: "Add a profile photo" })).toBeVisible();
     await expect(dialog.getByText(/receive 2-3x more votes/i)).toBeVisible();
@@ -102,8 +102,10 @@ test("onboarding keeps every action reachable on compact phones", async ({ page 
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("Username").fill("mobile_taylor");
     await dialog.getByRole("button", { name: "Continue" }).click();
-    await expect(dialog.getByLabel("Gender")).toHaveCSS("font-family", /Jua/);
-    await dialog.getByLabel("Gender").selectOption("non-binary");
+    const genderChoice = dialog.getByRole("radio", { name: "Non-binary" });
+    await expect(genderChoice).toHaveCSS("font-family", /Jua/);
+    await genderChoice.click();
+    await expect(genderChoice).toHaveAttribute("aria-checked", "true");
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(dialog.getByText("Add a profile photo")).toBeInViewport();
     await expect(dialog.getByRole("button", { name: "Continue" })).toBeInViewport();

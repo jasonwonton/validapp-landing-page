@@ -25,7 +25,7 @@ async function fillProductionSignup(dialog) {
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("Username").fill("taylor_j");
     await dialog.getByRole("button", { name: "Continue" }).click();
-    await dialog.getByLabel("Gender").selectOption("non-binary");
+    await dialog.getByRole("radio", { name: "Non-binary" }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
 }
 
