@@ -41,13 +41,16 @@ test("new users can complete passkey-only school onboarding", async ({ page }) =
     await fillSignupThroughUsername(dialog);
     await dialog.getByLabel("Gender").selectOption("non-binary");
     await dialog.getByRole("button", { name: "Continue" }).click();
-    await expect(dialog.getByText("No password. No phone number.")).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "Add a profile photo" })).toBeVisible();
+    await expect(dialog.getByText(/receive 2-3x more votes/i)).toBeVisible();
+    await expect(dialog.getByText("No password. No phone number.", { exact: true })).toHaveCount(0);
+    await expect(dialog.getByText("Choose from Library", { exact: true })).toBeVisible();
     await dialog.getByLabel(/Profile photo/).setInputFiles({
         name: "avatar.png",
         mimeType: "image/png",
         buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
     });
-    await dialog.getByRole("button", { name: "Create with passkey" }).click();
+    await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(page.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
     await expect(page.locator("#toast")).toContainText("Welcome to Valid");
     await expect(page.getByRole("dialog").getByText("No one will be texted.")).toBeVisible();
@@ -67,8 +70,10 @@ test("onboarding keeps every action reachable on compact phones", async ({ page 
     await page.goto("/app/?demo=1");
     await page.getByRole("button", { name: "Create an account" }).click();
     const dialog = page.getByRole("dialog");
+    await expect(dialog.locator(".signup-step .eyebrow")).toHaveCount(0);
     await expect(dialog.getByText("How old are you?")).toBeInViewport();
     await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
+    await expect(dialog.getByLabel("Age")).toHaveCSS("font-family", /Jua/);
     await expect(dialog.getByRole("button", { name: "Continue" })).toBeInViewport();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(dialog.getByText("What school do you go to?")).toBeInViewport();
@@ -82,6 +87,7 @@ test("onboarding keeps every action reachable on compact phones", async ({ page 
     await dialog.getByRole("option", { name: /Westview High School/ }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(dialog.getByText("What grade are you in?")).toBeInViewport();
+    await expect(dialog.getByLabel("Grade")).toHaveCSS("font-family", /Jua/);
     await dialog.getByLabel("Grade").selectOption("Senior");
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("First name").fill("Taylor");
@@ -90,10 +96,12 @@ test("onboarding keeps every action reachable on compact phones", async ({ page 
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("Username").fill("mobile_taylor");
     await dialog.getByRole("button", { name: "Continue" }).click();
+    await expect(dialog.getByLabel("Gender")).toHaveCSS("font-family", /Jua/);
     await dialog.getByLabel("Gender").selectOption("non-binary");
     await dialog.getByRole("button", { name: "Continue" }).click();
-    await expect(dialog.getByText("Add a photo and passkey")).toBeInViewport();
-    await expect(dialog.getByRole("button", { name: "Create with passkey" })).toBeInViewport();
+    await expect(dialog.getByText("Add a profile photo")).toBeInViewport();
+    await expect(dialog.getByRole("button", { name: "Continue" })).toBeInViewport();
+    await expect(dialog.getByRole("button", { name: "Skip for now" })).toBeInViewport();
 });
 
 test("signup ZIP picker lists, filters, and falls back from 50 nearby schools", async ({ page }) => {

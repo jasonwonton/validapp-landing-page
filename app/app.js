@@ -656,7 +656,7 @@ function dateOfBirthFromAge(value) {
 
 function openSignupDialog() {
     $("#signupStatus").textContent = "";
-    $("#signupPhotoPreview").textContent = "+";
+    resetSignupPhotoPreview();
     resetSignupSchoolPicker();
     setSignupStep(0);
     $("#signupDialog").showModal();
@@ -776,11 +776,8 @@ function setSignupStep(index) {
     requestAnimationFrame(() => { $("#signupDialog").scrollTop = 0; });
     $(".signup-back-button").classList.toggle("hidden", state.signupStep === 0);
     if (state.signupStep === 7) {
-        const schoolName = state.signupSelectedSchool?.name || $("#signupSchool").value.trim();
-        const schoolLocation = state.signupSelectedSchool
-            ? schoolLocationLabel(state.signupSelectedSchool)
-            : [$("#signupCity").value.trim(), $("#signupState").value.trim().toUpperCase()].filter(Boolean).join(", ");
-        $("#signupReview").innerHTML = `<strong>${escapeHTML($("#signupFirstName").value.trim())} ${escapeHTML($("#signupLastName").value.trim())}</strong><span>@${escapeHTML($("#signupUsername").value.trim().toLowerCase())} · ${escapeHTML($("#signupGrade").value)}</span><span>${escapeHTML(schoolName)} · ${escapeHTML(schoolLocation)}</span>`;
+        resetSignupPhotoPreview();
+        $("#signupPicture").value = "";
     }
 }
 
@@ -812,7 +809,7 @@ async function advanceSignup(button) {
 async function createAccount(event) {
     event.preventDefault();
     const form = event.currentTarget;
-    const button = form.querySelector("button[type=submit]");
+    const button = event.submitter || form.querySelector("button[type=submit]");
     const dateOfBirth = dateOfBirthFromAge($("#signupAge").value);
     if (!dateOfBirth) {
         $("#signupStatus").textContent = "Choose an age between 13 and 27.";
@@ -820,7 +817,9 @@ async function createAccount(event) {
     }
     const username = $("#signupUsername").value.trim().toLowerCase();
     const profilePicture = $("#signupPicture").files[0];
-    setButtonLoading(button, true, "Creating your passkey...");
+    const submitButtons = [...form.querySelectorAll("button[type=submit]")];
+    submitButtons.forEach((candidate) => { candidate.disabled = true; });
+    setButtonLoading(button, true, "Creating your account...");
     $("#signupStatus").textContent = "Creating your account...";
     try {
         let school = state.signupSelectedSchool;
@@ -847,7 +846,7 @@ async function createAccount(event) {
             username,
             profile_picture_filename: null,
         };
-        $("#signupStatus").textContent = "Confirm the passkey prompt on your device.";
+        $("#signupStatus").textContent = "Finish the setup prompt on your device.";
         let login;
         if (demoMode) {
             login = await api.demoSignup({ profile, school_name: school.name });
@@ -868,7 +867,7 @@ async function createAccount(event) {
         }
         form.reset();
         resetSignupSchoolPicker();
-        $("#signupPhotoPreview").textContent = "+";
+        resetSignupPhotoPreview();
         $("#signupDialog").close();
         await showSignedIn();
         showToast(photoUploadFailed ? "Welcome! Add your photo from Profile when you're ready." : "Welcome to Valid ✨");
@@ -877,6 +876,7 @@ async function createAccount(event) {
         $("#signupStatus").textContent = error.message || "Could not create your account.";
     } finally {
         setButtonLoading(button, false);
+        submitButtons.forEach((candidate) => { candidate.disabled = false; });
     }
 }
 
@@ -2099,23 +2099,27 @@ function openQuestionDialog() {
     $("#questionDialog").showModal();
 }
 
+function resetSignupPhotoPreview() {
+    $("#signupPhotoPreview").innerHTML = `<span class="signup-photo-placeholder"><span class="signup-photo-person-icon"></span><small>Tap to add photo</small></span>`;
+}
+
 function previewSignupPhoto() {
     const input = $("#signupPicture");
     const file = input.files[0];
     const preview = $("#signupPhotoPreview");
     if (!file) {
-        preview.textContent = "+";
+        resetSignupPhotoPreview();
         return;
     }
     if (file.size > 5 * 1024 * 1024) {
         input.value = "";
-        preview.textContent = "+";
+        resetSignupPhotoPreview();
         $("#signupStatus").textContent = "Profile photos must be 5 MB or smaller.";
         return;
     }
     const reader = new FileReader();
     reader.addEventListener("load", () => { preview.innerHTML = `<img src="${escapeHTML(reader.result)}" alt="">`; }, { once: true });
-    reader.addEventListener("error", () => { preview.textContent = "+"; }, { once: true });
+    reader.addEventListener("error", resetSignupPhotoPreview, { once: true });
     reader.readAsDataURL(file);
 }
 

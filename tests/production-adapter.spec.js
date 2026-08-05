@@ -321,7 +321,7 @@ test("real adapter completes passkey-only signup without an SMS request", async 
         mimeType: "image/png",
         buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
     });
-    await dialog.getByRole("button", { name: "Create with passkey" }).click();
+    await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
 
     const challenge = requests.find((request) => request.path === "/api/v1/auth/passkey/signup/challenge");

@@ -218,7 +218,6 @@
                 <button class="primary-button" type="button" data-signup-next>Continue</button>
             </fieldset>
             <fieldset class="signup-step signup-school-step hidden" data-signup-step="1">
-                <span class="eyebrow">YOUR COMMUNITY</span>
                 <h2>What school do you go to?</h2>
                 <p class="form-hint">Enter your ZIP code and we'll show the 50 closest schools.</p>
                 <div class="signup-zip-row">
@@ -239,40 +238,43 @@
                 <button id="signupSchoolContinue" class="primary-button" type="button" data-signup-next disabled>Continue</button>
             </fieldset>
             <fieldset class="signup-step hidden" data-signup-step="2">
-                <span class="eyebrow">YOUR COMMUNITY</span><h2>What grade are you in?</h2>
+                <h2>What grade are you in?</h2>
                 <label class="signup-choice-label">Grade<select id="signupGrade" required><option value="">Choose your grade</option><option>6th Grade</option><option>7th Grade</option><option>8th Grade</option><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select></label>
                 <button class="primary-button" type="button" data-signup-next>Continue</button>
             </fieldset>
             <fieldset class="signup-step hidden" data-signup-step="3">
-                <span class="eyebrow">ABOUT YOU</span><h2>What's your first name?</h2>
+                <h2>What's your first name?</h2>
                 <label>First name<input id="signupFirstName" autocomplete="given-name" maxlength="50" placeholder="First name" required></label>
                 <button class="primary-button" type="button" data-signup-next>Continue</button>
             </fieldset>
             <fieldset class="signup-step hidden" data-signup-step="4">
-                <span class="eyebrow">ABOUT YOU</span><h2>What's your last name?</h2>
+                <h2>What's your last name?</h2>
                 <label>Last name<input id="signupLastName" autocomplete="family-name" maxlength="50" placeholder="Last name" required></label>
                 <button class="primary-button" type="button" data-signup-next>Continue</button>
             </fieldset>
             <fieldset class="signup-step hidden" data-signup-step="5">
-                <span class="eyebrow">YOUR PROFILE</span><h2>Pick a username</h2>
+                <h2>Pick a username</h2>
                 <p class="form-hint">This is how classmates can find you.</p>
                 <label>Username<input id="signupUsername" autocomplete="username" minlength="3" maxlength="30" pattern="[a-z0-9_]+" placeholder="your_username" required></label>
                 <button class="primary-button" type="button" data-signup-next>Continue</button>
             </fieldset>
             <fieldset class="signup-step hidden" data-signup-step="6">
-                <span class="eyebrow">ABOUT YOU</span><h2>How do you identify?</h2>
+                <h2>How do you identify?</h2>
                 <label class="signup-choice-label">Gender<select id="signupGender" required><option value="">Choose one</option><option value="female">Girl</option><option value="male">Boy</option><option value="non-binary">Non-binary</option></select></label>
                 <button class="primary-button" type="button" data-signup-next>Continue</button>
             </fieldset>
-            <fieldset class="signup-step hidden" data-signup-step="7">
-                <span class="eyebrow">ONE LAST STEP</span><h2>Add a photo and passkey</h2>
-                <div class="passkey-explainer"><span aria-hidden="true">🔑</span><div><strong>No password. No phone number.</strong><p>Your face, fingerprint, or device PIN unlocks a passkey that stays on your device.</p></div></div>
-                <div id="signupReview" class="signup-review"></div>
+            <fieldset class="signup-step signup-photo-step hidden" data-signup-step="7">
+                <h2>Add a profile photo</h2>
+                <p class="signup-photo-benefit">📷 Users with profile pictures<br>receive 2-3x more votes</p>
                 <div class="signup-photo-picker">
-                    <span id="signupPhotoPreview" class="signup-photo-preview" aria-hidden="true">+</span>
-                    <label>Profile photo <small>(optional, up to 5 MB)</small><input id="signupPicture" type="file" accept="image/jpeg,image/png,image/webp"></label>
+                    <label class="signup-photo-circle" for="signupPicture">
+                        <span id="signupPhotoPreview" class="signup-photo-preview" aria-hidden="true"><span class="signup-photo-placeholder"><span class="signup-photo-person-icon"></span><small>Tap to add photo</small></span></span>
+                    </label>
+                    <input id="signupPicture" class="signup-photo-input" type="file" accept="image/jpeg,image/png,image/webp" aria-label="Profile photo">
+                    <label class="signup-library-button" for="signupPicture">Choose from Library</label>
                 </div>
-                <button class="primary-button" type="submit">Create with passkey</button>
+                <button class="primary-button" type="submit">Continue</button>
+                <button class="text-button signup-photo-skip" type="submit">Skip for now</button>
             </fieldset>
             <p id="signupStatus" class="status-message" role="status"></p>
         </form>
