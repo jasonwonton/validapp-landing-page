@@ -9,6 +9,14 @@ test("non-iOS visitors get one direct signup CTA", async ({ page }) => {
     await expect(page.getByRole("link", { name: "Download on the App Store" })).toHaveCount(0);
 });
 
+test("landing page uses the app palette and prominent wordmark", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("body")).toHaveCSS("background-color", "rgb(204, 247, 244)");
+    const wordmarkWidth = await page.locator(".brand img").evaluate((image) => image.getBoundingClientRect().width);
+    expect(wordmarkWidth).toBeGreaterThanOrEqual(124);
+    await expect(page.locator("#primaryCta")).toHaveCSS("background-color", "rgb(255, 177, 94)");
+});
+
 test("iOS visitors get one App Store CTA", async ({ page }) => {
     await page.addInitScript(() => {
         Object.defineProperty(navigator, "userAgent", {
@@ -28,4 +36,6 @@ test("the non-iOS CTA opens the signup flow", async ({ page }) => {
     await page.goto("/app/?demo=1&signup=1");
     await expect(page.getByRole("dialog", { name: "Create your Valid account" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "How old are you?" })).toBeVisible();
+    await expect(page.getByText("GET STARTED", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("dialog").getByRole("button", { name: "Continue" })).toBeVisible();
 });

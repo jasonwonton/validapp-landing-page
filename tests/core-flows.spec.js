@@ -9,7 +9,7 @@ async function signInToDemo(page) {
 async function fillSignupThroughUsername(dialog, username = "taylor_j") {
     await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
     await dialog.getByLabel("Age").selectOption("16");
-    await dialog.getByRole("button", { name: "Get Started!" }).click();
+    await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("ZIP code").fill("90210");
     await dialog.getByRole("button", { name: "Show schools" }).click();
     await expect(dialog.locator("[data-signup-school]")).toHaveCount(50);
@@ -67,7 +67,7 @@ test("onboarding keeps each step heading visible on compact phones", async ({ pa
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByText("How old are you?")).toBeInViewport();
     await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
-    await dialog.getByRole("button", { name: "Get Started!" }).click();
+    await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(dialog.getByText("What school do you go to?")).toBeInViewport();
     await dialog.getByLabel("ZIP code").fill("90210");
     await dialog.getByRole("button", { name: "Show schools" }).click();
@@ -80,7 +80,7 @@ test("signup ZIP picker lists, filters, and falls back from 50 nearby schools", 
     await page.goto("/app/?demo=1");
     await page.getByRole("button", { name: "Create an account" }).click();
     const dialog = page.getByRole("dialog");
-    await dialog.getByRole("button", { name: "Get Started!" }).click();
+    await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("ZIP code").fill("90210");
     await dialog.getByRole("button", { name: "Show schools" }).click();
     await expect(dialog.locator("[data-signup-school]")).toHaveCount(50);

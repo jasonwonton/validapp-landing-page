@@ -6,6 +6,8 @@ function apiBaseURL() {
     // authentication material to an untrusted server.
     const params = new URLSearchParams(window.location.search);
     if (params.get("local-api") === "1") return `${window.location.origin}/api/v1`;
+    const loopbackHost = window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost";
+    if (loopbackHost && window.location.port === "8443") return `${window.location.origin}/api/v1`;
     return window.VALID_API_BASE_URL || DEFAULT_API_BASE;
 }
 

@@ -6,7 +6,7 @@ const USER_ID = "11111111-1111-1111-1111-111111111111";
 async function fillProductionSignup(dialog) {
     await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
     await dialog.getByLabel("Age").selectOption("16");
-    await dialog.getByRole("button", { name: "Get Started!" }).click();
+    await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("ZIP code").fill("90210");
     await dialog.getByRole("button", { name: "Show schools" }).click();
     await dialog.getByRole("option", { name: /Westview High School/ }).click();

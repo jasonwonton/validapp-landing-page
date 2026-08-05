@@ -23,7 +23,7 @@
     <meta name="twitter:description" content="Unlock anonymous votes and app notifications from your school community.">
     <meta name="twitter:image" content="https://validapp.lol/assets/AppIconV2.png">
     <meta name="twitter:image:alt" content="Valid App Icon">
-    <meta name="theme-color" content="#f2fffd">
+    <meta name="theme-color" content="#ccf7f4">
     <meta name="apple-mobile-web-app-title" content="Valid">
     <script type="application/ld+json">
         {
@@ -57,12 +57,12 @@
         }
         :root {
             color-scheme: light;
-            --bg: #f2fffd;
-            --text: #050914;
-            --muted: rgba(5, 9, 20, 0.72);
-            --surface: rgba(255, 255, 255, 0.74);
-            --border: rgba(5, 9, 20, 0.14);
-            --accent: #ffb15e;
+            --aqua: #ccf7f4;
+            --ink: #000000;
+            --muted: rgba(0, 63, 66, 0.78);
+            --white: #ffffff;
+            --peach: #ffb15e;
+            --soft-pink: #ffb8d6;
         }
         * {
             box-sizing: border-box;
@@ -71,19 +71,19 @@
             margin: 0;
             min-height: 100vh;
             font-family: "Jua-Regular", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            background: var(--bg);
-            color: var(--text);
+            background: var(--aqua);
+            color: var(--ink);
         }
         a {
             color: inherit;
         }
         .site-header {
-            background: rgba(242, 255, 253, 0.94);
-            border-bottom: 1px solid var(--border);
+            background: rgba(204, 247, 244, 0.96);
+            border-bottom: 3px solid var(--ink);
         }
         .nav {
             width: min(1040px, calc(100% - 32px));
-            min-height: 72px;
+            min-height: 96px;
             margin: 0 auto;
             display: flex;
             align-items: center;
@@ -93,13 +93,12 @@
         .brand {
             display: inline-flex;
             align-items: center;
-            gap: 10px;
-            font-size: 1.15rem;
             text-decoration: none;
         }
         .brand img {
-            width: 42px;
-            height: 42px;
+            width: 142px;
+            height: auto;
+            display: block;
             object-fit: contain;
         }
         .nav-links {
@@ -115,7 +114,9 @@
             text-decoration: none;
         }
         .nav-links a:hover {
-            color: var(--text);
+            color: var(--ink);
+            text-decoration: underline;
+            text-underline-offset: 4px;
         }
         main {
             width: min(1040px, calc(100% - 32px));
@@ -155,13 +156,22 @@
             justify-content: center;
             min-height: 54px;
             padding: 0 28px;
-            border: 3px solid var(--text);
-            border-radius: 30px;
-            background: var(--accent);
-            color: var(--text);
+            border: 3px solid var(--ink);
+            border-radius: 22px;
+            background: var(--peach);
+            color: var(--ink);
             font-size: 1.08rem;
             text-decoration: none;
-            box-shadow: 0 12px 32px rgba(255, 122, 89, 0.26);
+            box-shadow: 0 6px 0 var(--ink);
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 0 var(--ink);
+        }
+        .button:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 var(--ink);
         }
         .mockup {
             margin: 0 auto;
@@ -171,8 +181,9 @@
             width: 100%;
             height: auto;
             display: block;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(5, 9, 20, 0.2);
+            border: 4px solid var(--ink);
+            border-radius: 28px;
+            box-shadow: 0 10px 0 rgba(0, 0, 0, 0.14);
         }
         .quick-info {
             display: flex;
@@ -184,7 +195,7 @@
             font-size: 0.98rem;
         }
         .quick-info a {
-            color: var(--text);
+            color: var(--ink);
             text-decoration: underline;
             text-underline-offset: 3px;
         }
@@ -192,7 +203,7 @@
             width: min(1040px, calc(100% - 32px));
             margin: 0 auto;
             padding: 24px 0 34px;
-            border-top: 1px solid var(--border);
+            border-top: 3px solid var(--ink);
             color: var(--muted);
             display: flex;
             flex-wrap: wrap;
@@ -201,7 +212,7 @@
             font-size: 0.95rem;
         }
         footer a {
-            color: var(--text);
+            color: var(--ink);
             text-decoration: none;
         }
         footer a:hover {
@@ -209,13 +220,17 @@
         }
         @media (max-width: 700px) {
             .nav {
-                align-items: flex-start;
-                flex-direction: column;
+                min-height: 0;
+                align-items: center;
                 padding: 14px 0;
             }
+            .brand img {
+                width: 124px;
+            }
             .nav-links {
-                justify-content: flex-start;
+                justify-content: flex-end;
                 gap: 12px 14px;
+                font-size: 0.9rem;
             }
             .button {
                 width: 100%;
