@@ -184,9 +184,50 @@ async function installCredentialStub(page, operation) {
     }, operation);
 }
 
-async function interceptProductionAPI(page, { signup = false, phoneExists = false, profileAura = 500, questionFailureCount = 0 } = {}) {
+async function installWebPushStub(page, { existing = true } = {}) {
+    await page.addInitScript(({ hasExistingSubscription }) => {
+        let currentSubscription = null;
+        const subscription = {
+            endpoint: "https://web.push.apple.com/test-subscription",
+            options: {},
+            toJSON: () => ({
+                endpoint: "https://web.push.apple.com/test-subscription",
+                keys: { p256dh: "browser-public-key-value", auth: "browser-auth-value" },
+            }),
+            unsubscribe: async () => {
+                currentSubscription = null;
+                return true;
+            },
+        };
+        currentSubscription = hasExistingSubscription ? subscription : null;
+        const pushManager = {
+            getSubscription: async () => currentSubscription,
+            subscribe: async () => {
+                currentSubscription = subscription;
+                return subscription;
+            },
+        };
+        const serviceWorker = {
+            ready: Promise.resolve({ pushManager }),
+            register: async () => ({ pushManager }),
+            addEventListener: () => {},
+        };
+        Object.defineProperty(window, "PushManager", { configurable: true, value: function PushManager() {} });
+        Object.defineProperty(window, "Notification", {
+            configurable: true,
+            value: { permission: "granted", requestPermission: async () => "granted" },
+        });
+        Object.defineProperty(Navigator.prototype, "serviceWorker", {
+            configurable: true,
+            get: () => serviceWorker,
+        });
+    }, { hasExistingSubscription: existing });
+}
+
+async function interceptProductionAPI(page, { signup = false, phoneExists = false, profileAura = 500, questionFailureCount = 0, webPushFailureCount = 0, feedLocked = false } = {}) {
     const requests = [];
     let questionAttempts = 0;
+    let webPushAttempts = 0;
     await page.route(`${API_ORIGIN}/api/v1/**`, async (route) => {
         const request = route.request();
         const url = new URL(request.url());
@@ -222,6 +263,14 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
             return fulfill({ access_token: "session-token", user: { id: USER_ID, subscribed_user: false } });
         }
         if (path === "/api/v1/auth/passkey/status") return fulfill({ registered: true, credentialCount: 1 });
+        if (path === "/api/v1/web-push/config") {
+            return fulfill({ enabled: true, vapid_public_key: "BC31fbRg792qbDNr_PaGHMhLlTjBL2VYpOkkhRS85gA1ofvBUbi0Vmixqdr3V7Exm4820s27ZpvNbcTkuTHMDKM" });
+        }
+        if (path === `/api/v1/users/${USER_ID}/web-push-subscriptions` && request.method() === "POST") {
+            webPushAttempts += 1;
+            if (webPushAttempts <= webPushFailureCount) return fulfill({ detail: "Subscription write failed" }, 500);
+            return fulfill({ registered: true });
+        }
         if (path === "/api/v1/users/username-available/taylor_j") return fulfill({ available: true, username: "taylor_j" });
         if (path === "/api/v1/highschools/nearby?zip_code=90210&limit=50") {
             return fulfill({
@@ -258,7 +307,9 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
             return fulfill({ ...profile("Maya", 0), user_id: "21111111-1111-1111-1111-111111111111", last_name: "Chen", username: "maya_c", bio: "Student council and bad puns.", vote_count: 61 });
         }
         if (path === `/api/v1/users/${USER_ID}/classmates/status`) {
-            return fulfill({ is_unlocked: true, lock_reasons: [], votes_cast: 3, required_votes: 3 });
+            return fulfill(feedLocked
+                ? { is_unlocked: false, lock_reasons: ["votes"], votes_cast: 1, required_votes: 3 }
+                : { is_unlocked: true, lock_reasons: [], votes_cast: 3, required_votes: 3 });
         }
         if (path === `/api/v1/users/${USER_ID}/feed?limit=20&offset=0`) return fulfill([]);
         if (path.startsWith(`/api/v1/users/${USER_ID}/feed?limit=20&offset=0&search=`)) return fulfill([]);
@@ -335,6 +386,48 @@ test("real adapter signs in, authenticates API calls, and revokes logout", async
     await expect.poll(() => requests.some((request) => request.path === "/api/v1/auth/logout")).toBe(true);
     const logout = requests.find((request) => request.path === "/api/v1/auth/logout");
     expect(logout.authorization).toBe("Bearer session-token");
+});
+
+test("incomplete Web Push setup stays retryable until the backend confirms registration", async ({ page }) => {
+    await page.addInitScript((apiOrigin) => {
+        window.VALID_API_BASE_URL = `${apiOrigin}/api/v1`;
+    }, API_ORIGIN);
+    await installCredentialStub(page, "get");
+    await installWebPushStub(page);
+    const requests = await interceptProductionAPI(page, { webPushFailureCount: 1 });
+
+    await page.goto("/app/?signin=1");
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+
+    const notificationButton = page.locator("#notificationButton");
+    await expect(notificationButton).toContainText("Setup incomplete · tap to retry");
+    await notificationButton.click();
+    await expect(notificationButton).toContainText("On · tap to turn off");
+    expect(requests.filter((request) => request.path.endsWith("/web-push-subscriptions"))).toHaveLength(2);
+});
+
+test("locked Feed shows received votes, vote-to-unlock, and notification activation", async ({ page }) => {
+    await page.addInitScript((apiOrigin) => {
+        window.VALID_API_BASE_URL = `${apiOrigin}/api/v1`;
+    }, API_ORIGIN);
+    await installCredentialStub(page, "get");
+    await installWebPushStub(page, { existing: false });
+    const requests = await interceptProductionAPI(page, { feedLocked: true });
+
+    await page.goto("/app/?signin=1");
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+
+    const gate = page.locator("#feedGateLock");
+    await expect(gate.getByRole("heading", { name: "4 votes" })).toBeVisible();
+    await expect(gate).toContainText("Cast 2 more votes to unlock your Feed");
+    await expect(gate.getByRole("button", { name: "Vote now to unlock Feed" })).toBeVisible();
+    const notificationButton = gate.getByRole("button", { name: "Enable notifications" });
+    await expect(notificationButton).toBeVisible();
+    await notificationButton.click();
+
+    await expect(gate.getByLabel("Enable vote notifications")).toBeHidden();
+    expect(requests.filter((request) => request.path.endsWith("/web-push-subscriptions"))).toHaveLength(1);
 });
 
 test("unified search debounces rapid typing into one bounded request pair", async ({ page }) => {

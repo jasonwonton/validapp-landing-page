@@ -1,4 +1,4 @@
-const CACHE_NAME = "valid-web-v24";
+const CACHE_NAME = "valid-web-v27";
 const APP_SHELL = [
     "./",
     "./styles.css",
@@ -17,6 +17,10 @@ const APP_SHELL = [
     "../assets/app/anonymous.png",
     "../assets/app/pencil-clipboard.png",
     "../assets/app/lock.png",
+    "../assets/app/profile-at.svg",
+    "../assets/app/profile-person-card.svg",
+    "../assets/app/profile-school.svg",
+    "../assets/app/profile-graduation-cap.svg",
 ];
 
 self.addEventListener("install", (event) => {

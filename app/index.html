@@ -37,6 +37,11 @@
             <section id="feedPanel" class="panel active-panel">
                 <div id="feedGateLock" class="hidden"></div>
                 <div id="feedUnlockedContent">
+                    <section id="feedNotificationPrompt" class="feed-notification-prompt hidden" aria-label="Enable vote notifications">
+                        <span class="feed-notification-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M10 21h4"/></svg></span>
+                        <span><strong>Don’t miss your next vote</strong><small>Enable notifications to know when someone picks you.</small></span>
+                        <button id="feedNotificationButton" class="secondary-button" type="button">Enable notifications</button>
+                    </section>
                     <div class="segmented-control" role="group" aria-label="Feed type">
                         <button class="segment active" data-feed="personal" type="button">Inbox</button>
                         <button class="segment" data-feed="school" type="button">School</button>
@@ -155,6 +160,17 @@
         <button class="nav-item" data-panel="play" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path class="nav-icon-fill" d="m10 8 6 4-6 4Z"/></svg><span>Play</span></button>
         <button class="nav-item" data-panel="profile" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.8v2M12 19.2v2M21.2 12h-2M4.8 12h-2M18.5 5.5l-1.4 1.4M6.9 17.1l-1.4 1.4M18.5 18.5l-1.4-1.4M6.9 6.9 5.5 5.5"/></svg><span>Settings</span></button>
     </nav>
+
+    <dialog id="androidInstallDialog" class="android-install-dialog" aria-label="Install Valid on Android">
+        <div class="android-install-dialog-content">
+            <img src="../assets/AppIconV2.png" alt="">
+            <p class="eyebrow">Valid for Android</p>
+            <h2>Install Valid</h2>
+            <p id="androidInstallCopy">Add Valid to your phone so it opens from your home screen like an app.</p>
+            <button id="androidInstallButton" class="primary-button" type="button">Install Valid</button>
+            <p id="androidInstallStatus" class="status-message" role="status">Chrome will show one confirmation.</p>
+        </div>
+    </dialog>
 
     <section id="questionDialog" class="detail-screen question-page hidden" role="dialog" aria-modal="true" aria-label="Submit a school question">
         <div class="detail-screen-header question-page-header">
@@ -339,22 +355,22 @@
                 <div id="profileEditHint" class="profile-editor-availability"></div>
                 <div class="profile-editor-rows">
                     <button class="profile-editor-row" type="button" data-profile-editor="username">
-                        <span class="profile-editor-row-icon" aria-hidden="true">@</span>
+                        <span class="profile-editor-row-icon" aria-hidden="true"><img src="../assets/app/profile-at.svg" alt=""></span>
                         <span><small>Username <em id="profileUsernameBadge"></em></small><strong id="profileUsernameValue"></strong></span>
                         <span aria-hidden="true">›</span>
                     </button>
                     <button class="profile-editor-row" type="button" data-profile-editor="name">
-                        <span class="profile-editor-row-icon" aria-hidden="true">ID</span>
+                        <span class="profile-editor-row-icon" aria-hidden="true"><img src="../assets/app/profile-person-card.svg" alt=""></span>
                         <span><small>Name <em id="profileNameBadge"></em></small><strong id="profileNameValue"></strong></span>
                         <span aria-hidden="true">›</span>
                     </button>
                     <button class="profile-editor-row" type="button" data-profile-editor="school">
-                        <span class="profile-editor-row-icon" aria-hidden="true">⌂</span>
+                        <span class="profile-editor-row-icon" aria-hidden="true"><img src="../assets/app/profile-school.svg" alt=""></span>
                         <span><small>School <em id="profileSchoolBadge"></em></small><strong id="profileSchoolValue"></strong></span>
                         <span aria-hidden="true">›</span>
                     </button>
                     <button class="profile-editor-row" type="button" data-profile-editor="grade">
-                        <span class="profile-editor-row-icon profile-grade-icon" aria-hidden="true"></span>
+                        <span class="profile-editor-row-icon" aria-hidden="true"><img src="../assets/app/profile-graduation-cap.svg" alt=""></span>
                         <span><small>Grade <em id="profileGradeBadge"></em></small><strong id="profileGradeValue"></strong></span>
                         <span aria-hidden="true">›</span>
                     </button>

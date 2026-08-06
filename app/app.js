@@ -85,6 +85,8 @@ const state = {
     installPrompt: null,
     webPushSubscription: null,
     webPushBusy: false,
+    webPushRegistrationState: "off",
+    webPushRegistrationError: "",
     detailReturnFocus: null,
 };
 
@@ -2317,17 +2319,53 @@ function renderFeedGate() {
     const locked = isFeedVoteLocked();
     $("#feedGateLock").classList.toggle("hidden", !locked);
     $("#feedUnlockedContent").classList.toggle("hidden", locked);
-    if (!locked) return;
+    if (!locked) {
+        renderFeedNotificationPrompt();
+        return;
+    }
     const cast = Number(state.classmatesStatus?.votes_cast || 0);
     const required = Number(state.classmatesStatus?.required_votes || 0);
+    const remaining = Math.max(0, required - cast);
+    const received = Math.max(0, Number(state.profile?.vote_count || 0));
+    const receivedLabel = received === 1 ? "vote" : "votes";
     $("#feedGateLock").innerHTML = `<article class="feed-gate-card">
         <img class="feed-gate-lock" src="../assets/app/lock.png" alt="" aria-hidden="true">
-        <h3>Feed is locked</h3>
-        <p>Answer a few polls to see what everyone is saying.</p>
+        <p class="feed-gate-eyebrow">You got</p>
+        <h3 class="feed-gate-vote-count">${received.toLocaleString()} ${receivedLabel}</h3>
+        <p>Cast ${remaining} more ${remaining === 1 ? "vote" : "votes"} to unlock your Feed and see what classmates said.</p>
         <progress class="feed-gate-progress" max="${Math.max(1, required)}" value="${Math.min(cast, Math.max(1, required))}" aria-label="Votes required to unlock Feed"></progress>
         <strong>${cast} / ${required} votes cast</strong>
         <button class="primary-button" type="button" data-vote-to-unlock>Vote now to unlock Feed</button>
+        <section class="feed-gate-notification" aria-label="Enable vote notifications">
+            <strong>Don’t miss your next vote</strong>
+            <small>Enable notifications to know when someone picks you.</small>
+            <button class="secondary-button" type="button" data-enable-feed-notifications>Enable notifications</button>
+        </section>
     </article>`;
+    renderFeedNotificationPrompt();
+}
+
+function renderFeedNotificationPrompt() {
+    const supported = webPushSupported();
+    const enabled = supported && state.webPushSubscription && state.webPushRegistrationState === "on";
+    const syncing = supported && state.webPushRegistrationState === "syncing";
+    const failed = supported && state.webPushRegistrationState === "error";
+    const blocked = supported && Notification.permission === "denied";
+    const label = blocked
+        ? "Fix notification settings"
+        : failed
+        ? "Retry notifications"
+        : syncing
+        ? "Finishing setup…"
+        : "Enable notifications";
+    const prompts = [$("#feedNotificationPrompt"), ...$$(".feed-gate-notification")].filter(Boolean);
+    prompts.forEach((prompt) => {
+        prompt.classList.toggle("hidden", !supported || Boolean(enabled));
+        const button = prompt.querySelector("button");
+        if (!button) return;
+        button.textContent = label;
+        button.disabled = state.webPushBusy || syncing;
+    });
 }
 
 async function refreshFeedGateStatus() {
@@ -3961,12 +3999,68 @@ function updateNetworkStatus() {
     if (!offline) showToast("Back online");
 }
 
-async function installWebApp() {
-    if (!state.installPrompt) return;
-    state.installPrompt.prompt();
-    await state.installPrompt.userChoice.catch(() => null);
-    state.installPrompt = null;
+function isStandaloneApp() {
+    return matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+}
+
+function androidInstallRequested() {
+    if (demoMode || !isAndroidDevice() || isStandaloneApp()) return false;
+    if (new URLSearchParams(location.search).get("install") !== "1") return false;
+    try {
+        return localStorage.getItem("valid:pwa-installed") !== "1";
+    } catch (_) {
+        return true;
+    }
+}
+
+function showAndroidInstallGate() {
+    const dialog = $("#androidInstallDialog");
+    if (!dialog.open) dialog.showModal();
+    const button = $("#androidInstallButton");
+    button.disabled = false;
+    $("#androidInstallStatus").textContent = state.installPrompt
+        ? "Chrome is ready to install Valid."
+        : "Waiting for Chrome’s installer…";
+}
+
+function markWebAppInstalled() {
+    try {
+        localStorage.setItem("valid:pwa-installed", "1");
+    } catch (_) {
+        // Installation still completed when storage is unavailable.
+    }
+}
+
+function finishAndroidInstall() {
+    markWebAppInstalled();
+    const dialog = $("#androidInstallDialog");
+    if (dialog.open) dialog.close();
+    const params = new URLSearchParams(location.search);
+    params.delete("install");
+    history.replaceState(null, "", `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`);
     $("#installAppButton").classList.add("hidden");
+    restoreOrStartAuthFlow();
+}
+
+async function installWebApp() {
+    if (!state.installPrompt) {
+        if ($("#androidInstallDialog").open) {
+            $("#androidInstallStatus").textContent = "Open Chrome’s ⋮ menu and choose Install app or Add to Home screen.";
+        }
+        return;
+    }
+    const prompt = state.installPrompt;
+    state.installPrompt = null;
+    await prompt.prompt();
+    const choice = await prompt.userChoice.catch(() => null);
+    if (choice?.outcome === "accepted") {
+        finishAndroidInstall();
+        showToast("Valid is installed ✨");
+        return;
+    }
+    if ($("#androidInstallDialog").open) {
+        $("#androidInstallStatus").textContent = "Installation was canceled. Tap Install Valid when you’re ready.";
+    }
 }
 
 function webPushSupported() {
@@ -3989,6 +4083,7 @@ function renderWebPushStatus() {
     if (!webPushSupported()) {
         button.classList.add("hidden");
         renderProfileActionsVisibility();
+        renderFeedNotificationPrompt();
         return;
     }
     button.classList.remove("hidden");
@@ -3996,11 +4091,48 @@ function renderWebPushStatus() {
     const status = $("#notificationStatusText");
     if (Notification.permission === "denied") {
         status.textContent = "Blocked in browser settings";
-    } else if (state.webPushSubscription) {
+    } else if (state.webPushSubscription && state.webPushRegistrationState === "on") {
         status.textContent = "On · tap to turn off";
+    } else if (state.webPushSubscription && state.webPushRegistrationState === "syncing") {
+        status.textContent = "Finishing setup…";
+    } else if (state.webPushSubscription && state.webPushRegistrationState === "error") {
+        status.textContent = "Setup incomplete · tap to retry";
     } else {
         status.textContent = "Off · tap to turn on";
     }
+    renderFeedNotificationPrompt();
+}
+
+function subscriptionUsesVapidKey(subscription, publicKey) {
+    const currentKey = subscription?.options?.applicationServerKey;
+    if (!currentKey) return true;
+    const expected = urlBase64ToUint8Array(publicKey);
+    const current = new Uint8Array(currentKey);
+    return current.length === expected.length && current.every((value, index) => value === expected[index]);
+}
+
+async function syncWebPushSubscription(subscription) {
+    const config = await api.getWebPushConfig();
+    if (!config?.enabled || !config.vapid_public_key) {
+        throw new Error("Notifications are not configured yet.");
+    }
+    let current = subscription;
+    if (!subscriptionUsesVapidKey(current, config.vapid_public_key)) {
+        await current.unsubscribe();
+        const registration = await navigator.serviceWorker.ready;
+        current = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(config.vapid_public_key),
+        });
+    }
+    const result = await api.registerWebPushSubscription(api.user.id, current.toJSON());
+    if (result?.registered !== true) {
+        throw new Error("Valid could not confirm notification setup. Tap to retry.");
+    }
+    state.webPushSubscription = current;
+    state.webPushRegistrationState = "on";
+    state.webPushRegistrationError = "";
+    return current;
 }
 
 async function refreshWebPushStatus({ sync = false } = {}) {
@@ -4014,8 +4146,21 @@ async function refreshWebPushStatus({ sync = false } = {}) {
     } catch (_) {
         state.webPushSubscription = null;
     }
+    if (!state.webPushSubscription) {
+        state.webPushRegistrationState = "off";
+        state.webPushRegistrationError = "";
+    }
     if (sync && state.webPushSubscription && api.user?.id) {
-        await api.registerWebPushSubscription(api.user.id, state.webPushSubscription.toJSON()).catch(() => null);
+        state.webPushRegistrationState = "syncing";
+        renderWebPushStatus();
+        try {
+            await syncWebPushSubscription(state.webPushSubscription);
+        } catch (error) {
+            state.webPushRegistrationState = "error";
+            state.webPushRegistrationError = error.message || "Could not finish notification setup.";
+        }
+    } else if (state.webPushSubscription && state.webPushRegistrationState === "off") {
+        state.webPushRegistrationState = "syncing";
     }
     renderWebPushStatus();
 }
@@ -4028,6 +4173,8 @@ async function detachWebPushSubscription() {
     const endpoint = subscription.endpoint;
     await subscription.unsubscribe();
     state.webPushSubscription = null;
+    state.webPushRegistrationState = "off";
+    state.webPushRegistrationError = "";
     await api.deleteWebPushSubscription(api.user.id, endpoint).catch(() => null);
     renderWebPushStatus();
 }
@@ -4051,8 +4198,17 @@ async function toggleWebPush() {
         const registration = await navigator.serviceWorker.ready;
         const existing = state.webPushSubscription || await registration.pushManager.getSubscription();
         if (existing) {
-            await detachWebPushSubscription();
-            showToast("Notifications turned off");
+            if (state.webPushRegistrationState === "on") {
+                await detachWebPushSubscription();
+                showToast("Notifications turned off");
+            } else {
+                state.webPushSubscription = existing;
+                state.webPushRegistrationState = "syncing";
+                renderWebPushStatus();
+                await syncWebPushSubscription(existing);
+                renderWebPushStatus();
+                showToast("Notifications are on ✨");
+            }
             return;
         }
 
@@ -4067,22 +4223,25 @@ async function toggleWebPush() {
             throw new Error("Notifications are not configured yet.");
         }
 
+        state.webPushRegistrationState = "syncing";
+        renderWebPushStatus();
         const subscription = await registration.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(config.vapid_public_key),
         });
-        try {
-            await api.registerWebPushSubscription(api.user.id, subscription.toJSON());
-        } catch (error) {
-            await subscription.unsubscribe().catch(() => null);
-            throw error;
-        }
         state.webPushSubscription = subscription;
+        await syncWebPushSubscription(subscription);
         renderWebPushStatus();
         showToast("Notifications are on ✨");
     } catch (error) {
+        if (state.webPushSubscription) {
+            state.webPushRegistrationState = "error";
+            state.webPushRegistrationError = error.message || "Could not finish notification setup.";
+        } else {
+            state.webPushRegistrationState = "off";
+        }
+        renderWebPushStatus();
         showToast(error.message || "Could not enable notifications.");
-        await refreshWebPushStatus();
     } finally {
         state.webPushBusy = false;
         button.disabled = false;
@@ -4238,7 +4397,11 @@ function bindEvents() {
             moderateFeedItem("block");
         }
     });
-    $("#feedGateLock").addEventListener("click", (event) => { if (event.target.closest("[data-vote-to-unlock]")) switchPanel("play"); });
+    $("#feedGateLock").addEventListener("click", (event) => {
+        if (event.target.closest("[data-vote-to-unlock]")) switchPanel("play");
+        if (event.target.closest("[data-enable-feed-notifications]")) toggleWebPush();
+    });
+    $("#feedNotificationButton").addEventListener("click", toggleWebPush);
     $("#anonymousAnswerForm").addEventListener("submit", answerAnonymousQuestion);
     $("#anonymousQuestionDialog").addEventListener("click", (event) => {
         const menuButton = event.target.closest("[data-toggle-anonymous-menu]");
@@ -4369,6 +4532,8 @@ function bindEvents() {
     $("#cancelDeletionButton").addEventListener("click", cancelAccountDeletion);
     $("#pendingDeletionLogout").addEventListener("click", logoutAndReset);
     $("#installAppButton").addEventListener("click", installWebApp);
+    $("#androidInstallButton").addEventListener("click", installWebApp);
+    $("#androidInstallDialog").addEventListener("cancel", (event) => event.preventDefault());
     $("#notificationButton").addEventListener("click", toggleWebPush);
     $("#questionForm").addEventListener("submit", reviewQuestionSubmission);
     $("#questionForm").addEventListener("input", resetQuestionSubmissionIfDraftChanged);
@@ -4445,15 +4610,13 @@ function bindEvents() {
         event.preventDefault();
         state.installPrompt = event;
         $("#installAppButton").classList.remove("hidden");
+        if ($("#androidInstallDialog").open) {
+            $("#androidInstallStatus").textContent = "Chrome is ready to install Valid.";
+        }
     });
     addEventListener("appinstalled", () => {
         state.installPrompt = null;
-        try {
-            localStorage.setItem("valid:pwa-installed", "1");
-        } catch (_) {
-            // Installation should still complete when storage is unavailable.
-        }
-        $("#installAppButton").classList.add("hidden");
+        finishAndroidInstall();
         showToast("Valid is on your home screen ✨");
     });
 }
@@ -4487,7 +4650,11 @@ if (!passkeysSupported() && !demoMode) {
     $("#authStatus").textContent = "This browser does not support passkeys. Try current Chrome, Safari, or Edge.";
 }
 
+let authFlowStarted = false;
+
 async function restoreOrStartAuthFlow() {
+    if (authFlowStarted) return;
+    authFlowStarted = true;
     if (!demoMode) {
         $("#authStatus").textContent = "Checking your session…";
         try {
@@ -4509,4 +4676,5 @@ async function restoreOrStartAuthFlow() {
     }
 }
 
-restoreOrStartAuthFlow();
+if (androidInstallRequested()) showAndroidInstallGate();
+else restoreOrStartAuthFlow();

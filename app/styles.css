@@ -226,11 +226,23 @@ h3 { font-size: 1.45rem; }
 .feed-gate-lock { width: min(150px, 42vw); height: auto; object-fit: contain; }
 .feed-gate-card h3 { margin: 0; font-size: 2rem; }
 .feed-gate-card p { max-width: 390px; margin: 0; color: var(--muted); line-height: 1.4; }
+.feed-gate-eyebrow { margin-bottom: -9px !important; color: var(--dark-teal) !important; font-size: .9rem; letter-spacing: .08em; text-transform: uppercase; }
+.feed-gate-vote-count { font-size: clamp(2.4rem, 12vw, 4rem) !important; line-height: .98; }
 .feed-gate-progress { width: min(100%, 360px); height: 12px; appearance: none; overflow: hidden; border: 2px solid var(--ink); border-radius: 999px; background: var(--aqua); }
 .feed-gate-progress::-webkit-progress-bar { background: var(--aqua); }
 .feed-gate-progress::-webkit-progress-value { background: var(--peach); }
 .feed-gate-progress::-moz-progress-bar { background: var(--peach); }
 .feed-gate-card .primary-button { max-width: 390px; }
+.feed-gate-notification { width: min(100%, 390px); display: grid; gap: 8px; margin-top: 8px; padding: 16px; border: 2px solid var(--ink); border-radius: 17px; background: var(--aqua); }
+.feed-gate-notification strong { font-size: 1.05rem; }
+.feed-gate-notification small { color: var(--muted); line-height: 1.35; }
+.feed-gate-notification .secondary-button { min-height: 46px; background: var(--white); }
+.feed-notification-prompt { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 12px; margin-bottom: 15px; padding: 13px; border: 2px solid var(--ink); border-radius: 17px; background: var(--white); box-shadow: 0 4px 0 rgba(0,0,0,.12); }
+.feed-notification-icon { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 13px; background: var(--peach); }
+.feed-notification-icon svg { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.feed-notification-prompt > span:nth-child(2) { min-width: 0; display: grid; gap: 2px; text-align: left; }
+.feed-notification-prompt small { color: var(--muted); line-height: 1.25; }
+.feed-notification-prompt .secondary-button { width: auto; min-height: 44px; padding: 0 14px; white-space: nowrap; }
 
 .feed-tools { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 9px; margin-bottom: 15px; }
 .feed-search { min-height: 46px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border: var(--line); border-radius: 12px; background: rgba(255,255,255,.82); }
@@ -676,6 +688,15 @@ body.play-active .play-actions { margin: 0; }
 .modal textarea { min-height: 125px; resize: vertical; padding: 13px; border: 2px solid var(--ink); border-radius: 14px; background: var(--white); }
 .modal input[type="file"] { width: 100%; padding: 10px; border: 2px dashed var(--ink); border-radius: 13px; background: var(--white); }
 .modal input:not([type="file"]):not([type="radio"]):not([type="checkbox"]), .modal select { width: 100%; min-height: 44px; padding: 9px 11px; border: 2px solid var(--ink); border-radius: 11px; background: var(--white); }
+.android-install-dialog { position: fixed; inset: 0; width: 100%; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom)); border: 0; background: var(--aqua); }
+.android-install-dialog::backdrop { background: var(--aqua); }
+.android-install-dialog-content { width: min(430px, 100%); min-height: 100%; display: grid; align-content: center; justify-items: center; gap: 14px; margin: auto; text-align: center; }
+.android-install-dialog-content > img { width: 104px; height: 104px; border-radius: 26px; object-fit: contain; }
+.android-install-dialog-content .eyebrow { margin: 4px 0 -6px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.android-install-dialog-content h2 { margin: 0; font-size: clamp(2.4rem, 11vw, 3.5rem); line-height: 1; }
+.android-install-dialog-content > p:not(.eyebrow) { max-width: 360px; margin: 0; color: var(--muted); line-height: 1.4; }
+.android-install-dialog-content .primary-button { width: 100%; margin-top: 10px; }
+.android-install-dialog-content .status-message { min-height: 1.4em; font-size: .88rem; }
 .modal .feed-search input[type="search"] { min-height: 0; padding: 0; border: 0 !important; border-radius: 0; background: transparent; outline: 0; box-shadow: none; appearance: none; -webkit-appearance: none; }
 .modal .feed-search input[type="search"]::-webkit-search-decoration,
 .modal .feed-search input[type="search"]::-webkit-search-cancel-button { display: none; }
@@ -695,8 +716,8 @@ body.play-active .play-actions { margin: 0; }
 .profile-editor-rows { display: grid; gap: 11px; }
 .profile-editor-row { width: 100%; min-height: 78px; display: grid; grid-template-columns: 34px minmax(0, 1fr) 20px; align-items: center; gap: 12px; padding: 13px 15px; border: 2px solid var(--ink); border-radius: 16px; background: var(--white); color: var(--ink); cursor: pointer; text-align: left; }
 .profile-editor-row:disabled { cursor: not-allowed; opacity: .58; }
-.profile-editor-row-icon { width: 30px; height: 30px; display: grid; place-items: center; font-size: 1.05rem; font-weight: 900; }
-.profile-grade-icon::before { content: ""; width: 25px; height: 16px; display: block; border: 2px solid currentColor; border-radius: 2px 2px 8px 8px; transform: skewY(-8deg); }
+.profile-editor-row-icon { width: 30px; height: 30px; display: grid; place-items: center; }
+.profile-editor-row-icon img { width: 25px; height: 25px; display: block; object-fit: contain; }
 .profile-editor-row > span:nth-child(2) { min-width: 0; display: grid; gap: 4px; }
 .profile-editor-row small { display: flex; align-items: center; gap: 7px; color: rgba(5,9,20,.65); }
 .profile-editor-row small em { padding: 2px 7px; border-radius: 999px; font-size: .68rem; font-style: normal; }
@@ -992,6 +1013,9 @@ body.detail-screen-open { overflow: hidden; }
 }
 
 @media (max-width: 470px) {
+    .feed-notification-prompt { grid-template-columns: 40px minmax(0, 1fr); }
+    .feed-notification-icon { width: 40px; height: 40px; }
+    .feed-notification-prompt .secondary-button { grid-column: 1 / -1; width: 100%; }
     .signup-flow form { width: calc(100% - 22px); gap: 11px; padding-top: max(6px, env(safe-area-inset-top)); padding-bottom: max(8px, env(safe-area-inset-bottom)); }
     .signup-flow-controls .icon-button, .signup-back-button { width: 44px; height: 44px; }
     .signup-step { gap: 12px; padding: 58px 1px 12px; }

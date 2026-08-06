@@ -199,13 +199,43 @@ test("android shell surfaces connectivity and install affordances", async ({ pag
     await page.evaluate(() => {
         const event = new Event("beforeinstallprompt", { cancelable: true });
         event.prompt = () => Promise.resolve();
-        event.userChoice = Promise.resolve({ outcome: "dismissed" });
+        event.userChoice = Promise.resolve({ outcome: "accepted" });
         dispatchEvent(event);
     });
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await expect(page.getByRole("button", { name: "Install Valid" })).toBeVisible();
     await page.getByRole("button", { name: "Install Valid" }).click();
     await expect(page.getByRole("button", { name: "Install Valid" })).toBeHidden();
+});
+
+test("Android landing handoff requires native installation before signup", async ({ page }) => {
+    await page.addInitScript(() => {
+        Object.defineProperty(navigator, "userAgent", {
+            configurable: true,
+            get: () => "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 Chrome/138.0 Mobile Safari/537.36",
+        });
+    });
+    await page.route("**/api/v1/**", (route) => route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "Authentication required" }),
+    }));
+    await page.goto("/app/?install=1&signup=1");
+    const installDialog = page.getByRole("dialog", { name: "Install Valid on Android" });
+    await expect(installDialog).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Create your Valid account" })).toBeHidden();
+
+    await page.evaluate(() => {
+        const event = new Event("beforeinstallprompt", { cancelable: true });
+        event.prompt = () => Promise.resolve();
+        event.userChoice = Promise.resolve({ outcome: "accepted" });
+        dispatchEvent(event);
+    });
+    await installDialog.getByRole("button", { name: "Install Valid" }).click();
+
+    await expect(installDialog).toBeHidden();
+    await expect(page.getByRole("dialog", { name: "Create your Valid account" })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("valid:pwa-installed"))).toBe("1");
 });
 
 test("PWA ships install icons and Web Push worker handlers", async ({ request }) => {
@@ -378,7 +408,8 @@ test("non-subscribers can reach God Mode from a received vote", async ({ page })
 test("new users vote to unlock Feed just like iOS", async ({ page }) => {
     await page.goto("/app/?demo=1&locked=1&signin=1");
     await page.getByRole("button", { name: /^sign in$/i }).click();
-    await expect(page.getByRole("heading", { name: "Feed is locked" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "84 votes" })).toBeVisible();
+    await expect(page.getByText("Cast 2 more votes to unlock your Feed and see what classmates said.")).toBeVisible();
     await expect(page.locator(".feed-gate-lock")).toHaveAttribute("src", "../assets/app/lock.png");
     await expect(page.getByText("1 / 3 votes cast")).toBeVisible();
     await page.getByRole("button", { name: "Vote now to unlock Feed" }).click();
@@ -387,7 +418,7 @@ test("new users vote to unlock Feed just like iOS", async ({ page }) => {
     await page.locator("[data-choice]").first().click();
     await page.getByRole("button", { name: "Feed", exact: true }).click();
     await expect(page.getByRole("button", { name: /What is something you are genuinely proud/ })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Feed is locked" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "84 votes" })).toHaveCount(0);
 });
 
 test("anonymous inbox supports private answers and safety controls", async ({ page }) => {
