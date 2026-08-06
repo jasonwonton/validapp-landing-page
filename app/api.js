@@ -104,7 +104,9 @@ export class ValidAPI {
             const waitSeconds = response.status === 429
                 ? retryAfterSeconds(response.headers.get("retry-after"))
                 : null;
-            const message = response.status === 429
+            const message = response.status >= 500 && !contentType.includes("application/json")
+                ? "Valid is temporarily unavailable. Please try again in a moment."
+                : response.status === 429
                 ? retryMessage(waitSeconds)
                 : typeof detail === "string"
                 ? detail

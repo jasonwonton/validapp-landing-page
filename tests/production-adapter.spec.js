@@ -107,6 +107,36 @@ test("real adapter uses the scoped aura boost endpoints", async ({ page }) => {
     ]);
 });
 
+test("real adapter does not expose an upstream HTML error page", async ({ page }) => {
+    await page.addInitScript((apiOrigin) => {
+        window.VALID_API_BASE_URL = `${apiOrigin}/api/v1`;
+    }, API_ORIGIN);
+    await page.route(`${API_ORIGIN}/api/v1/config`, async (route) => {
+        await route.fulfill({
+            status: 502,
+            contentType: "text/html",
+            body: "<!DOCTYPE html><html><body>via_upstream</body></html>",
+        });
+    });
+    await page.goto("/app/");
+
+    const error = await page.evaluate(async () => {
+        const { ValidAPI } = await import("/app/api.js");
+        try {
+            await new ValidAPI().getConfig();
+            return null;
+        } catch (caught) {
+            return { message: caught.message, status: caught.status, detail: caught.detail };
+        }
+    });
+
+    expect(error).toEqual({
+        message: "Valid is temporarily unavailable. Please try again in a moment.",
+        status: 502,
+        detail: "<!DOCTYPE html><html><body>via_upstream</body></html>",
+    });
+});
+
 function profile(firstName = "Jordan", auraPoints = 500) {
     return {
         user_id: USER_ID,
