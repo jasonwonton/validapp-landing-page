@@ -12,8 +12,9 @@ test("non-iOS visitors get one direct signup CTA", async ({ page }) => {
 test("landing page uses the app palette and prominent wordmark", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("body")).toHaveCSS("background-color", "rgb(204, 247, 244)");
-    const wordmarkWidth = await page.locator(".brand img").evaluate((image) => image.getBoundingClientRect().width);
+    const wordmarkWidth = await page.locator(".hero-logo").evaluate((image) => image.getBoundingClientRect().width);
     expect(wordmarkWidth).toBeGreaterThanOrEqual(124);
+    await expect(page.locator(".site-header")).toHaveCount(0);
     await expect(page.locator("#primaryCta")).toHaveCSS("background-color", "rgb(255, 177, 94)");
 });
 

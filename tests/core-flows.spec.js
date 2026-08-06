@@ -32,7 +32,10 @@ test("signed-out experience goes straight to the passkey actions", async ({ page
     await expect(page.getByText("VALID, EVERYWHERE", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Your feed is ready.", { exact: true })).toHaveCount(0);
     await expect(page.getByText(/Use the same passkey as the Valid iPhone app/i)).toHaveCount(0);
-    await expect(page.getByRole("button", { name: /^sign in$/i })).toBeVisible();
+    const signInButton = page.getByRole("button", { name: /^sign in$/i });
+    await expect(signInButton).toBeVisible();
+    await expect(signInButton).toHaveText("Sign in");
+    await expect(signInButton.locator("span")).toHaveCount(0);
     await expect(page.getByText(/fingerprint or face stays on your device/i)).toHaveCount(0);
 });
 
