@@ -161,11 +161,15 @@ export class ValidAPI {
         });
     }
 
-    requestPhoneVerification(phoneNumber) {
-        return this.request("/auth/phone/request", {
+    requestPhoneVerification(phoneNumber, turnstileToken) {
+        return this.request("/auth/phone/request/web", {
             method: "POST",
             auth: false,
-            body: JSON.stringify({ phone_number: phoneNumber, channel: "sms" }),
+            body: JSON.stringify({
+                phone_number: phoneNumber,
+                channel: "sms",
+                turnstile_token: turnstileToken,
+            }),
         });
     }
 

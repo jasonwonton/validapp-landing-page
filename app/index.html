@@ -6,7 +6,7 @@
     <base href="/app/">
     <meta name="theme-color" content="#ccf7f4">
     <meta name="referrer" content="no-referrer">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'self'; connect-src 'self' https://api.six7.lol; font-src 'self'; form-action 'self'; img-src 'self' data: https:; manifest-src 'self'; object-src 'none'; script-src 'self'; style-src 'self'; worker-src 'self'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'self'; connect-src 'self' https://api.six7.lol; font-src 'self'; form-action 'self'; frame-src https://challenges.cloudflare.com; img-src 'self' data: https:; manifest-src 'self'; object-src 'none'; script-src 'self' https://challenges.cloudflare.com; style-src 'self'; worker-src 'self'">
     <meta name="description" content="Answer polls, see your feed, and share your anonymous Valid link from any device.">
     <title>Valid on the web</title>
     <link rel="icon" type="image/png" href="../assets/AppIconV2.png">
@@ -280,6 +280,7 @@
             <fieldset class="signup-step signup-entry-step signup-code-step hidden" data-signup-step="4">
                 <h2>Enter your code</h2>
                 <p id="signupCodeHint" class="form-hint">We sent a verification code to your phone.</p>
+                <div id="signupTurnstile" class="signup-turnstile" aria-label="Security verification"></div>
                 <label>Verification code<input id="signupPhoneCode" type="text" inputmode="numeric" autocomplete="one-time-code" minlength="4" maxlength="10" pattern="[0-9]{4,10}" placeholder="123456" required></label>
                 <button class="primary-button" type="button" data-signup-next>Continue</button>
                 <button class="text-button signup-resend-code" type="button" data-signup-resend-code>Send another code</button>
@@ -659,6 +660,7 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
     <script src="local-config.js"></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
     <script type="module" src="app.js"></script>
 </body>
 </html>

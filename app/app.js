@@ -5,6 +5,7 @@ import { createAdditionalPasskey, createSignupPasskey, passkeysSupported, signIn
 const demoMode = localDemoAllowed();
 const api = demoMode ? new DemoAPI() : new ValidAPI();
 const DEFAULT_FULL_REVEAL_AURA_COST = 1000;
+const TURNSTILE_ACTION = "phone_otp_request";
 const state = {
     profile: null,
     activePanel: "feed",
@@ -64,6 +65,10 @@ const state = {
     signupSchoolLookupGeneration: 0,
     signupPhoneVerified: false,
     signupVerifiedPhone: null,
+    turnstileWidgetId: null,
+    turnstileToken: null,
+    turnstileResolve: null,
+    turnstileReject: null,
     contactOnboarding: false,
     questionArtworkFile: null,
     questionArtworkPreviewURL: null,
@@ -1090,12 +1095,98 @@ function openSignupDialog() {
     resetSignupSchoolPicker();
     state.signupPhoneVerified = false;
     state.signupVerifiedPhone = null;
+    resetSignupTurnstile({ remove: true });
     $("#signupPhoneCode").value = "";
     selectSignupAge($("#signupAge").value || 13, { scroll: false });
     renderSignupGradeOptions();
     setSignupStep(0);
     $("#signupDialog").showModal();
     requestAnimationFrame(() => selectSignupAge($("#signupAge").value));
+}
+
+async function turnstileSiteKey() {
+    if (!state.config) state.config = await api.getConfig();
+    return window.VALID_TURNSTILE_SITE_KEY || state.config?.turnstile_site_key || "";
+}
+
+async function waitForTurnstileAPI() {
+    const startedAt = Date.now();
+    while (!window.turnstile) {
+        if (Date.now() - startedAt > 10_000) throw new Error("Security check could not load. Please try again.");
+        await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    return window.turnstile;
+}
+
+function settleTurnstileWaiter(kind, value) {
+    const callback = kind === "resolve" ? state.turnstileResolve : state.turnstileReject;
+    state.turnstileResolve = null;
+    state.turnstileReject = null;
+    callback?.(value);
+}
+
+function resetSignupTurnstile({ remove = false } = {}) {
+    state.turnstileToken = null;
+    settleTurnstileWaiter("reject", new Error("Security check was reset."));
+    if (state.turnstileWidgetId === null || !window.turnstile) return;
+    if (remove) {
+        window.turnstile.remove(state.turnstileWidgetId);
+        state.turnstileWidgetId = null;
+        return;
+    }
+    window.turnstile.reset(state.turnstileWidgetId);
+}
+
+async function getSignupTurnstileToken() {
+    if (demoMode) return "demo";
+    const [sitekey, turnstile] = await Promise.all([turnstileSiteKey(), waitForTurnstileAPI()]);
+    if (!sitekey) throw new Error("Security verification is not configured yet.");
+
+    state.turnstileToken = null;
+    const tokenPromise = new Promise((resolve, reject) => {
+        let rejectWaiter;
+        const timer = setTimeout(() => {
+            if (state.turnstileReject !== rejectWaiter) return;
+            state.turnstileResolve = null;
+            state.turnstileReject = null;
+            reject(new Error("Security check took too long. Please try again."));
+        }, 30_000);
+        state.turnstileResolve = (token) => {
+            clearTimeout(timer);
+            resolve(token);
+        };
+        rejectWaiter = (error) => {
+            clearTimeout(timer);
+            reject(error);
+        };
+        state.turnstileReject = rejectWaiter;
+    });
+
+    if (state.turnstileWidgetId === null) {
+        state.turnstileWidgetId = turnstile.render("#signupTurnstile", {
+            sitekey,
+            action: TURNSTILE_ACTION,
+            appearance: "interaction-only",
+            size: "flexible",
+            callback: (token) => {
+                state.turnstileToken = token;
+                settleTurnstileWaiter("resolve", token);
+            },
+            "expired-callback": () => {
+                state.turnstileToken = null;
+            },
+            "error-callback": () => {
+                state.turnstileToken = null;
+                settleTurnstileWaiter("reject", new Error("Security check failed to load. Please try again."));
+            },
+        });
+    } else {
+        turnstile.reset(state.turnstileWidgetId);
+    }
+
+    const immediateToken = turnstile.getResponse(state.turnstileWidgetId);
+    if (immediateToken) settleTurnstileWaiter("resolve", immediateToken);
+    return tokenPromise;
 }
 
 function resetSignupSchoolPicker() {
@@ -1267,7 +1358,10 @@ async function advanceSignup(button) {
                 return;
             }
             if (!demoMode) {
-                const verification = await api.requestPhoneVerification(phoneNumber);
+                $("#signupStatus").textContent = "Completing a quick security check…";
+                const turnstileToken = await getSignupTurnstileToken();
+                const verification = await api.requestPhoneVerification(phoneNumber, turnstileToken);
+                resetSignupTurnstile();
                 $("#signupCodeHint").textContent = `We sent a verification code to ${formatSignupPhone(phoneNumber)}.`;
                 $("#signupStatus").textContent = verification.can_resend
                     ? "Enter the code from your text message."
@@ -1338,7 +1432,10 @@ async function resendSignupPhoneCode(button) {
     setButtonLoading(button, true, "Sending...");
     $("#signupStatus").textContent = "";
     try {
-        await api.requestPhoneVerification(phoneNumber);
+        $("#signupStatus").textContent = "Completing a quick security check…";
+        const turnstileToken = await getSignupTurnstileToken();
+        await api.requestPhoneVerification(phoneNumber, turnstileToken);
+        resetSignupTurnstile();
         $("#signupCodeHint").textContent = `We sent a new verification code to ${formatSignupPhone(phoneNumber)}.`;
         $("#signupPhoneCode").value = "";
         $("#signupPhoneCode").focus({ preventScroll: true });

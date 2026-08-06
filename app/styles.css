@@ -849,6 +849,8 @@ body.play-active .play-actions { margin: 0; }
 .signup-terms a { color: var(--dark-teal); text-underline-offset: 2px; }
 .signup-phone-hint { max-width: 430px; font-size: 1rem; text-align: center; }
 .signup-phone-step h2 { font-size: clamp(1.05rem, 4.65vw, 1.65rem); letter-spacing: -.01em; white-space: nowrap; }
+.signup-turnstile { width: 100%; min-height: 1px; display: flex; justify-content: center; }
+.signup-turnstile:empty { display: none; }
 .signup-name-step h2 { font-size: clamp(1.2rem, 5.15vw, 1.8rem); white-space: nowrap; }
 .signup-entry-step { width: min(100%, 480px); justify-self: center; align-content: start; gap: 13px; padding-top: clamp(110px, 24vh, 210px); }
 .signup-entry-step > h2, .signup-entry-step > label, .signup-entry-step > .primary-button { width: 100%; }
