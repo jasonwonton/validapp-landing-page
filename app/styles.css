@@ -342,6 +342,9 @@ h3 { font-size: 1.45rem; }
 .ask-link-card strong { display: block; margin-bottom: 10px; font-size: 1.35rem; }
 .ask-link-heading { display: block; }
 .ask-link-heading > div > span { display: block; margin: -5px 0 13px; color: rgba(5,9,20,.62); font-size: .85rem; }
+.ask-link-paused { margin: 4px 0 0; padding: 11px 12px; border-radius: 12px; background: rgba(5,9,20,.07); color: var(--muted); font-size: .88rem; line-height: 1.35; }
+.ask-link-controls { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 16px; }
+.ask-link-controls .text-button { min-height: 36px; padding: 4px 8px; color: var(--ink); font-family: var(--app-font); font-size: .92rem; }
 .ask-url { width: 100%; min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px; overflow: hidden; margin-bottom: 15px; padding: 12px; border: 2px solid var(--ink); border-radius: 13px; background: rgba(255,255,255,.7); color: inherit; cursor: pointer; text-align: left; }
 .ask-url > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ask-url > strong { margin: 0; color: #b55218; font-size: .88rem; }
@@ -458,13 +461,19 @@ h3 { font-size: 1.45rem; }
 .school-rank-card > small { color: var(--muted); font-size: .73rem; }
 .school-rank-card > small span { color: var(--heart-pink); }
 .settings-row { width: 100%; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 11px; padding: 13px; border: var(--line); border-radius: 15px; background: rgba(255,255,255,.9); cursor: pointer; text-align: left; }
+.settings-row:disabled { cursor: not-allowed; }
 .profile-actions a.settings-row { color: inherit; text-decoration: none; }
 .settings-row > img, .settings-icon { width: 42px; height: 42px; display: grid; place-items: center; object-fit: contain; font-size: 1.5rem; }
 .notification-settings-icon { border: 2px solid var(--ink); border-radius: 50%; background: var(--aqua); }
 .notification-settings-icon svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
+.feedback-settings-icon { border: 2px solid var(--ink); border-radius: 50%; background: var(--peach); font-size: 1.25rem; }
 .settings-row > span:nth-child(2) { display: grid; gap: 2px; }
 .settings-row small { color: var(--muted); }
 .settings-row > span:last-child { font-size: 2rem; }
+.settings-switch { width: 48px !important; height: 28px !important; display: flex !important; align-items: center; padding: 3px; border: 2px solid var(--ink); border-radius: 999px; background: rgba(5,9,20,.18); transition: background-color .15s ease; }
+.settings-switch > span { width: 18px; height: 18px; display: block; border-radius: 50%; background: var(--white); box-shadow: 0 1px 2px rgba(0,0,0,.28); transition: transform .15s ease; }
+#notificationButton.on .settings-switch { background: #28b97b; }
+#notificationButton.on .settings-switch > span { transform: translateX(18px); }
 .danger-row { color: #a3293c; }
 .danger-row small { color: #8a5962; }
 .god-mode-card { display: grid; gap: 12px; padding: 18px; border: 2px solid var(--ink); border-radius: 18px; background: rgba(255,255,255,.95); }
@@ -480,8 +489,7 @@ h3 { font-size: 1.45rem; }
 .god-mode-card ul { display: grid; gap: 6px; margin: 0; padding-left: 22px; }
 .god-mode-card p { margin: 0; font-size: .86rem; line-height: 1.4; }
 .god-mode-benefits-heading { color: var(--ink) !important; font-size: 1rem !important; }
-.god-mode-start-button { min-height: 62px; display: grid; grid-template-columns: 42px auto; align-items: center; justify-content: center; gap: 8px; padding: 9px 16px; border: 0; border-radius: 20px; background: var(--peach); color: var(--ink); cursor: pointer; text-align: center; }
-.god-mode-start-button > img, .god-mode-checkout-button > img { width: 42px; height: 42px; object-fit: contain; }
+.god-mode-start-button { min-height: 62px; display: grid; align-items: center; justify-content: center; padding: 9px 16px; border: 0; border-radius: 20px; background: var(--peach); color: var(--ink); cursor: pointer; text-align: center; }
 .god-mode-start-button > span, .god-mode-checkout-button > span { display: grid; justify-items: center; gap: 1px; }
 .god-mode-start-button strong, .god-mode-checkout-button strong { font-size: 1.18rem; line-height: 1.05; }
 .god-mode-start-button small { font-size: .82rem; line-height: 1.1; }
@@ -496,6 +504,7 @@ h3 { font-size: 1.45rem; }
 .aura-price-button { min-width: 92px; min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 8px 13px; border: 0; border-radius: 999px; background: var(--peach); cursor: pointer; }
 .aura-price-button img { width: 18px; height: 20px; object-fit: contain; }
 .aura-price-button:disabled { opacity: .45; cursor: not-allowed; }
+.aura-price-button.insufficient:disabled { background: var(--ink); color: var(--white); opacity: 1; }
 .god-mode-pitch-dialog { position: fixed; inset: 0; width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; overflow: auto; overscroll-behavior: contain; padding: 0; border: 0; background: var(--aqua); }
 .god-mode-pitch-dialog::backdrop { background: var(--aqua); }
 .god-mode-pitch-content { width: min(600px, 100%); min-height: 100%; display: grid; align-content: start; gap: 16px; margin: 0 auto; padding: max(10px, env(safe-area-inset-top)) 18px calc(24px + env(safe-area-inset-bottom)); }
@@ -526,8 +535,8 @@ h3 { font-size: 1.45rem; }
 .god-mode-pitch-actions { display: grid; gap: 10px; }
 .god-mode-earn-button, .god-mode-checkout-button { min-height: 64px; display: grid; place-items: center; gap: 2px; padding: 9px 16px; border: 2px solid var(--ink); border-radius: 20px; color: var(--ink); cursor: pointer; text-align: center; text-decoration: none; }
 .god-mode-earn-button { background: var(--white); }
-.god-mode-checkout-button { grid-template-columns: 42px auto; justify-content: center; gap: 8px; background: var(--peach); }
-.god-mode-earn-button strong { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 1.25rem; }
+.god-mode-checkout-button { justify-content: center; background: var(--peach); }
+.god-mode-earn-button strong { font-size: 1.25rem; }
 .god-mode-earn-button small, .god-mode-checkout-button small { font-size: .875rem; }
 .god-mode-maybe-button { min-height: 40px; border: 0; background: transparent; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .god-mode-legal { display: flex; justify-content: center; gap: 8px; margin: 0; font-size: .78rem; }
@@ -672,7 +681,8 @@ body.play-active .play-actions { margin: 0; }
 .nav-item .nav-icon-fill { fill: currentColor; stroke: none; }
 .nav-item > span { font-size: .75rem; }
 .nav-item { color: rgba(0,0,0,.6); }
-.nav-item.active { background: transparent; color: var(--ink); }
+.nav-item.active { background: var(--white); color: var(--ink); box-shadow: 0 2px 0 rgba(0,0,0,.18); }
+.nav-item.active > span { font-weight: 700; }
 
 .modal { width: min(560px, calc(var(--visual-viewport-width, 100%) - 28px)); max-height: calc(var(--visual-viewport-height, 100vh) - 40px); overflow: auto; overscroll-behavior: contain; padding: 0; border: 0; border-radius: 32px; background: var(--aqua); box-shadow: 0 12px 30px rgba(0,0,0,.15); transform: translate(calc(var(--visual-viewport-center, 50vw) - 50vw), calc(var(--visual-viewport-middle, 50vh) - 50vh)); }
 .modal::backdrop { background: rgba(5,9,20,.55); backdrop-filter: blur(3px); }
@@ -687,6 +697,7 @@ body.play-active .play-actions { margin: 0; }
 .modal label span { color: var(--muted); }
 .modal textarea { min-height: 125px; resize: vertical; padding: 13px; border: 2px solid var(--ink); border-radius: 14px; background: var(--white); }
 .modal input[type="file"] { width: 100%; padding: 10px; border: 2px dashed var(--ink); border-radius: 13px; background: var(--white); }
+.feedback-photo-field > span { font-size: .82rem; }
 .modal input:not([type="file"]):not([type="radio"]):not([type="checkbox"]), .modal select { width: 100%; min-height: 44px; padding: 9px 11px; border: 2px solid var(--ink); border-radius: 11px; background: var(--white); }
 .android-install-dialog { position: fixed; inset: 0; width: 100%; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom)); border: 0; background: var(--aqua); }
 .android-install-dialog::backdrop { background: var(--aqua); }
@@ -957,7 +968,8 @@ body.play-active .play-actions { margin: 0; }
 #feedDetailDialog .detail-screen-header { grid-template-columns: 64px minmax(0, 1fr) 64px; }
 #feedDetailDialog .detail-screen-header > strong { overflow: hidden; font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }
 .detail-overflow { position: relative; justify-self: end; align-self: end; }
-.detail-overflow-button { width: 38px; height: 38px; display: grid; place-items: center; padding: 0 0 8px; border: 2px solid var(--ink); border-radius: 50%; background: transparent; color: var(--ink); cursor: pointer; font: 700 1rem/1 system-ui, sans-serif; letter-spacing: -2px; }
+.detail-overflow-button { width: 38px; height: 38px; display: grid; place-items: center; padding: 0; border: 2px solid var(--ink); border-radius: 50%; background: transparent; color: var(--ink); cursor: pointer; font-size: 0; letter-spacing: 0; }
+.detail-overflow-button::before { content: "•••"; font: 700 1rem/1 system-ui, sans-serif; letter-spacing: -1px; transform: translateY(-2px); }
 .detail-overflow-menu { position: absolute; z-index: 8; top: calc(100% + 8px); right: 0; min-width: 190px; overflow: hidden; border: 2px solid var(--ink); border-radius: 15px; background: var(--white); box-shadow: 0 8px 24px rgba(0,0,0,.2); }
 .detail-overflow-menu button { width: 100%; min-height: 46px; display: block; padding: 10px 14px; border: 0; border-bottom: 1px solid rgba(0,0,0,.12); background: var(--white); color: #a3293c; cursor: pointer; font-family: var(--app-font); font-size: .95rem; font-weight: 600; line-height: 1.2; text-align: left; }
 .detail-overflow-menu button:last-child { border-bottom: 0; }

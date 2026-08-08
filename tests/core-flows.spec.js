@@ -633,13 +633,13 @@ test("settings browses and searches classmates with public profile details", asy
     await signInToDemo(page);
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.getByRole("button", { name: "View classmates" }).click();
-    const directory = page.getByRole("dialog").filter({ hasText: "YOUR SCHOOL" });
+    const directory = page.getByRole("dialog", { name: "Classmates", exact: true });
     await expect(directory.getByText("6 classmates")).toBeVisible();
     await directory.getByPlaceholder("Search classmates...").fill("Maya");
     await expect(directory.getByRole("button", { name: /Maya Chen/ })).toBeVisible();
     await expect(directory.getByRole("button", { name: /Noah Williams/ })).toBeHidden();
     await directory.getByRole("button", { name: /Maya Chen/ }).click();
-    const profile = page.getByRole("dialog").filter({ hasText: "CLASSMATE PROFILE" });
+    const profile = page.getByRole("dialog", { name: "Profile", exact: true });
     await expect(profile.getByRole("heading", { name: "Maya Chen" })).toBeVisible();
     await expect(profile.getByText("Student council and bad puns.")).toBeVisible();
     await expect(profile.getByText("61")).toBeVisible();

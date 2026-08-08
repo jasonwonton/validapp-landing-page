@@ -1,4 +1,4 @@
-const CACHE_NAME = "valid-web-v27";
+const CACHE_NAME = "valid-web-v28";
 const APP_SHELL = [
     "./",
     "./styles.css",
@@ -66,11 +66,13 @@ self.addEventListener("push", (event) => {
     } catch (_) {
         payload = { body: event.data?.text() || "You have a new update." };
     }
+    const tag = typeof payload.tag === "string" && payload.tag.trim() ? payload.tag.trim() : undefined;
     event.waitUntil(self.registration.showNotification(payload.title || "Valid", {
         body: payload.body || "You have a new update.",
         icon: "/assets/pwa/icon-192.png",
-        tag: payload.tag || "valid-notification",
-        renotify: true,
+        tag,
+        renotify: Boolean(tag),
+        timestamp: Number(payload.timestamp) || Date.now(),
         data: { url: safeNotificationURL(payload.url) },
     }));
 });

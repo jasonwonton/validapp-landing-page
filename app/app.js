@@ -475,7 +475,7 @@ function renderGodModeCard() {
         <ul><li>${weeklyReveals} weekly reveals to see exactly who voted.</li><li>First-letter hints on every poll.</li><li>${multiplier}× aura on every answer you give.</li><li>Get boosted to the top of classmates' polls.</li></ul>
         ${active
         ? `<p>Your subscription is recognized on web · ${remainingReveals} weekly ${remainingReveals === 1 ? "reveal" : "reveals"} left. Billing stays with the store where you subscribed.</p>`
-        : `<button class="god-mode-start-button" type="button" data-open-god-mode><img src="../assets/app/crown.png" alt=""><span><strong>Start God Mode</strong><small>$${weeklyPrice.toFixed(2)} per week</small></span></button>`}
+        : `<button class="god-mode-start-button" type="button" data-open-god-mode><span><strong>Start God Mode</strong><small>$${weeklyPrice.toFixed(2)} per week</small></span></button>`}
     </article>`;
 }
 
@@ -527,8 +527,8 @@ function renderGodModePitch() {
         </div>
         <div class="god-mode-page-dots" aria-hidden="true"><span class="active"></span><span></span><span></span><span></span></div>
         <div class="god-mode-pitch-actions">
-            <button class="god-mode-earn-button" type="button" data-earn-god-mode><strong><span aria-hidden="true">👥</span> Earn God Mode</strong><small id="godModeInviteProgress">${escapeHTML(godModeInviteProgressLabel())}</small></button>
-            <button class="god-mode-checkout-button" type="button" data-start-god-mode><img src="../assets/app/crown.png" alt=""><span><strong>Start God Mode</strong><small>$${weeklyPrice.toFixed(2)} per week</small></span></button>
+            <button class="god-mode-earn-button" type="button" data-earn-god-mode><strong>Earn God Mode</strong><small id="godModeInviteProgress">${escapeHTML(godModeInviteProgressLabel())}</small></button>
+            <button class="god-mode-checkout-button" type="button" data-start-god-mode><span><strong>Start God Mode</strong><small>$${weeklyPrice.toFixed(2)} per week</small></span></button>
             <button class="god-mode-maybe-button" type="button" data-close-dialog>Maybe later</button>
             <p id="godModeCheckoutStatus" class="status-message" role="status"></p>
             <p class="god-mode-legal"><a href="/terms.html">Terms</a><span>·</span><a href="/privacy-policy.html">Privacy Policy</a></p>
@@ -589,7 +589,7 @@ async function startGodModeCheckout(button) {
     const checkoutWindow = window.open("about:blank", "_blank");
     const originalHTML = button.innerHTML;
     button.disabled = true;
-    button.innerHTML = `<img src="../assets/app/crown.png" alt=""><span><strong>Opening payment…</strong><small>Apple Pay, Google Pay, or card</small></span>`;
+    button.innerHTML = `<span><strong>Opening payment…</strong><small>Apple Pay, Google Pay, or card</small></span>`;
     const status = $("#godModeCheckoutStatus");
     status.textContent = "";
     try {
@@ -694,9 +694,19 @@ function renderAuraPurchases() {
     const targetedCost = auraCost("targeted");
     const questionCost = auraCost("question");
     const globalBoost = activeBoost("global");
-    container.innerHTML = `<article class="purchase-row"><span><strong>Get boosted</strong><small>Jump to the top of classmates' polls for 5 days or until you get voted 10 times.</small></span><button class="aura-price-button" type="button" data-buy-aura="global" aria-label="${globalBoost ? "Global boost active" : `Get boosted for ${globalCost.toLocaleString()} aura`}" ${globalBoost ? "disabled" : ""}>${globalBoost ? "Active" : `<span>${globalCost.toLocaleString()}</span><img src="../assets/app/aura.png" alt="aura">`}</button></article>
-        <article class="purchase-row"><span><strong>See what your crush thinks about you</strong><small>Your crush stays top secret. You appear more often in their polls.</small></span><button class="aura-price-button" type="button" data-buy-aura="targeted" aria-label="Choose a crush for ${targetedCost.toLocaleString()} aura"><span>${targetedCost.toLocaleString()}</span><img src="../assets/app/aura.png" alt="aura"></button></article>
-        <article class="purchase-row"><span><strong>Submit a school question</strong><small>Anonymously create a poll that your school will answer.</small></span><button class="aura-price-button" type="button" data-buy-aura="question" aria-label="Submit a school question for ${questionCost.toLocaleString()} aura"><span>${questionCost.toLocaleString()}</span><img src="../assets/app/aura.png" alt="aura"></button></article>`;
+    const aura = Math.max(0, Number(state.profile.aura_points || 0));
+    const purchaseButton = (kind, cost, label, active = false) => {
+        const insufficient = !active && aura < cost;
+        const ariaLabel = active
+            ? label
+            : insufficient
+            ? `${label}. Need ${(cost - aura).toLocaleString()} more aura`
+            : label;
+        return `<button class="aura-price-button ${insufficient ? "insufficient" : ""}" type="button" data-buy-aura="${kind}" aria-label="${escapeHTML(ariaLabel)}" ${active || insufficient ? "disabled" : ""}>${active ? "Active" : `<span>${cost.toLocaleString()}</span><img src="../assets/app/aura.png" alt="aura">`}</button>`;
+    };
+    container.innerHTML = `<article class="purchase-row"><span><strong>Get boosted</strong><small>Jump to the top of classmates' polls for 5 days or until you get voted 10 times.</small></span>${purchaseButton("global", globalCost, globalBoost ? "Global boost active" : `Get boosted for ${globalCost.toLocaleString()} aura`, Boolean(globalBoost))}</article>
+        <article class="purchase-row"><span><strong>See what your crush thinks about you</strong><small>Your crush stays top secret. You appear more often in their polls.</small></span>${purchaseButton("targeted", targetedCost, `Choose a crush for ${targetedCost.toLocaleString()} aura`)}</article>
+        <article class="purchase-row"><span><strong>Submit a school question</strong><small>Anonymously create a poll that your school will answer.</small></span>${purchaseButton("question", questionCost, `Submit a school question for ${questionCost.toLocaleString()} aura`)}</article>`;
 }
 
 function openTopPoll(pollKey) {
@@ -1681,7 +1691,7 @@ function renderFeedDetail() {
         const label = subscribed
             ? (remaining > 0 ? `Reveal who sent this (${remaining} remaining)` : `Reveal who sent this (${auraCost.toLocaleString()} aura)`)
             : "Get God Mode to Reveal who sent this";
-        revealButton.innerHTML = `<img class="reveal-sender-crown" src="../assets/app/crown.png" alt=""><span>${escapeHTML(label)}</span>`;
+        revealButton.innerHTML = `<span>${escapeHTML(label)}</span>`;
         revealButton.disabled = subscribed && remaining === 0 && Number(state.profile?.aura_points || 0) < auraCost;
     }
     $("#feedDetailStatus").textContent = "";
@@ -2360,7 +2370,7 @@ function renderFeedNotificationPrompt() {
         : "Enable notifications";
     const prompts = [$("#feedNotificationPrompt"), ...$$(".feed-gate-notification")].filter(Boolean);
     prompts.forEach((prompt) => {
-        prompt.classList.toggle("hidden", !supported || Boolean(enabled));
+        prompt.classList.toggle("hidden", !supported || Boolean(enabled) || blocked);
         const button = prompt.querySelector("button");
         if (!button) return;
         button.textContent = label;
@@ -3066,7 +3076,8 @@ function renderAskLink() {
     $("#askLinkCard").innerHTML = `<article class="ask-link-card">
         <div class="ask-link-heading"><div><strong>Get messages</strong><span>Share your link in a story. New messages show up in Inbox.</span></div></div>
         <button class="ask-url" type="button" data-copy-link aria-label="Copy ask link"><span>🔗</span><span>${escapeHTML(link.share_url.replace(/^https:\/\//, ""))}</span><strong>Copy</strong></button>
-        ${link.is_active ? `<div class="share-platform-row"><span class="share-platform-label">Open on:</span><button class="share-platform-button snapchat" type="button" data-share-link="snapchat" aria-label="Share ask link to Snapchat">${shareIconMarkup("snapchat")}</button><button class="share-platform-button instagram" type="button" data-share-link="instagram" aria-label="Share ask link to Instagram">${shareIconMarkup("instagram")}</button></div>` : `<button class="primary-button" type="button" data-toggle-link>Resume ask link</button>`}
+        ${link.is_active ? `<div class="share-platform-row"><span class="share-platform-label">Open on:</span><button class="share-platform-button snapchat" type="button" data-share-link="snapchat" aria-label="Share ask link to Snapchat">${shareIconMarkup("snapchat")}</button><button class="share-platform-button instagram" type="button" data-share-link="instagram" aria-label="Share ask link to Instagram">${shareIconMarkup("instagram")}</button></div>` : `<p class="ask-link-paused">Your link is paused. New anonymous messages are blocked.</p>`}
+        <div class="ask-link-controls"><button class="text-button" type="button" data-toggle-link>${link.is_active ? "Pause link" : "Resume link"}</button><span aria-hidden="true">·</span><button class="text-button" type="button" data-rotate-link>Reset link</button></div>
     </article>`;
 }
 
@@ -3538,6 +3549,43 @@ async function saveBio(event) {
     } finally { setButtonLoading(button, false); }
 }
 
+function openFeedbackDialog() {
+    const form = $("#feedbackForm");
+    form.reset();
+    $("#feedbackStatus").textContent = "";
+    $("#feedbackDialog").showModal();
+    requestAnimationFrame(() => $("#feedbackText").focus());
+}
+
+async function submitFeedback(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const text = $("#feedbackText").value.trim();
+    const photo = $("#feedbackPhoto").files[0] || null;
+    const status = $("#feedbackStatus");
+    if (text.length < 3) {
+        status.textContent = "Please add a little more detail.";
+        return;
+    }
+    if (photo && photo.size > 5 * 1024 * 1024) {
+        status.textContent = "Screenshots must be 5 MB or smaller.";
+        return;
+    }
+    const button = $("#feedbackSubmitButton");
+    setButtonLoading(button, true, "Sending...");
+    status.textContent = "";
+    try {
+        await api.submitFeedback(text, photo);
+        $("#feedbackDialog").close();
+        form.reset();
+        showToast("Thanks — feedback sent");
+    } catch (error) {
+        status.textContent = error.message || "Could not send your feedback.";
+    } finally {
+        setButtonLoading(button, false);
+    }
+}
+
 async function changeProfilePicture(event) {
     const input = event.currentTarget;
     const file = input.files[0];
@@ -3986,7 +4034,12 @@ function switchPanel(panel) {
     document.body.classList.toggle("play-active", panel === "play");
     $$(".panel").forEach((element) => element.classList.add("hidden"));
     $(`#${panel}Panel`).classList.remove("hidden");
-    $$(".nav-item").forEach((button) => button.classList.toggle("active", button.dataset.panel === panel));
+    $$(".nav-item").forEach((button) => {
+        const active = button.dataset.panel === panel;
+        button.classList.toggle("active", active);
+        if (active) button.setAttribute("aria-current", "page");
+        else button.removeAttribute("aria-current");
+    });
     scrollTo({ top: 0, behavior: "smooth" });
     if (panel === "play") loadPlay();
     if (panel === "profile") loadProfilePanel();
@@ -4089,6 +4142,9 @@ function renderWebPushStatus() {
     button.classList.remove("hidden");
     renderProfileActionsVisibility();
     const status = $("#notificationStatusText");
+    const enabled = Boolean(state.webPushSubscription && state.webPushRegistrationState === "on");
+    button.setAttribute("aria-checked", String(enabled));
+    button.classList.toggle("on", enabled);
     if (Notification.permission === "denied") {
         status.textContent = "Blocked in browser settings";
     } else if (state.webPushSubscription && state.webPushRegistrationState === "on") {
@@ -4189,6 +4245,7 @@ async function toggleWebPush() {
 
     state.webPushBusy = true;
     button.disabled = true;
+    renderFeedNotificationPrompt();
     try {
         // Permission requests must begin in the original tap task. Awaiting the
         // service worker first can consume transient user activation on mobile.
@@ -4245,6 +4302,7 @@ async function toggleWebPush() {
     } finally {
         state.webPushBusy = false;
         button.disabled = false;
+        renderWebPushStatus();
     }
 }
 
@@ -4503,6 +4561,8 @@ function bindEvents() {
     $("#pollSummaryDialog").addEventListener("click", (event) => { if (event.target.closest("[data-share-top-poll]")) shareTopPoll(); });
     $("#profilePictureInput").addEventListener("change", changeProfilePicture);
     $("#addPasskeyButton").addEventListener("click", addBackupPasskey);
+    $("#feedbackButton").addEventListener("click", openFeedbackDialog);
+    $("#feedbackForm").addEventListener("submit", submitFeedback);
     $("#classmateDirectorySearch").addEventListener("input", renderClassmateDirectory);
     $("#classmateDirectoryList").addEventListener("click", (event) => {
         const classmate = event.target.closest("[data-directory-classmate]");
@@ -4606,6 +4666,9 @@ function bindEvents() {
     addEventListener("online", updateNetworkStatus);
     addEventListener("focus", checkStripeCheckout);
     addEventListener("focus", () => refreshWebPushStatus());
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") refreshWebPushStatus();
+    });
     addEventListener("beforeinstallprompt", (event) => {
         event.preventDefault();
         state.installPrompt = event;
@@ -4638,7 +4701,7 @@ document.addEventListener("focusout", () => requestAnimationFrame(syncVisualView
 bindEvents();
 if (!navigator.onLine) updateNetworkStatus();
 if ("serviceWorker" in navigator && !demoMode) {
-    navigator.serviceWorker.register("./service-worker.js").then(() => refreshWebPushStatus()).catch(() => null);
+    navigator.serviceWorker.register("./service-worker.js", { updateViaCache: "none" }).then(() => refreshWebPushStatus()).catch(() => null);
     navigator.serviceWorker.addEventListener("message", (event) => {
         if (event.data?.type !== "VALID_NOTIFICATION_CLICK") return;
         const target = new URL(event.data.url || "./", location.origin);

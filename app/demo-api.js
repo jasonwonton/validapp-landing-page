@@ -18,12 +18,14 @@ export function localDemoAllowed() {
 export class DemoAPI {
     constructor() {
         assertLocalDemo();
+        const demoParams = new URLSearchParams(window.location.search);
+        const demoAura = demoParams.has("aura") ? Number(demoParams.get("aura")) : Number.NaN;
         this.token = null;
         this.user = null;
         this.deletionRequestedAt = null;
-        this.demoGodMode = new URLSearchParams(window.location.search).get("godmode") === "1";
+        this.demoGodMode = demoParams.get("godmode") === "1";
         this.passkeyCount = 1;
-        this.feedVotesCast = new URLSearchParams(window.location.search).get("locked") === "1" ? 1 : 3;
+        this.feedVotesCast = demoParams.get("locked") === "1" ? 1 : 3;
         this.profile = {
             user_id: "demo-user",
             first_name: "Jules",
@@ -34,7 +36,7 @@ export class DemoAPI {
             grade: "Junior",
             gender: "female",
             bio: "Trying to make senior year unforgettable ✨",
-            aura_points: 1280,
+            aura_points: Number.isFinite(demoAura) && demoAura >= 0 ? demoAura : 1280,
             remaining_reveals: this.demoGodMode ? 2 : 0,
             god_mode_aura_multiplier: 2,
             vote_count: 84,
@@ -451,6 +453,16 @@ export class DemoAPI {
     async updateBio(_userId, bio) {
         this.profile.bio = bio;
         return { ...this.profile };
+    }
+
+    async submitFeedback(feedbackText) {
+        return {
+            id: `demo-feedback-${Date.now()}`,
+            user_id: this.profile.user_id,
+            feedback_text: feedbackText,
+            created_at: new Date().toISOString(),
+            photo_url: null,
+        };
     }
 
     async updateInformation(_userId, information) {

@@ -355,6 +355,15 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
                 is_duplicate: questionFailureCount > 0,
             });
         }
+        if (path === "/api/v1/feedback" && request.method() === "POST") {
+            return fulfill({
+                id: "71111111-1111-1111-1111-111111111111",
+                user_id: USER_ID,
+                feedback_text: "Make the active tab easier to spot.",
+                created_at: new Date().toISOString(),
+                photo_url: null,
+            }, 201);
+        }
         if (path === `/api/v1/users/${USER_ID}/profile-picture`) return fulfill({ url: "https://cdn.example/avatar.jpg" });
         if (path === "/api/v1/auth/logout") return fulfill(null, 204);
         return fulfill({ detail: `Unexpected production-adapter request: ${request.method()} ${path}` }, 500);
@@ -386,6 +395,35 @@ test("real adapter signs in, authenticates API calls, and revokes logout", async
     await expect.poll(() => requests.some((request) => request.path === "/api/v1/auth/logout")).toBe(true);
     const logout = requests.find((request) => request.path === "/api/v1/auth/logout");
     expect(logout.authorization).toBe("Bearer session-token");
+});
+
+test("Settings submits authenticated multipart feedback", async ({ page }) => {
+    await page.addInitScript((apiOrigin) => {
+        window.VALID_API_BASE_URL = `${apiOrigin}/api/v1`;
+    }, API_ORIGIN);
+    await installCredentialStub(page, "get");
+    const requests = await interceptProductionAPI(page);
+
+    await page.goto("/app/?signin=1");
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Leave feedback" }).click();
+    const dialog = page.getByRole("dialog", { name: "Leave feedback" });
+    await dialog.getByLabel("What should we improve?").fill("Make the active tab easier to spot.");
+    await dialog.getByLabel("Add a screenshot (optional)").setInputFiles({
+        name: "screen.png",
+        mimeType: "image/png",
+        buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    });
+    await dialog.getByRole("button", { name: "Send feedback" }).click();
+
+    await expect(page.locator("#toast")).toContainText("Thanks — feedback sent");
+    const request = requests.find((candidate) => candidate.path === "/api/v1/feedback");
+    expect(request).toMatchObject({ method: "POST", authorization: "Bearer session-token" });
+    expect(request.contentType).toMatch(/^multipart\/form-data; boundary=/);
+    expect(request.body).toContain('name="feedback_text"');
+    expect(request.body).toContain("Make the active tab easier to spot.");
+    expect(request.body).toContain('filename="screen.png"');
 });
 
 test("incomplete Web Push setup stays retryable until the backend confirms registration", async ({ page }) => {
@@ -536,9 +574,9 @@ test("real adapter submits a Play vote and multipart school question", async ({ 
 
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.getByRole("button", { name: "View classmates" }).click();
-    const directory = page.getByRole("dialog").filter({ hasText: "YOUR SCHOOL" });
+    const directory = page.getByRole("dialog", { name: "Classmates", exact: true });
     await directory.getByRole("button", { name: /Maya Chen/ }).click();
-    const classmateProfile = page.getByRole("dialog").filter({ hasText: "CLASSMATE PROFILE" });
+    const classmateProfile = page.getByRole("dialog", { name: "Profile", exact: true });
     await expect(classmateProfile.getByRole("heading", { name: "Maya Chen" })).toBeVisible();
     await expect.poll(() => requests.some((request) => request.path.endsWith("21111111-1111-1111-1111-111111111111/profile"))).toBe(true);
     await classmateProfile.getByRole("button", { name: "Back to classmates" }).click();

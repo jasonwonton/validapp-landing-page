@@ -380,6 +380,17 @@ export class ValidAPI {
         });
     }
 
+    submitFeedback(feedbackText, photo = null) {
+        const formData = new FormData();
+        formData.set("feedback_text", feedbackText);
+        if (photo) formData.set("photo", photo);
+        return this.request("/feedback", {
+            method: "POST",
+            body: formData,
+            timeoutMs: 45_000,
+        });
+    }
+
     updateInformation(userId, profile) {
         return this.request(`/users/${userId}/information`, {
             method: "PUT",
