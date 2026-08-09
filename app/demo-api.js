@@ -155,6 +155,46 @@ export class DemoAPI {
             share_url: "https://validapp.lol/a/jules-demo",
             is_active: true,
         };
+        this.askAccess = {
+            status: "allowed",
+            timeout_until: null,
+            warning_count: 0,
+            timeout_count: 0,
+            message: null,
+        };
+        this.askSafetyNotices = [];
+        const askRestriction = demoParams.get("askrestriction");
+        if (askRestriction === "timeout") {
+            const timeoutUntil = new Date(Date.now() + 14 * 86_400_000).toISOString();
+            this.askLink.is_active = false;
+            this.askAccess = {
+                status: "timed_out",
+                timeout_until: timeoutUntil,
+                warning_count: 1,
+                timeout_count: 1,
+                message: "Your Ask Me access is paused for 14 days because messages you sent violated our safety rules.",
+            };
+        } else if (askRestriction === "ban") {
+            this.askLink.is_active = false;
+            this.askAccess = {
+                status: "banned",
+                timeout_until: null,
+                warning_count: 1,
+                timeout_count: 1,
+                message: "Your access to Ask Me has been permanently removed because of repeated or serious safety violations.",
+            };
+        }
+        if (demoParams.get("safetynotice") === "1") {
+            this.askSafetyNotices.push({
+                id: "demo-safety-notice",
+                action: "warning",
+                title: "Ask Me safety warning",
+                message: "One of your Ask Me messages was reviewed and found to violate our safety rules.",
+                timeout_until: null,
+                acknowledged_at: null,
+                created_at: new Date().toISOString(),
+            });
+        }
         this.anonymousInbox = {
             questions: [
                 {
@@ -498,6 +538,22 @@ export class DemoAPI {
         return { ...this.askLink };
     }
 
+    async getAnonymousAskAccess() {
+        return { ...this.askAccess };
+    }
+
+    async getAnonymousAskSafetyNotices(_userId, includeAcknowledged = false) {
+        const notices = includeAcknowledged
+            ? this.askSafetyNotices
+            : this.askSafetyNotices.filter((notice) => !notice.acknowledged_at);
+        return structuredClone(notices);
+    }
+
+    async acknowledgeAnonymousAskSafetyNotice(_userId, noticeId) {
+        const notice = this.askSafetyNotices.find((item) => item.id === noticeId);
+        if (notice) notice.acknowledged_at ||= new Date().toISOString();
+    }
+
     async trackAskShare(_userId, platform = "other") {
         return {
             id: `demo-ask-share-${Date.now()}`,
@@ -538,7 +594,7 @@ export class DemoAPI {
         return { ...question };
     }
 
-    async reportAnonymousQuestion(_userId, questionId) {
+    async reportAnonymousQuestion(_userId, questionId, _reason = "other") {
         this.anonymousInbox.questions = this.anonymousInbox.questions.filter((item) => item.id !== questionId);
     }
 

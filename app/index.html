@@ -59,13 +59,14 @@
                                     <div class="detail-overflow">
                                         <button class="detail-overflow-button" type="button" data-toggle-anonymous-menu aria-label="More message actions" aria-expanded="false">•••</button>
                                         <div class="detail-overflow-menu hidden" role="menu" aria-label="Message actions">
-                                            <button type="button" role="menuitem" data-anonymous-action="report">Report</button>
+                                            <button id="anonymousReportButton" type="button" role="menuitem" data-anonymous-action="report">Report</button>
                                             <button type="button" role="menuitem" data-anonymous-action="delete">Delete</button>
                                         </div>
                                     </div>
                                 </div>
                                 <div class="detail-screen-content anonymous-detail-content">
                                     <div id="anonymousQuestionBody" class="anonymous-question-detail"></div>
+                                    <div id="anonymousAnswerRestriction" class="ask-safety-restriction hidden" role="status"></div>
                                     <label id="anonymousAnswerLabel" for="anonymousAnswerText">Your reply</label>
                                     <textarea id="anonymousAnswerText" minlength="1" maxlength="500" required placeholder="Write a reply..."></textarea>
                                     <p id="anonymousAnswerStatus" class="status-message" role="status"></p>
@@ -632,6 +633,50 @@
                 <p id="anonymousReceivedReply"></p>
             </article>
             <p id="anonymousAnswerReceivedAt" class="fine-print"></p>
+        </div>
+    </dialog>
+
+    <dialog id="anonymousReportDialog" class="modal" aria-labelledby="anonymousReportTitle">
+        <form id="anonymousReportForm">
+            <div class="modal-heading">
+                <div><span class="eyebrow">MESSAGE SAFETY</span><h2 id="anonymousReportTitle">Report and remove</h2></div>
+                <button class="icon-button" aria-label="Close" type="button" data-close-dialog>×</button>
+            </div>
+            <p id="anonymousReportExplanation" class="fine-print"></p>
+            <fieldset class="ask-report-reasons">
+                <legend>Why are you reporting this?</legend>
+                <label><input type="radio" name="anonymousReportReason" value="harassment" required><span>Harassment or bullying</span></label>
+                <label><input type="radio" name="anonymousReportReason" value="sexual_content"><span>Sexual content</span></label>
+                <label><input type="radio" name="anonymousReportReason" value="threat"><span>Threat or violence</span></label>
+                <label><input type="radio" name="anonymousReportReason" value="personal_information"><span>Personal information</span></label>
+                <label><input type="radio" name="anonymousReportReason" value="spam"><span>Spam</span></label>
+                <label><input type="radio" name="anonymousReportReason" value="other"><span>Something else</span></label>
+            </fieldset>
+            <p id="anonymousReportStatus" class="status-message" role="status"></p>
+            <button id="confirmAnonymousReport" class="primary-button" type="submit">Report and remove</button>
+        </form>
+    </dialog>
+
+    <dialog id="askSafetyNoticeDialog" class="modal ask-safety-notice-dialog" aria-labelledby="askSafetyNoticeTitle">
+        <div class="ask-safety-notice-content">
+            <span class="ask-safety-shield" aria-hidden="true">🛡️</span>
+            <p class="eyebrow">ASK ME SAFETY</p>
+            <h2 id="askSafetyNoticeTitle">Important safety notice</h2>
+            <p id="askSafetyNoticeMessage"></p>
+            <p id="askSafetyNoticeDate" class="fine-print"></p>
+            <button id="acknowledgeAskSafetyNotice" class="primary-button" type="button">I understand</button>
+            <p id="askSafetyNoticeStatus" class="status-message" role="status"></p>
+        </div>
+    </dialog>
+
+    <dialog id="askSafetyHistoryDialog" class="modal" aria-labelledby="askSafetyHistoryTitle">
+        <div class="ask-safety-history-content">
+            <div class="modal-heading">
+                <div><span class="eyebrow">ASK ME</span><h2 id="askSafetyHistoryTitle">Safety notices</h2></div>
+                <button class="icon-button" aria-label="Close" type="button" data-close-dialog>×</button>
+            </div>
+            <div id="askSafetyHistoryList" class="ask-safety-history-list"></div>
+            <p id="askSafetyHistoryStatus" class="status-message" role="status"></p>
         </div>
     </dialog>
 

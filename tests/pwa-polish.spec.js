@@ -59,12 +59,57 @@ test("Ask Me link can be paused, resumed, and reset from Settings", async ({ pag
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     const askCard = page.locator("#askLinkCard");
     await askCard.getByRole("button", { name: "Pause link" }).click();
-    await expect(askCard.getByText("Your link is paused.", { exact: false })).toBeVisible();
-    await askCard.getByRole("button", { name: "Resume link" }).click();
+    await expect(askCard.getByText("Ask Me is off.", { exact: false })).toBeVisible();
+    await askCard.getByRole("button", { name: "Turn on Ask Me" }).click();
     await expect(askCard.getByRole("button", { name: "Pause link" })).toBeVisible();
     page.once("dialog", (dialog) => dialog.accept());
     await askCard.getByRole("button", { name: "Reset link" }).click();
     await expect(page.locator("#toast")).toContainText("New ask me link created");
+});
+
+test("Ask Me restriction copy does not invite a timed-out user to turn it on", async ({ page }) => {
+    await signInToDemo(page, "&askrestriction=timeout");
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    const askCard = page.locator("#askLinkCard");
+
+    await expect(askCard.getByText("Ask Me access restricted")).toBeVisible();
+    await expect(askCard.getByText("paused for 14 days", { exact: false })).toBeVisible();
+    await expect(askCard.getByRole("button", { name: "Access restricted" })).toBeDisabled();
+    await expect(askCard.getByText("Turn it on whenever", { exact: false })).toHaveCount(0);
+    await expect(askCard.getByRole("button", { name: "Ask Me safety notices" })).toHaveCount(0);
+});
+
+test("Ask Me safety notices require acknowledgement and remain available in history", async ({ page }) => {
+    await signInToDemo(page, "&safetynotice=1");
+    const notice = page.getByRole("dialog", { name: "Ask Me safety warning" });
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText("violate our safety rules");
+    await notice.getByRole("button", { name: "I understand" }).click();
+    await expect(notice).toBeHidden();
+
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Ask Me safety notices" }).click();
+    const history = page.getByRole("dialog", { name: "Safety notices" });
+    await expect(history).toContainText("Ask Me safety warning");
+});
+
+test("Ask Me reports distinguish guests from signed-in member senders", async ({ page }) => {
+    await signInToDemo(page);
+
+    await page.locator(".anonymous-question-row").filter({ hasText: "genuinely proud" }).click();
+    await page.getByRole("button", { name: "More message actions" }).click();
+    await page.getByRole("menuitem", { name: "Report and remove" }).click();
+    let reportDialog = page.getByRole("dialog", { name: "Report and remove" });
+    await expect(reportDialog).toContainText("no person, browser, or device will be blocked");
+    await reportDialog.getByLabel("Harassment or bullying").check();
+    await reportDialog.getByRole("button", { name: "Report and remove" }).click();
+    await expect(page.locator("#toast")).toContainText("Reported and removed");
+
+    await page.locator(".anonymous-question-row").filter({ hasText: "making school better" }).click();
+    await page.getByRole("button", { name: "More message actions" }).click();
+    await page.getByRole("menuitem", { name: "Report and block sender" }).click();
+    reportDialog = page.getByRole("dialog", { name: "Report and block sender" });
+    await expect(reportDialog).toContainText("block this account");
 });
 
 test("Settings feedback form accepts a message and optional screenshot", async ({ page }) => {

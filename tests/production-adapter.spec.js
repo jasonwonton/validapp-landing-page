@@ -38,6 +38,49 @@ test("local integration mode uses only the same-origin API proxy", async ({ page
     expect(baseURL).toBe("http://127.0.0.1:4173/api/v1");
 });
 
+test("real adapter sends Ask Me safety requests with explicit report reasons", async ({ page }) => {
+    const requests = [];
+    await page.addInitScript((apiOrigin) => {
+        window.VALID_API_BASE_URL = `${apiOrigin}/api/v1`;
+    }, API_ORIGIN);
+    await page.route(`${API_ORIGIN}/api/v1/**`, async (route) => {
+        const request = route.request();
+        requests.push({
+            method: request.method(),
+            path: `${new URL(request.url()).pathname}${new URL(request.url()).search}`,
+            body: request.postData() ? request.postDataJSON() : null,
+        });
+        const status = request.url().endsWith("/acknowledge") || request.url().endsWith("/report") ? 204 : 200;
+        await route.fulfill({
+            status,
+            contentType: "application/json",
+            body: status === 204 ? "" : JSON.stringify(request.url().includes("ask-sender-access")
+                ? { status: "allowed", timeout_until: null, warning_count: 0, timeout_count: 0, message: null }
+                : []),
+        });
+    });
+    await page.goto("/app/?signin=1");
+    requests.length = 0;
+    await page.evaluate(async ({ userId }) => {
+        const { ValidAPI } = await import("/app/api.js");
+        const api = new ValidAPI();
+        api.saveSession({ access_token: "ask-safety-token", user: { id: userId } });
+        await api.getAnonymousAskAccess(userId);
+        await api.getAnonymousAskSafetyNotices(userId);
+        await api.getAnonymousAskSafetyNotices(userId, true);
+        await api.acknowledgeAnonymousAskSafetyNotice(userId, "notice-1");
+        await api.reportAnonymousQuestion(userId, "question-1", "harassment");
+    }, { userId: USER_ID });
+
+    expect(requests).toEqual([
+        { method: "GET", path: `/api/v1/users/${USER_ID}/ask-sender-access`, body: null },
+        { method: "GET", path: `/api/v1/users/${USER_ID}/ask-safety-notices`, body: null },
+        { method: "GET", path: `/api/v1/users/${USER_ID}/ask-safety-notices?include_acknowledged=true`, body: null },
+        { method: "POST", path: `/api/v1/users/${USER_ID}/ask-safety-notices/notice-1/acknowledge`, body: null },
+        { method: "POST", path: `/api/v1/users/${USER_ID}/anonymous-questions/question-1/report`, body: { reason: "harassment" } },
+    ]);
+});
+
 test("real adapter sends bounded, encoded unified-search queries", async ({ page }) => {
     const urls = [];
     await page.route(`${API_ORIGIN}/api/v1/**`, async (route) => {
@@ -345,6 +388,11 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
         if (path === `/api/v1/users/${USER_ID}/ask-link`) {
             return fulfill({ share_url: "https://validapp.lol/a/contract", is_active: true });
         }
+        if (path === `/api/v1/users/${USER_ID}/ask-sender-access`) {
+            return fulfill({ status: "allowed", timeout_until: null, warning_count: 0, timeout_count: 0, message: null });
+        }
+        if (path === `/api/v1/users/${USER_ID}/ask-safety-notices`) return fulfill([]);
+        if (path === `/api/v1/users/${USER_ID}/ask-safety-notices?include_acknowledged=true`) return fulfill([]);
         if (path === `/api/v1/users/${USER_ID}/question-submissions`) {
             questionAttempts += 1;
             if (questionAttempts <= questionFailureCount) return fulfill({ detail: "Temporary upstream failure" }, 500);

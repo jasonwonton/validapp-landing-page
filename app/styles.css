@@ -345,6 +345,26 @@ h3 { font-size: 1.45rem; }
 .ask-link-paused { margin: 4px 0 0; padding: 11px 12px; border-radius: 12px; background: rgba(5,9,20,.07); color: var(--muted); font-size: .88rem; line-height: 1.35; }
 .ask-link-controls { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 16px; }
 .ask-link-controls .text-button { min-height: 36px; padding: 4px 8px; color: var(--ink); font-family: var(--app-font); font-size: .92rem; }
+.ask-link-controls .text-button:disabled { color: var(--muted); cursor: not-allowed; opacity: .75; }
+.ask-safety-restriction { display: grid; gap: 5px; margin: 10px 0; padding: 13px 14px; border: 2px solid var(--ink); border-radius: 14px; background: rgba(255, 165, 0, .18); color: var(--ink); font-size: .9rem; line-height: 1.4; }
+.ask-safety-restriction span { color: var(--muted); }
+.ask-safety-history-button { display: block; margin: 12px auto 0; color: var(--ink); font-family: var(--app-font); }
+.ask-report-reasons { display: grid; gap: 8px; margin: 0; padding: 0; border: 0; }
+.ask-report-reasons legend { margin-bottom: 4px; font-weight: 800; }
+.ask-report-reasons label { display: flex; align-items: center; gap: 10px; min-height: 46px; padding: 10px 12px; border: 2px solid rgba(5,9,20,.18); border-radius: 12px; background: var(--white); cursor: pointer; }
+.ask-report-reasons input { width: 20px; height: 20px; accent-color: var(--ink); }
+.ask-safety-notice-dialog { width: min(480px, calc(var(--visual-viewport-width, 100%) - 28px)); }
+.ask-safety-notice-content, .ask-safety-history-content { display: grid; gap: 14px; padding: 24px; font-family: var(--app-font); }
+.ask-safety-notice-content { justify-items: center; text-align: center; }
+.ask-safety-notice-content h2, .ask-safety-notice-content p { margin: 0; }
+.ask-safety-notice-content > p:not(.eyebrow):not(.fine-print):not(.status-message) { color: var(--muted); line-height: 1.5; }
+.ask-safety-shield { font-size: 2.5rem; }
+.ask-safety-notice-content .primary-button { width: 100%; }
+.ask-safety-history-list { display: grid; gap: 10px; }
+.ask-safety-history-card { display: grid; gap: 8px; padding: 14px; border: 2px solid var(--ink); border-radius: 14px; background: var(--white); }
+.ask-safety-history-card > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.ask-safety-history-card time { flex: 0 0 auto; color: var(--muted); font-size: .76rem; }
+.ask-safety-history-card p { margin: 0; color: var(--muted); font-size: .9rem; line-height: 1.45; }
 .ask-url { width: 100%; min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px; overflow: hidden; margin-bottom: 15px; padding: 12px; border: 2px solid var(--ink); border-radius: 13px; background: rgba(255,255,255,.7); color: inherit; cursor: pointer; text-align: left; }
 .ask-url > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ask-url > strong { margin: 0; color: #b55218; font-size: .88rem; }

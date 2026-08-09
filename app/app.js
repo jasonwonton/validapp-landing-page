@@ -38,6 +38,10 @@ const state = {
     pendingQuestionSubmissionKey: null,
     pendingQuestionDraft: null,
     askLink: null,
+    askAccess: null,
+    askSafetyNotices: [],
+    askSafetyNoticeHistory: [],
+    pendingAnonymousReportQuestionId: null,
     pendingAskStoryPlatform: null,
     askStoryFile: null,
     askStoryShareURL: null,
@@ -251,7 +255,7 @@ async function showSignedIn() {
     requestAnimationFrame(() => requestAnimationFrame(syncVisualViewport));
     setTimeout(syncVisualViewport, 120);
     try {
-        const [profile, currentUser, classmatesStatus, config] = await Promise.all([
+        const [profile, currentUser, classmatesStatus, config, askAccess, askSafetyNotices, askSafetyNoticeHistory] = await Promise.all([
             api.getProfile(api.user.id),
             api.getUser(api.user.id).catch(() => api.user),
             api.getClassmatesStatus(api.user.id).catch(() => null),
@@ -263,16 +267,23 @@ async function showSignedIn() {
                 play_lock_time_seconds: 60,
                 full_reveal_aura_cost: DEFAULT_FULL_REVEAL_AURA_COST,
             })),
+            api.getAnonymousAskAccess(api.user.id).catch(() => null),
+            api.getAnonymousAskSafetyNotices(api.user.id).catch(() => []),
+            api.getAnonymousAskSafetyNotices(api.user.id, true).catch(() => []),
         ]);
         api.user = { ...api.user, ...currentUser };
         state.profile = profile;
         state.classmatesStatus = classmatesStatus;
         state.config = config;
+        state.askAccess = askAccess;
+        state.askSafetyNotices = askSafetyNotices;
+        state.askSafetyNoticeHistory = askSafetyNoticeHistory;
         renderProfileHeader();
         renderFeedGate();
         refreshWebPushStatus({ sync: true });
         if (!isFeedVoteLocked()) await loadFeed(true);
         if (api.user?.deletion_requested_at) showPendingDeletion();
+        else showNextAskSafetyNotice();
     } catch (error) {
         if (error.status !== 401) $("#feedStatus").textContent = error.message || "Could not load your profile.";
     }
@@ -935,6 +946,7 @@ async function loadProfilePanel() {
     if (!state.topQuestionsWeekly) requests.push({ key: "weekly", promise: api.getTopQuestions(api.user.id, "weekly", 10) });
     if (!state.topQuestionsAllTime) requests.push({ key: "allTime", promise: api.getTopQuestions(api.user.id, "all_time", 3) });
     if (!state.askLink) requests.push({ key: "askLink", promise: api.getAskLink(api.user.id) });
+    if (!state.askAccess) requests.push({ key: "askAccess", promise: api.getAnonymousAskAccess(api.user.id) });
     if (!state.passkeyStatus) requests.push({ key: "passkeyStatus", promise: api.getPasskeyStatus() });
     if (!state.classmateDirectory || state.activeClassmatesThisWeek === null) requests.push({ key: "classmates", promise: api.getClassmatesWithMetadata(api.user.id, "", 500) });
     const results = await Promise.allSettled(requests.map((request) => request.promise));
@@ -947,6 +959,7 @@ async function loadProfilePanel() {
             if (request.key === "weekly") state.topQuestionsWeekly = result.value;
             if (request.key === "allTime") state.topQuestionsAllTime = result.value;
             if (request.key === "askLink") state.askLink = result.value;
+            if (request.key === "askAccess") state.askAccess = result.value;
             if (request.key === "passkeyStatus") state.passkeyStatus = result.value;
             if (request.key === "classmates") {
                 state.classmateDirectory = result.value.classmates;
@@ -2430,10 +2443,20 @@ function renderAnonymousQuestionDialog() {
     if (!question) return;
     $("#anonymousQuestionBody").innerHTML = `<blockquote>${escapeHTML(question.body)}</blockquote><div><strong>${escapeHTML(question.provenance_label)}</strong><span>${escapeHTML(question.provenance_detail)}</span></div>`;
     const answered = question.status === "answered";
+    const restricted = Boolean(state.askAccess && state.askAccess.status !== "allowed");
+    $("#anonymousReportButton").textContent = question.sender_type === "valid_member"
+        ? "Report and block sender"
+        : "Report and remove";
+    $("#anonymousAnswerRestriction").classList.toggle("hidden", !restricted);
+    $("#anonymousAnswerRestriction").textContent = restricted
+        ? (state.askAccess.message || "Your Ask Me access is currently unavailable.")
+        : "";
     $("#anonymousAnswerText").value = question.answer_text || "";
     $("#anonymousAnswerText").readOnly = false;
+    $("#anonymousAnswerText").classList.toggle("hidden", restricted);
     $("#anonymousAnswerLabel").textContent = "Your reply";
-    $("#anonymousAnswerButton").classList.remove("hidden");
+    $("#anonymousAnswerLabel").classList.toggle("hidden", restricted);
+    $("#anonymousAnswerButton").classList.toggle("hidden", restricted);
     $("#anonymousAnswerButton").dataset.label = answered ? "Update reply" : "Send reply";
     $("#anonymousAnswerButton").textContent = $("#anonymousAnswerButton").dataset.label;
     $("#anonymousAnswerShare").classList.toggle("hidden", !answered);
@@ -2546,21 +2569,68 @@ async function answerAnonymousQuestion(event) {
 async function handleAnonymousSafetyAction(action) {
     const question = selectedAnonymousQuestion();
     if (!question || !["report", "delete"].includes(action)) return;
-    const prompts = {
-        report: "Report and remove this question? Valid's moderation team will review it.",
-        delete: "Delete this question? This cannot be undone.",
-    };
-    if (!confirm(prompts[action])) return;
+    if (action === "report") {
+        openAnonymousReportDialog(question);
+        return;
+    }
+    if (!confirm("Delete this question? This cannot be undone.")) return;
     try {
-        if (action === "report") await api.reportAnonymousQuestion(api.user.id, question.id);
-        if (action === "delete") await api.deleteAnonymousQuestion(api.user.id, question.id);
+        await api.deleteAnonymousQuestion(api.user.id, question.id);
         state.anonymousInbox.questions = state.anonymousInbox.questions.filter((item) => String(item.id) !== String(question.id));
         state.selectedAnonymousQuestionId = null;
         closeDetailScreen($("#anonymousQuestionDialog"));
         renderAnonymousInbox();
-        showToast(action === "report" ? "Reported to Valid" : "Question deleted");
+        showToast("Question deleted");
     } catch (error) {
         $("#anonymousAnswerStatus").textContent = error.message || `Could not ${action} this question.`;
+    }
+}
+
+function openAnonymousReportDialog(question) {
+    state.pendingAnonymousReportQuestionId = question.id;
+    $("#anonymousReportForm").reset();
+    $("#anonymousReportStatus").textContent = "";
+    const memberSender = question.sender_type === "valid_member";
+    $("#anonymousReportTitle").textContent = memberSender
+        ? "Report and block sender"
+        : "Report and remove";
+    $("#anonymousReportExplanation").textContent = memberSender
+        ? "Valid will record and remove this question and block this account from sending you future Ask Me questions. Their identity stays hidden."
+        : "Valid will record and remove this question. Because it came from an anonymous guest link, no person, browser, or device will be blocked.";
+    $("#confirmAnonymousReport").textContent = memberSender
+        ? "Report and block sender"
+        : "Report and remove";
+    $("#confirmAnonymousReport").dataset.label = $("#confirmAnonymousReport").textContent;
+    $("#anonymousReportDialog").showModal();
+}
+
+async function submitAnonymousReport(event) {
+    event.preventDefault();
+    const question = state.anonymousInbox?.questions?.find(
+        (item) => String(item.id) === String(state.pendingAnonymousReportQuestionId)
+    );
+    const reason = new FormData(event.currentTarget).get("anonymousReportReason");
+    if (!question || !reason) return;
+    const button = $("#confirmAnonymousReport");
+    setButtonLoading(button, true, "Reporting…");
+    $("#anonymousReportStatus").textContent = "";
+    try {
+        await api.reportAnonymousQuestion(api.user.id, question.id, String(reason));
+        state.anonymousInbox.questions = state.anonymousInbox.questions.filter(
+            (item) => String(item.id) !== String(question.id)
+        );
+        state.pendingAnonymousReportQuestionId = null;
+        state.selectedAnonymousQuestionId = null;
+        $("#anonymousReportDialog").close();
+        closeDetailScreen($("#anonymousQuestionDialog"));
+        renderAnonymousInbox();
+        showToast(question.sender_type === "valid_member"
+            ? "Reported and sender blocked"
+            : "Reported and removed");
+    } catch (error) {
+        $("#anonymousReportStatus").textContent = error.message || "Could not report this question.";
+    } finally {
+        setButtonLoading(button, false);
     }
 }
 
@@ -3070,14 +3140,110 @@ async function refreshProfile() {
     } catch (_) { /* The action succeeded; totals can catch up later. */ }
 }
 
+function askAccessRestricted() {
+    return Boolean(state.askAccess && state.askAccess.status !== "allowed");
+}
+
+function formatSafetyNoticeDate(value) {
+    if (!value) return "";
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString(undefined, {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+    });
+}
+
+function showNextAskSafetyNotice() {
+    const dialog = $("#askSafetyNoticeDialog");
+    const notice = state.askSafetyNotices[0];
+    if (!notice) {
+        if (dialog.open) dialog.close();
+        return;
+    }
+    $("#askSafetyNoticeTitle").textContent = notice.title;
+    $("#askSafetyNoticeMessage").textContent = notice.message;
+    $("#askSafetyNoticeDate").textContent = formatSafetyNoticeDate(notice.created_at);
+    $("#askSafetyNoticeStatus").textContent = "";
+    const button = $("#acknowledgeAskSafetyNotice");
+    button.dataset.label = "I understand";
+    button.textContent = "I understand";
+    button.disabled = false;
+    if (!dialog.open) dialog.showModal();
+}
+
+async function refreshAskSafetyState() {
+    if (!api.user?.id) return;
+    try {
+        const [access, notices, history] = await Promise.all([
+            api.getAnonymousAskAccess(api.user.id),
+            api.getAnonymousAskSafetyNotices(api.user.id),
+            api.getAnonymousAskSafetyNotices(api.user.id, true),
+        ]);
+        state.askAccess = access;
+        state.askSafetyNotices = notices;
+        state.askSafetyNoticeHistory = history;
+        if (state.askLink) renderAskLink();
+        showNextAskSafetyNotice();
+    } catch (_) { /* Keep the last authoritative safety state until the next refresh. */ }
+}
+
+async function acknowledgeAskSafetyNotice() {
+    const notice = state.askSafetyNotices[0];
+    if (!notice) return;
+    const button = $("#acknowledgeAskSafetyNotice");
+    setButtonLoading(button, true, "Saving…");
+    try {
+        await api.acknowledgeAnonymousAskSafetyNotice(api.user.id, notice.id);
+        state.askSafetyNotices.shift();
+        showNextAskSafetyNotice();
+    } catch (error) {
+        $("#askSafetyNoticeStatus").textContent = error.message || "Could not save your acknowledgement.";
+        setButtonLoading(button, false);
+    }
+}
+
+function renderAskSafetyHistory() {
+    const list = $("#askSafetyHistoryList");
+    if (!state.askSafetyNoticeHistory.length) {
+        list.innerHTML = `<div class="empty-card"><strong>No safety notices</strong><p>You do not have any Ask Me warnings or restrictions.</p></div>`;
+        return;
+    }
+    list.innerHTML = state.askSafetyNoticeHistory.map((notice) => `<article class="ask-safety-history-card">
+        <div><strong>${escapeHTML(notice.title)}</strong><time>${escapeHTML(formatSafetyNoticeDate(notice.created_at))}</time></div>
+        <p>${escapeHTML(notice.message)}</p>
+    </article>`).join("");
+}
+
+async function openAskSafetyHistory() {
+    const dialog = $("#askSafetyHistoryDialog");
+    $("#askSafetyHistoryStatus").textContent = "Loading notices…";
+    renderAskSafetyHistory();
+    dialog.showModal();
+    try {
+        state.askSafetyNoticeHistory = await api.getAnonymousAskSafetyNotices(api.user.id, true);
+        $("#askSafetyHistoryStatus").textContent = "";
+        renderAskSafetyHistory();
+    } catch (error) {
+        $("#askSafetyHistoryStatus").textContent = error.message || "Could not load safety notices.";
+    }
+}
+
 function renderAskLink() {
     const link = state.askLink;
     if (!link) return;
+    const restricted = askAccessRestricted();
+    const inactiveCopy = restricted
+        ? "Your link is off while your Ask Me access is restricted."
+        : "Ask Me is off. Turn it on whenever you're ready; you can switch it off again anytime.";
     $("#askLinkCard").innerHTML = `<article class="ask-link-card">
-        <div class="ask-link-heading"><div><strong>Get messages</strong><span>Share your link in a story. New messages show up in Inbox.</span></div></div>
-        <button class="ask-url" type="button" data-copy-link aria-label="Copy ask link"><span>🔗</span><span>${escapeHTML(link.share_url.replace(/^https:\/\//, ""))}</span><strong>Copy</strong></button>
-        ${link.is_active ? `<div class="share-platform-row"><span class="share-platform-label">Open on:</span><button class="share-platform-button snapchat" type="button" data-share-link="snapchat" aria-label="Share ask link to Snapchat">${shareIconMarkup("snapchat")}</button><button class="share-platform-button instagram" type="button" data-share-link="instagram" aria-label="Share ask link to Instagram">${shareIconMarkup("instagram")}</button></div>` : `<p class="ask-link-paused">Your link is paused. New anonymous messages are blocked.</p>`}
-        <div class="ask-link-controls"><button class="text-button" type="button" data-toggle-link>${link.is_active ? "Pause link" : "Resume link"}</button><span aria-hidden="true">·</span><button class="text-button" type="button" data-rotate-link>Reset link</button></div>
+        <div class="ask-link-heading"><div><strong>Ask Me</strong><span>Allow people with your Ask Me link to send you private questions. You'll see their grade and gender, but not their name. Nothing is posted to your school.</span></div></div>
+        ${restricted ? `<div class="ask-safety-restriction"><strong>Ask Me access restricted</strong><span>${escapeHTML(state.askAccess.message || "Your Ask Me access is currently unavailable.")}</span></div>` : ""}
+        ${link.is_active && !restricted ? `<button class="ask-url" type="button" data-copy-link aria-label="Copy ask link"><span>🔗</span><span>${escapeHTML(link.share_url.replace(/^https:\/\//, ""))}</span><strong>Copy</strong></button>` : ""}
+        ${link.is_active && !restricted ? `<div class="share-platform-row"><span class="share-platform-label">Open on:</span><button class="share-platform-button snapchat" type="button" data-share-link="snapchat" aria-label="Share ask link to Snapchat">${shareIconMarkup("snapchat")}</button><button class="share-platform-button instagram" type="button" data-share-link="instagram" aria-label="Share ask link to Instagram">${shareIconMarkup("instagram")}</button></div>` : ""}
+        ${!link.is_active || restricted ? `<p class="ask-link-paused">${escapeHTML(inactiveCopy)}</p>` : ""}
+        <div class="ask-link-controls"><button class="text-button" type="button" data-toggle-link ${restricted ? "disabled" : ""}>${restricted ? "Access restricted" : link.is_active ? "Pause link" : "Turn on Ask Me"}</button><span aria-hidden="true">·</span><button class="text-button" type="button" data-rotate-link>Reset link</button></div>
+        ${state.askSafetyNoticeHistory.length ? `<button class="text-button ask-safety-history-button" type="button" data-ask-safety-history>🛡️ Ask Me safety notices</button>` : ""}
     </article>`;
 }
 
@@ -3185,6 +3351,10 @@ function openAskStoryApp() {
 
 async function shareAskLink(forceCopy, platform = "other") {
     if (!state.askLink) return;
+    if (askAccessRestricted()) {
+        showToast(state.askAccess.message || "Your Ask Me access is restricted.");
+        return;
+    }
     if (!forceCopy && ["snapchat", "instagram"].includes(platform)) {
         requestAskStoryShare(platform);
         return;
@@ -3200,6 +3370,10 @@ async function shareAskLink(forceCopy, platform = "other") {
 }
 
 async function toggleAskLink() {
+    if (askAccessRestricted()) {
+        showToast(state.askAccess.message || "Your Ask Me access is restricted.");
+        return;
+    }
     try {
         state.askLink = await api.setAskLinkActive(api.user.id, !state.askLink.is_active);
         renderAskLink();
@@ -4461,6 +4635,9 @@ function bindEvents() {
     });
     $("#feedNotificationButton").addEventListener("click", toggleWebPush);
     $("#anonymousAnswerForm").addEventListener("submit", answerAnonymousQuestion);
+    $("#anonymousReportForm").addEventListener("submit", submitAnonymousReport);
+    $("#acknowledgeAskSafetyNotice").addEventListener("click", acknowledgeAskSafetyNotice);
+    $("#askSafetyNoticeDialog").addEventListener("cancel", (event) => event.preventDefault());
     $("#anonymousQuestionDialog").addEventListener("click", (event) => {
         const menuButton = event.target.closest("[data-toggle-anonymous-menu]");
         if (menuButton) toggleDetailActionMenu(menuButton);
@@ -4511,6 +4688,7 @@ function bindEvents() {
         if (event.target.closest("[data-copy-link]")) shareAskLink(true);
         if (event.target.closest("[data-toggle-link]")) toggleAskLink();
         if (event.target.closest("[data-rotate-link]")) rotateAskLink();
+        if (event.target.closest("[data-ask-safety-history]")) openAskSafetyHistory();
     });
     $("#confirmAskStoryShare").addEventListener("click", prepareAskStoryShare);
     $("#saveAskStoryImage").addEventListener("click", saveAskStoryImageAgain);
@@ -4667,7 +4845,10 @@ function bindEvents() {
     addEventListener("focus", checkStripeCheckout);
     addEventListener("focus", () => refreshWebPushStatus());
     document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "visible") refreshWebPushStatus();
+        if (document.visibilityState === "visible") {
+            refreshWebPushStatus();
+            refreshAskSafetyState();
+        }
     });
     addEventListener("beforeinstallprompt", (event) => {
         event.preventDefault();

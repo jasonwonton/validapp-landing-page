@@ -423,6 +423,21 @@ export class ValidAPI {
         return this.request(`/users/${userId}/ask-link/rotate`, { method: "POST" });
     }
 
+    getAnonymousAskAccess(userId) {
+        return this.request(`/users/${userId}/ask-sender-access`);
+    }
+
+    getAnonymousAskSafetyNotices(userId, includeAcknowledged = false) {
+        const suffix = includeAcknowledged ? "?include_acknowledged=true" : "";
+        return this.request(`/users/${userId}/ask-safety-notices${suffix}`);
+    }
+
+    acknowledgeAnonymousAskSafetyNotice(userId, noticeId) {
+        return this.request(`/users/${userId}/ask-safety-notices/${noticeId}/acknowledge`, {
+            method: "POST",
+        });
+    }
+
     createGodModeCheckout(userId) {
         return this.request(`/users/${userId}/stripe/checkout-session`, { method: "POST" });
     }
@@ -454,8 +469,11 @@ export class ValidAPI {
         });
     }
 
-    reportAnonymousQuestion(userId, questionId) {
-        return this.request(`/users/${userId}/anonymous-questions/${questionId}/report`, { method: "POST" });
+    reportAnonymousQuestion(userId, questionId, reason = "other") {
+        return this.request(`/users/${userId}/anonymous-questions/${questionId}/report`, {
+            method: "POST",
+            body: JSON.stringify({ reason }),
+        });
     }
 
     blockAnonymousQuestion(userId, questionId) {
