@@ -58,13 +58,33 @@ test("Ask Me link can be paused, resumed, and reset from Settings", async ({ pag
     await signInToDemo(page);
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     const askCard = page.locator("#askLinkCard");
-    await askCard.getByRole("button", { name: "Pause link" }).click();
+    const toggle = askCard.getByRole("switch", { name: "Allow private questions" });
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-checked", "false");
     await expect(askCard.getByText("Ask Me is off.", { exact: false })).toBeVisible();
-    await askCard.getByRole("button", { name: "Turn on Ask Me" }).click();
-    await expect(askCard.getByRole("button", { name: "Pause link" })).toBeVisible();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
     page.once("dialog", (dialog) => dialog.accept());
     await askCard.getByRole("button", { name: "Reset link" }).click();
     await expect(page.locator("#toast")).toContainText("New ask me link created");
+});
+
+test("Ask Me appears directly below the profile header like iOS", async ({ page }) => {
+    await signInToDemo(page);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+
+    const order = await page.locator("#profilePanel").evaluate((panel) => {
+        const children = Array.from(panel.children);
+        return {
+            profile: children.findIndex((child) => child.id === "profileCard"),
+            askMe: children.findIndex((child) => child.id === "askLinkSection"),
+            school: children.findIndex((child) => child.id === "schoolCard"),
+        };
+    });
+
+    expect(order.profile).toBeLessThan(order.askMe);
+    expect(order.askMe).toBeLessThan(order.school);
 });
 
 test("Ask Me restriction copy does not invite a timed-out user to turn it on", async ({ page }) => {
@@ -74,7 +94,7 @@ test("Ask Me restriction copy does not invite a timed-out user to turn it on", a
 
     await expect(askCard.getByText("Ask Me access restricted")).toBeVisible();
     await expect(askCard.getByText("paused for 14 days", { exact: false })).toBeVisible();
-    await expect(askCard.getByRole("button", { name: "Access restricted" })).toBeDisabled();
+    await expect(askCard.getByRole("switch", { name: "Allow private questions" })).toBeDisabled();
     await expect(askCard.getByText("Turn it on whenever", { exact: false })).toHaveCount(0);
     await expect(askCard.getByRole("button", { name: "Ask Me safety notices" })).toHaveCount(0);
 });

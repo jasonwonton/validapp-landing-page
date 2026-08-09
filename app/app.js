@@ -3236,13 +3236,20 @@ function renderAskLink() {
     const inactiveCopy = restricted
         ? "Your link is off while your Ask Me access is restricted."
         : "Ask Me is off. Turn it on whenever you're ready; you can switch it off again anytime.";
+    const activeDescription = link.is_active && !restricted
+        ? "People can ask from your profile or shared link."
+        : "Your profile and shared links will not accept messages.";
     $("#askLinkCard").innerHTML = `<article class="ask-link-card">
         <div class="ask-link-heading"><div><strong>Ask Me</strong><span>Allow people with your Ask Me link to send you private questions. You'll see their grade and gender, but not their name. Nothing is posted to your school.</span></div></div>
         ${restricted ? `<div class="ask-safety-restriction"><strong>Ask Me access restricted</strong><span>${escapeHTML(state.askAccess.message || "Your Ask Me access is currently unavailable.")}</span></div>` : ""}
+        <button class="ask-link-toggle-row" type="button" role="switch" aria-label="Allow private questions" aria-checked="${link.is_active && !restricted}" data-toggle-link ${restricted ? "disabled" : ""}>
+            <span><strong>${link.is_active && !restricted ? "Ask Me is on" : "Ask Me is off"}</strong><small>${escapeHTML(activeDescription)}</small></span>
+            <span class="settings-switch" aria-hidden="true"><span></span></span>
+        </button>
         ${link.is_active && !restricted ? `<button class="ask-url" type="button" data-copy-link aria-label="Copy ask link"><span>🔗</span><span>${escapeHTML(link.share_url.replace(/^https:\/\//, ""))}</span><strong>Copy</strong></button>` : ""}
         ${link.is_active && !restricted ? `<div class="share-platform-row"><span class="share-platform-label">Open on:</span><button class="share-platform-button snapchat" type="button" data-share-link="snapchat" aria-label="Share ask link to Snapchat">${shareIconMarkup("snapchat")}</button><button class="share-platform-button instagram" type="button" data-share-link="instagram" aria-label="Share ask link to Instagram">${shareIconMarkup("instagram")}</button></div>` : ""}
         ${!link.is_active || restricted ? `<p class="ask-link-paused">${escapeHTML(inactiveCopy)}</p>` : ""}
-        <div class="ask-link-controls"><button class="text-button" type="button" data-toggle-link ${restricted ? "disabled" : ""}>${restricted ? "Access restricted" : link.is_active ? "Pause link" : "Turn on Ask Me"}</button><span aria-hidden="true">·</span><button class="text-button" type="button" data-rotate-link>Reset link</button></div>
+        <div class="ask-link-controls"><button class="text-button" type="button" data-rotate-link>Reset link</button></div>
         ${state.askSafetyNoticeHistory.length ? `<button class="text-button ask-safety-history-button" type="button" data-ask-safety-history>🛡️ Ask Me safety notices</button>` : ""}
     </article>`;
 }

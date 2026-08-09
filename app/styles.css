@@ -342,6 +342,13 @@ h3 { font-size: 1.45rem; }
 .ask-link-card strong { display: block; margin-bottom: 10px; font-size: 1.35rem; }
 .ask-link-heading { display: block; }
 .ask-link-heading > div > span { display: block; margin: -5px 0 13px; color: rgba(5,9,20,.62); font-size: .85rem; }
+.ask-link-toggle-row { width: 100%; min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 14px; padding: 12px 14px; border: 2px solid var(--ink); border-radius: 14px; background: var(--white); color: var(--ink); cursor: pointer; text-align: left; }
+.ask-link-toggle-row > span:first-child { min-width: 0; display: grid; gap: 3px; }
+.ask-link-toggle-row strong { font-size: 1.02rem; }
+.ask-link-toggle-row small { color: var(--muted); font-size: .8rem; line-height: 1.3; }
+.ask-link-toggle-row[aria-checked="true"] .settings-switch { background: #28b97b; }
+.ask-link-toggle-row[aria-checked="true"] .settings-switch > span { transform: translateX(18px); }
+.ask-link-toggle-row:disabled { cursor: not-allowed; opacity: .72; }
 .ask-link-paused { margin: 4px 0 0; padding: 11px 12px; border-radius: 12px; background: rgba(5,9,20,.07); color: var(--muted); font-size: .88rem; line-height: 1.35; }
 .ask-link-controls { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 16px; }
 .ask-link-controls .text-button { min-height: 36px; padding: 4px 8px; color: var(--ink); font-family: var(--app-font); font-size: .92rem; }
