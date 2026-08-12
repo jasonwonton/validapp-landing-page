@@ -2,6 +2,7 @@
   "name": "validapp-landing-page",
   "private": true,
   "scripts": {
+    "build": "node scripts/build-static.mjs",
     "test:e2e": "playwright test",
     "test:e2e:update": "playwright test --update-snapshots",
     "test:passkey-integration": "node scripts/test-passkey-backend.mjs",
