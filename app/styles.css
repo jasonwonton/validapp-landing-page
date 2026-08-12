@@ -535,7 +535,8 @@ h3 { font-size: 1.45rem; }
 .god-mode-pitch-dialog { position: fixed; inset: 0; width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; overflow: auto; overscroll-behavior: contain; padding: 0; border: 0; background: var(--aqua); }
 .god-mode-pitch-dialog::backdrop { background: var(--aqua); }
 .god-mode-pitch-content { width: min(600px, 100%); min-height: 100%; display: grid; align-content: start; gap: 16px; margin: 0 auto; padding: max(10px, env(safe-area-inset-top)) 18px calc(24px + env(safe-area-inset-bottom)); }
-.god-mode-sheet-handle { width: 42px; height: 5px; justify-self: center; padding: 0; border: 0; border-radius: 999px; background: rgba(0,0,0,.28); cursor: pointer; }
+.god-mode-pitch-topbar { min-height: 44px; display: flex; justify-content: flex-end; align-items: center; }
+.god-mode-close-button { width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 2px solid rgba(5,9,20,.16); border-radius: 50%; background: rgba(255,255,255,.72); color: var(--ink); cursor: pointer; font-size: 1.8rem; line-height: 1; }
 .god-mode-pitch-hero { display: grid; justify-items: center; gap: 6px; text-align: center; }
 .god-mode-pitch-hero h2 { margin: 0; font-size: clamp(1.35rem, 5vw, 1.85rem); }
 .god-mode-pitch-brand { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: clamp(2.2rem, 11vw, 3.5rem); line-height: 1; }
@@ -722,9 +723,15 @@ body.play-active .play-actions { margin: 0; }
 .icon-button { font-size: 2rem; line-height: 1; }
 .modal label { font-size: .94rem; }
 .modal label span { color: var(--muted); }
-.modal textarea { min-height: 125px; resize: vertical; padding: 13px; border: 2px solid var(--ink); border-radius: 14px; background: var(--white); }
+.modal textarea { width: 100%; display: block; min-height: 125px; resize: vertical; padding: 13px; border: 2px solid var(--ink); border-radius: 14px; background: var(--white); }
 .modal input[type="file"] { width: 100%; padding: 10px; border: 2px dashed var(--ink); border-radius: 13px; background: var(--white); }
+.feedback-intro { max-width: 34ch; margin: 5px 0 0; color: var(--muted); line-height: 1.35; }
+.feedback-photo-field { display: grid; grid-template-columns: auto 1fr; align-items: baseline; column-gap: 5px; }
 .feedback-photo-field > span { font-size: .82rem; }
+.feedback-photo-picker { position: relative; grid-column: 1 / -1; min-height: 54px; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; margin-top: 7px; padding: 8px; border: 2px dashed var(--ink); border-radius: 14px; background: var(--white); cursor: pointer; }
+.feedback-photo-picker strong { padding: 9px 12px; border-radius: 10px; background: var(--ink); color: var(--white); font-size: .84rem; text-align: center; }
+.feedback-photo-picker small { min-width: 0; overflow: hidden; color: var(--muted); font-size: .82rem; text-overflow: ellipsis; white-space: nowrap; }
+.feedback-photo-picker input[type="file"] { position: absolute; width: 1px; height: 1px; overflow: hidden; padding: 0; border: 0; opacity: 0; pointer-events: none; }
 .modal input:not([type="file"]):not([type="radio"]):not([type="checkbox"]), .modal select { width: 100%; min-height: 44px; padding: 9px 11px; border: 2px solid var(--ink); border-radius: 11px; background: var(--white); }
 .android-install-dialog { position: fixed; inset: 0; width: 100%; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom)); border: 0; background: var(--aqua); }
 .android-install-dialog::backdrop { background: var(--aqua); }
@@ -824,6 +831,24 @@ body.play-active .play-actions { margin: 0; }
 .question-image-placeholder small { color: rgba(5,9,20,.42); line-height: 1.35; }
 .question-image-change { position: absolute; right: 12px; bottom: 12px; padding: 8px 12px; border: 2px solid var(--ink); border-radius: 999px; background: rgba(255,255,255,.92); font-size: .82rem; }
 .question-image-input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
+.question-crop-adjust { justify-self: start; min-height: 42px; padding: 8px 14px; border: 2px solid var(--ink); border-radius: 999px; background: var(--white); color: var(--ink); cursor: pointer; font-weight: 700; }
+.question-crop-dialog { position: fixed; inset: 0; width: 100%; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: 0; border: 0; background: #090b12; color: #fff; }
+.question-crop-dialog::backdrop { background: #090b12; }
+.question-crop-content { width: min(600px, 100%); height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); margin: 0 auto; }
+.question-crop-header { min-height: 64px; display: grid; grid-template-columns: 88px minmax(0, 1fr) 88px; align-items: center; gap: 4px; padding: max(8px, env(safe-area-inset-top)) 14px 8px; }
+.question-crop-header h2 { margin: 0; color: #fff; font-size: 1.2rem; text-align: center; }
+.question-crop-control, .question-crop-use { min-height: 44px; padding: 0; border: 0; color: #fff; cursor: pointer; }
+.question-crop-control { justify-self: start; width: 44px; border-radius: 50%; background: rgba(255,255,255,.14); font-size: 1.8rem; line-height: 1; }
+.question-crop-use { justify-self: end; background: transparent; font-weight: 800; }
+.question-crop-workspace { min-height: 0; display: grid; align-content: center; justify-items: center; gap: 18px; padding: 18px 20px calc(28px + env(safe-area-inset-bottom)); }
+.question-crop-viewport { position: relative; width: min(100%, 520px); aspect-ratio: 1; overflow: hidden; background: #000; cursor: grab; touch-action: none; user-select: none; }
+.question-crop-viewport:active { cursor: grabbing; }
+.question-crop-viewport > img { position: absolute; left: 50%; top: 50%; max-width: none; max-height: none; pointer-events: none; transform-origin: center; will-change: transform; }
+.question-crop-grid { position: absolute; inset: 0; pointer-events: none; border: 2px solid rgba(255,255,255,.9); background: linear-gradient(to right, transparent 33.1%, rgba(255,255,255,.3) 33.3%, rgba(255,255,255,.3) 33.6%, transparent 33.8%, transparent 66.2%, rgba(255,255,255,.3) 66.4%, rgba(255,255,255,.3) 66.7%, transparent 66.9%), linear-gradient(to bottom, transparent 33.1%, rgba(255,255,255,.3) 33.3%, rgba(255,255,255,.3) 33.6%, transparent 33.8%, transparent 66.2%, rgba(255,255,255,.3) 66.4%, rgba(255,255,255,.3) 66.7%, transparent 66.9%); }
+.question-crop-workspace > p { margin: 0; color: rgba(255,255,255,.76); text-align: center; }
+.question-crop-zoom { width: min(360px, 100%); display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; }
+.question-crop-zoom span { color: rgba(255,255,255,.9); font-weight: 700; }
+.question-crop-zoom input { width: 100%; accent-color: var(--peach); }
 .question-refund-copy { display: flex; align-items: center; gap: 8px; margin: 0; color: rgba(5,9,20,.75); font-size: .88rem; line-height: 1.3; }
 .question-refund-copy > span { width: 18px; height: 18px; flex: 0 0 18px; display: grid; place-items: center; border-radius: 50%; background: #2fab63; color: var(--white); font-size: .72rem; }
 .question-permission-card { display: grid !important; grid-template-columns: 24px minmax(0, 1fr); align-items: start; gap: 12px; padding: 14px; border: 1px solid rgba(5,9,20,.2); border-radius: 16px; background: var(--white); cursor: pointer; }

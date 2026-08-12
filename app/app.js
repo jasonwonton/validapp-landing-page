@@ -75,8 +75,10 @@ const state = {
     turnstileReject: null,
     contactOnboarding: false,
     questionArtworkFile: null,
+    questionArtworkSourceFile: null,
     questionArtworkPreviewURL: null,
     questionArtworkProcessing: false,
+    questionCrop: null,
     optimisticEarnedProfile: null,
     pendingProfileInformation: null,
     profileDraft: null,
@@ -519,7 +521,7 @@ function renderGodModePitch() {
     const weeklyPrice = Math.max(0, Number(state.config?.god_mode_price || 6.99));
     const multiplier = Math.max(1, Number(state.profile?.god_mode_aura_multiplier || 2));
     const revealNames = ["Sydney Sweeney", "LaMelo Ball", "Jordan Lee", "Taylor Swift"];
-    $("#godModePitchBody").innerHTML = `<button class="god-mode-sheet-handle" type="button" data-close-dialog aria-label="Close God Mode"></button>
+    $("#godModePitchBody").innerHTML = `<div class="god-mode-pitch-topbar"><button class="god-mode-close-button" type="button" data-close-dialog aria-label="Close God Mode">×</button></div>
         <section class="god-mode-pitch-hero">
             <h2>See who likes you with</h2>
             <div class="god-mode-pitch-brand"><img src="../assets/app/crown.png" alt=""><strong>God Mode</strong></div>
@@ -717,7 +719,7 @@ function renderAuraPurchases() {
     };
     container.innerHTML = `<article class="purchase-row"><span><strong>Get boosted</strong><small>Jump to the top of classmates' polls for 5 days or until you get voted 10 times.</small></span>${purchaseButton("global", globalCost, globalBoost ? "Global boost active" : `Get boosted for ${globalCost.toLocaleString()} aura`, Boolean(globalBoost))}</article>
         <article class="purchase-row"><span><strong>See what your crush thinks about you</strong><small>Your crush stays top secret. You appear more often in their polls.</small></span>${purchaseButton("targeted", targetedCost, `Choose a crush for ${targetedCost.toLocaleString()} aura`)}</article>
-        <article class="purchase-row"><span><strong>Submit a school question</strong><small>Anonymously create a poll that your school will answer.</small></span>${purchaseButton("question", questionCost, `Submit a school question for ${questionCost.toLocaleString()} aura`)}</article>`;
+        <article class="purchase-row"><span><strong>Submit a school question</strong><small>Create a poll for your school and choose whether to show your name.</small></span>${purchaseButton("question", questionCost, `Submit a school question for ${questionCost.toLocaleString()} aura`)}</article>`;
 }
 
 function openTopPoll(pollKey) {
@@ -3759,6 +3761,7 @@ async function submitFeedback(event) {
         await api.submitFeedback(text, photo);
         $("#feedbackDialog").close();
         form.reset();
+        $("#feedbackPhotoName").textContent = "No screenshot selected";
         showToast("Thanks — feedback sent");
     } catch (error) {
         status.textContent = error.message || "Could not send your feedback.";
@@ -3830,8 +3833,11 @@ function resetQuestionArtworkPreview() {
     if (state.questionArtworkPreviewURL?.startsWith("blob:")) URL.revokeObjectURL(state.questionArtworkPreviewURL);
     state.questionArtworkPreviewURL = null;
     state.questionArtworkFile = null;
+    state.questionArtworkSourceFile = null;
     state.questionArtworkProcessing = false;
     $("#questionImagePreview").innerHTML = `<span class="question-image-placeholder"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"></rect><circle cx="9" cy="10" r="2"></circle><path d="m5.5 17 4.5-4 3 2.5 2.5-2 3 3.5"></path></svg><strong>Tap to add an image</strong></span>`;
+    $("#adjustQuestionCrop").classList.add("hidden");
+    $(".question-image-change").textContent = "Choose image";
 }
 
 function readFileDataURL(file) {
@@ -3843,66 +3849,147 @@ function readFileDataURL(file) {
     });
 }
 
-function loadLocalImage(file) {
+async function loadLocalImage(file) {
+    const sourceURL = await readFileDataURL(file);
     return new Promise((resolve, reject) => {
-        const objectURL = URL.createObjectURL(file);
         const image = new Image();
-        image.addEventListener("load", () => resolve({ image, objectURL }), { once: true });
-        image.addEventListener("error", () => {
-            URL.revokeObjectURL(objectURL);
-            reject(new Error("decode-failed"));
-        }, { once: true });
-        image.src = objectURL;
+        image.addEventListener("load", () => resolve({ image, sourceURL }), { once: true });
+        image.addEventListener("error", () => reject(new Error("decode-failed")), { once: true });
+        image.src = sourceURL;
     });
 }
 
-async function centerCropQuestionArtwork(file) {
-    let image;
-    let sourceWidth;
-    let sourceHeight;
-    let releaseImage = () => {};
+function clearQuestionCrop() {
+    state.questionCrop = null;
+    $("#questionCropImage").removeAttribute("src");
+    const dialog = $("#questionCropDialog");
+    if (dialog.open) dialog.close();
+}
+
+function questionCropLayout() {
+    const crop = state.questionCrop;
+    const viewportSize = $("#questionCropViewport").clientWidth;
+    if (!crop || !viewportSize) return null;
+    const aspect = crop.sourceWidth / crop.sourceHeight;
+    const baseWidth = aspect >= 1 ? viewportSize * aspect : viewportSize;
+    const baseHeight = aspect >= 1 ? viewportSize : viewportSize / aspect;
+    const zoom = Math.max(1, Math.min(4, crop.zoom));
+    const maxOffsetX = Math.max(0, (baseWidth * zoom - viewportSize) / 2);
+    const maxOffsetY = Math.max(0, (baseHeight * zoom - viewportSize) / 2);
+    crop.offsetX = Math.max(-maxOffsetX, Math.min(maxOffsetX, crop.offsetX));
+    crop.offsetY = Math.max(-maxOffsetY, Math.min(maxOffsetY, crop.offsetY));
+    return { viewportSize, baseWidth, baseHeight, zoom };
+}
+
+function renderQuestionCrop() {
+    const crop = state.questionCrop;
+    const layout = questionCropLayout();
+    if (!crop || !layout) return;
+    const image = $("#questionCropImage");
+    image.style.width = `${layout.baseWidth}px`;
+    image.style.height = `${layout.baseHeight}px`;
+    image.style.transform = `translate(-50%, -50%) translate(${crop.offsetX}px, ${crop.offsetY}px) scale(${layout.zoom})`;
+}
+
+async function openQuestionArtworkCrop(file) {
+    if (!file) return;
+    clearQuestionCrop();
+    state.questionArtworkProcessing = true;
+    $("#questionStatus").textContent = "";
+    updateQuestionSubmissionUI();
+    let loaded = null;
     try {
-        const loaded = await loadLocalImage(file);
-        image = loaded.image;
-        sourceWidth = image.naturalWidth;
-        sourceHeight = image.naturalHeight;
-        releaseImage = () => URL.revokeObjectURL(loaded.objectURL);
-    } catch (imageError) {
-        if (typeof createImageBitmap !== "function") throw imageError;
-        image = await createImageBitmap(file, { imageOrientation: "from-image" });
-        sourceWidth = image.width;
-        sourceHeight = image.height;
-        releaseImage = () => image.close?.();
+        loaded = await loadLocalImage(file);
+        if (!loaded.image.naturalWidth || !loaded.image.naturalHeight) throw new Error("decode-failed");
+        state.questionCrop = {
+            file,
+            image: loaded.image,
+            sourceWidth: loaded.image.naturalWidth,
+            sourceHeight: loaded.image.naturalHeight,
+            zoom: 1,
+            offsetX: 0,
+            offsetY: 0,
+            pointerId: null,
+            lastPointerX: 0,
+            lastPointerY: 0,
+            hadArtwork: Boolean(state.questionArtworkFile),
+        };
+        $("#questionCropImage").src = loaded.sourceURL;
+        $("#questionCropZoom").value = "1";
+        $("#questionCropDialog").showModal();
+        requestAnimationFrame(renderQuestionCrop);
+    } catch (_) {
+        state.questionArtworkProcessing = false;
+        if (!state.questionArtworkFile) {
+            $("#questionImage").value = "";
+            resetQuestionArtworkPreview();
+        }
+        $("#questionStatus").textContent = "That photo format could not be decoded by this browser. Choose a JPEG or PNG, or export the photo as Most Compatible.";
+        updateQuestionSubmissionUI();
     }
+}
+
+function cancelQuestionArtworkCrop() {
+    const hadArtwork = state.questionCrop?.hadArtwork;
+    clearQuestionCrop();
+    state.questionArtworkProcessing = false;
+    if (!hadArtwork) {
+        $("#questionImage").value = "";
+        resetQuestionArtworkPreview();
+    }
+    updateQuestionSubmissionUI();
+}
+
+async function applyQuestionArtworkCrop() {
+    const crop = state.questionCrop;
+    const layout = questionCropLayout();
+    if (!crop || !layout) return;
+    const button = $("#applyQuestionCrop");
+    setButtonLoading(button, true, "Working...");
     try {
-        const cropSize = Math.min(sourceWidth, sourceHeight);
-        if (!cropSize) throw new Error("decode-failed");
-        const outputSize = Math.min(1024, cropSize);
+        const sourceCropSize = Math.min(crop.sourceWidth, crop.sourceHeight) / layout.zoom;
+        const sourcePixelsPerViewportPixel = sourceCropSize / layout.viewportSize;
+        const sourceX = Math.max(0, Math.min(
+            crop.sourceWidth - sourceCropSize,
+            (crop.sourceWidth - sourceCropSize) / 2 - crop.offsetX * sourcePixelsPerViewportPixel,
+        ));
+        const sourceY = Math.max(0, Math.min(
+            crop.sourceHeight - sourceCropSize,
+            (crop.sourceHeight - sourceCropSize) / 2 - crop.offsetY * sourcePixelsPerViewportPixel,
+        ));
+        const outputSize = Math.min(1024, Math.max(1, Math.round(sourceCropSize)));
         const canvas = document.createElement("canvas");
         canvas.width = outputSize;
         canvas.height = outputSize;
-        const context = canvas.getContext("2d");
-        context.drawImage(
-            image,
-            Math.floor((sourceWidth - cropSize) / 2),
-            Math.floor((sourceHeight - cropSize) / 2),
-            cropSize,
-            cropSize,
+        canvas.getContext("2d").drawImage(
+            crop.image,
+            sourceX,
+            sourceY,
+            sourceCropSize,
+            sourceCropSize,
             0,
             0,
             outputSize,
             outputSize,
         );
         const blob = await canvasBlob(canvas, "image/jpeg", 0.9);
-        const baseName = String(file.name || "question-artwork").replace(/\.[^.]+$/, "");
-        return {
-            file: new File([blob], `${baseName}-square.jpg`, { type: "image/jpeg", lastModified: Date.now() }),
-            sourceWidth,
-            sourceHeight,
-            outputSize,
-        };
+        const baseName = String(crop.file.name || "question-artwork").replace(/\.[^.]+$/, "");
+        const croppedFile = new File([blob], `${baseName}-square.jpg`, { type: "image/jpeg", lastModified: Date.now() });
+        if (state.questionArtworkPreviewURL?.startsWith("blob:")) URL.revokeObjectURL(state.questionArtworkPreviewURL);
+        state.questionArtworkFile = croppedFile;
+        state.questionArtworkSourceFile = crop.file;
+        state.questionArtworkPreviewURL = await readFileDataURL(croppedFile);
+        $("#questionImagePreview").innerHTML = `<img src="${escapeHTML(state.questionArtworkPreviewURL)}" alt="Square crop preview">`;
+        $("#adjustQuestionCrop").classList.remove("hidden");
+        $(".question-image-change").textContent = "Choose another";
+        clearQuestionCrop();
+        resetQuestionSubmissionIfDraftChanged();
+    } catch (_) {
+        $("#questionStatus").textContent = "Could not crop that photo. Try another image.";
     } finally {
-        releaseImage();
+        state.questionArtworkProcessing = false;
+        setButtonLoading(button, false);
+        updateQuestionSubmissionUI();
     }
 }
 
@@ -3921,24 +4008,33 @@ async function previewQuestionArtwork() {
         updateQuestionSubmissionUI();
         return;
     }
-    state.questionArtworkProcessing = true;
-    state.questionArtworkFile = null;
-    $("#questionStatus").textContent = "";
-    updateQuestionSubmissionUI();
-    try {
-        const cropped = await centerCropQuestionArtwork(file);
-        if (state.questionArtworkPreviewURL?.startsWith("blob:")) URL.revokeObjectURL(state.questionArtworkPreviewURL);
-        state.questionArtworkFile = cropped.file;
-        state.questionArtworkPreviewURL = await readFileDataURL(cropped.file);
-        $("#questionImagePreview").innerHTML = `<img src="${escapeHTML(state.questionArtworkPreviewURL)}" alt="Square crop preview">`;
-    } catch (_) {
-        input.value = "";
-        resetQuestionArtworkPreview();
-        $("#questionStatus").textContent = "That photo format could not be decoded by this browser. Choose a JPEG or PNG, or export the photo as Most Compatible.";
-    } finally {
-        state.questionArtworkProcessing = false;
-        updateQuestionSubmissionUI();
-    }
+    await openQuestionArtworkCrop(file);
+}
+
+function beginQuestionCropDrag(event) {
+    const crop = state.questionCrop;
+    if (!crop || event.button > 0) return;
+    crop.pointerId = event.pointerId;
+    crop.lastPointerX = event.clientX;
+    crop.lastPointerY = event.clientY;
+    event.currentTarget.setPointerCapture(event.pointerId);
+}
+
+function moveQuestionCrop(event) {
+    const crop = state.questionCrop;
+    if (!crop || crop.pointerId !== event.pointerId) return;
+    crop.offsetX += event.clientX - crop.lastPointerX;
+    crop.offsetY += event.clientY - crop.lastPointerY;
+    crop.lastPointerX = event.clientX;
+    crop.lastPointerY = event.clientY;
+    renderQuestionCrop();
+}
+
+function endQuestionCropDrag(event) {
+    const crop = state.questionCrop;
+    if (!crop || crop.pointerId !== event.pointerId) return;
+    crop.pointerId = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
 }
 
 function reviewQuestionSubmission(event) {
@@ -4748,6 +4844,9 @@ function bindEvents() {
     $("#addPasskeyButton").addEventListener("click", addBackupPasskey);
     $("#feedbackButton").addEventListener("click", openFeedbackDialog);
     $("#feedbackForm").addEventListener("submit", submitFeedback);
+    $("#feedbackPhoto").addEventListener("change", (event) => {
+        $("#feedbackPhotoName").textContent = event.currentTarget.files[0]?.name || "No screenshot selected";
+    });
     $("#classmateDirectorySearch").addEventListener("input", renderClassmateDirectory);
     $("#classmateDirectoryList").addEventListener("click", (event) => {
         const classmate = event.target.closest("[data-directory-classmate]");
@@ -4784,6 +4883,23 @@ function bindEvents() {
     $("#questionForm").addEventListener("input", resetQuestionSubmissionIfDraftChanged);
     $("#questionForm").addEventListener("change", resetQuestionSubmissionIfDraftChanged);
     $("#questionImage").addEventListener("change", previewQuestionArtwork);
+    $("#adjustQuestionCrop").addEventListener("click", () => openQuestionArtworkCrop(state.questionArtworkSourceFile));
+    $("#cancelQuestionCrop").addEventListener("click", cancelQuestionArtworkCrop);
+    $("#applyQuestionCrop").addEventListener("click", applyQuestionArtworkCrop);
+    $("#questionCropDialog").addEventListener("cancel", (event) => {
+        event.preventDefault();
+        cancelQuestionArtworkCrop();
+    });
+    $("#questionCropZoom").addEventListener("input", (event) => {
+        if (!state.questionCrop) return;
+        state.questionCrop.zoom = Number(event.currentTarget.value);
+        renderQuestionCrop();
+    });
+    $("#questionCropViewport").addEventListener("pointerdown", beginQuestionCropDrag);
+    $("#questionCropViewport").addEventListener("pointermove", moveQuestionCrop);
+    $("#questionCropViewport").addEventListener("pointerup", endQuestionCropDrag);
+    $("#questionCropViewport").addEventListener("pointercancel", endQuestionCropDrag);
+    window.addEventListener("resize", renderQuestionCrop);
     $("#confirmQuestionSubmit").addEventListener("click", confirmQuestionSubmission);
     $("#closeQuestionPage").addEventListener("click", () => closeDetailScreen($("#questionDialog")));
     $("#profileForm").addEventListener("submit", saveProfile);

@@ -136,7 +136,10 @@ test("Settings feedback form accepts a message and optional screenshot", async (
     await signInToDemo(page);
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.getByRole("button", { name: "Leave feedback" }).click();
-    const dialog = page.getByRole("dialog", { name: "Leave feedback" });
+    const dialog = page.getByRole("dialog", { name: "Feedback" });
+    const formBox = await dialog.locator("form").boundingBox();
+    const textareaBox = await dialog.getByLabel("What should we improve?").boundingBox();
+    expect(textareaBox.width).toBeGreaterThan(formBox.width - 50);
     await dialog.getByLabel("What should we improve?").fill("Make the active tab easier to spot.");
     await dialog.getByLabel("Add a screenshot (optional)").setInputFiles({
         name: "screen.png",
@@ -146,6 +149,37 @@ test("Settings feedback form accepts a message and optional screenshot", async (
     await dialog.getByRole("button", { name: "Send feedback" }).click();
     await expect(dialog).toBeHidden();
     await expect(page.locator("#toast")).toContainText("Thanks — feedback sent");
+});
+
+test("school question artwork can be positioned and adjusted again", async ({ page }) => {
+    await signInToDemo(page);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: /Submit a school question for/i }).click();
+    const question = page.getByRole("dialog", { name: "Submit a school question" });
+    await question.getByLabel("Artwork").setInputFiles("assets/valid_logo.png");
+
+    const crop = page.getByRole("dialog", { name: "Adjust crop" });
+    await expect(crop).toBeVisible();
+    const cropImage = crop.getByAltText("Photo being cropped");
+    const initialTransform = await cropImage.evaluate((image) => image.style.transform);
+    await crop.getByLabel("Zoom").fill("2");
+    await expect.poll(() => cropImage.evaluate((image) => image.style.transform)).not.toBe(initialTransform);
+    const zoomedTransform = await cropImage.evaluate((image) => image.style.transform);
+    const viewport = crop.locator("#questionCropViewport");
+    const viewportBox = await viewport.boundingBox();
+    await page.mouse.move(viewportBox.x + viewportBox.width / 2, viewportBox.y + viewportBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(viewportBox.x + viewportBox.width / 2 + 40, viewportBox.y + viewportBox.height / 2, { steps: 3 });
+    await page.mouse.up();
+    await expect.poll(() => cropImage.evaluate((image) => image.style.transform)).not.toBe(zoomedTransform);
+    await crop.getByRole("button", { name: "Use photo" }).click();
+
+    const adjust = question.getByRole("button", { name: "Adjust crop" });
+    await expect(adjust).toBeVisible();
+    await adjust.click();
+    await expect(crop).toBeVisible();
+    await crop.getByRole("button", { name: "Cancel crop" }).click();
+    await expect(adjust).toBeVisible();
 });
 
 test("push worker preserves separate notifications unless the server supplies a tag", async ({ page }) => {

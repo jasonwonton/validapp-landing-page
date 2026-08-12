@@ -435,7 +435,7 @@ test("anonymous inbox supports private answers and safety controls", async ({ pa
     await page.getByRole("button", { name: /What is something you are genuinely proud/ }).click();
     const answerDialog = page.locator("#anonymousQuestionDialog");
     await expect(answerDialog).toHaveCSS("position", "fixed");
-    await expect(answerDialog.getByText("Fully anonymous guest")).toBeVisible();
+    await expect(answerDialog.getByText("From someone anonymous")).toBeVisible();
     await answerDialog.getByLabel("Your reply").fill("Helping my friends through a hard semester.");
     await answerDialog.getByRole("button", { name: "Send reply" }).click();
     await expect(answerDialog.getByText(/Answered.*10 aura/)).toBeVisible();

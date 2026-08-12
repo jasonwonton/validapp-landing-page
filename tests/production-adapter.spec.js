@@ -3,6 +3,16 @@ import { expect, test } from "@playwright/test";
 const API_ORIGIN = "https://api.six7.lol";
 const USER_ID = "11111111-1111-1111-1111-111111111111";
 
+async function attachAndCropQuestionArtwork(page, questionDialog) {
+    await questionDialog.getByLabel("Artwork").setInputFiles("assets/valid_logo.png");
+    const cropDialog = page.getByRole("dialog", { name: "Adjust crop" });
+    await expect(cropDialog).toBeVisible();
+    await cropDialog.getByLabel("Zoom").fill("1.5");
+    await cropDialog.getByRole("button", { name: "Use photo" }).click();
+    await expect(cropDialog).toBeHidden();
+    await expect(questionDialog.getByRole("button", { name: "Adjust crop" })).toBeVisible();
+}
+
 async function fillProductionSignupThroughGrade(dialog) {
     await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
     await dialog.locator('[data-signup-age="16"]').click();
@@ -456,7 +466,7 @@ test("Settings submits authenticated multipart feedback", async ({ page }) => {
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.getByRole("button", { name: "Leave feedback" }).click();
-    const dialog = page.getByRole("dialog", { name: "Leave feedback" });
+    const dialog = page.getByRole("dialog", { name: "Feedback" });
     await dialog.getByLabel("What should we improve?").fill("Make the active tab easier to spot.");
     await dialog.getByLabel("Add a screenshot (optional)").setInputFiles({
         name: "screen.png",
@@ -630,13 +640,9 @@ test("real adapter submits a Play vote and multipart school question", async ({ 
     await classmateProfile.getByRole("button", { name: "Back to classmates" }).click();
     await directory.getByRole("button", { name: "Close" }).click();
     await page.getByRole("button", { name: /Submit a school question/i }).click();
-    const dialog = page.getByRole("dialog");
+    const dialog = page.getByRole("dialog", { name: "Submit a school question" });
     await dialog.getByLabel("What should your school vote on?").fill("Who makes everyone feel included?");
-    await dialog.getByLabel(/Artwork/).setInputFiles({
-        name: "art.png",
-        mimeType: "image/png",
-        buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
-    });
+    await attachAndCropQuestionArtwork(page, dialog);
     await dialog.getByLabel(/permission to use this image/i).check();
     await dialog.getByRole("button", { name: "Submit for review" }).click();
     const confirmation = page.getByRole("dialog").filter({ hasText: "Submit this poll?" });
@@ -651,7 +657,7 @@ test("real adapter submits a Play vote and multipart school question", async ({ 
     expect(submission.contentType).toMatch(/^multipart\/form-data; boundary=/);
     expect(String(submission.body)).toContain("Who makes everyone feel included?");
     expect(String(submission.body)).toContain("idempotency_key");
-    expect(String(submission.body)).toContain("art.png");
+    expect(String(submission.body)).toContain("valid_logo-square.jpg");
 });
 
 test("real adapter gives rate-limited users an actionable wait time", async ({ page }) => {
@@ -680,11 +686,7 @@ test("question submission refuses an aura overdraft before calling the API", asy
     await page.getByRole("button", { name: /Submit a school question/i }).click();
     const dialog = page.getByRole("dialog").filter({ hasText: "Submit a school question" });
     await dialog.getByLabel("What should your school vote on?").fill("Who makes school more welcoming?");
-    await dialog.getByLabel(/Artwork/).setInputFiles({
-        name: "art.png",
-        mimeType: "image/png",
-        buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
-    });
+    await attachAndCropQuestionArtwork(page, dialog);
     await dialog.getByLabel(/permission to use this image/i).check();
     await dialog.getByRole("button", { name: "Submit for review" }).click();
     await expect(dialog.locator("#questionStatus")).toHaveText("You need 200 aura to submit this question.");
@@ -700,11 +702,7 @@ test("ambiguous question retries reuse one idempotency key and never double-char
     await page.getByRole("button", { name: /Submit a school question/i }).click();
     const dialog = page.getByRole("dialog").filter({ hasText: "Submit a school question" });
     await dialog.getByLabel("What should your school vote on?").fill("Who always makes people feel included?");
-    await dialog.getByLabel(/Artwork/).setInputFiles({
-        name: "art.png",
-        mimeType: "image/png",
-        buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
-    });
+    await attachAndCropQuestionArtwork(page, dialog);
     await dialog.getByLabel(/permission to use this image/i).check();
     await dialog.getByRole("button", { name: "Submit for review" }).click();
     await page.getByRole("dialog").filter({ hasText: "Submit this poll?" })

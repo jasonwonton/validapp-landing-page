@@ -177,7 +177,7 @@
     <section id="questionDialog" class="detail-screen question-page hidden" role="dialog" aria-modal="true" aria-label="Submit a school question">
         <div class="detail-screen-header question-page-header">
             <button id="closeQuestionPage" class="detail-back-button" aria-label="Back" type="button">‹ <span>Back</span></button>
-            <strong>Submit a question</strong>
+            <strong>Submit a school question</strong>
             <span aria-hidden="true"></span>
         </div>
         <form id="questionForm" class="question-submission-form">
@@ -188,14 +188,15 @@
                 <label><input type="radio" name="questionIdentity" value="anonymous"><img src="../assets/app/anonymous.png" alt=""><span><strong>Stay anonymous</strong><small>Your name will not be on the question</small></span></label>
                 <label><input type="radio" name="questionIdentity" value="named" checked><span id="questionIdentityAvatar" class="tiny-avatar">V</span><span><strong id="questionIdentityName">Your name</strong><small>Your name appears next to the question</small></span></label>
             </fieldset>
-            <label class="question-prompt-field" for="questionText"><span>Question prompt</span><textarea id="questionText" name="question_text" minlength="3" maxlength="280" required placeholder="Write the exact question classmates will see."></textarea></label>
+            <label class="question-prompt-field" for="questionText"><span>Question prompt</span><textarea id="questionText" name="question_text" minlength="3" maxlength="280" required aria-label="What should your school vote on?" placeholder="Write the exact question classmates will see."></textarea></label>
             <section class="question-image-section" aria-labelledby="questionImageLabel">
                 <strong id="questionImageLabel">Image</strong>
                 <label class="question-image-picker" for="questionImage">
                     <span id="questionImagePreview" class="question-image-preview"><span class="question-image-placeholder"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"></rect><circle cx="9" cy="10" r="2"></circle><path d="m5.5 17 4.5-4 3 2.5 2.5-2 3 3.5"></path></svg><strong>Tap to add an image</strong></span></span>
                     <span class="question-image-change">Choose image</span>
                 </label>
-                <input id="questionImage" class="question-image-input" type="file" required accept="image/*,.heic,.heif">
+                <input id="questionImage" class="question-image-input" type="file" required accept="image/*,.heic,.heif" aria-label="Artwork">
+                <button id="adjustQuestionCrop" class="question-crop-adjust hidden" type="button">Adjust crop</button>
                 <p class="question-refund-copy"><span aria-hidden="true">✓</span> If moderators deny the submission, your aura is refunded.</p>
             </section>
             <label class="question-permission-card">
@@ -214,6 +215,24 @@
             </div>
         </form>
     </section>
+
+    <dialog id="questionCropDialog" class="question-crop-dialog" aria-labelledby="questionCropTitle">
+        <div class="question-crop-content">
+            <header class="question-crop-header">
+                <button id="cancelQuestionCrop" class="question-crop-control" type="button" aria-label="Cancel crop">×</button>
+                <h2 id="questionCropTitle">Adjust crop</h2>
+                <button id="applyQuestionCrop" class="question-crop-use" type="button">Use photo</button>
+            </header>
+            <div class="question-crop-workspace">
+                <div id="questionCropViewport" class="question-crop-viewport" aria-label="Drag photo to reposition crop">
+                    <img id="questionCropImage" alt="Photo being cropped" draggable="false">
+                    <span class="question-crop-grid" aria-hidden="true"></span>
+                </div>
+                <p>Drag to reposition. Use the slider to zoom.</p>
+                <label class="question-crop-zoom" for="questionCropZoom"><span>Zoom</span><input id="questionCropZoom" type="range" min="1" max="4" step="0.01" value="1"></label>
+            </div>
+        </div>
+    </dialog>
 
     <dialog id="questionConfirmDialog" class="modal">
         <div class="aura-confirm-content">
@@ -456,9 +475,9 @@
 
     <dialog id="feedbackDialog" class="modal" aria-labelledby="feedbackDialogTitle">
         <form id="feedbackForm">
-            <div class="modal-heading"><div><p class="eyebrow">HELP SHAPE VALID</p><h2 id="feedbackDialogTitle">Leave feedback</h2></div><button class="icon-button" type="button" data-close-dialog aria-label="Close">×</button></div>
+            <div class="modal-heading"><div><h2 id="feedbackDialogTitle">Feedback</h2><p class="feedback-intro">Tell us what feels confusing, broken, or missing. We read every note.</p></div><button class="icon-button" type="button" data-close-dialog aria-label="Close">×</button></div>
             <label>What should we improve?<textarea id="feedbackText" minlength="3" maxlength="2000" required placeholder="Tell us what feels confusing, broken, or missing..."></textarea></label>
-            <label class="feedback-photo-field">Add a screenshot <span>(optional)</span><input id="feedbackPhoto" type="file" accept="image/jpeg,image/png,image/webp"></label>
+            <label class="feedback-photo-field">Add a screenshot <span>(optional)</span><span class="feedback-photo-picker"><strong>Choose screenshot</strong><small id="feedbackPhotoName">No screenshot selected</small><input id="feedbackPhoto" type="file" accept="image/jpeg,image/png,image/webp"></span></label>
             <p id="feedbackStatus" class="status-message" role="status"></p>
             <button id="feedbackSubmitButton" class="primary-button" type="submit">Send feedback</button>
         </form>
