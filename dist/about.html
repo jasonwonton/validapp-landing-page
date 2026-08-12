@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About Valid</title>
+    <meta name="description" content="Learn about Valid - Compliment Classmates, the iOS anonymous polling app for high school communities on the App Store.">
+    <link rel="canonical" href="https://validapp.lol/about.html">
+    <link rel="icon" type="image/png" href="assets/AppIconV2.png">
+    <style>
+        @font-face {
+            font-family: "Jua-Regular";
+            src: url("assets/Jua-Regular.ttf") format("truetype");
+            font-display: swap;
+        }
+        :root {
+            color-scheme: light;
+            --bg: #f2fffd;
+            --surface: #ffffff;
+            --text: #050914;
+            --muted: rgba(5, 9, 20, 0.72);
+            --border: rgba(5, 9, 20, 0.14);
+            --accent: #ffb15e;
+        }
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            font-family: "Jua-Regular", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.65;
+        }
+        a {
+            color: #0b5cff;
+        }
+        .site-header {
+            border-bottom: 1px solid var(--border);
+            background: rgba(242, 255, 253, 0.94);
+        }
+        .nav,
+        main,
+        .footer-inner {
+            width: min(920px, calc(100% - 32px));
+            margin: 0 auto;
+        }
+        .nav {
+            min-height: 72px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+        }
+        .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text);
+            font-weight: 800;
+            text-decoration: none;
+        }
+        .brand img {
+            width: 42px;
+            height: 42px;
+            object-fit: contain;
+        }
+        .nav-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+        }
+        .nav-links a {
+            color: var(--muted);
+            text-decoration: none;
+        }
+        .nav-links a:hover {
+            color: var(--text);
+        }
+        main {
+            padding: clamp(40px, 7vw, 76px) 0;
+        }
+        .eyebrow {
+            margin: 0 0 10px;
+            color: rgba(5, 9, 20, 0.64);
+            font-size: 0.8rem;
+            font-weight: 800;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+        h1 {
+            margin: 0 0 18px;
+            font-size: clamp(2.5rem, 7vw, 5rem);
+            line-height: 0.98;
+            letter-spacing: 0;
+        }
+        h2 {
+            margin-top: 34px;
+            font-size: 1.45rem;
+            line-height: 1.2;
+        }
+        p,
+        li {
+            color: var(--muted);
+        }
+        .panel {
+            margin-top: 28px;
+            padding: 22px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 44px;
+            margin-top: 12px;
+            padding: 0 18px;
+            border: 2px solid var(--text);
+            border-radius: 8px;
+            background: var(--accent);
+            color: var(--text);
+            font-weight: 800;
+            text-decoration: none;
+        }
+        .details {
+            display: grid;
+            gap: 12px;
+            margin: 0;
+        }
+        .detail-row {
+            display: grid;
+            grid-template-columns: 150px minmax(0, 1fr);
+            gap: 14px;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .detail-row:last-child {
+            border-bottom: 0;
+        }
+        dt {
+            color: rgba(5, 9, 20, 0.62);
+            font-weight: 800;
+        }
+        dd {
+            margin: 0;
+        }
+        .site-footer {
+            background: #050914;
+            color: #f5f7ff;
+        }
+        .footer-inner {
+            padding: 30px 0;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 14px;
+        }
+        .footer-inner a {
+            color: rgba(245, 247, 255, 0.78);
+            text-decoration: none;
+        }
+        @media (max-width: 640px) {
+            .nav {
+                align-items: flex-start;
+                flex-direction: column;
+                padding: 14px 0;
+            }
+            .detail-row {
+                grid-template-columns: 1fr;
+                gap: 4px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="site-header">
+        <nav class="nav" aria-label="Primary navigation">
+            <a class="brand" href="index.html">
+                <img src="assets/valid_logo.png" alt="Valid logo">
+            </a>
+            <div class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="about.html">About</a>
+                <a href="contact.html">Contact</a>
+                <a href="privacy-policy.html">Privacy</a>
+                <a href="terms.html">Terms</a>
+            </div>
+        </nav>
+    </header>
+
+    <main>
+        <p class="eyebrow">iOS App Store App</p>
+        <h1>About Valid</h1>
+        <p>
+            Valid - Compliment Classmates is an iOS app available on the Apple App Store. It is built for high school
+            communities where students can compliment classmates through quick, positive, anonymous daily polls.
+        </p>
+        <p>
+            In Valid, students answer questions about friends and classmates, earn aura points for participating, and see
+            votes they receive in a personal feed. Votes stay anonymous unless a user chooses to reveal more.
+        </p>
+        <a class="button" href="https://apps.apple.com/us/app/valid-compliment-classmates/id6755367062">View on the App Store</a>
+
+        <section class="panel" aria-labelledby="how-it-works">
+            <h2 id="how-it-works">What You Can Do In Valid</h2>
+            <ul>
+                <li>Answer daily questions by choosing from contacts and classmates.</li>
+                <li>Send classmates positive signals through anonymous polls.</li>
+                <li>Earn aura points as you participate and move up the leaderboard.</li>
+                <li>See votes you receive in your own feed.</li>
+                <li>Browse school-wide activity to see what is trending.</li>
+            </ul>
+        </section>
+
+        <section class="panel" aria-labelledby="school-communities">
+            <h2 id="school-communities">Built For School Communities</h2>
+            <p>
+                Valid is designed around the way classmates already interact: quick questions, light competition, and
+                positive feedback. The app gives students a simple place to participate in school-wide polls, recognize
+                friends, and see the compliments coming back to them.
+            </p>
+            <p>
+                The experience stays focused on classmates and friend groups instead of public follower counts or open
+                comment threads. That keeps Valid centered on short, fun prompts and positive signals from people users
+                know from school.
+            </p>
+        </section>
+
+        <section class="panel" aria-labelledby="privacy-safety">
+            <h2 id="privacy-safety">Privacy And Safety</h2>
+            <p>
+                Poll responses are anonymous by default, and users can decide whether they want to reveal more about
+                votes they receive. Valid also keeps support, contact, privacy, and terms pages available so students,
+                parents, and schools can reach the team or review how the app works.
+            </p>
+        </section>
+
+        <section class="panel" aria-labelledby="app-store">
+            <h2 id="app-store">Available For iPhone</h2>
+            <p>
+                The App Store listing is named Valid - Compliment Classmates. Valid is distributed through Apple's App
+                Store for iOS users and links back to these terms, privacy, and contact pages for support.
+            </p>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="footer-inner">
+            <span>&copy; <script>document.write(new Date().getFullYear());</script> Valid. All rights reserved.</span>
+            <span><a href="contact.html">Contact us</a></span>
+        </div>
+    </footer>
+</body>
+</html>

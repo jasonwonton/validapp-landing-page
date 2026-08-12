@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Valid - See who likes you</title>
+    <meta name="description" content="Valid is the anonymous social polling app for school communities. Answer polls, receive app notifications, invite classmates, and reveal who voted for you.">
+    <link rel="canonical" href="https://validapp.lol/">
+    <link rel="icon" type="image/png" href="assets/AppIconV2.png">
+    <link rel="apple-touch-icon" href="assets/AppIconV2.png">
+    <meta property="og:url" content="https://validapp.lol/">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Valid">
+    <meta property="og:title" content="Valid - See who likes you">
+    <meta property="og:description" content="Answer polls, invite classmates, and reveal who voted for you on Valid.">
+    <meta property="og:image" content="https://validapp.lol/assets/AppIconV2.png">
+    <meta property="og:image:secure_url" content="https://validapp.lol/assets/AppIconV2.png">
+    <meta property="og:image:width" content="1024">
+    <meta property="og:image:height" content="1024">
+    <meta property="og:image:alt" content="Valid App Icon">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Valid - See who likes you">
+    <meta name="twitter:description" content="Unlock anonymous votes and app notifications from your school community.">
+    <meta name="twitter:image" content="https://validapp.lol/assets/AppIconV2.png">
+    <meta name="twitter:image:alt" content="Valid App Icon">
+    <meta name="theme-color" content="#ccf7f4">
+    <meta name="apple-mobile-web-app-title" content="Valid">
+    <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@type": "MobileApplication",
+          "name": "Valid",
+          "operatingSystem": "iOS",
+          "applicationCategory": "SocialNetworkingApplication",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          },
+          "url": "https://validapp.lol/",
+          "image": "https://validapp.lol/assets/AppIconV2.png",
+          "publisher": {
+            "@type": "Organization",
+            "name": "Valid",
+            "logo": "https://validapp.lol/assets/valid_logo.png",
+            "url": "https://validapp.lol/",
+            "email": "support@validapp.lol"
+          },
+          "description": "Valid is the anonymous poll app for school communities. Answer questions, receive app notifications, invite classmates, and reveal who voted for you."
+        }
+    </script>
+    <style>
+        @font-face {
+            font-family: "Jua-Regular";
+            src: url("assets/Jua-Regular.ttf") format("truetype");
+            font-display: swap;
+        }
+        :root {
+            color-scheme: light;
+            --aqua: #ccf7f4;
+            --ink: #000000;
+            --muted: rgba(0, 63, 66, 0.78);
+            --white: #ffffff;
+            --peach: #ffb15e;
+            --soft-pink: #ffb8d6;
+        }
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Jua-Regular", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: var(--aqua);
+            color: var(--ink);
+        }
+        a {
+            color: inherit;
+        }
+        main {
+            width: min(1040px, calc(100% - 32px));
+            margin: 0 auto;
+            padding: clamp(28px, 5vw, 48px) 0 52px;
+            text-align: center;
+        }
+        .hero-logo {
+            width: min(260px, 68vw);
+            height: auto;
+            display: block;
+            margin: 0 auto 12px;
+        }
+        .hero-title {
+            margin: 0 0 12px;
+            font-size: clamp(3rem, 10vw, 5.6rem);
+            line-height: 0.98;
+            letter-spacing: 0;
+        }
+        .hero-copy {
+            max-width: 680px;
+            margin: 0 auto 26px;
+            color: var(--muted);
+            font-size: clamp(1.2rem, 3vw, 1.55rem);
+            line-height: 1.45;
+        }
+        .cta-row {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: clamp(26px, 5vw, 42px);
+        }
+        .android-install-gate {
+            position: fixed;
+            z-index: 100;
+            inset: 0;
+            min-height: 100dvh;
+            display: grid;
+            place-items: center;
+            overflow: auto;
+            padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
+            background: var(--aqua);
+        }
+        .android-install-gate[hidden] {
+            display: none;
+        }
+        body.android-install-required {
+            overflow: hidden;
+        }
+        body.android-install-required > main,
+        body.android-install-required > footer {
+            display: none;
+        }
+        .android-install-shell {
+            width: min(440px, 100%);
+            display: grid;
+            justify-items: center;
+            gap: 16px;
+            padding: clamp(28px, 8vw, 42px) 24px;
+            border: 4px solid var(--ink);
+            border-radius: 32px;
+            background: rgba(255, 255, 255, 0.92);
+            box-shadow: 0 10px 0 var(--ink);
+            text-align: center;
+        }
+        .android-install-shell img {
+            width: 96px;
+            height: 96px;
+            object-fit: contain;
+            border-radius: 24px;
+        }
+        .android-install-eyebrow {
+            margin: 0;
+            color: var(--muted);
+            font-size: 0.88rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .android-install-shell h1 {
+            margin: -6px 0 0;
+            font-size: clamp(2rem, 9vw, 2.8rem);
+            line-height: 1.02;
+        }
+        .android-install-shell > p:not(.android-install-eyebrow) {
+            margin: 0;
+            color: var(--muted);
+            font-size: 1.05rem;
+            line-height: 1.4;
+        }
+        .android-install-action {
+            width: 100%;
+            min-height: 58px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 22px;
+            border: 3px solid var(--ink);
+            border-radius: 20px;
+            background: var(--peach);
+            color: var(--ink);
+            box-shadow: 0 5px 0 var(--ink);
+            font-size: 1.1rem;
+            text-decoration: none;
+        }
+        .android-install-note {
+            color: var(--muted);
+            font-size: 0.82rem;
+            line-height: 1.35;
+        }
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 54px;
+            padding: 0 28px;
+            border: 3px solid var(--ink);
+            border-radius: 22px;
+            background: var(--peach);
+            color: var(--ink);
+            font-size: 1.08rem;
+            text-decoration: none;
+            box-shadow: 0 6px 0 var(--ink);
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 0 var(--ink);
+        }
+        .button:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 var(--ink);
+        }
+        .mockup {
+            margin: 0 auto;
+            width: min(820px, 100%);
+        }
+        .mockup img {
+            width: 100%;
+            height: auto;
+            display: block;
+            border: 4px solid var(--ink);
+            border-radius: 28px;
+            box-shadow: 0 10px 0 rgba(0, 0, 0, 0.14);
+        }
+        .quick-info {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 24px;
+            color: var(--muted);
+            font-size: 0.98rem;
+        }
+        .quick-info a {
+            color: var(--ink);
+            text-decoration: underline;
+            text-underline-offset: 3px;
+        }
+        footer {
+            width: min(1040px, calc(100% - 32px));
+            margin: 0 auto;
+            padding: 24px 0 34px;
+            border-top: 3px solid var(--ink);
+            color: var(--muted);
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 12px;
+            font-size: 0.95rem;
+        }
+        footer a {
+            color: var(--ink);
+            text-decoration: none;
+        }
+        footer a:hover {
+            text-decoration: underline;
+        }
+        @media (max-width: 700px) {
+            .button {
+                width: 100%;
+            }
+            .mockup img {
+                border-radius: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <aside id="androidInstallGate" class="android-install-gate" aria-label="Install Valid on Android" hidden>
+        <div class="android-install-shell">
+            <img src="assets/AppIconV2.png" alt="">
+            <p class="android-install-eyebrow">Valid for Android</p>
+            <h1>Install Valid to continue</h1>
+            <p>Put Valid on your home screen so it opens like an app and can keep you updated.</p>
+            <a class="android-install-action" href="app/?install=1&amp;signup=1">Install Valid</a>
+            <span class="android-install-note">Chrome will ask you to add Valid to your phone. No Play Store download needed.</span>
+        </div>
+    </aside>
+    <main>
+        <img class="hero-logo" src="assets/valid_logo.png" alt="Valid logo">
+        <section class="hero" aria-labelledby="hero-title">
+            <h1 class="hero-title" id="hero-title">See who likes you &#x1F92B;</h1>
+            <p class="hero-copy">
+                Answer polls and see what your classmates think about you &#x1F440;
+            </p>
+            <div class="cta-row">
+                <a id="primaryCta" class="button" href="app/?signup=1">Sign up for Valid</a>
+            </div>
+        </section>
+
+        <section class="mockup" aria-label="Valid app preview">
+            <img src="assets/phone_mockup.png" alt="Valid app phone mockup">
+        </section>
+
+    </main>
+
+    <footer>
+        <span>&copy; <script>document.write(new Date().getFullYear());</script> Valid. All rights reserved.</span>
+        <span>
+            <a href="about.html">About</a>
+            &nbsp; &nbsp;
+            <a href="contact.html">Contact</a>
+            &nbsp; &nbsp;
+            <a href="privacy-policy.html">Privacy</a>
+            &nbsp; &nbsp;
+            <a href="terms.html">Terms</a>
+        </span>
+    </footer>
+    <script>
+        (function () {
+            var userAgent = navigator.userAgent || "";
+            var isAppleMobile = /iPad|iPhone|iPod/i.test(userAgent)
+                || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+            var isAndroid = (navigator.userAgentData && navigator.userAgentData.platform === "Android")
+                || /Android/i.test(userAgent);
+            var cta = document.getElementById("primaryCta");
+            if (isAppleMobile) {
+                cta.textContent = "Download on the App Store";
+                cta.href = "https://apps.apple.com/us/app/valid-compliment-classmates/id6755367062";
+                cta.dataset.deviceCta = "ios";
+                return;
+            }
+            if (!isAndroid) return;
+            var isStandalone = window.matchMedia("(display-mode: standalone)").matches;
+            var alreadyInstalled = false;
+            try {
+                alreadyInstalled = localStorage.getItem("valid:pwa-installed") === "1";
+            } catch (_) {
+                // Storage can be unavailable in hardened browsing modes.
+            }
+            if (isStandalone || alreadyInstalled) return;
+            var installGate = document.getElementById("androidInstallGate");
+            installGate.hidden = false;
+            document.body.classList.add("android-install-required");
+            cta.dataset.deviceCta = "android";
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+    <base href="/app/">
+    <meta name="theme-color" content="#ccf7f4">
+    <meta name="referrer" content="no-referrer">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'self'; connect-src 'self' https://api.six7.lol; font-src 'self'; form-action 'self'; frame-src https://challenges.cloudflare.com; img-src 'self' data: https:; manifest-src 'self'; object-src 'none'; script-src 'self' https://challenges.cloudflare.com; style-src 'self'; worker-src 'self'">
+    <meta name="description" content="Answer polls, see your feed, and share your anonymous Valid link from any device.">
+    <title>Valid on the web</title>
+    <link rel="icon" type="image/png" href="../assets/AppIconV2.png">
+    <link rel="apple-touch-icon" href="../assets/AppIconV2.png">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header class="topbar">
+        <a class="wordmark" href="../index.html" aria-label="Valid home">
+            <img src="../assets/valid_logo.png" alt="Valid">
+        </a>
+        <button id="logoutButton" class="text-button hidden" type="button">Log out</button>
+    </header>
+    <div id="networkBanner" class="network-banner hidden" role="status">You're offline. We'll reconnect automatically.</div>
+
+    <main>
+        <section id="authView" class="auth-view">
+            <div class="passkey-card">
+                <img src="../assets/AppIconV2.png" alt="" class="app-icon">
+                <button id="passkeyButton" class="primary-button" type="button">Sign in</button>
+                <button id="createAccountButton" class="secondary-button" type="button">Create an account</button>
+                <p id="authStatus" class="status-message" role="status"></p>
+            </div>
+        </section>
+
+        <section id="appView" class="app-view hidden" aria-live="polite">
+            <section id="feedPanel" class="panel active-panel">
+                <div id="feedGateLock" class="hidden"></div>
+                <div id="feedUnlockedContent">
+                    <section id="feedNotificationPrompt" class="feed-notification-prompt hidden" aria-label="Enable vote notifications">
+                        <span class="feed-notification-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M10 21h4"/></svg></span>
+                        <span><strong>Don’t miss your next vote</strong><small>Enable notifications to know when someone picks you.</small></span>
+                        <button id="feedNotificationButton" class="secondary-button" type="button">Enable notifications</button>
+                    </section>
+                    <div class="segmented-control" role="group" aria-label="Feed type">
+                        <button class="segment active" data-feed="personal" type="button">Inbox</button>
+                        <button class="segment" data-feed="school" type="button">School</button>
+                    </div>
+                    <div class="feed-tools">
+                        <label class="feed-search"><span aria-hidden="true">⌕</span><input id="feedSearch" type="search" placeholder="Search names, questions..." autocomplete="off"></label>
+                        <button id="myVotesFilter" class="filter-button hidden" type="button" aria-pressed="false">○ My Votes</button>
+                    </div>
+                    <div id="feedClassmateResults" class="feed-classmate-results hidden"></div>
+                    <section id="anonymousQuestionDialog" class="detail-screen hidden" role="dialog" aria-modal="true" aria-label="Anonymous question">
+                            <form id="anonymousAnswerForm">
+                                <div class="detail-screen-header">
+                                    <button class="detail-back-button" aria-label="Close" type="button" data-close-anonymous>‹ <span>Inbox</span></button>
+                                    <strong>Message</strong>
+                                    <div class="detail-overflow">
+                                        <button class="detail-overflow-button" type="button" data-toggle-anonymous-menu aria-label="More message actions" aria-expanded="false">•••</button>
+                                        <div class="detail-overflow-menu hidden" role="menu" aria-label="Message actions">
+                                            <button id="anonymousReportButton" type="button" role="menuitem" data-anonymous-action="report">Report</button>
+                                            <button type="button" role="menuitem" data-anonymous-action="delete">Delete</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="detail-screen-content anonymous-detail-content">
+                                    <div id="anonymousQuestionBody" class="anonymous-question-detail"></div>
+                                    <div id="anonymousAnswerRestriction" class="ask-safety-restriction hidden" role="status"></div>
+                                    <label id="anonymousAnswerLabel" for="anonymousAnswerText">Your reply</label>
+                                    <textarea id="anonymousAnswerText" minlength="1" maxlength="500" required placeholder="Write a reply..."></textarea>
+                                    <p id="anonymousAnswerStatus" class="status-message" role="status"></p>
+                                    <button id="anonymousAnswerButton" class="primary-button" type="submit">Send reply</button>
+                                    <div id="anonymousAnswerShare" class="anonymous-share-section hidden">
+                                        <strong>Share your reply</strong>
+                                        <div class="share-platform-row detail-share-row">
+                                            <button class="share-platform-button snapchat expanded" type="button" data-share-anonymous="snapchat" aria-label="Share answer to Snapchat"></button>
+                                            <button class="share-platform-button instagram" type="button" data-share-anonymous="instagram" aria-label="Share answer to Instagram"></button>
+                                            <button class="share-platform-button tiktok" type="button" data-share-anonymous="tiktok" aria-label="Share answer to TikTok"></button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </form>
+                    </section>
+                    <div id="feedStatus" class="inline-status" role="status"></div>
+                    <div id="feedList" class="card-list"></div>
+                    <section id="feedDetailDialog" class="detail-screen hidden" role="dialog" aria-modal="true" aria-label="Poll details">
+                        <div class="detail-screen-header">
+                            <button class="detail-back-button" aria-label="Close" type="button" data-close-feed-detail>‹ <span>Feed</span></button>
+                            <strong>Poll</strong>
+                            <div class="detail-overflow">
+                                <button class="detail-overflow-button" type="button" data-toggle-feed-menu aria-label="More poll actions" aria-expanded="false">•••</button>
+                                <div class="detail-overflow-menu hidden" role="menu" aria-label="Poll actions">
+                                    <button type="button" role="menuitem" data-report-feed-item>Report question</button>
+                                    <button id="blockFeedSubmitterButton" class="hidden" type="button" role="menuitem" data-block-feed-submitter>Block submitter</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="feed-detail-content">
+                            <div id="feedDetailBody"></div>
+                            <p id="feedDetailStatus" class="status-message" role="status"></p>
+                            <div class="feed-detail-actions">
+                                <div class="feed-detail-share">
+                                    <div class="share-platform-row detail-share-row">
+                                        <button class="share-platform-button snapchat expanded" type="button" data-share-feed-platform="snapchat" aria-label="Share poll to Snapchat"></button>
+                                        <button class="share-platform-button instagram" type="button" data-share-feed-platform="instagram" aria-label="Share poll to Instagram"></button>
+                                        <button class="share-platform-button tiktok" type="button" data-share-feed-platform="tiktok" aria-label="Share poll to TikTok"></button>
+                                    </div>
+                                </div>
+                                <button id="revealFeedSenderButton" class="secondary-button reveal-sender-button hidden" type="button"><span>Reveal sender</span></button>
+                            </div>
+                        </div>
+                    </section>
+                    <button id="loadMoreFeed" class="secondary-button hidden" type="button">Load more</button>
+                </div>
+            </section>
+
+            <section id="playPanel" class="panel hidden">
+                <div class="play-status-bar" aria-label="Play status">
+                    <span class="play-streak-chip">🔥 <strong id="playStreakCount">0</strong><small id="playStreakMultiplier" class="hidden"></small></span>
+                    <span id="playProgress" class="play-progress"></span>
+                    <span class="play-aura-chip"><img src="../assets/app/aura.png" alt=""><strong id="auraCount">0</strong></span>
+                </div>
+                <div id="playStatus" class="inline-status" role="status"></div>
+                <div id="playCard"></div>
+            </section>
+
+            <section id="profilePanel" class="panel hidden">
+                <div id="profileStatus" class="inline-status" role="status"></div>
+                <div id="profileCard"></div>
+                <input id="profilePictureInput" class="hidden" type="file" accept="image/jpeg,image/png,image/webp">
+                <section id="askLinkSection" class="profile-polls-section messages-section" aria-label="Anonymous ask link">
+                    <div id="askStatus" class="inline-status" role="status"></div>
+                    <div id="askLinkCard"></div>
+                </section>
+                <section id="schoolCard" class="profile-polls-section school-card-section" aria-label="School"></section>
+                <section class="profile-polls-section poll-highlights" aria-labelledby="weeklyPollsHeading">
+                    <h3 id="weeklyPollsHeading">Top Polls This Week</h3>
+                    <div id="weeklyPolls" class="profile-poll-list"></div>
+                </section>
+                <section class="profile-polls-section poll-highlights" aria-labelledby="allTimePollsHeading">
+                    <h3 id="allTimePollsHeading">Top Polls All Time</h3>
+                    <div id="allTimePolls" class="profile-poll-list"></div>
+                </section>
+                <section id="purchasesSection" class="profile-polls-section purchases-section" aria-labelledby="purchasesHeading">
+                    <div class="settings-section-heading"><h3 id="purchasesHeading">Purchases</h3></div>
+                    <div id="godModeCard"></div>
+                    <div id="auraPurchases" class="purchase-list"></div>
+                </section>
+                <section class="profile-actions" aria-label="Profile actions">
+                    <button id="addPasskeyButton" class="settings-row" type="button"><span class="settings-icon" aria-hidden="true">🔑</span><span><strong>Add a backup passkey</strong><small id="passkeyStatusText">Add another secure way to sign in</small></span><span aria-hidden="true">›</span></button>
+                    <button id="notificationButton" class="settings-row hidden" type="button" role="switch" aria-checked="false"><span class="settings-icon notification-settings-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M10 21h4"/></svg></span><span><strong>Notifications</strong><small id="notificationStatusText">Get updates from Valid</small></span><span class="settings-switch" aria-hidden="true"><span></span></span></button>
+                    <button id="feedbackButton" class="settings-row" type="button"><span class="settings-icon feedback-settings-icon" aria-hidden="true">✎</span><span><strong>Leave feedback</strong><small>Tell us what would make Valid better</small></span><span aria-hidden="true">›</span></button>
+                </section>
+                <button id="installAppButton" class="settings-row hidden" type="button"><span class="settings-icon" aria-hidden="true">⇩</span><span><strong>Install Valid</strong><small>Add the app to your home screen</small></span><span aria-hidden="true">›</span></button>
+            </section>
+        </section>
+    </main>
+
+    <nav id="bottomNav" class="bottom-nav hidden" aria-label="App navigation">
+        <button class="nav-item active" data-panel="feed" type="button" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h11a2 2 0 0 1 2 2V19H6a2 2 0 0 1-2-2V5.5Z"/><path d="M17 8h3v9a2 2 0 0 1-2 2h-1M7 9h7M7 12h7M7 15h4"/></svg><span>Feed</span></button>
+        <button class="nav-item" data-panel="play" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path class="nav-icon-fill" d="m10 8 6 4-6 4Z"/></svg><span>Play</span></button>
+        <button class="nav-item" data-panel="profile" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.8v2M12 19.2v2M21.2 12h-2M4.8 12h-2M18.5 5.5l-1.4 1.4M6.9 17.1l-1.4 1.4M18.5 18.5l-1.4-1.4M6.9 6.9 5.5 5.5"/></svg><span>Settings</span></button>
+    </nav>
+
+    <dialog id="androidInstallDialog" class="android-install-dialog" aria-label="Install Valid on Android">
+        <div class="android-install-dialog-content">
+            <img src="../assets/AppIconV2.png" alt="">
+            <p class="eyebrow">Valid for Android</p>
+            <h2>Install Valid</h2>
+            <p id="androidInstallCopy">Add Valid to your phone so it opens from your home screen like an app.</p>
+            <button id="androidInstallButton" class="primary-button" type="button">Install Valid</button>
+            <p id="androidInstallStatus" class="status-message" role="status">Chrome will show one confirmation.</p>
+        </div>
+    </dialog>
+
+    <section id="questionDialog" class="detail-screen question-page hidden" role="dialog" aria-modal="true" aria-label="Submit a school question">
+        <div class="detail-screen-header question-page-header">
+            <button id="closeQuestionPage" class="detail-back-button" aria-label="Back" type="button">‹ <span>Back</span></button>
+            <strong>Submit a school question</strong>
+            <span aria-hidden="true"></span>
+        </div>
+        <form id="questionForm" class="question-submission-form">
+            <div class="question-submission-scroll">
+            <p class="question-kind-note">IMPORTANT: Keep it kind, specific, and something your classmates would love to vote on. ❤️</p>
+            <fieldset class="identity-picker">
+                <legend>Anonymity</legend>
+                <label><input type="radio" name="questionIdentity" value="anonymous"><img src="../assets/app/anonymous.png" alt=""><span><strong>Stay anonymous</strong><small>Your name will not be on the question</small></span></label>
+                <label><input type="radio" name="questionIdentity" value="named" checked><span id="questionIdentityAvatar" class="tiny-avatar">V</span><span><strong id="questionIdentityName">Your name</strong><small>Your name appears next to the question</small></span></label>
+            </fieldset>
+            <label class="question-prompt-field" for="questionText"><span>Question prompt</span><textarea id="questionText" name="question_text" minlength="3" maxlength="280" required aria-label="What should your school vote on?" placeholder="Write the exact question classmates will see."></textarea></label>
+            <section class="question-image-section" aria-labelledby="questionImageLabel">
+                <strong id="questionImageLabel">Image</strong>
+                <label class="question-image-picker" for="questionImage">
+                    <span id="questionImagePreview" class="question-image-preview"><span class="question-image-placeholder"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"></rect><circle cx="9" cy="10" r="2"></circle><path d="m5.5 17 4.5-4 3 2.5 2.5-2 3 3.5"></path></svg><strong>Tap to add an image</strong></span></span>
+                    <span class="question-image-change">Choose image</span>
+                </label>
+                <input id="questionImage" class="question-image-input" type="file" required accept="image/*,.heic,.heif" aria-label="Artwork">
+                <button id="adjustQuestionCrop" class="question-crop-adjust hidden" type="button">Adjust crop</button>
+                <p class="question-refund-copy"><span aria-hidden="true">✓</span> If moderators deny the submission, your aura is refunded.</p>
+            </section>
+            <label class="question-permission-card">
+                <input id="questionPermission" type="checkbox" required>
+                <span class="question-permission-check" aria-hidden="true">✓</span>
+                <span><strong>I have permission</strong><small>I confirm that I have permission from anyone featured in this question or image to post this content.</small></span>
+            </label>
+            <div class="question-cost-row">
+                <span><small>Cost to submit</small><strong class="question-aura-value"><img src="../assets/app/aura.png" alt=""><span id="questionAuraCost">200</span><span>aura</span></strong></span>
+                <span><small>Your aura</small><strong class="question-aura-value"><img src="../assets/app/aura.png" alt=""><span id="questionCurrentAura">0</span></strong></span>
+            </div>
+            </div>
+            <div class="question-submit-dock">
+                <p id="questionStatus" class="status-message" role="status"></p>
+                <button id="questionSubmitButton" class="primary-button" type="submit">Submit for review</button>
+            </div>
+        </form>
+    </section>
+
+    <dialog id="questionCropDialog" class="question-crop-dialog" aria-labelledby="questionCropTitle">
+        <div class="question-crop-content">
+            <header class="question-crop-header">
+                <button id="cancelQuestionCrop" class="question-crop-control" type="button" aria-label="Cancel crop">×</button>
+                <h2 id="questionCropTitle">Adjust crop</h2>
+                <button id="applyQuestionCrop" class="question-crop-use" type="button">Use photo</button>
+            </header>
+            <div class="question-crop-workspace">
+                <div id="questionCropViewport" class="question-crop-viewport" aria-label="Drag photo to reposition crop">
+                    <img id="questionCropImage" alt="Photo being cropped" draggable="false">
+                    <span class="question-crop-grid" aria-hidden="true"></span>
+                </div>
+                <p>Drag to reposition. Use the slider to zoom.</p>
+                <label class="question-crop-zoom" for="questionCropZoom"><span>Zoom</span><input id="questionCropZoom" type="range" min="1" max="4" step="0.01" value="1"></label>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog id="questionConfirmDialog" class="modal">
+        <div class="aura-confirm-content">
+            <div class="question-confirm-icon"><img src="../assets/app/pencil-clipboard.png" alt=""></div>
+            <h2>Submit this poll?</h2>
+            <p>Spend aura to send your question for review.</p>
+            <div class="question-confirm-breakdown">
+                <span><small>Cost</small><strong class="question-aura-value"><img src="../assets/app/aura.png" alt=""><span id="questionConfirmCost">200</span> aura</strong></span>
+                <span><small>Aura left</small><strong class="question-aura-value"><img src="../assets/app/aura.png" alt=""><span id="questionConfirmRemaining">0</span> aura</strong></span>
+            </div>
+            <p class="question-confirm-refund"><span aria-hidden="true">✓</span>If moderators deny the submission, we will refund your aura.</p>
+            <div class="dialog-button-row question-confirm-actions">
+                <button class="secondary-button" type="button" data-close-dialog>Cancel</button>
+                <button id="confirmQuestionSubmit" class="primary-button" type="button">Spend 200 aura</button>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog id="signupDialog" class="signup-flow" aria-label="Create your Valid account">
+        <form id="signupForm">
+            <div class="signup-flow-controls">
+                <button class="signup-back-button hidden" aria-label="Back" type="button" data-signup-back>‹</button>
+            </div>
+            <fieldset class="signup-step signup-age-step" data-signup-step="0">
+                <img class="signup-age-logo" src="../assets/valid_logo.png" alt="Valid">
+                <p class="form-hint signup-terms">By entering your age, you agree to our <a href="../terms.html" target="_blank">Terms</a> and <a href="../privacy-policy.html" target="_blank">Privacy Policy</a>.</p>
+                <div class="signup-age-picker">
+                    <strong id="signupAgeValue" aria-live="polite">13</strong>
+                    <div id="signupAgeWheel" class="signup-age-wheel" role="listbox" aria-label="Age" tabindex="0">
+                        <button type="button" role="option" aria-selected="true" data-signup-age="13">13</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="14">14</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="15">15</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="16">16</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="17">17</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="18">18</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="19">19</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="20">20</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="21">21</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="22">22</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="23">23</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="24">24</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="25">25</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="26">26</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="27">27</button>
+                    </div>
+                    <input id="signupAge" type="hidden" value="13">
+                </div>
+                <button class="primary-button" type="button" data-signup-next>Continue</button>
+                <button class="text-button signup-login-button" type="button" data-signup-login>Already have an account? <span>Log in</span></button>
+            </fieldset>
+            <fieldset class="signup-step signup-school-step hidden" data-signup-step="1">
+                <h2>What school do you go to?</h2>
+                <div class="signup-zip-row">
+                    <label>ZIP code<input id="signupZip" inputmode="numeric" autocomplete="postal-code" maxlength="5" pattern="[0-9]{5}" placeholder="90210" required></label>
+                </div>
+                <div id="signupSchoolPicker" class="signup-school-picker hidden">
+                    <label>Search nearby schools<input id="signupSchoolSearch" type="search" autocomplete="off" placeholder="Search these 50 schools..."></label>
+                    <div id="signupSchoolResults" class="signup-school-results" role="listbox" aria-label="Nearby schools"></div>
+                    <button id="signupShowSchoolFallback" class="text-button signup-school-fallback-link" type="button">Can't find your school?</button>
+                </div>
+                <div id="signupSchoolFallback" class="signup-school-fallback hidden">
+                    <p class="form-hint">Add the school only if it isn't in the nearby list.</p>
+                    <label>School name<input id="signupSchool" autocomplete="organization" maxlength="200" placeholder="Westview High School" disabled></label>
+                    <div class="two-field-row"><label>City<input id="signupCity" autocomplete="address-level2" maxlength="100" disabled></label><label>State<input id="signupState" autocomplete="address-level1" maxlength="2" pattern="[A-Za-z]{2}" placeholder="CA" disabled></label></div>
+                    <button id="signupBackToNearby" class="text-button" type="button">Back to nearby schools</button>
+                </div>
+                <button id="signupSchoolContinue" class="primary-button" type="button" data-signup-next disabled>Continue</button>
+            </fieldset>
+            <fieldset class="signup-step signup-grade-step hidden" data-signup-step="2">
+                <h2>What grade are you in?</h2>
+                <p class="form-hint">This will affect who shows up in your polls!</p>
+                <div id="signupGradeOptions" class="signup-grade-options" role="radiogroup" aria-label="Grade"></div>
+                <input id="signupGrade" type="hidden" value="">
+                <button id="signupGradeContinue" class="primary-button" type="button" data-signup-next disabled>Continue</button>
+            </fieldset>
+            <fieldset class="signup-step signup-entry-step signup-phone-step hidden" data-signup-step="3">
+                <h2>What's your phone number?</h2>
+                <p class="form-hint signup-phone-hint">This will identify your account and find polls where classmates picked you.</p>
+                <label>Phone number<input id="signupPhone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" placeholder="(555) 123-4567" required></label>
+                <button class="primary-button" type="button" data-signup-next>Continue</button>
+            </fieldset>
+            <fieldset class="signup-step signup-entry-step signup-code-step hidden" data-signup-step="4">
+                <h2>Enter your code</h2>
+                <p id="signupCodeHint" class="form-hint">We sent a verification code to your phone.</p>
+                <div id="signupTurnstile" class="signup-turnstile" aria-label="Security verification"></div>
+                <label>Verification code<input id="signupPhoneCode" type="text" inputmode="numeric" autocomplete="one-time-code" minlength="4" maxlength="10" pattern="[0-9]{4,10}" placeholder="123456" required></label>
+                <button class="primary-button" type="button" data-signup-next>Continue</button>
+                <button class="text-button signup-resend-code" type="button" data-signup-resend-code>Send another code</button>
+            </fieldset>
+            <fieldset class="signup-step signup-entry-step signup-name-step hidden" data-signup-step="5">
+                <h2>What's your first name?</h2>
+                <label>First name<input id="signupFirstName" autocomplete="given-name" maxlength="50" placeholder="First name" required></label>
+                <button class="primary-button" type="button" data-signup-next>Continue</button>
+            </fieldset>
+            <fieldset class="signup-step signup-entry-step signup-name-step hidden" data-signup-step="6">
+                <h2>What's your last name?</h2>
+                <label>Last name<input id="signupLastName" autocomplete="family-name" maxlength="50" placeholder="Last name" required></label>
+                <button class="primary-button" type="button" data-signup-next>Continue</button>
+            </fieldset>
+            <fieldset class="signup-step signup-entry-step signup-username-step hidden" data-signup-step="7">
+                <h2>Pick a username</h2>
+                <label>Username<input id="signupUsername" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="3" maxlength="30" pattern="[a-z0-9_]+" placeholder="your_username" required></label>
+                <button class="primary-button" type="button" data-signup-next>Continue</button>
+            </fieldset>
+            <fieldset class="signup-step signup-gender-step hidden" data-signup-step="8">
+                <h2>What's your gender?</h2>
+                <div class="signup-gender-options" role="radiogroup" aria-label="Gender">
+                    <button class="signup-gender-option boy" type="button" role="radio" aria-checked="false" data-signup-gender="male"><span aria-hidden="true">👦</span><strong>Boy</strong></button>
+                    <button class="signup-gender-option girl" type="button" role="radio" aria-checked="false" data-signup-gender="female"><span aria-hidden="true">👧</span><strong>Girl</strong></button>
+                    <button class="signup-gender-option non-binary" type="button" role="radio" aria-checked="false" data-signup-gender="non-binary"><span aria-hidden="true">🧑</span><strong>Non-binary</strong></button>
+                </div>
+                <input id="signupGender" type="hidden" value="">
+                <button id="signupGenderContinue" class="primary-button" type="button" data-signup-next disabled>Continue</button>
+            </fieldset>
+            <fieldset class="signup-step signup-photo-step hidden" data-signup-step="9">
+                <h2>Add a profile photo</h2>
+                <p class="signup-photo-benefit">📷 Users with profile pictures<br>receive 2-3x more votes</p>
+                <div class="signup-photo-picker">
+                    <label class="signup-photo-circle" for="signupPicture">
+                        <span id="signupPhotoPreview" class="signup-photo-preview" aria-hidden="true"><span class="signup-photo-placeholder"><span class="signup-photo-person-icon"></span><small>Tap to add photo</small></span></span>
+                    </label>
+                    <input id="signupPicture" class="signup-photo-input" type="file" accept="image/jpeg,image/png,image/webp" aria-label="Profile photo">
+                    <label class="signup-library-button" for="signupPicture">Choose from Library</label>
+                </div>
+                <button class="primary-button" type="submit">Continue</button>
+                <button class="text-button signup-photo-skip" type="submit">Skip for now</button>
+            </fieldset>
+            <p id="signupStatus" class="status-message" role="status"></p>
+        </form>
+    </dialog>
+
+    <dialog id="profileDialog" class="modal profile-information-flow" aria-labelledby="profileEditorTitle">
+        <form id="profileForm" method="dialog">
+            <div class="profile-editor-heading">
+                <button id="profileEditorBack" class="profile-editor-back hidden" type="button" aria-label="Back">‹</button>
+                <h2 id="profileEditorTitle">Correct profile information</h2>
+                <button id="profileEditorCancel" class="profile-editor-cancel" type="button">Cancel</button>
+            </div>
+
+            <section id="profileEditorHub" class="profile-editor-panel" data-profile-panel="hub">
+                <div id="profileEditHint" class="profile-editor-availability"></div>
+                <div class="profile-editor-rows">
+                    <button class="profile-editor-row" type="button" data-profile-editor="username">
+                        <span class="profile-editor-row-icon" aria-hidden="true"><img src="../assets/app/profile-at.svg" alt=""></span>
+                        <span><small>Username <em id="profileUsernameBadge"></em></small><strong id="profileUsernameValue"></strong></span>
+                        <span aria-hidden="true">›</span>
+                    </button>
+                    <button class="profile-editor-row" type="button" data-profile-editor="name">
+                        <span class="profile-editor-row-icon" aria-hidden="true"><img src="../assets/app/profile-person-card.svg" alt=""></span>
+                        <span><small>Name <em id="profileNameBadge"></em></small><strong id="profileNameValue"></strong></span>
+                        <span aria-hidden="true">›</span>
+                    </button>
+                    <button class="profile-editor-row" type="button" data-profile-editor="school">
+                        <span class="profile-editor-row-icon" aria-hidden="true"><img src="../assets/app/profile-school.svg" alt=""></span>
+                        <span><small>School <em id="profileSchoolBadge"></em></small><strong id="profileSchoolValue"></strong></span>
+                        <span aria-hidden="true">›</span>
+                    </button>
+                    <button class="profile-editor-row" type="button" data-profile-editor="grade">
+                        <span class="profile-editor-row-icon" aria-hidden="true"><img src="../assets/app/profile-graduation-cap.svg" alt=""></span>
+                        <span><small>Grade <em id="profileGradeBadge"></em></small><strong id="profileGradeValue"></strong></span>
+                        <span aria-hidden="true">›</span>
+                    </button>
+                </div>
+                <p id="profileEditStatus" class="status-message" role="status"></p>
+                <button id="profileReviewButton" class="primary-button" type="button" disabled>Review changes</button>
+            </section>
+
+            <section class="profile-editor-panel hidden" data-profile-panel="name">
+                <div class="two-field-row">
+                    <label>First name<input id="profileFirstName" autocomplete="given-name" maxlength="50" required></label>
+                    <label>Last name<input id="profileLastName" autocomplete="family-name" maxlength="50" required></label>
+                </div>
+                <p id="profileNameStatus" class="profile-editor-validation" role="status"></p>
+                <button class="primary-button" type="button" data-profile-done="name">Done</button>
+            </section>
+
+            <section class="profile-editor-panel hidden" data-profile-panel="username">
+                <label>Username
+                    <span class="profile-username-field"><span aria-hidden="true">@</span><input id="profileUsername" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="3" maxlength="30" pattern="[a-z0-9_]+" required></span>
+                </label>
+                <p id="profileUsernameStatus" class="profile-editor-validation" role="status"></p>
+                <button id="profileUsernameDone" class="primary-button" type="button" data-profile-done="username">Done</button>
+            </section>
+
+            <section class="profile-editor-panel profile-school-panel hidden" data-profile-panel="school">
+                <div class="profile-school-zip-row">
+                    <label>ZIP code<input id="profileSchoolZip" inputmode="numeric" autocomplete="postal-code" maxlength="5" pattern="[0-9]{5}" placeholder="90210"></label>
+                    <button id="profileSchoolLookup" class="secondary-button" type="button">Show schools</button>
+                </div>
+                <div id="profileSchoolPicker" class="profile-school-picker hidden">
+                    <label>Search nearby schools<input id="profileSchoolSearch" type="search" autocomplete="off" placeholder="Search these 50 schools..."></label>
+                    <div id="profileSchoolResults" class="signup-school-results" role="listbox" aria-label="Nearby schools"></div>
+                    <button id="profileShowSchoolFallback" class="text-button" type="button">Can't find your school?</button>
+                </div>
+                <div id="profileSchoolFallback" class="profile-school-fallback hidden">
+                    <p class="form-hint">Add the school only if it isn't in the nearby list.</p>
+                    <label>School name<input id="profileSchoolName" autocomplete="organization" maxlength="200" placeholder="Westview High School"></label>
+                    <div class="two-field-row"><label>City<input id="profileSchoolCity" autocomplete="address-level2" maxlength="100"></label><label>State<input id="profileSchoolState" autocomplete="address-level1" maxlength="2" pattern="[A-Za-z]{2}" placeholder="CA"></label></div>
+                    <button id="profileRequestSchool" class="primary-button" type="button">Use this school</button>
+                    <button id="profileBackToNearby" class="text-button" type="button">Back to nearby schools</button>
+                </div>
+                <p id="profileSchoolStatus" class="status-message" role="status"></p>
+            </section>
+
+            <section class="profile-editor-panel hidden" data-profile-panel="grade">
+                <p id="profileGradeHint" class="form-hint"></p>
+                <div id="profileGradeOptions" class="signup-grade-options" role="radiogroup" aria-label="Grade"></div>
+                <input id="profileGrade" type="hidden" value="">
+                <p id="profileGradeStatus" class="profile-editor-validation" role="status"></p>
+                <button class="primary-button" type="button" data-profile-done="grade">Done</button>
+            </section>
+
+            <section class="profile-editor-panel hidden" data-profile-panel="review">
+                <p class="profile-review-heading">Check every change before saving</p>
+                <div id="profileReviewRows" class="profile-review-rows"></div>
+                <p id="profileSchoolChangeNote" class="profile-school-change-note hidden">Your classmates, polls, and school feed will switch to the new school immediately. Past activity stays in its original school.</p>
+                <div class="profile-review-cooldown">
+                    <span class="profile-change-calendar" aria-hidden="true">▣</span>
+                    <strong>Your next profile change will be available in 14 days</strong>
+                    <span>Saving starts the 14-day cooldown for username, name, school, and grade.</span>
+                </div>
+                <p id="profileInformationConfirmStatus" class="status-message" role="status"></p>
+                <button id="confirmProfileInformationSave" class="primary-button" type="submit">Confirm and save</button>
+            </section>
+        </form>
+    </dialog>
+
+    <dialog id="bioDialog" class="modal">
+        <form id="bioForm" method="dialog">
+            <div class="modal-heading">
+                <h2>Edit bio</h2>
+                <button class="icon-button" value="cancel" aria-label="Close" type="button" data-close-dialog>×</button>
+            </div>
+            <label>Bio<textarea id="profileBio" maxlength="160" placeholder="Say something about yourself..."></textarea></label>
+            <p class="form-hint">Tap your bio in Settings whenever you want to change it.</p>
+            <p id="bioEditStatus" class="status-message" role="status"></p>
+            <button class="primary-button" type="submit">Save bio</button>
+        </form>
+    </dialog>
+
+    <dialog id="feedbackDialog" class="modal" aria-labelledby="feedbackDialogTitle">
+        <form id="feedbackForm">
+            <div class="modal-heading"><div><h2 id="feedbackDialogTitle">Feedback</h2><p class="feedback-intro">Tell us what feels confusing, broken, or missing. We read every note.</p></div><button class="icon-button" type="button" data-close-dialog aria-label="Close">×</button></div>
+            <label>What should we improve?<textarea id="feedbackText" minlength="3" maxlength="2000" required placeholder="Tell us what feels confusing, broken, or missing..."></textarea></label>
+            <label class="feedback-photo-field">Add a screenshot <span>(optional)</span><span class="feedback-photo-picker"><strong>Choose screenshot</strong><small id="feedbackPhotoName">No screenshot selected</small><input id="feedbackPhoto" type="file" accept="image/jpeg,image/png,image/webp"></span></label>
+            <p id="feedbackStatus" class="status-message" role="status"></p>
+            <button id="feedbackSubmitButton" class="primary-button" type="submit">Send feedback</button>
+        </form>
+    </dialog>
+
+    <dialog id="pollSummaryDialog" class="modal">
+        <div class="poll-summary-content">
+            <div class="modal-heading">
+                <h2>Poll</h2>
+                <button class="icon-button" aria-label="Close" type="button" data-close-dialog>×</button>
+            </div>
+            <div id="pollSummaryBody"></div>
+        </div>
+    </dialog>
+
+    <dialog id="godModePitchDialog" class="god-mode-pitch-dialog" aria-label="God Mode">
+        <div id="godModePitchBody" class="god-mode-pitch-content"></div>
+    </dialog>
+
+    <dialog id="earnGodModeDialog" class="modal earn-god-mode-dialog" aria-labelledby="earnGodModeTitle">
+        <div class="earn-god-mode-content">
+            <div class="earn-god-mode-heading">
+                <span aria-hidden="true"></span>
+                <div class="earn-god-mode-title-row">
+                    <img src="../assets/app/letter_aligned.png" alt="">
+                    <h2 id="earnGodModeTitle">Invite Friends</h2>
+                </div>
+                <button class="icon-button" aria-label="Close" type="button" data-close-dialog>×</button>
+            </div>
+            <p class="earn-god-mode-subtitle">Valid is more fun when there are more classmates</p>
+            <div id="earnGodModeProgress"></div>
+            <div class="earn-god-mode-actions">
+                <button class="earn-invite-card snapchat" type="button" data-share-god-mode-invite="snapchat">
+                    <img src="../assets/app/snapchat-logo.png" alt="">
+                    <span><strong class="earn-share-label">Share on Snapchat</strong><small>Invite your friends to join</small></span>
+                </button>
+                <button class="earn-message-button" type="button" data-share-god-mode-invite="imessage">
+                    <svg class="earn-imessage-icon" viewBox="0 0 48 48" aria-hidden="true">
+                        <circle cx="24" cy="24" r="22" fill="currentColor"/>
+                        <path d="M13.25 23.1c0-6.15 4.72-10.35 10.75-10.35s10.75 4.2 10.75 10.35S30.03 33.45 24 33.45c-1.45 0-2.82-.24-4.06-.7-1.95 1.18-4.32 1.8-7.1 1.84 1.23-1.25 2.14-2.68 2.73-4.27-1.47-1.82-2.32-4.3-2.32-7.22Z" fill="#00e02d"/>
+                    </svg>
+                    <span><strong>Invite via iMessage</strong><small>Send your personal invite link</small></span>
+                    <span aria-hidden="true">›</span>
+                </button>
+            </div>
+            <p id="earnGodModeStatus" class="status-message" role="status"></p>
+        </div>
+    </dialog>
+
+    <dialog id="askStoryConfirmDialog" class="modal ask-story-dialog" aria-labelledby="askStoryConfirmTitle">
+        <div class="ask-story-confirm-content">
+            <div id="askStoryConfirmPlatformIcon" class="ask-story-platform-icon" aria-hidden="true"></div>
+            <h2 id="askStoryConfirmTitle">Share your story?</h2>
+            <p id="askStoryConfirmMessage">Valid will create a story image and copy your ask link.</p>
+            <p id="askStoryConfirmStatus" class="status-message" role="status"></p>
+            <div class="dialog-button-row ask-story-confirm-actions">
+                <button class="secondary-button" type="button" data-close-dialog>Cancel</button>
+                <button id="confirmAskStoryShare" class="primary-button" type="button">Continue</button>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog id="askStoryInstructionsDialog" class="modal ask-story-dialog" aria-labelledby="askStoryInstructionsTitle">
+        <div class="ask-story-instructions-content">
+            <div class="ask-story-instructions-heading">
+                <img src="../assets/valid_logo.png" alt="Valid">
+                <div id="askStoryInstructionsPlatformIcon" class="ask-story-platform-icon" aria-hidden="true"></div>
+            </div>
+            <h2 id="askStoryInstructionsTitle">Add your link to the story</h2>
+            <p id="askStoryInstructionsStatus" class="ask-story-ready-status" role="status"></p>
+            <ol id="askStoryInstructionsSteps" class="ask-story-steps"></ol>
+            <button id="openAskStoryApp" class="primary-button" type="button">Open app</button>
+            <button id="saveAskStoryImage" class="secondary-button" type="button">Save image again</button>
+            <button id="copyAskStoryLink" class="text-button hidden" type="button">Copy link</button>
+            <button class="text-button" type="button" data-close-dialog>Done</button>
+        </div>
+    </dialog>
+
+    <dialog id="auraSpendDialog" class="modal">
+        <div class="aura-spend-content">
+            <div class="aura-spend-icon"><img id="auraSpendIcon" src="../assets/app/rocket.png" alt=""></div>
+            <h2 id="auraSpendTitle">Spend aura?</h2>
+            <p id="auraSpendMessage"></p>
+            <div class="aura-spend-breakdown">
+                <span>Cost <strong><img src="../assets/app/aura.png" alt=""><span id="auraSpendCost"></span></strong></span>
+                <span>Aura left <strong><img src="../assets/app/aura.png" alt=""><span id="auraSpendRemaining"></span></strong></span>
+            </div>
+            <p id="auraSpendStatus" class="status-message" role="status"></p>
+            <div class="dialog-button-row aura-spend-actions"><button class="secondary-button" type="button" data-close-dialog>Cancel</button><button id="confirmAuraSpend" class="primary-button" type="button">Spend aura</button></div>
+        </div>
+    </dialog>
+
+    <dialog id="targetedBoostDialog" class="modal">
+        <div class="nomination-modal">
+            <div class="modal-heading">
+                <h2>Choose your crush</h2>
+                <button class="icon-button" aria-label="Close" type="button" data-close-dialog>×</button>
+            </div>
+            <p class="form-hint">You will show up more often in this classmate's polls. They will not be told you chose them.</p>
+            <label class="feed-search nomination-search"><span aria-hidden="true">⌕</span><input id="targetedBoostSearch" type="search" placeholder="Search classmates..." autocomplete="off"></label>
+            <div id="targetedBoostList" class="nomination-list"></div>
+            <p id="targetedBoostStatus" class="status-message" role="status"></p>
+        </div>
+    </dialog>
+
+    <dialog id="classmatesDialog" class="contact-onboarding">
+        <div class="contact-onboarding-content">
+            <button class="contact-onboarding-back" aria-label="Close" type="button" data-close-dialog>‹</button>
+            <div class="contact-onboarding-main">
+                <img src="../assets/valid_logo.png" alt="Valid">
+                <h2>Pick a Couple Friends</h2>
+            </div>
+            <div class="contact-onboarding-actions">
+                <p class="contact-onboarding-explanation">Choose a couple friends to find people you know. You can add more anytime.</p>
+                <p id="classmatesStatus" class="status-message" role="status"></p>
+                <button id="chooseContactsButton" class="primary-button" type="button">Choose Friends</button>
+                <div id="contactInviteExtras" class="contact-invite-extras hidden">
+                    <div id="inviteRewardCard" class="invite-reward-card hidden" aria-live="polite"></div>
+                    <button id="shareClassmateInviteButton" class="secondary-button" type="button">Share my invite instead</button>
+                </div>
+                <p class="contact-onboarding-privacy">Valid really cares about your privacy. We will never spam your contacts.</p>
+                <button id="skipContactsButton" class="text-button" type="button" data-close-dialog>Skip for now</button>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog id="classmateDirectoryDialog" class="modal" aria-labelledby="classmateDirectoryTitle">
+        <div class="classmate-directory-content">
+            <div class="modal-heading">
+                <h2 id="classmateDirectoryTitle">Classmates</h2>
+                <button class="icon-button" aria-label="Close" type="button" data-close-dialog>×</button>
+            </div>
+            <label class="feed-search classmate-directory-search"><span aria-hidden="true">⌕</span><input id="classmateDirectorySearch" type="search" placeholder="Search classmates..." autocomplete="off"></label>
+            <p id="classmateDirectoryStatus" class="status-message" role="status"></p>
+            <div id="classmateDirectoryList" class="classmate-directory-list"></div>
+        </div>
+    </dialog>
+
+    <section id="classmateProfileDialog" class="detail-screen hidden" role="dialog" aria-modal="true" aria-label="Profile">
+        <div class="detail-screen-header classmate-profile-header">
+            <button id="backToClassmatesButton" class="detail-back-button" aria-label="Back to classmates" type="button">‹ <span>Back</span></button>
+            <strong>Profile</strong>
+            <span aria-hidden="true"></span>
+        </div>
+        <div class="classmate-profile-page-content">
+            <div id="classmateProfileStatus" class="status-message" role="status"></div>
+            <div id="classmateProfileCard"></div>
+            <section class="profile-polls-section classmate-profile-polls" aria-labelledby="classmateWeeklyPollsHeading">
+                <h3 id="classmateWeeklyPollsHeading">Top Polls This Week</h3>
+                <div id="classmateWeeklyPolls" class="profile-poll-list"></div>
+            </section>
+            <section class="profile-polls-section classmate-profile-polls" aria-labelledby="classmateAllTimePollsHeading">
+                <h3 id="classmateAllTimePollsHeading">Top Polls All Time</h3>
+                <div id="classmateAllTimePolls" class="profile-poll-list"></div>
+            </section>
+        </div>
+    </section>
+
+    <dialog id="anonymousAnswerDetailDialog" class="modal">
+        <div class="anonymous-answer-detail-content">
+            <div class="modal-heading">
+                <div><span class="eyebrow">ANONYMOUS REPLY</span><h2>Reply</h2></div>
+                <button class="icon-button" aria-label="Close" type="button" data-close-dialog>×</button>
+            </div>
+            <div id="anonymousAnswerRecipient" class="anonymous-answer-recipient"></div>
+            <article class="anonymous-response-card">
+                <small>Your message</small>
+                <p id="anonymousOriginalMessage"></p>
+            </article>
+            <article class="anonymous-response-card reply">
+                <small>Their reply</small>
+                <p id="anonymousReceivedReply"></p>
+            </article>
+            <p id="anonymousAnswerReceivedAt" class="fine-print"></p>
+        </div>
+    </dialog>
+
+    <dialog id="anonymousReportDialog" class="modal" aria-labelledby="anonymousReportTitle">
+        <form id="anonymousReportForm">
+            <div class="modal-heading">
+                <div><span class="eyebrow">MESSAGE SAFETY</span><h2 id="anonymousReportTitle">Report and remove</h2></div>
+                <button class="icon-button" aria-label="Close" type="button" data-close-dialog>×</button>
+            </div>
+            <p id="anonymousReportExplanation" class="fine-print"></p>
+            <fieldset class="ask-report-reasons">
+                <legend>Why are you reporting this?</legend>
+                <label><input type="radio" name="anonymousReportReason" value="harassment" required><span>Harassment or bullying</span></label>
+                <label><input type="radio" name="anonymousReportReason" value="sexual_content"><span>Sexual content</span></label>
+                <label><input type="radio" name="anonymousReportReason" value="threat"><span>Threat or violence</span></label>
+                <label><input type="radio" name="anonymousReportReason" value="personal_information"><span>Personal information</span></label>
+                <label><input type="radio" name="anonymousReportReason" value="spam"><span>Spam</span></label>
+                <label><input type="radio" name="anonymousReportReason" value="other"><span>Something else</span></label>
+            </fieldset>
+            <p id="anonymousReportStatus" class="status-message" role="status"></p>
+            <button id="confirmAnonymousReport" class="primary-button" type="submit">Report and remove</button>
+        </form>
+    </dialog>
+
+    <dialog id="askSafetyNoticeDialog" class="modal ask-safety-notice-dialog" aria-labelledby="askSafetyNoticeTitle">
+        <div class="ask-safety-notice-content">
+            <span class="ask-safety-shield" aria-hidden="true">🛡️</span>
+            <p class="eyebrow">ASK ME SAFETY</p>
+            <h2 id="askSafetyNoticeTitle">Important safety notice</h2>
+            <p id="askSafetyNoticeMessage"></p>
+            <p id="askSafetyNoticeDate" class="fine-print"></p>
+            <button id="acknowledgeAskSafetyNotice" class="primary-button" type="button">I understand</button>
+            <p id="askSafetyNoticeStatus" class="status-message" role="status"></p>
+        </div>
+    </dialog>
+
+    <dialog id="askSafetyHistoryDialog" class="modal" aria-labelledby="askSafetyHistoryTitle">
+        <div class="ask-safety-history-content">
+            <div class="modal-heading">
+                <div><span class="eyebrow">ASK ME</span><h2 id="askSafetyHistoryTitle">Safety notices</h2></div>
+                <button class="icon-button" aria-label="Close" type="button" data-close-dialog>×</button>
+            </div>
+            <div id="askSafetyHistoryList" class="ask-safety-history-list"></div>
+            <p id="askSafetyHistoryStatus" class="status-message" role="status"></p>
+        </div>
+    </dialog>
+
+    <dialog id="deleteAccountDialog" class="modal">
+        <form id="deleteAccountForm" method="dialog">
+            <div class="modal-heading">
+                <div><span class="eyebrow">ACCOUNT SAFETY</span><h2>Delete your account?</h2></div>
+                <button class="icon-button" aria-label="Close" type="button" data-close-dialog>×</button>
+            </div>
+            <div class="deletion-warning">
+                <strong>You have 5 days to change your mind.</strong>
+                <p>Your account, profile, votes, questions, and passkeys will then be permanently deleted. Logging in does not cancel the request automatically.</p>
+            </div>
+            <label for="deleteConfirmation">Type <strong>DELETE</strong> to confirm</label>
+            <input id="deleteConfirmation" autocomplete="off" pattern="DELETE" required>
+            <p id="deleteAccountStatus" class="status-message" role="status"></p>
+            <button class="primary-button danger-button" type="submit">Schedule account deletion</button>
+            <button class="secondary-button" type="button" data-close-dialog>Keep my account</button>
+        </form>
+    </dialog>
+
+    <dialog id="pendingDeletionDialog" class="modal pending-deletion-modal">
+        <div class="pending-deletion-content">
+            <span class="eyebrow">WELCOME BACK</span>
+            <h2>Your account is scheduled for deletion</h2>
+            <p id="pendingDeletionCopy"></p>
+            <p id="pendingDeletionStatus" class="status-message" role="status"></p>
+            <button id="cancelDeletionButton" class="primary-button" type="button">Keep my account</button>
+            <button id="pendingDeletionLogout" class="secondary-button" type="button">Log out</button>
+        </div>
+    </dialog>
+
+    <dialog id="nominationDialog" class="modal">
+        <div class="nomination-modal">
+            <div class="modal-heading">
+                <div><span class="eyebrow">WRITE-IN PICK</span><h2>Nominate someone</h2></div>
+                <button class="icon-button" aria-label="Close" type="button" data-close-dialog>×</button>
+            </div>
+            <p class="form-hint">Don't think the four choices fit? Pick another classmate.</p>
+            <label class="feed-search nomination-search"><span aria-hidden="true">⌕</span><input id="nominationSearch" type="search" placeholder="Search classmates..." autocomplete="off"></label>
+            <div id="nominationList" class="nomination-list"></div>
+            <p id="nominationStatus" class="status-message" role="status"></p>
+        </div>
+    </dialog>
+
+    <div id="streakCelebration" class="streak-celebration hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="streakCelebrationTitle">
+        <div class="streak-celebration-card">
+            <span id="streakCelebrationFire" class="streak-celebration-fire" aria-hidden="true">🔥</span>
+            <strong id="streakCelebrationTitle">1 Day Streak!</strong>
+            <span id="streakCelebrationMultiplier" class="hidden"></span>
+        </div>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="local-config.js"></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>

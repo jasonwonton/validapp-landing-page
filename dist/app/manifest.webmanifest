@@ -1,0 +1,31 @@
+{
+  "name": "Valid",
+  "short_name": "Valid",
+  "description": "Answer polls, see your feed, and use your anonymous link.",
+  "start_url": "./",
+  "id": "/app/",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ccf7f4",
+  "theme_color": "#ccf7f4",
+  "icons": [
+    {
+      "src": "../assets/pwa/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "../assets/pwa/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "../assets/pwa/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
