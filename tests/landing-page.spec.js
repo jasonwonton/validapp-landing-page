@@ -33,6 +33,15 @@ test("landing page uses the app palette and prominent wordmark", async ({ page }
     await expect(page.locator("#primaryCta")).toHaveCSS("background-color", "rgb(255, 177, 94)");
 });
 
+test("community guidelines publish the safety and moderation standards", async ({ page }) => {
+    await emulateDesktopVisitor(page);
+    await page.goto("/community-guidelines.html");
+    await expect(page.getByRole("heading", { name: "Community Guidelines", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Bullying And Harassment" })).toBeVisible();
+    await expect(page.getByText("Our team reviews user reports within 15 minutes.")).toBeVisible();
+    await expect(page.getByRole("link", { name: "support@validapp.lol" })).toHaveAttribute("href", "mailto:support@validapp.lol");
+});
+
 test("iOS visitors get one App Store CTA", async ({ page }) => {
     await page.addInitScript(() => {
         Object.defineProperty(navigator, "userAgent", {

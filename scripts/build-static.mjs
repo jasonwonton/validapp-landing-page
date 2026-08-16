@@ -8,6 +8,7 @@ const staticDirectories = [".well-known", "app", "assets"];
 const staticFiles = [
     "_headers",
     "about.html",
+    "community-guidelines.html",
     "contact.html",
     "index.html",
     "privacy-policy.html",
