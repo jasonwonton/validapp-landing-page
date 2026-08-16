@@ -38,6 +38,8 @@ test("community guidelines publish the safety and moderation standards", async (
     await page.goto("/community-guidelines.html");
     await expect(page.getByRole("heading", { name: "Community Guidelines", level: 1 })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Bullying And Harassment" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Ask Permission Before Posting" })).toBeVisible();
+    await expect(page.getByText("You must have permission from everyone featured in the content.", { exact: false })).toBeVisible();
     await expect(page.getByText("Our team reviews user reports within 15 minutes.")).toBeVisible();
     await expect(page.getByRole("link", { name: "support@validapp.lol" })).toHaveAttribute("href", "mailto:support@validapp.lol");
 });
