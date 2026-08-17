@@ -54,6 +54,71 @@ test("insufficient-aura purchase buttons are black and disabled", async ({ page 
     }
 });
 
+test("feed timestamps sit directly below the reaction control", async ({ page }) => {
+    await signInToDemo(page);
+    const card = page.locator("[data-feed-detail='9001']");
+    const geometry = await card.evaluate((element) => {
+        const reaction = element.querySelector(".reaction-control").getBoundingClientRect();
+        const time = element.querySelector("time").getBoundingClientRect();
+        return {
+            reactionCenter: reaction.left + reaction.width / 2,
+            reactionBottom: reaction.bottom,
+            timeCenter: time.left + time.width / 2,
+            timeTop: time.top,
+        };
+    });
+    expect(Math.abs(geometry.reactionCenter - geometry.timeCenter)).toBeLessThan(2);
+    expect(geometry.timeTop).toBeGreaterThanOrEqual(geometry.reactionBottom);
+});
+
+test("classmate browsing, targeted boost, and TBH use the same iOS-style rows", async ({ page }) => {
+    await signInToDemo(page);
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+
+    await page.getByRole("button", { name: "Classmates", exact: true }).click();
+    const directory = page.locator("#classmateDirectoryDialog");
+    const directoryRow = directory.locator(".classmate-picker-row").first();
+    await expect(directoryRow).toHaveCSS("background-color", "rgb(255, 255, 255)");
+    await expect(directoryRow).toHaveCSS("border-top-width", "2px");
+    await expect(directoryRow).toHaveCSS("border-radius", "18px");
+    await expect(directoryRow.getByText("this week", { exact: true })).toBeVisible();
+    await directory.getByRole("button", { name: "Close" }).click();
+
+    await page.getByRole("button", { name: /Choose a crush/ }).click();
+    const targeted = page.locator("#targetedBoostDialog .classmate-picker-row").first();
+    const targetedStyles = await targeted.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return [style.display, style.columnGap, style.padding, style.borderRadius, style.backgroundColor];
+    });
+    await page.locator("#targetedBoostDialog [data-close-dialog]").click();
+
+    await page.getByRole("button", { name: /Request a TBH for/ }).click();
+    const tbh = page.locator("#tbhRequestDialog .classmate-picker-row").first();
+    const tbhStyles = await tbh.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return [style.display, style.columnGap, style.padding, style.borderRadius, style.backgroundColor];
+    });
+    expect(tbhStyles).toEqual(targetedStyles);
+});
+
+test("pick a couple friends stays compact and keeps every action reachable", async ({ page }) => {
+    await signInToDemo(page);
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: "Contacts", exact: true }).click();
+    const dialog = page.locator("#classmatesDialog");
+    await expect(dialog.getByRole("heading", { name: "Pick a Couple Friends" })).toBeVisible();
+    await expect(dialog.locator(".contact-onboarding-main img")).toHaveCSS("max-width", "none");
+    await expect(dialog.locator("#skipContactsButton")).toBeInViewport();
+    const layout = await dialog.evaluate((element) => {
+        const main = element.querySelector(".contact-onboarding-main").getBoundingClientRect();
+        const actions = element.querySelector(".contact-onboarding-actions").getBoundingClientRect();
+        const logo = element.querySelector(".contact-onboarding-main img").getBoundingClientRect();
+        return { gap: actions.top - main.bottom, logoWidth: logo.width };
+    });
+    expect(layout.gap).toBeLessThanOrEqual(50);
+    expect(layout.logoWidth).toBeLessThanOrEqual(176);
+});
+
 test("Ask Me link can be paused, resumed, and reset from Settings", async ({ page }) => {
     await signInToDemo(page);
     await page.getByRole("button", { name: "Profile", exact: true }).click();

@@ -884,6 +884,21 @@ function tbhTargetStatus(target) {
     return "Again tomorrow";
 }
 
+function classmatePickerRowMarkup(classmate, { dataAttribute, trailingMarkup = "", disabled = false, extraClass = "" } = {}) {
+    const grade = formatGrade(classmate.grade || "");
+    const username = String(classmate.username || "").trim();
+    const subtitle = [grade, username ? `@${username}` : ""].filter(Boolean).join(" · ");
+    return `<button class="classmate-picker-row ${extraClass}" type="button" ${dataAttribute} ${disabled ? "disabled" : ""}>
+        ${avatarMarkup(classmate, "row-avatar classmate-picker-avatar")}
+        <span class="classmate-picker-copy"><strong>${escapeHTML(displayName(classmate))}</strong>${subtitle ? `<small>${escapeHTML(subtitle)}</small>` : ""}</span>
+        <span class="classmate-picker-trailing">${trailingMarkup}</span>
+    </button>`;
+}
+
+function classmateSearchMarkup(inputId) {
+    return `<label class="feed-search classmate-picker-search"><span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg></span><input id="${inputId}" type="search" placeholder="Search classmates..." autocomplete="off"></label>`;
+}
+
 function renderTbhTargetList() {
     const query = $("#tbhTargetSearch")?.value.trim().toLowerCase() || "";
     const targets = state.tbhTargets
@@ -891,9 +906,11 @@ function renderTbhTargetList() {
         .sort((left, right) => Number(right.state === "eligible") - Number(left.state === "eligible") || left.first_name.localeCompare(right.first_name));
     const list = $("#tbhTargetList");
     if (!list) return;
-    list.innerHTML = targets.length ? targets.map((target) => `<button class="tbh-target-row" type="button" data-tbh-target="${escapeHTML(target.user_id)}" ${target.state === "eligible" ? "" : "disabled"}>
-        ${avatarMarkup(target, "row-avatar")}<span><strong>${escapeHTML(`${target.first_name} ${target.last_name}`)}</strong><small>@${escapeHTML(target.username || "valid")}</small></span><span>${target.state === "eligible" ? "›" : escapeHTML(tbhTargetStatus(target))}</span>
-    </button>`).join("") : '<div class="empty-card">No classmates match your search.</div>';
+    list.innerHTML = targets.length ? targets.map((target) => classmatePickerRowMarkup(target, {
+        dataAttribute: `data-tbh-target="${escapeHTML(target.user_id)}"`,
+        disabled: target.state !== "eligible",
+        trailingMarkup: target.state === "eligible" ? '<span class="classmate-picker-chevron" aria-hidden="true">›</span>' : `<small>${escapeHTML(tbhTargetStatus(target))}</small>`,
+    })).join("") : '<div class="empty-card">No classmates match your search.</div>';
 }
 
 function renderTbhRequestFlow() {
@@ -902,7 +919,7 @@ function renderTbhRequestFlow() {
     if (!target) {
         $("#tbhRequestTitle").textContent = "Request a TBH";
         $("#tbhRequestDialog [data-close-tbh-request] span").textContent = "Close";
-        body.innerHTML = `<p>Who do you want an honest take from?</p><label class="feed-search"><span aria-hidden="true">⌕</span><input id="tbhTargetSearch" type="search" placeholder="Search classmates" autocomplete="off"></label><div id="tbhTargetList" class="tbh-target-list"></div>`;
+        body.innerHTML = `<p>Who do you want an honest take from?</p>${classmateSearchMarkup("tbhTargetSearch")}<div id="tbhTargetList" class="tbh-target-list classmate-picker-list"></div>`;
         renderTbhTargetList();
         return;
     }
@@ -1160,8 +1177,11 @@ function renderTargetedBoostList() {
     const cost = auraCost("targeted");
     $("#targetedBoostList").innerHTML = classmates.length ? classmates.map((classmate) => {
         const active = activeBoost("targeted", classmate.user_id);
-        const grade = formatGrade(classmate.grade || "");
-        return `<button class="nomination-row" type="button" data-targeted-boost="${escapeHTML(classmate.user_id)}" ${active ? "disabled" : ""}>${avatarMarkup(classmate, "choice-avatar")}<span class="nomination-row-copy"><strong>${escapeHTML(displayName(classmate))}</strong>${grade ? `<small>${escapeHTML(grade)}</small>` : ""}</span><span class="nomination-cost ${active ? "active" : ""}">${active ? "Active" : `<span>${cost.toLocaleString()}</span><img src="../assets/app/aura.png" alt="aura">`}</span></button>`;
+        return classmatePickerRowMarkup(classmate, {
+            dataAttribute: `data-targeted-boost="${escapeHTML(classmate.user_id)}"`,
+            disabled: active,
+            trailingMarkup: `<span class="nomination-cost ${active ? "active" : ""}">${active ? "Active" : `<span>${cost.toLocaleString()}</span><img src="../assets/app/aura.png" alt="aura">`}</span>`,
+        });
     }).join("") : `<div class="profile-poll-empty">No matching classmates.</div>`;
 }
 
@@ -1185,7 +1205,11 @@ function renderClassmateDirectory() {
         return !query || searchable.includes(query);
     });
     $("#classmateDirectoryList").innerHTML = classmates.length
-        ? classmates.map((classmate) => `<button type="button" data-directory-classmate="${escapeHTML(classmate.user_id)}">${avatarMarkup(classmate, "row-avatar")}<span><strong>${escapeHTML(displayName(classmate))}</strong><small>${escapeHTML(formatGrade(classmate.grade || "Classmate"))}</small></span><span class="classmate-row-meta"><strong><span aria-hidden="true">♥</span> ${Number(classmate.weekly_vote_count || 0).toLocaleString()}</strong>${classmate.ask_link_active ? `<span class="classmate-ask-indicator" aria-label="Ask Me is on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5h14v10H10l-4.5 3v-3H5Z"/><path d="M10 9a2 2 0 1 1 2.8 1.8c-.8.3-.8.8-.8 1.2M12 14h.01"/></svg></span>` : ""}</span></button>`).join("")
+        ? classmates.map((classmate) => classmatePickerRowMarkup(classmate, {
+            dataAttribute: `data-directory-classmate="${escapeHTML(classmate.user_id)}"`,
+            extraClass: "classmate-directory-row",
+            trailingMarkup: `<span class="classmate-row-meta"><strong><span aria-hidden="true">♥</span> ${Number(classmate.weekly_vote_count || 0).toLocaleString()}</strong><small>this week</small></span>${classmate.ask_link_active ? `<span class="classmate-ask-indicator" aria-label="Ask Me is on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5h14v10H10l-4.5 3v-3H5Z"/><path d="M10 9a2 2 0 1 1 2.8 1.8c-.8.3-.8.8-.8 1.2M12 14h.01"/></svg></span>` : ""}`,
+        })).join("")
         : `<div class="profile-poll-empty">${query ? "No matching classmates." : "No classmates are visible yet."}</div>`;
 }
 
