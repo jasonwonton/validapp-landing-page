@@ -50,6 +50,10 @@
                         <label class="feed-search"><span aria-hidden="true">⌕</span><input id="feedSearch" type="search" placeholder="Search names, questions..." autocomplete="off"></label>
                         <button id="myVotesFilter" class="filter-button hidden" type="button" aria-pressed="false">○ My Votes</button>
                     </div>
+                    <div id="schoolFeedControls" class="school-feed-controls hidden" aria-label="School feed filters">
+                        <div role="group" aria-label="School feed order"><button class="active" type="button" data-school-sort="recent">Recent</button><button type="button" data-school-sort="hottest">Hottest</button></div>
+                        <div role="group" aria-label="School feed content"><button class="active" type="button" data-school-content="all">All</button><button type="button" data-school-content="tbhs">TBHs</button><button type="button" data-school-content="my_votes">My Votes</button></div>
+                    </div>
                     <div id="feedClassmateResults" class="feed-classmate-results hidden"></div>
                     <section id="anonymousQuestionDialog" class="detail-screen hidden" role="dialog" aria-modal="true" aria-label="Anonymous question">
                             <form id="anonymousAnswerForm">
@@ -568,6 +572,38 @@
             <p id="auraSpendStatus" class="status-message" role="status"></p>
             <div class="dialog-button-row aura-spend-actions"><button class="secondary-button" type="button" data-close-dialog>Cancel</button><button id="confirmAuraSpend" class="primary-button" type="button">Spend aura</button></div>
         </div>
+    </dialog>
+
+    <section id="tbhRequestDialog" class="detail-screen hidden" role="dialog" aria-modal="true" aria-label="Request a TBH">
+        <div class="detail-screen-header"><button class="detail-back-button" type="button" data-close-tbh-request>‹ <span>Settings</span></button><strong id="tbhRequestTitle">Request a TBH</strong><span></span></div>
+        <div id="tbhRequestBody" class="detail-screen-content tbh-flow-content"></div>
+    </section>
+
+    <section id="tbhComposerDialog" class="detail-screen hidden" role="dialog" aria-modal="true" aria-label="Write a TBH">
+        <div class="detail-screen-header"><button class="detail-back-button" type="button" data-close-tbh-composer>‹ <span>Inbox</span></button><strong>Write a TBH</strong><span></span></div>
+        <form id="tbhComposerForm" class="detail-screen-content tbh-flow-content">
+            <div id="tbhComposerHeading"></div>
+            <div><small>Need a start?</small><div id="tbhStarterOptions" class="tbh-starter-options"></div></div>
+            <label>Be honest, specific, and kind…<textarea id="tbhResponseText" minlength="10" maxlength="300" required></textarea></label>
+            <div class="tbh-character-row"><span id="tbhComposerHelper">At least 10 characters</span><span id="tbhCharacterCount">0/300</span></div>
+            <p id="tbhComposerStatus" class="status-message" role="status"></p>
+            <button id="sendTbhResponse" class="primary-button" type="submit" disabled>Send TBH</button>
+        </form>
+    </section>
+
+    <dialog id="tbhDetailDialog" class="modal tbh-detail-dialog" aria-labelledby="tbhDetailTitle">
+        <div class="modal-heading"><div><span class="eyebrow">TBH</span><h2 id="tbhDetailTitle">TBH</h2></div><button class="icon-button" type="button" data-close-dialog aria-label="Close">×</button></div>
+        <div id="tbhDetailBody"></div>
+    </dialog>
+
+    <dialog id="reactionPickerDialog" class="modal reaction-picker-dialog" aria-label="Choose a reaction">
+        <div class="modal-heading"><h2>React</h2><button class="icon-button" type="button" data-close-dialog aria-label="Close">×</button></div>
+        <div id="reactionPickerOptions" class="reaction-picker-options"></div>
+    </dialog>
+
+    <dialog id="reactorListDialog" class="modal reactor-list-dialog" aria-labelledby="reactorListTitle">
+        <div class="modal-heading"><h2 id="reactorListTitle">Reactions</h2><button class="icon-button" type="button" data-close-dialog aria-label="Close">×</button></div>
+        <div id="reactorList" class="reactor-list"></div>
     </dialog>
 
     <dialog id="targetedBoostDialog" class="modal">

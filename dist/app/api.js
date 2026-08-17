@@ -245,11 +245,12 @@ export class ValidAPI {
         return this.request(`/users/${userId}/feed?${params}`);
     }
 
-    getSchoolFeed(userId, cursor = null, search = "") {
-        const params = new URLSearchParams({ limit: "20" });
+    getSchoolFeed(userId, cursor = null, search = "", sort = "recent", limit = 20) {
+        const params = new URLSearchParams({ limit: String(limit) });
         if (cursor?.timestamp) params.set("before_ts", cursor.timestamp);
         if (cursor?.id) params.set("before_id", String(cursor.id));
         if (search.trim()) params.set("search", search.trim());
+        if (sort !== "recent") params.set("sort", sort);
         return this.request(`/users/${userId}/feed/school?${params}`);
     }
 
@@ -262,6 +263,46 @@ export class ValidAPI {
 
     toggleUpvote(userId, questionAnswerId) {
         return this.request(`/users/${userId}/feed/upvote/${questionAnswerId}`, { method: "POST" });
+    }
+
+    setFeedReaction(userId, questionAnswerId, reactionType) {
+        return this.request(`/users/${userId}/feed/reactions/${questionAnswerId}`, {
+            method: "PUT",
+            body: JSON.stringify({ reaction_type: reactionType }),
+        });
+    }
+
+    removeFeedReaction(userId, questionAnswerId) {
+        return this.request(`/users/${userId}/feed/reactions/${questionAnswerId}`, { method: "DELETE" });
+    }
+
+    getFeedReactors(userId, questionAnswerId, reactionType = "") {
+        const params = new URLSearchParams();
+        if (reactionType) params.set("reaction_type", reactionType);
+        const query = params.size ? `?${params}` : "";
+        return this.request(`/users/${userId}/feed/reactions/${questionAnswerId}${query}`);
+    }
+
+    getFeedItem(userId, questionAnswerId) {
+        return this.request(`/users/${userId}/feed/item/${questionAnswerId}`);
+    }
+
+    setFeedActivityReaction(userId, activityId, reactionType) {
+        return this.request(`/users/${userId}/feed/activities/${activityId}/reaction`, {
+            method: "PUT",
+            body: JSON.stringify({ reaction_type: reactionType }),
+        });
+    }
+
+    removeFeedActivityReaction(userId, activityId) {
+        return this.request(`/users/${userId}/feed/activities/${activityId}/reaction`, { method: "DELETE" });
+    }
+
+    getFeedActivityReactors(userId, activityId, reactionType = "") {
+        const params = new URLSearchParams();
+        if (reactionType) params.set("reaction_type", reactionType);
+        const query = params.size ? `?${params}` : "";
+        return this.request(`/users/${userId}/feed/activities/${activityId}/reactions${query}`);
     }
 
     revealSender(userId, questionAnswerId) {
@@ -456,6 +497,64 @@ export class ValidAPI {
     getAnonymousInbox(userId, limit = 30, offset = 0) {
         const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
         return this.request(`/users/${userId}/anonymous-inbox?${params}`);
+    }
+
+    getTbhRequestTargets(userId, search = "") {
+        const params = new URLSearchParams();
+        if (search.trim()) params.set("search", search.trim());
+        const query = params.size ? `?${params}` : "";
+        return this.request(`/users/${userId}/tbh-request-targets${query}`);
+    }
+
+    createTbhRequest(userId, recipientUserId, promptKey, idempotencyKey) {
+        return this.request(`/users/${userId}/tbh-requests`, {
+            method: "POST",
+            body: JSON.stringify({
+                recipient_user_id: recipientUserId,
+                prompt_key: promptKey,
+                idempotency_key: idempotencyKey,
+            }),
+        });
+    }
+
+    getPendingTbhRequests(userId) {
+        return this.request(`/users/${userId}/tbh-requests/pending`);
+    }
+
+    openTbhRequest(userId, requestId) {
+        return this.request(`/users/${userId}/tbh-requests/${requestId}/open`, { method: "POST" });
+    }
+
+    dismissTbhRequest(userId, requestId) {
+        return this.request(`/users/${userId}/tbh-requests/${requestId}/dismiss`, { method: "POST" });
+    }
+
+    suppressTbhRequester(userId, requesterUserId) {
+        return this.request(`/users/${userId}/tbh-suppressions/${requesterUserId}`, { method: "POST" });
+    }
+
+    respondToTbhRequest(userId, requestId, body, idempotencyKey) {
+        return this.request(`/users/${userId}/tbh-requests/${requestId}/respond`, {
+            method: "POST",
+            body: JSON.stringify({ body, idempotency_key: idempotencyKey }),
+        });
+    }
+
+    getTbhInbox(userId) {
+        return this.request(`/users/${userId}/tbh-inbox`);
+    }
+
+    getSentTbhs(userId) {
+        return this.request(`/users/${userId}/tbh-sent`);
+    }
+
+    getTbhSchoolFeed(userId, sort = "recent") {
+        const params = new URLSearchParams({ sort });
+        return this.request(`/users/${userId}/tbh-school-feed?${params}`);
+    }
+
+    getTbhResponse(userId, responseId) {
+        return this.request(`/users/${userId}/tbh-responses/${responseId}`);
     }
 
     openAnonymousQuestion(userId, questionId) {

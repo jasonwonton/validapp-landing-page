@@ -6,11 +6,33 @@ const demoMode = localDemoAllowed();
 const api = demoMode ? new DemoAPI() : new ValidAPI();
 const DEFAULT_FULL_REVEAL_AURA_COST = 1000;
 const TURNSTILE_ACTION = "phone_otp_request";
+const FEED_REACTIONS = [
+    { type: "thumbs_down", emoji: "👎", label: "Thumbs Down" },
+    { type: "surprised", emoji: "😮", label: "Surprised" },
+    { type: "fire", emoji: "🔥", label: "Fire" },
+    { type: "eyes", emoji: "👀", label: "Interesting" },
+    { type: "funny", emoji: "😂", label: "Funny" },
+    { type: "love", emoji: "❤️", label: "Love" },
+];
+const REACTION_BY_TYPE = new Map([
+    ...FEED_REACTIONS,
+    { type: "legacy_agree", emoji: "👍", label: "Agree" },
+].map((reaction) => [reaction.type, reaction]));
+const TBH_PROMPTS = [
+    { key: "anything", title: "Anything — just be honest", starters: ["TBH, you’re…", "Something I appreciate about you is…", "You might not know this, but…"] },
+    { key: "first_impression", title: "Your first impression of me", starters: ["My first impression was…", "At first I thought you were…", "You came across as…"] },
+    { key: "best_quality", title: "My best quality", starters: ["Your best quality is…", "People can count on you to…", "You make people feel…"] },
+    { key: "your_vibe", title: "What vibe do I give off?", starters: ["Your vibe is…", "You remind me of…", "The energy you bring is…"] },
+    { key: "good_memory", title: "A good memory you have of me", starters: ["A memory I still think about is…", "I’ll always remember when…", "One good moment was…"] },
+    { key: "something_to_hear", title: "Something I need to hear", starters: ["Something you should know is…", "Don’t forget that…", "I hope you realize…"] },
+];
 const state = {
     profile: null,
     activePanel: "feed",
     feedType: "personal",
     myVotesOnly: false,
+    schoolFeedSort: "recent",
+    schoolFeedContent: "all",
     feedSearch: "",
     feedClassmateResults: [],
     feedSearchTimer: null,
@@ -21,6 +43,21 @@ const state = {
     feedCursor: null,
     feedGeneration: 0,
     selectedFeedItemId: null,
+    tbhPendingRequests: [],
+    tbhInboxItems: [],
+    tbhSentItems: [],
+    schoolTbhItems: [],
+    tbhGeneration: 0,
+    selectedTbhRequestId: null,
+    selectedTbhItem: null,
+    tbhTargets: [],
+    selectedTbhTargetId: null,
+    selectedTbhPrompt: "anything",
+    tbhRequestIdempotencyKey: null,
+    tbhResponseIdempotencyKey: null,
+    selectedTbhStarter: null,
+    reactorTarget: null,
+    reactionMutationGeneration: new Map(),
     selectedTopPoll: null,
     questions: [],
     classmates: [],
@@ -263,11 +300,13 @@ async function showSignedIn() {
             api.getClassmatesStatus(api.user.id).catch(() => null),
             api.getConfig().catch(() => ({
                 nomination_aura_cost: 100,
+                tbh_request_aura_cost: 100,
                 question_submission_aura_cost: 200,
                 max_custom_question_length: 280,
                 max_skips_per_set: 3,
                 play_lock_time_seconds: 60,
                 full_reveal_aura_cost: DEFAULT_FULL_REVEAL_AURA_COST,
+                enable_tbh_requests: false,
             })),
             api.getAnonymousAskAccess(api.user.id).catch(() => null),
             api.getAnonymousAskSafetyNotices(api.user.id).catch(() => []),
@@ -284,11 +323,53 @@ async function showSignedIn() {
         renderFeedGate();
         refreshWebPushStatus({ sync: true });
         if (!isFeedVoteLocked()) await loadFeed(true);
+        await handleNotificationRoute();
         if (api.user?.deletion_requested_at) showPendingDeletion();
         else showNextAskSafetyNotice();
     } catch (error) {
         if (error.status !== 401) $("#feedStatus").textContent = error.message || "Could not load your profile.";
     }
+}
+
+async function handleNotificationRoute() {
+    const params = new URLSearchParams(location.search);
+    const notification = params.get("notification");
+    if (!notification || isFeedVoteLocked()) return;
+    switchPanel("feed");
+    if (notification === "tbh_request") {
+        await loadTbhContent();
+        const requestId = params.get("tbh_request_id");
+        if (state.tbhPendingRequests.some((item) => String(item.id) === String(requestId))) openTbhComposer(requestId);
+    } else if (notification === "tbh_response") {
+        await loadTbhContent();
+        const responseId = params.get("tbh_response_id");
+        let kind = state.tbhInboxItems.some((item) => String(item.id) === String(responseId))
+            ? "received"
+            : state.tbhSentItems.some((item) => String(item.id) === String(responseId))
+            ? "sent"
+            : state.schoolTbhItems.some((item) => String(item.id) === String(responseId)) ? "school" : null;
+        if (!kind && responseId) {
+            const response = await api.getTbhResponse(api.user.id, responseId).catch(() => null);
+            if (response) {
+                state.tbhInboxItems.unshift(response);
+                kind = "received";
+                renderFeed();
+            }
+        }
+        if (kind) openTbhDetail(`${kind}:${responseId}`);
+    } else if (notification === "feed_item") {
+        const answerId = params.get("question_answer_id");
+        if (!state.feedItems.some((item) => String(item.question_answer_id) === String(answerId))) {
+            const item = await api.getFeedItem(api.user.id, answerId).catch(() => null);
+            if (item) state.feedItems.unshift(item);
+        }
+        if (state.feedItems.some((item) => String(item.question_answer_id) === String(answerId))) openFeedDetail(answerId);
+    }
+    params.delete("notification");
+    params.delete("tbh_request_id");
+    params.delete("tbh_response_id");
+    params.delete("question_answer_id");
+    history.replaceState(null, "", `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`);
 }
 
 function renderProfileHeader() {
@@ -695,6 +776,14 @@ function auraCost(kind) {
     return questionSubmissionCost();
 }
 
+function tbhRequestsEnabled() {
+    return state.config?.enable_tbh_requests === true;
+}
+
+function tbhAuraCost() {
+    return Math.max(0, Number(state.config?.tbh_request_aura_cost ?? 100));
+}
+
 function activeBoost(kind, targetId = null) {
     if (kind === "global") return state.profile?.active_global_boost || null;
     return (state.profile?.active_targeted_boosts || []).find((boost) => !targetId || String(boost.target_user_id) === String(targetId)) || null;
@@ -706,6 +795,7 @@ function renderAuraPurchases() {
     const globalCost = auraCost("global");
     const targetedCost = auraCost("targeted");
     const questionCost = auraCost("question");
+    const tbhCost = tbhAuraCost();
     const globalBoost = activeBoost("global");
     const aura = Math.max(0, Number(state.profile.aura_points || 0));
     const purchaseButton = (kind, cost, label, active = false) => {
@@ -719,7 +809,180 @@ function renderAuraPurchases() {
     };
     container.innerHTML = `<article class="purchase-row"><span><strong>Get boosted</strong><small>Jump to the top of classmates' polls for 5 days or until you get voted 10 times.</small></span>${purchaseButton("global", globalCost, globalBoost ? "Global boost active" : `Get boosted for ${globalCost.toLocaleString()} aura`, Boolean(globalBoost))}</article>
         <article class="purchase-row"><span><strong>See what your crush thinks about you</strong><small>Your crush stays top secret. You appear more often in their polls.</small></span>${purchaseButton("targeted", targetedCost, `Choose a crush for ${targetedCost.toLocaleString()} aura`)}</article>
+        ${tbhRequestsEnabled() ? `<article class="purchase-row"><span><strong>Request a TBH</strong><small>Ask a classmate for their honest take on you.</small></span>${purchaseButton("tbh", tbhCost, `Request a TBH for ${tbhCost.toLocaleString()} aura`)}</article>` : ""}
         <article class="purchase-row"><span><strong>Submit a school question</strong><small>Create a poll for your school and choose whether to show your name.</small></span>${purchaseButton("question", questionCost, `Submit a school question for ${questionCost.toLocaleString()} aura`)}</article>`;
+}
+
+function newIdempotencyKey() {
+    return crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function tbhTargetStatus(target) {
+    if (target.state === "active") return "Requested";
+    if (target.state !== "cooldown" || !target.next_allowed_at) return "Unavailable";
+    const remaining = Date.parse(target.next_allowed_at) - Date.now();
+    if (remaining <= 0) return "Available";
+    if (remaining < 3_600_000) return "Again soon";
+    if (remaining < 86_400_000) return `Again in ${Math.max(1, Math.ceil(remaining / 3_600_000))}h`;
+    return "Again tomorrow";
+}
+
+function renderTbhTargetList() {
+    const query = $("#tbhTargetSearch")?.value.trim().toLowerCase() || "";
+    const targets = state.tbhTargets
+        .filter((target) => !query || `${target.first_name} ${target.last_name}`.toLowerCase().includes(query))
+        .sort((left, right) => Number(right.state === "eligible") - Number(left.state === "eligible") || left.first_name.localeCompare(right.first_name));
+    const list = $("#tbhTargetList");
+    if (!list) return;
+    list.innerHTML = targets.length ? targets.map((target) => `<button class="tbh-target-row" type="button" data-tbh-target="${escapeHTML(target.user_id)}" ${target.state === "eligible" ? "" : "disabled"}>
+        ${avatarMarkup(target, "row-avatar")}<span><strong>${escapeHTML(`${target.first_name} ${target.last_name}`)}</strong><small>@${escapeHTML(target.username || "valid")}</small></span><span>${target.state === "eligible" ? "›" : escapeHTML(tbhTargetStatus(target))}</span>
+    </button>`).join("") : '<div class="empty-card">No classmates match your search.</div>';
+}
+
+function renderTbhRequestFlow() {
+    const body = $("#tbhRequestBody");
+    const target = state.tbhTargets.find((item) => String(item.user_id) === String(state.selectedTbhTargetId));
+    if (!target) {
+        $("#tbhRequestTitle").textContent = "Request a TBH";
+        body.innerHTML = `<p>Who do you want an honest take from?</p><label class="feed-search"><span aria-hidden="true">⌕</span><input id="tbhTargetSearch" type="search" placeholder="Search classmates" autocomplete="off"></label><div id="tbhTargetList" class="tbh-target-list"></div>`;
+        renderTbhTargetList();
+        return;
+    }
+    $("#tbhRequestTitle").textContent = "Choose an angle";
+    body.innerHTML = `<div class="tbh-target-row">${avatarMarkup(target, "row-avatar")}<span><strong>Asking ${escapeHTML(target.first_name)}</strong><small>What do you want their honest take on?</small></span></div>
+        <div class="tbh-prompt-list">${TBH_PROMPTS.map((prompt) => `<button class="tbh-prompt-row ${state.selectedTbhPrompt === prompt.key ? "selected" : ""}" type="button" data-tbh-prompt="${prompt.key}" aria-pressed="${state.selectedTbhPrompt === prompt.key}"><span aria-hidden="true">${state.selectedTbhPrompt === prompt.key ? "●" : "○"}</span><strong>${escapeHTML(prompt.title)}</strong></button>`).join("")}</div>
+        <div class="tbh-consent-card"><strong>Public to your school</strong><p>If they answer, your name and their TBH will appear in School for classmates to see and react to. Their name stays private.</p></div>
+        <button class="primary-button" type="button" data-send-tbh-request>Continue · ${tbhAuraCost().toLocaleString()} aura</button><p id="tbhRequestStatus" class="status-message" role="status"></p>`;
+}
+
+async function openTbhRequestPurchase() {
+    if (!tbhRequestsEnabled()) return;
+    state.selectedTbhTargetId = null;
+    state.selectedTbhPrompt = "anything";
+    state.tbhRequestIdempotencyKey = newIdempotencyKey();
+    $("#tbhRequestTitle").textContent = "Request a TBH";
+    $("#tbhRequestBody").innerHTML = '<div class="empty-card">Loading classmates…</div>';
+    openDetailScreen($("#tbhRequestDialog"));
+    try {
+        const response = await api.getTbhRequestTargets(api.user.id);
+        state.tbhTargets = response.items || [];
+        renderTbhRequestFlow();
+    } catch (error) {
+        $("#tbhRequestBody").innerHTML = `<div class="empty-card"><strong>Couldn't load classmates</strong><p>${escapeHTML(error.message || "Please try again.")}</p></div>`;
+    }
+}
+
+async function submitTbhRequest(button) {
+    const target = state.tbhTargets.find((item) => String(item.user_id) === String(state.selectedTbhTargetId));
+    if (!target) return;
+    const cost = tbhAuraCost();
+    if (!confirm(`Request a TBH from ${target.first_name}? Spend ${cost.toLocaleString()} aura. If they answer, your name and their TBH will be public in School; their name stays private.`)) return;
+    setButtonLoading(button, true, "Sending…");
+    try {
+        const response = await api.createTbhRequest(api.user.id, target.user_id, state.selectedTbhPrompt, state.tbhRequestIdempotencyKey);
+        if (state.profile) state.profile.aura_points = response.total_aura_points;
+        renderProfileHeader();
+        renderProfilePanel();
+        $("#tbhRequestTitle").textContent = "Request sent";
+        $("#tbhRequestBody").innerHTML = `<div class="tbh-success"><span aria-hidden="true">❝</span><h2>Request sent to ${escapeHTML(target.first_name)}</h2><p>If they answer, your name and their TBH will be posted in School for classmates to see and react to. Their name stays private.</p><button class="primary-button" type="button" data-close-tbh-request>Done</button></div>`;
+    } catch (error) {
+        $("#tbhRequestStatus").textContent = error.message || "Couldn't send request.";
+        setButtonLoading(button, false);
+    }
+}
+
+function selectedTbhRequest() {
+    return state.tbhPendingRequests.find((item) => String(item.id) === String(state.selectedTbhRequestId));
+}
+
+function updateTbhComposer() {
+    const request = selectedTbhRequest();
+    if (!request) return;
+    const value = $("#tbhResponseText").value.trim();
+    const starterOnly = value === state.selectedTbhStarter;
+    const valid = value.length >= 10 && value.length <= 300 && !starterOnly;
+    $("#tbhCharacterCount").textContent = `${value.length}/300`;
+    $("#tbhComposerHelper").textContent = starterOnly ? "Add your own words before sending" : value.length < 10 ? "At least 10 characters" : `${request.requester_first_name} sees your name; School sees the TBH anonymously`;
+    $("#sendTbhResponse").disabled = !valid;
+}
+
+function openTbhComposer(requestId) {
+    const request = state.tbhPendingRequests.find((item) => String(item.id) === String(requestId));
+    if (!request) return;
+    state.selectedTbhRequestId = request.id;
+    state.tbhResponseIdempotencyKey = newIdempotencyKey();
+    state.selectedTbhStarter = null;
+    $("#tbhComposerHeading").innerHTML = `<h2>TBH for ${escapeHTML(request.requester_first_name)}</h2><p>${escapeHTML(promptForKey(request.prompt_key).title)}</p>`;
+    $("#tbhStarterOptions").innerHTML = promptForKey(request.prompt_key).starters.map((starter) => `<button type="button" data-tbh-starter="${escapeHTML(starter)}">${escapeHTML(starter)}</button>`).join("");
+    $("#tbhResponseText").value = "";
+    $("#tbhComposerStatus").textContent = "";
+    updateTbhComposer();
+    openDetailScreen($("#tbhComposerDialog"));
+    if (!request.opened_at) {
+        request.opened_at = new Date().toISOString();
+        renderFeed();
+        api.openTbhRequest(api.user.id, request.id).catch(() => { request.opened_at = null; renderFeed(); });
+    }
+}
+
+async function submitTbhResponse(event) {
+    event.preventDefault();
+    const request = selectedTbhRequest();
+    const body = $("#tbhResponseText").value.trim();
+    if (!request || body.length < 10 || body.length > 300 || body === state.selectedTbhStarter) return;
+    const button = $("#sendTbhResponse");
+    setButtonLoading(button, true, "Sending…");
+    try {
+        const response = await api.respondToTbhRequest(api.user.id, request.id, body, state.tbhResponseIdempotencyKey);
+        state.tbhPendingRequests = state.tbhPendingRequests.filter((item) => String(item.id) !== String(request.id));
+        state.tbhSentItems.unshift({ ...response,
+            subject_user_id: request.requester_user_id,
+            subject_first_name: request.requester_first_name,
+            subject_last_name: request.requester_last_name,
+            subject_profile_picture_url: request.requester_profile_picture_url,
+        });
+        closeDetailScreen($("#tbhComposerDialog"));
+        renderFeed();
+        showToast("TBH sent ✓");
+        loadTbhContent();
+    } catch (error) {
+        $("#tbhComposerStatus").textContent = error.message || "Couldn't send TBH.";
+        setButtonLoading(button, false);
+    }
+}
+
+async function dismissTbhRequest(requestId) {
+    const previous = [...state.tbhPendingRequests];
+    state.tbhPendingRequests = state.tbhPendingRequests.filter((item) => String(item.id) !== String(requestId));
+    renderFeed();
+    try { await api.dismissTbhRequest(api.user.id, requestId); }
+    catch (error) { state.tbhPendingRequests = previous; renderFeed(); showToast(error.message || "Couldn't dismiss request."); }
+}
+
+async function suppressTbhRequester(requesterId) {
+    const previous = [...state.tbhPendingRequests];
+    state.tbhPendingRequests = state.tbhPendingRequests.filter((item) => String(item.requester_user_id) !== String(requesterId));
+    renderFeed();
+    try { await api.suppressTbhRequester(api.user.id, requesterId); }
+    catch (error) { state.tbhPendingRequests = previous; renderFeed(); showToast(error.message || "Couldn't update requests."); }
+}
+
+async function openTbhDetail(value) {
+    const [kind, id] = String(value).split(":");
+    let item = (kind === "received" ? state.tbhInboxItems : kind === "sent" ? state.tbhSentItems : state.schoolTbhItems).find((candidate) => String(candidate.id) === String(id));
+    if (!item) return;
+    const name = kind === "received" ? item.author_first_name : item.subject_first_name;
+    $("#tbhDetailTitle").textContent = kind === "received" ? `TBH from ${name}` : kind === "sent" ? `TBH sent to ${name}` : `${name} got a TBH`;
+    $("#tbhDetailBody").innerHTML = `<article class="tbh-detail-card"><p>${escapeHTML(promptForKey(item.prompt_key).title)}</p><blockquote>${escapeHTML(item.body)}</blockquote>${kind === "school" ? `<small>${escapeHTML(tbhAuthorLine(item))}</small>` : kind === "sent" ? `<small>${escapeHTML(`${name} sees your name. School sees your TBH without your name.`)}</small>` : ""}</article>`;
+    $("#tbhDetailDialog").showModal();
+    if (kind === "received" && !item.opened_at) {
+        try {
+            const opened = await api.getTbhResponse(api.user.id, item.id);
+            const index = state.tbhInboxItems.findIndex((candidate) => String(candidate.id) === String(item.id));
+            if (index >= 0) state.tbhInboxItems[index] = { ...state.tbhInboxItems[index], ...opened };
+            renderFeed();
+        } catch (_) { /* Detail remains readable from the inbox payload. */ }
+    }
 }
 
 function openTopPoll(pollKey) {
@@ -884,7 +1147,10 @@ function renderClassmateProfile() {
         <div class="profile-handle">${profile.username ? `@${escapeHTML(profile.username)}` : "Valid classmate"}</div>
         ${profile.bio ? `<p class="profile-bio">${escapeHTML(profile.bio)}</p>` : ""}
         <div class="profile-school-meta"><span>🏫 ${escapeHTML(profile.school_name || state.profile?.school_name || "Your school")}</span>${profile.grade ? `<span>🎓 ${escapeHTML(formatGrade(profile.grade))}</span>` : ""}</div>
-        <div class="profile-stats-grid single"><div class="profile-stat-card"><strong><span class="heart">♥</span>${Number(profile.vote_count || 0).toLocaleString()}</strong><span>Votes Received</span></div></div>
+        <div class="profile-stats-grid ${tbhRequestsEnabled() ? "" : "single"}">
+            <div class="profile-stat-card"><strong><span class="heart">♥</span>${Number(profile.vote_count || 0).toLocaleString()}</strong><span>Votes Received</span></div>
+            ${tbhRequestsEnabled() ? `<div class="profile-stat-card"><strong><span aria-hidden="true">❝</span>${Number(profile.tbh_unique_requester_count || 0).toLocaleString()}</strong><span>TBH Requests</span></div>` : ""}
+        </div>
     </article>`;
     if (state.selectedClassmateTopQuestionsWeekly === null) {
         $("#classmateWeeklyPolls").innerHTML = '<div class="profile-poll-empty">Loading...</div>';
@@ -1571,6 +1837,93 @@ function feedAvatar(item) {
     return avatarMarkup(votedFor);
 }
 
+function promptForKey(key) {
+    return TBH_PROMPTS.find((prompt) => prompt.key === key) || TBH_PROMPTS[0];
+}
+
+function normalizeReactionState(item) {
+    if (!item) return;
+    if (!Number.isFinite(Number(item.reaction_count))) item.reaction_count = Number(item.upvote_count || 0);
+    if (!item.reaction_summary || typeof item.reaction_summary !== "object") item.reaction_summary = {};
+    if (!("current_user_reaction" in item)) item.current_user_reaction = item.user_has_upvoted ? "legacy_agree" : null;
+    if (!("can_react" in item)) item.can_react = true;
+}
+
+function dominantReaction(item) {
+    normalizeReactionState(item);
+    if (item.current_user_reaction) return REACTION_BY_TYPE.get(item.current_user_reaction);
+    return Object.entries(item.reaction_summary)
+        .filter(([type, count]) => REACTION_BY_TYPE.has(type) && Number(count) > 0)
+        .sort(([leftType, leftCount], [rightType, rightCount]) => Number(rightCount) - Number(leftCount) || leftType.localeCompare(rightType))
+        .map(([type]) => REACTION_BY_TYPE.get(type))[0] || null;
+}
+
+function reactionControlMarkup(item, targetType, targetId) {
+    normalizeReactionState(item);
+    const displayed = dominantReaction(item);
+    const selected = REACTION_BY_TYPE.get(item.current_user_reaction);
+    const canReact = item.can_react !== false && Boolean(targetId);
+    const target = `${targetType}:${targetId}`;
+    return `<span class="reaction-control ${selected ? "selected" : ""} ${canReact ? "" : "disabled"}" data-reaction-control="${escapeHTML(target)}">
+        <button class="reaction-picker-button" type="button" data-reaction-picker="${escapeHTML(target)}" aria-label="${escapeHTML(selected ? `Your reaction is ${selected.label}. Change reaction` : "React")}" ${canReact ? "" : "disabled"}>${displayed ? `<span aria-hidden="true">${displayed.emoji}</span>` : `<span aria-hidden="true">☺</span>`}</button>
+        <span class="reaction-divider" aria-hidden="true"></span>
+        <button class="reaction-count-button" type="button" data-reactors="${escapeHTML(target)}" aria-label="View ${Number(item.reaction_count || 0)} reactions">${Number(item.reaction_count || 0)}</button>
+    </span>`;
+}
+
+function tbhAuthorLine(item) {
+    const gender = String(item.author_gender || "").toLowerCase();
+    const emoji = gender === "male" || gender === "boy" ? "👦💙" : gender === "female" || gender === "girl" ? "👧💗" : gender === "non-binary" || gender === "nonbinary" ? "🧑💛" : "";
+    if (!emoji) return "from a classmate";
+    const grade = String(item.author_grade || "").trim();
+    if (!grade) return `from a ${emoji} classmate`;
+    const normalized = formatGrade(grade);
+    const classmatesInGrade = (state.classmates || []).filter((classmate) => formatGrade(classmate.grade || "") === normalized).length;
+    return classmatesInGrade >= 2 ? `from a ${emoji} ${normalized}` : `from a ${emoji} (grade hidden until more classmates join)`;
+}
+
+function pendingTbhRows() {
+    if (state.feedType !== "personal" || !tbhRequestsEnabled() || state.feedSearch.trim()) return [];
+    return state.tbhPendingRequests.map((request) => ({ timestamp: request.created_at, html: `<article class="tbh-row tbh-request-row ${request.opened_at ? "" : "unread"}">
+        <button class="tbh-row-main" type="button" data-tbh-request="${escapeHTML(request.id)}">
+            ${avatarMarkup({ first_name: request.requester_first_name, last_name: request.requester_last_name, profile_picture_url: request.requester_profile_picture_url }, "row-avatar tbh-avatar")}
+            <span class="tbh-row-copy"><span><strong>${escapeHTML(request.requester_first_name)} wants a TBH</strong>${request.opened_at ? "" : `<i aria-label="Unread"></i>`}</span><small>${escapeHTML(promptForKey(request.prompt_key).title)}</small></span>
+        </button>
+        <details class="tbh-row-menu"><summary aria-label="More options for ${escapeHTML(request.requester_first_name)}'s TBH request">•••</summary><span><button type="button" data-tbh-dismiss="${escapeHTML(request.id)}">Dismiss request</button><button type="button" data-tbh-suppress="${escapeHTML(request.requester_user_id)}">Stop requests from ${escapeHTML(request.requester_first_name)}</button></span></details>
+    </article>` }));
+}
+
+function tbhFeedRows(items, kind) {
+    return items.map((item) => {
+        const received = kind === "received";
+        const school = kind === "school";
+        const firstName = received ? item.author_first_name : item.subject_first_name;
+        const lastName = received ? item.author_last_name : item.subject_last_name;
+        const picture = received ? item.author_profile_picture_url : item.subject_profile_picture_url;
+        const title = received
+            ? `<strong>${escapeHTML(`${firstName} ${lastName}`)}</strong> sent your TBH`
+            : school
+            ? `<strong>${escapeHTML(`${firstName} ${lastName}`)}</strong> got a TBH`
+            : `<strong>${escapeHTML(`${firstName} ${lastName}`)}</strong> got your TBH`;
+        const detail = school ? tbhAuthorLine(item) : promptForKey(item.prompt_key).title;
+        return { timestamp: item.created_at, item, html: `<article class="feed-card tbh-row" data-tbh-detail="${escapeHTML(`${kind}:${item.id}`)}" role="button" tabindex="0" aria-label="Open TBH details">
+            ${avatarMarkup({ first_name: firstName, last_name: lastName, profile_picture_url: picture }, "row-avatar tbh-avatar")}
+            <div class="feed-body"><div class="feed-meta"><span>${title}</span><time>${escapeHTML(relativeTime(item.created_at))}</time></div><div class="feed-question">${escapeHTML(item.body)}</div><div class="feed-answer">${escapeHTML(detail)}</div></div>
+            ${reactionControlMarkup(item, "activity", item.activity_id)}
+        </article>` };
+    });
+}
+
+function schoolHotScore(entry) {
+    const item = entry.item;
+    normalizeReactionState(item);
+    const total = Number(item.reaction_count || 0);
+    const negative = Number(item.reaction_summary?.thumbs_down || 0);
+    const positive = Math.max(0, total - negative);
+    const hours = Math.max(0, (Date.now() - (Date.parse(entry.timestamp) || Date.now())) / 3_600_000);
+    return (positive * 2 + total) / Math.pow(hours + 2, 1.15);
+}
+
 function anonymousInboxRows() {
     if (state.feedType !== "personal" || !state.anonymousInbox || state.feedSearch.trim()) return [];
     const questions = state.anonymousInbox.questions || [];
@@ -1594,27 +1947,38 @@ function renderFeed() {
     renderFeedClassmateResults();
     const visible = query ? state.feedItems.filter((item) => [item.question_text, item.voted_for_name, item.contact_name, item.voter_name].some((value) => String(value || "").toLowerCase().includes(query))) : state.feedItems;
     const anonymousRows = anonymousInboxRows();
-    if (!visible.length && !anonymousRows.length) {
-        const text = state.feedSearch ? "No matching votes." : state.myVotesOnly ? "You haven't voted yet. Answer questions in Play to see your votes here." : "No votes here yet. Play a few rounds and check back soon.";
+    const personalTbhRows = state.feedType === "personal" && !query
+        ? [...pendingTbhRows(), ...tbhFeedRows(state.tbhInboxItems, "received"), ...tbhFeedRows(state.tbhSentItems, "sent")]
+        : [];
+    const schoolTbhRows = state.feedType === "school" && !query && state.schoolFeedContent !== "my_votes"
+        ? tbhFeedRows(state.schoolTbhItems, "school")
+        : [];
+    const filteredVotes = state.feedType === "school" && state.schoolFeedContent === "tbhs" ? [] : visible;
+    if (!filteredVotes.length && !anonymousRows.length && !personalTbhRows.length && !schoolTbhRows.length) {
+        const text = state.feedSearch ? "No matching posts." : state.schoolFeedContent === "tbhs" ? "No TBHs yet. Public TBHs from your school will show up here." : state.myVotesOnly ? "You haven't voted yet. Answer questions in Play to see your votes here." : state.feedType === "personal" ? "Nothing in your Inbox yet. Votes, TBHs, and anonymous messages will show up here." : "No school activity yet.";
         list.innerHTML = `<div class="empty-card">${escapeHTML(text)}</div>`;
         return;
     }
-    const voteRows = visible.map((item) => {
+    const voteRows = filteredVotes.map((item) => {
+        normalizeReactionState(item);
         const isPersonal = state.feedType === "personal";
         const title = isPersonal ? `${item.is_nomination ? "👑 " : ""}<strong>You</strong> got ${item.is_nomination ? "nominated" : "voted"}` : `<strong>${escapeHTML(item.voted_for_name || item.contact_name || "A classmate")}</strong> got voted`;
         const detail = formatVoterHint(item);
-        return { timestamp: item.timestamp, html: `<article class="feed-card" data-answer-id="${item.question_answer_id}" data-feed-detail="${item.question_answer_id}" role="button" tabindex="0" aria-label="Open poll details: ${escapeHTML(item.question_text)}">
+        return { timestamp: item.timestamp, item, html: `<article class="feed-card" data-answer-id="${item.question_answer_id}" data-feed-detail="${item.question_answer_id}" role="button" tabindex="0" aria-label="Open poll details: ${escapeHTML(item.question_text)}">
             ${feedAvatar(item)}
             <div class="feed-body">
                 <div class="feed-meta"><span>${title}</span><time>${escapeHTML(relativeTime(item.timestamp))}</time></div>
                 <div class="feed-question">${escapeHTML(item.question_text)}</div>
                 ${detail ? `<div class="feed-answer">${escapeHTML(detail)}</div>` : ""}
             </div>
-            <button class="upvote-button ${item.user_has_upvoted ? "active" : ""}" type="button" data-upvote="${item.question_answer_id}" aria-label="Upvote">${item.user_has_upvoted ? "♥" : "♡"}<span>${item.upvote_count || 0}</span></button>
+            ${reactionControlMarkup(item, "poll", item.question_answer_id)}
         </article>` };
     });
-    list.innerHTML = [...anonymousRows, ...voteRows]
-        .sort((left, right) => (Date.parse(right.timestamp) || 0) - (Date.parse(left.timestamp) || 0))
+    const rows = [...anonymousRows, ...personalTbhRows, ...schoolTbhRows, ...voteRows];
+    list.innerHTML = rows
+        .sort((left, right) => state.feedType === "school" && state.schoolFeedSort === "hottest"
+            ? schoolHotScore(right) - schoolHotScore(left)
+            : (Date.parse(right.timestamp) || 0) - (Date.parse(left.timestamp) || 0))
         .map((row) => row.html)
         .join("");
 }
@@ -1639,8 +2003,10 @@ function selectFeedClassmate(classmateId) {
     $("#feedSearch").value = name;
     state.feedType = "school";
     state.myVotesOnly = false;
+    state.schoolFeedContent = "all";
     $$("[data-feed]").forEach((button) => button.classList.toggle("active", button.dataset.feed === "school"));
-    $("#myVotesFilter").classList.remove("hidden");
+    $("#myVotesFilter").classList.add("hidden");
+    $("#schoolFeedControls").classList.remove("hidden");
     loadFeed(true);
 }
 
@@ -1672,6 +2038,107 @@ function scheduleFeedSearch() {
 
 function selectedFeedItem() {
     return state.feedItems.find((item) => String(item.question_answer_id) === String(state.selectedFeedItemId));
+}
+
+function reactionItems(targetType, targetId) {
+    if (targetType === "poll") {
+        return state.feedItems.filter((item) => String(item.question_answer_id) === String(targetId));
+    }
+    return [state.tbhInboxItems, state.tbhSentItems, state.schoolTbhItems]
+        .flat()
+        .filter((item) => String(item.activity_id) === String(targetId));
+}
+
+function reactionSnapshot(item) {
+    normalizeReactionState(item);
+    return {
+        reaction_count: Number(item.reaction_count || 0),
+        reaction_summary: { ...item.reaction_summary },
+        current_user_reaction: item.current_user_reaction || null,
+    };
+}
+
+function applyReactionState(targetType, targetId, next) {
+    reactionItems(targetType, targetId).forEach((item) => {
+        item.reaction_count = Math.max(0, Number(next.reaction_count || 0));
+        item.reaction_summary = { ...(next.reaction_summary || {}) };
+        item.current_user_reaction = next.current_user_reaction ?? next.reaction_type ?? null;
+        item.upvote_count = item.reaction_count;
+        item.user_has_upvoted = Boolean(item.current_user_reaction);
+    });
+    renderFeed();
+}
+
+function optimisticReactionState(original, reactionType) {
+    const summary = { ...original.reaction_summary };
+    if (original.current_user_reaction) {
+        const remaining = Math.max(0, Number(summary[original.current_user_reaction] || 0) - 1);
+        if (remaining) summary[original.current_user_reaction] = remaining;
+        else delete summary[original.current_user_reaction];
+    }
+    let count = Number(original.reaction_count || 0);
+    if (reactionType) {
+        summary[reactionType] = Number(summary[reactionType] || 0) + 1;
+        if (!original.current_user_reaction) count += 1;
+    } else if (original.current_user_reaction) count -= 1;
+    return { reaction_count: Math.max(0, count), reaction_summary: summary, current_user_reaction: reactionType };
+}
+
+async function setReactionForTarget(target, reactionType) {
+    const [targetType, targetId] = String(target).split(":");
+    const item = reactionItems(targetType, targetId)[0];
+    if (!item || item.can_react === false) return;
+    const original = reactionSnapshot(item);
+    const generation = Number(state.reactionMutationGeneration.get(target) || 0) + 1;
+    state.reactionMutationGeneration.set(target, generation);
+    applyReactionState(targetType, targetId, optimisticReactionState(original, reactionType));
+    softHaptic();
+    try {
+        const response = targetType === "poll"
+            ? reactionType
+                ? await api.setFeedReaction(api.user.id, targetId, reactionType)
+                : await api.removeFeedReaction(api.user.id, targetId)
+            : reactionType
+                ? await api.setFeedActivityReaction(api.user.id, targetId, reactionType)
+                : await api.removeFeedActivityReaction(api.user.id, targetId);
+        if (state.reactionMutationGeneration.get(target) !== generation) return;
+        applyReactionState(targetType, targetId, {
+            reaction_count: response.reaction_count,
+            reaction_summary: response.reaction_summary,
+            current_user_reaction: response.reaction_type,
+        });
+    } catch (_) {
+        if (state.reactionMutationGeneration.get(target) !== generation) return;
+        applyReactionState(targetType, targetId, original);
+        showToast("Couldn't save reaction. Try again.");
+    }
+}
+
+function openReactionPicker(target) {
+    const [targetType, targetId] = String(target).split(":");
+    const item = reactionItems(targetType, targetId)[0];
+    if (!item || item.can_react === false) return;
+    normalizeReactionState(item);
+    state.reactorTarget = target;
+    $("#reactionPickerOptions").innerHTML = FEED_REACTIONS.map((reaction) => `<button class="${item.current_user_reaction === reaction.type ? "selected" : ""}" type="button" data-select-reaction="${reaction.type}" aria-label="${reaction.label}" aria-pressed="${item.current_user_reaction === reaction.type}"><span aria-hidden="true">${reaction.emoji}</span><small>${reaction.label}</small></button>`).join("");
+    $("#reactionPickerDialog").showModal();
+    softHaptic();
+}
+
+async function openReactorList(target) {
+    const [targetType, targetId] = String(target).split(":");
+    state.reactorTarget = target;
+    const dialog = $("#reactorListDialog");
+    $("#reactorList").innerHTML = '<div class="empty-card">Loading reactions…</div>';
+    dialog.showModal();
+    try {
+        const reactors = targetType === "poll"
+            ? await api.getFeedReactors(api.user.id, targetId)
+            : await api.getFeedActivityReactors(api.user.id, targetId);
+        $("#reactorList").innerHTML = reactors.length ? reactors.map((reactor) => `<div class="reactor-row">${avatarMarkup({ first_name: reactor.first_name, last_name: reactor.last_name, profile_picture_url: reactor.profile_picture_url }, "row-avatar")}<strong>${escapeHTML(`${reactor.first_name} ${reactor.last_name}`)}</strong><span aria-label="${escapeHTML(REACTION_BY_TYPE.get(reactor.reaction_type)?.label || "Reaction")}">${REACTION_BY_TYPE.get(reactor.reaction_type)?.emoji || "✨"}</span></div>`).join("") : '<div class="empty-card"><strong>No reactions yet</strong><p>Be the first to react.</p></div>';
+    } catch (error) {
+        $("#reactorList").innerHTML = `<div class="empty-card"><strong>Couldn't load reactions</strong><p>${escapeHTML(error.message || "Please try again.")}</p></div>`;
+    }
 }
 
 function renderFeedDetail() {
@@ -2436,6 +2903,46 @@ async function loadAnonymousInbox() {
     }
 }
 
+async function loadTbhContent() {
+    if (!tbhRequestsEnabled() || !api.user?.id) {
+        state.tbhPendingRequests = [];
+        state.tbhInboxItems = [];
+        state.tbhSentItems = [];
+        state.schoolTbhItems = [];
+        renderFeed();
+        return;
+    }
+    const generation = ++state.tbhGeneration;
+    const results = await Promise.allSettled([
+        api.getPendingTbhRequests(api.user.id),
+        api.getTbhInbox(api.user.id),
+        api.getSentTbhs(api.user.id),
+        api.getTbhSchoolFeed(api.user.id, state.schoolFeedSort),
+    ]);
+    if (generation !== state.tbhGeneration) return;
+    const [pending, inbox, sent, school] = results;
+    if (school.status === "fulfilled") state.schoolTbhItems = school.value.items || [];
+    const publicById = new Map(state.schoolTbhItems.map((item) => [String(item.id), item]));
+    const mergePublicReaction = (item) => {
+        const publicItem = publicById.get(String(item.id));
+        if (!publicItem || item.activity_id) return item;
+        return { ...item,
+            activity_id: publicItem.activity_id,
+            reaction_count: publicItem.reaction_count,
+            reaction_summary: publicItem.reaction_summary,
+            current_user_reaction: publicItem.current_user_reaction,
+            can_react: publicItem.can_react,
+        };
+    };
+    if (pending.status === "fulfilled") {
+        const now = Date.now();
+        state.tbhPendingRequests = (pending.value.items || []).filter((item) => !item.snoozed_until || Date.parse(item.snoozed_until) <= now);
+    }
+    if (inbox.status === "fulfilled") state.tbhInboxItems = (inbox.value.items || []).map(mergePublicReaction);
+    if (sent.status === "fulfilled") state.tbhSentItems = (sent.value.items || []).map(mergePublicReaction);
+    renderFeed();
+}
+
 function selectedAnonymousQuestion() {
     return state.anonymousInbox?.questions?.find((question) => String(question.id) === String(state.selectedAnonymousQuestionId));
 }
@@ -2644,6 +3151,8 @@ async function loadFeed(reset = false) {
     const generation = reset ? ++state.feedGeneration : state.feedGeneration;
     const feedType = state.feedType;
     const myVotesOnly = state.myVotesOnly;
+    const schoolSort = state.schoolFeedSort;
+    const schoolContent = state.schoolFeedContent;
     const rawSearch = state.feedSearch.trim();
     const search = rawSearch.length >= 2 ? rawSearch : "";
     if (reset) {
@@ -2651,6 +3160,7 @@ async function loadFeed(reset = false) {
         state.feedOffset = 0;
         state.feedCursor = null;
         renderFeed();
+        loadTbhContent();
         if (feedType === "personal") loadAnonymousInbox();
         else {
             state.anonymousInboxGeneration += 1;
@@ -2665,10 +3175,10 @@ async function loadFeed(reset = false) {
         let items;
         if (feedType === "personal") items = await api.getPersonalFeed(api.user.id, state.feedOffset, search);
         else if (myVotesOnly) items = await api.getUserVotes(api.user.id, state.feedCursor);
-        else items = await api.getSchoolFeed(api.user.id, state.feedCursor, search);
+        else items = await api.getSchoolFeed(api.user.id, schoolSort === "hottest" ? null : state.feedCursor, search, schoolSort, schoolSort === "hottest" ? 100 : 20);
         const currentRawSearch = state.feedSearch.trim();
         const currentSearch = currentRawSearch.length >= 2 ? currentRawSearch : "";
-        if (generation !== state.feedGeneration || feedType !== state.feedType || myVotesOnly !== state.myVotesOnly || search !== currentSearch) return;
+        if (generation !== state.feedGeneration || feedType !== state.feedType || myVotesOnly !== state.myVotesOnly || schoolSort !== state.schoolFeedSort || schoolContent !== state.schoolFeedContent || search !== currentSearch) return;
         state.feedItems.push(...items);
         if (feedType === "personal") state.feedOffset += items.length;
         else if (items.length) {
@@ -2678,7 +3188,7 @@ async function loadFeed(reset = false) {
         status.textContent = "";
         state.feedAppliedSearch = search;
         renderFeed();
-        loadMore.classList.toggle("hidden", items.length < 20);
+        loadMore.classList.toggle("hidden", schoolSort === "hottest" || schoolContent === "tbhs" || items.length < 20);
     } catch (error) {
         if (generation !== state.feedGeneration) return;
         status.textContent = error.message || "Could not load the feed.";
@@ -4670,13 +5180,29 @@ function bindEvents() {
     $$(".segment").forEach((button) => button.addEventListener("click", () => {
         state.feedType = button.dataset.feed;
         state.myVotesOnly = false;
+        state.schoolFeedContent = "all";
         $$(".segment").forEach((segment) => segment.classList.toggle("active", segment === button));
-        $("#myVotesFilter").classList.toggle("hidden", state.feedType !== "school");
+        $("#myVotesFilter").classList.add("hidden");
+        $("#schoolFeedControls").classList.toggle("hidden", state.feedType !== "school");
         $("#myVotesFilter").classList.remove("active");
         $("#myVotesFilter").setAttribute("aria-pressed", "false");
         $("#myVotesFilter").textContent = "○ My Votes";
         loadFeed(true);
     }));
+    $("#schoolFeedControls").addEventListener("click", (event) => {
+        const sort = event.target.closest("[data-school-sort]");
+        const content = event.target.closest("[data-school-content]");
+        if (sort) {
+            state.schoolFeedSort = sort.dataset.schoolSort;
+            $$("[data-school-sort]").forEach((button) => button.classList.toggle("active", button === sort));
+        }
+        if (content) {
+            state.schoolFeedContent = content.dataset.schoolContent;
+            state.myVotesOnly = state.schoolFeedContent === "my_votes";
+            $$("[data-school-content]").forEach((button) => button.classList.toggle("active", button === content));
+        }
+        if (sort || content) loadFeed(true);
+    });
     $("#myVotesFilter").addEventListener("click", (event) => {
         state.myVotesOnly = !state.myVotesOnly;
         event.currentTarget.classList.toggle("active", state.myVotesOnly);
@@ -4696,18 +5222,34 @@ function bindEvents() {
     });
     $("#loadMoreFeed").addEventListener("click", () => loadFeed(false));
     $("#feedList").addEventListener("click", (event) => {
+        const reactionPicker = event.target.closest("[data-reaction-picker]");
+        const reactors = event.target.closest("[data-reactors]");
+        if (reactionPicker) return openReactionPicker(reactionPicker.dataset.reactionPicker);
+        if (reactors) return openReactorList(reactors.dataset.reactors);
+        const tbhRequest = event.target.closest("[data-tbh-request]");
+        const tbhDismiss = event.target.closest("[data-tbh-dismiss]");
+        const tbhSuppress = event.target.closest("[data-tbh-suppress]");
+        const tbhDetail = event.target.closest("[data-tbh-detail]");
+        if (tbhDismiss) return dismissTbhRequest(tbhDismiss.dataset.tbhDismiss);
+        if (tbhSuppress) return suppressTbhRequester(tbhSuppress.dataset.tbhSuppress);
+        if (tbhRequest) return openTbhComposer(tbhRequest.dataset.tbhRequest);
+        if (tbhDetail) return openTbhDetail(tbhDetail.dataset.tbhDetail);
         const anonymousQuestion = event.target.closest("[data-anonymous-question]");
         const anonymousAnswer = event.target.closest("[data-anonymous-answer]");
         if (anonymousQuestion) return openAnonymousQuestionDialog(anonymousQuestion.dataset.anonymousQuestion);
         if (anonymousAnswer) return openAnonymousAnswerDialog(anonymousAnswer.dataset.anonymousAnswer);
-        const upvote = event.target.closest("[data-upvote]");
-        if (upvote) return toggleUpvote(upvote);
         const detail = event.target.closest("[data-feed-detail]");
         if (detail) openFeedDetail(detail.dataset.feedDetail);
     });
     $("#feedList").addEventListener("keydown", (event) => {
         if (!["Enter", " "].includes(event.key)) return;
         const detail = event.target.closest("[data-feed-detail]");
+        const tbhDetail = event.target.closest("[data-tbh-detail]");
+        if (tbhDetail) {
+            event.preventDefault();
+            openTbhDetail(tbhDetail.dataset.tbhDetail);
+            return;
+        }
         if (detail) {
             event.preventDefault();
             openFeedDetail(detail.dataset.feedDetail);
@@ -4819,7 +5361,52 @@ function bindEvents() {
         const purchase = event.target.closest("[data-buy-aura]");
         if (purchase?.dataset.buyAura === "global") openAuraSpend("global");
         if (purchase?.dataset.buyAura === "targeted") openTargetedBoostPicker();
+        if (purchase?.dataset.buyAura === "tbh") openTbhRequestPurchase();
         if (purchase?.dataset.buyAura === "question") openQuestionDialog();
+    });
+    $("#tbhRequestDialog").addEventListener("click", (event) => {
+        if (event.target.closest("[data-close-tbh-request]")) {
+            if (state.selectedTbhTargetId && !event.target.closest(".tbh-success")) {
+                state.selectedTbhTargetId = null;
+                renderTbhRequestFlow();
+            } else closeDetailScreen($("#tbhRequestDialog"));
+            return;
+        }
+        const target = event.target.closest("[data-tbh-target]");
+        if (target) {
+            state.selectedTbhTargetId = target.dataset.tbhTarget;
+            state.selectedTbhPrompt = "anything";
+            state.tbhRequestIdempotencyKey = newIdempotencyKey();
+            renderTbhRequestFlow();
+        }
+        const prompt = event.target.closest("[data-tbh-prompt]");
+        if (prompt) { state.selectedTbhPrompt = prompt.dataset.tbhPrompt; renderTbhRequestFlow(); }
+        const submit = event.target.closest("[data-send-tbh-request]");
+        if (submit) submitTbhRequest(submit);
+    });
+    $("#tbhRequestDialog").addEventListener("input", (event) => {
+        if (event.target.id === "tbhTargetSearch") renderTbhTargetList();
+    });
+    $("#tbhComposerDialog").addEventListener("click", (event) => {
+        if (event.target.closest("[data-close-tbh-composer]")) closeDetailScreen($("#tbhComposerDialog"));
+        const starter = event.target.closest("[data-tbh-starter]");
+        if (starter) {
+            state.selectedTbhStarter = starter.dataset.tbhStarter;
+            $("#tbhResponseText").value = state.selectedTbhStarter;
+            $("#tbhResponseText").focus();
+            updateTbhComposer();
+        }
+    });
+    $("#tbhResponseText").addEventListener("input", updateTbhComposer);
+    $("#tbhComposerForm").addEventListener("submit", submitTbhResponse);
+    $("#reactionPickerOptions").addEventListener("click", (event) => {
+        const button = event.target.closest("[data-select-reaction]");
+        if (!button || !state.reactorTarget) return;
+        const [type, id] = state.reactorTarget.split(":");
+        const item = reactionItems(type, id)[0];
+        const next = item?.current_user_reaction === button.dataset.selectReaction ? null : button.dataset.selectReaction;
+        $("#reactionPickerDialog").close();
+        setReactionForTarget(state.reactorTarget, next);
     });
     $("#godModePitchDialog").addEventListener("click", (event) => {
         if (event.target.closest("[data-close-dialog]")) {

@@ -160,6 +160,76 @@ test("real adapter uses the scoped aura boost endpoints", async ({ page }) => {
     ]);
 });
 
+test("real adapter matches the TBH and typed-reaction contracts", async ({ page }) => {
+    const requests = [];
+    await page.addInitScript((apiOrigin) => {
+        window.VALID_API_BASE_URL = `${apiOrigin}/api/v1`;
+    }, API_ORIGIN);
+    await page.route(`${API_ORIGIN}/api/v1/**`, async (route) => {
+        const request = route.request();
+        requests.push({
+            method: request.method(),
+            path: `${new URL(request.url()).pathname}${new URL(request.url()).search}`,
+            body: request.postData() ? request.postDataJSON() : null,
+            authorization: request.headers().authorization || null,
+        });
+        await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+    });
+    await page.goto("/app/");
+    requests.length = 0;
+    await page.evaluate(async ({ userId }) => {
+        const { ValidAPI } = await import("/app/api.js");
+        const api = new ValidAPI();
+        const requestId = "31111111-1111-1111-1111-111111111111";
+        const responseId = "41111111-1111-1111-1111-111111111111";
+        const activityId = "51111111-1111-1111-1111-111111111111";
+        const targetId = "21111111-1111-1111-1111-111111111111";
+        const idempotencyKey = "61111111-1111-1111-1111-111111111111";
+        api.saveSession({ access_token: "tbh-token", user: { id: userId } });
+        await api.getSchoolFeed(userId, null, "", "hottest", 100);
+        await api.setFeedReaction(userId, 42, "fire");
+        await api.removeFeedReaction(userId, 42);
+        await api.getFeedReactors(userId, 42, "love");
+        await api.getFeedItem(userId, 42);
+        await api.setFeedActivityReaction(userId, activityId, "funny");
+        await api.removeFeedActivityReaction(userId, activityId);
+        await api.getFeedActivityReactors(userId, activityId, "eyes");
+        await api.getTbhRequestTargets(userId, "Maya Chen");
+        await api.createTbhRequest(userId, targetId, "your_vibe", idempotencyKey);
+        await api.getPendingTbhRequests(userId);
+        await api.openTbhRequest(userId, requestId);
+        await api.dismissTbhRequest(userId, requestId);
+        await api.suppressTbhRequester(userId, targetId);
+        await api.respondToTbhRequest(userId, requestId, "You make every room feel welcoming.", idempotencyKey);
+        await api.getTbhInbox(userId);
+        await api.getSentTbhs(userId);
+        await api.getTbhSchoolFeed(userId, "hottest");
+        await api.getTbhResponse(userId, responseId);
+    }, { userId: USER_ID });
+
+    expect(requests).toEqual([
+        { method: "GET", path: `/api/v1/users/${USER_ID}/feed/school?limit=100&sort=hottest`, body: null, authorization: "Bearer tbh-token" },
+        { method: "PUT", path: `/api/v1/users/${USER_ID}/feed/reactions/42`, body: { reaction_type: "fire" }, authorization: "Bearer tbh-token" },
+        { method: "DELETE", path: `/api/v1/users/${USER_ID}/feed/reactions/42`, body: null, authorization: "Bearer tbh-token" },
+        { method: "GET", path: `/api/v1/users/${USER_ID}/feed/reactions/42?reaction_type=love`, body: null, authorization: "Bearer tbh-token" },
+        { method: "GET", path: `/api/v1/users/${USER_ID}/feed/item/42`, body: null, authorization: "Bearer tbh-token" },
+        { method: "PUT", path: `/api/v1/users/${USER_ID}/feed/activities/51111111-1111-1111-1111-111111111111/reaction`, body: { reaction_type: "funny" }, authorization: "Bearer tbh-token" },
+        { method: "DELETE", path: `/api/v1/users/${USER_ID}/feed/activities/51111111-1111-1111-1111-111111111111/reaction`, body: null, authorization: "Bearer tbh-token" },
+        { method: "GET", path: `/api/v1/users/${USER_ID}/feed/activities/51111111-1111-1111-1111-111111111111/reactions?reaction_type=eyes`, body: null, authorization: "Bearer tbh-token" },
+        { method: "GET", path: `/api/v1/users/${USER_ID}/tbh-request-targets?search=Maya+Chen`, body: null, authorization: "Bearer tbh-token" },
+        { method: "POST", path: `/api/v1/users/${USER_ID}/tbh-requests`, body: { recipient_user_id: "21111111-1111-1111-1111-111111111111", prompt_key: "your_vibe", idempotency_key: "61111111-1111-1111-1111-111111111111" }, authorization: "Bearer tbh-token" },
+        { method: "GET", path: `/api/v1/users/${USER_ID}/tbh-requests/pending`, body: null, authorization: "Bearer tbh-token" },
+        { method: "POST", path: `/api/v1/users/${USER_ID}/tbh-requests/31111111-1111-1111-1111-111111111111/open`, body: null, authorization: "Bearer tbh-token" },
+        { method: "POST", path: `/api/v1/users/${USER_ID}/tbh-requests/31111111-1111-1111-1111-111111111111/dismiss`, body: null, authorization: "Bearer tbh-token" },
+        { method: "POST", path: `/api/v1/users/${USER_ID}/tbh-suppressions/21111111-1111-1111-1111-111111111111`, body: null, authorization: "Bearer tbh-token" },
+        { method: "POST", path: `/api/v1/users/${USER_ID}/tbh-requests/31111111-1111-1111-1111-111111111111/respond`, body: { body: "You make every room feel welcoming.", idempotency_key: "61111111-1111-1111-1111-111111111111" }, authorization: "Bearer tbh-token" },
+        { method: "GET", path: `/api/v1/users/${USER_ID}/tbh-inbox`, body: null, authorization: "Bearer tbh-token" },
+        { method: "GET", path: `/api/v1/users/${USER_ID}/tbh-sent`, body: null, authorization: "Bearer tbh-token" },
+        { method: "GET", path: `/api/v1/users/${USER_ID}/tbh-school-feed?sort=hottest`, body: null, authorization: "Bearer tbh-token" },
+        { method: "GET", path: `/api/v1/users/${USER_ID}/tbh-responses/41111111-1111-1111-1111-111111111111`, body: null, authorization: "Bearer tbh-token" },
+    ]);
+});
+
 test("real adapter does not expose an upstream HTML error page", async ({ page }) => {
     await page.addInitScript((apiOrigin) => {
         window.VALID_API_BASE_URL = `${apiOrigin}/api/v1`;

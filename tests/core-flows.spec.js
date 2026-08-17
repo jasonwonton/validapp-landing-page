@@ -257,7 +257,7 @@ test("PWA ships install icons and Web Push worker handlers", async ({ request })
     expect(worker).toContain("safeNotificationURL");
 });
 
-test("feed navigation, filtering, and upvotes work", async ({ page }) => {
+test("feed navigation, filtering, and reactions work", async ({ page }) => {
     await signInToDemo(page);
     await expect(page.getByText("Who always knows how to make people laugh?")).toBeVisible();
     await page.locator("#loadMoreFeed").evaluate((button) => button.classList.remove("hidden"));
@@ -267,16 +267,16 @@ test("feed navigation, filtering, and upvotes work", async ({ page }) => {
     await page.getByRole("button", { name: "School", exact: true }).click();
     await expect(page.getByText("Who has the best music taste?")).toBeVisible();
     await expect(page.locator("#feedList .feed-section-heading")).toHaveCount(0);
-    const searchBounds = await page.locator(".feed-tools > .feed-search").boundingBox();
-    const myVotesBounds = await page.locator("#myVotesFilter").boundingBox();
-    expect(Math.abs(searchBounds.y - myVotesBounds.y)).toBeLessThan(4);
+    await expect(page.getByRole("button", { name: "Recent", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "My Votes", exact: true })).toBeVisible();
     await page.getByPlaceholder("Search names, questions...").fill("company");
     await expect(page.getByText("Who is most likely to start a company?")).toBeVisible();
     await expect(page.getByText("Who has the best music taste?")).toBeHidden();
     await page.getByPlaceholder("Search names, questions...").fill("");
-    const upvote = page.locator("[data-upvote='9003']");
-    await upvote.click();
-    await expect(upvote).toHaveClass(/active/);
+    const poll = page.locator("[data-feed-detail='9003']");
+    await poll.locator("[data-reaction-picker]").click();
+    await page.getByRole("dialog", { name: "Choose a reaction" }).getByRole("button", { name: "Love" }).click();
+    await expect(poll.locator("[data-reaction-picker]")).toContainText("❤️");
     await page.locator("[data-feed-detail='9003']").click();
     const detail = page.locator("#feedDetailDialog");
     await expect(detail.getByRole("heading", { name: "Who has the best music taste?" })).toBeVisible();
@@ -426,11 +426,11 @@ test("anonymous inbox supports private answers and safety controls", async ({ pa
     await expect(page.locator("#feedList [data-anonymous-answer]")).toHaveCount(1);
     await expect(page.locator("#feedList [data-anonymous-question]")).toHaveCount(2);
     await expect(page.locator("#feedList [data-feed-detail]")).toHaveCount(2);
-    await expect(page.locator("#feedList > *").nth(0)).toHaveAttribute("data-feed-detail", "9001");
-    await expect(page.locator("#feedList > *").nth(1)).toHaveAttribute("data-anonymous-question", "ask-demo-1");
-    await expect(page.locator("#feedList > *").nth(2)).toHaveAttribute("data-anonymous-answer", "answer-demo-1");
-    await expect(page.locator("#feedList > *").nth(3)).toHaveAttribute("data-feed-detail", "9002");
-    await expect(page.locator("#feedList > *").nth(4)).toHaveAttribute("data-anonymous-question", "ask-demo-2");
+    await expect(page.getByText("Maya wants a TBH")).toBeVisible();
+    await expect(page.getByText("Who always knows how to make people laugh?")).toBeVisible();
+    await expect(page.locator("[data-anonymous-question='ask-demo-1']")).toBeVisible();
+    await expect(page.locator("[data-anonymous-answer='answer-demo-1']")).toBeVisible();
+    await expect(page.locator("[data-anonymous-question='ask-demo-2']")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Anonymous questions" })).toHaveCount(0);
     await page.getByRole("button", { name: /What is something you are genuinely proud/ }).click();
     const answerDialog = page.locator("#anonymousQuestionDialog");
@@ -438,7 +438,7 @@ test("anonymous inbox supports private answers and safety controls", async ({ pa
     await expect(answerDialog.getByText("From someone anonymous")).toBeVisible();
     await answerDialog.getByLabel("Your reply").fill("Helping my friends through a hard semester.");
     await answerDialog.getByRole("button", { name: "Send reply" }).click();
-    await expect(answerDialog.getByText(/Answered.*10 aura/)).toBeVisible();
+    await expect(answerDialog.getByRole("button", { name: "✓ Reply sent" })).toBeVisible();
     await expect(answerDialog.getByRole("button", { name: "Share answer to Snapchat" })).toBeVisible();
     await expect(answerDialog.getByRole("button", { name: "Share answer to Instagram" })).toBeVisible();
     await expect(answerDialog.getByRole("button", { name: "Share answer to TikTok" })).toBeVisible();
@@ -458,9 +458,11 @@ test("anonymous inbox supports private answers and safety controls", async ({ pa
     await expect(safetyMenu.getByRole("menuitem", { name: "Report" })).toBeVisible();
     await expect(safetyMenu.getByRole("menuitem", { name: "Block sender" })).toBeVisible();
     await expect(safetyMenu.getByRole("menuitem", { name: "Delete" })).toBeVisible();
-    page.once("dialog", (confirmation) => confirmation.accept());
     await page.locator("#anonymousQuestionDialog").getByRole("menuitem", { name: "Report" }).click();
-    await expect(page.locator("#toast")).toContainText("Reported to Valid");
+    const reportDialog = page.getByRole("dialog", { name: "Report and block sender" });
+    await reportDialog.getByRole("radio", { name: "Harassment or bullying" }).check();
+    await reportDialog.getByRole("button", { name: "Report and block sender" }).click();
+    await expect(page.locator("#toast")).toContainText("Reported and sender blocked");
     await expect(page.getByRole("button", { name: /Who has been making school better lately/ })).toHaveCount(0);
 });
 

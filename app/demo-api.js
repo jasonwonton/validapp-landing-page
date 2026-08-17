@@ -40,6 +40,7 @@ export class DemoAPI {
             remaining_reveals: this.demoGodMode ? 2 : 0,
             god_mode_aura_multiplier: 2,
             vote_count: 84,
+            tbh_unique_requester_count: 7,
             weekly_vote_count: 16,
             current_streak: 7,
             streak_multiplier: 1.5,
@@ -80,6 +81,10 @@ export class DemoAPI {
                 ],
                 upvote_count: 12,
                 user_has_upvoted: false,
+                reaction_count: 12,
+                reaction_summary: { love: 7, funny: 5 },
+                current_user_reaction: null,
+                can_react: true,
             },
             {
                 item_type: "received_vote",
@@ -97,6 +102,10 @@ export class DemoAPI {
                 ],
                 upvote_count: 7,
                 user_has_upvoted: true,
+                reaction_count: 7,
+                reaction_summary: { legacy_agree: 7 },
+                current_user_reaction: "legacy_agree",
+                can_react: true,
             },
         ];
         this.schoolFeed = [
@@ -116,6 +125,10 @@ export class DemoAPI {
                 ],
                 upvote_count: 19,
                 user_has_upvoted: false,
+                reaction_count: 19,
+                reaction_summary: { fire: 12, love: 7 },
+                current_user_reaction: null,
+                can_react: true,
             },
             {
                 item_type: "school_activity",
@@ -134,6 +147,10 @@ export class DemoAPI {
                 ],
                 upvote_count: 5,
                 user_has_upvoted: false,
+                reaction_count: 5,
+                reaction_summary: { funny: 5 },
+                current_user_reaction: null,
+                can_react: false,
             },
         ];
         this.questions = [
@@ -237,6 +254,36 @@ export class DemoAPI {
                     answered_at: ago(42),
                 },
             ],
+        };
+        this.tbhTargets = this.classmates.map((classmate, index) => ({
+            ...classmate,
+            state: index === 1 ? "active" : index === 2 ? "cooldown" : "eligible",
+            active_request_id: index === 1 ? "active-demo-request" : null,
+            next_allowed_at: index === 2 ? new Date(Date.now() + 6 * 3_600_000).toISOString() : null,
+        }));
+        this.tbhPending = [{
+            id: "tbh-request-1", requester_user_id: "classmate-1", recipient_user_id: "demo-user",
+            requester_first_name: "Maya", requester_last_name: "Chen", requester_username: "maya_c",
+            requester_profile_picture_url: "../assets/app/anonymous.png", prompt_key: "your_vibe", status: "pending",
+            aura_spent: 100, created_at: ago(6), expires_at: ago(-10_000), snoozed_until: null, snooze_count: 0, opened_at: null,
+        }];
+        this.tbhInbox = [{
+            id: "tbh-response-1", request_id: "answered-request-1", body: "You make every group project more fun, and you always notice when someone needs help.", prompt_key: "best_quality",
+            author_user_id: "classmate-2", author_first_name: "Noah", author_last_name: "Williams", author_username: "noahw", author_profile_picture_url: "../assets/app/lock.png",
+            created_at: ago(25), opened_at: null, activity_id: "activity-tbh-1", reaction_count: 4, reaction_summary: { love: 3, fire: 1 }, current_user_reaction: null, can_react: true,
+        }];
+        this.tbhSent = [{
+            id: "tbh-response-2", request_id: "answered-request-2", body: "Your energy is calm until the music starts, then you become the whole party.", prompt_key: "your_vibe",
+            subject_user_id: "classmate-4", subject_first_name: "Eli", subject_last_name: "Brooks", subject_profile_picture_url: "../assets/AppIconV2.png",
+            created_at: ago(70), activity_id: "activity-tbh-2", reaction_count: 2, reaction_summary: { funny: 2 }, current_user_reaction: "funny", can_react: true,
+        }];
+        this.tbhSchool = [
+            { ...this.tbhInbox[0], subject_user_id: "demo-user", subject_first_name: "Jules", subject_last_name: "Rivera", subject_profile_picture_url: "../assets/AppIconV2.png", author_gender: "male", author_grade: "Sophomore" },
+            { ...this.tbhSent[0], author_gender: "female", author_grade: "Junior" },
+        ];
+        this.reactors = {
+            "9001": [{ user_id: "classmate-1", first_name: "Maya", last_name: "Chen", profile_picture_url: "../assets/app/anonymous.png", reaction_type: "love", reacted_at: ago(4) }],
+            "activity-tbh-1": [{ user_id: "classmate-4", first_name: "Eli", last_name: "Brooks", profile_picture_url: "../assets/AppIconV2.png", reaction_type: "fire", reacted_at: ago(8) }],
         };
     }
 
@@ -352,8 +399,11 @@ export class DemoAPI {
         return offset ? [] : this.personalFeed.map((item) => ({ ...item }));
     }
 
-    async getSchoolFeed(_userId, cursor = null) {
-        return cursor ? [] : this.schoolFeed.map((item) => ({ ...item }));
+    async getSchoolFeed(_userId, cursor = null, _search = "", sort = "recent") {
+        if (cursor) return [];
+        const items = this.schoolFeed.map((item) => ({ ...item }));
+        if (sort === "hottest") items.sort((left, right) => Number(right.reaction_count || 0) - Number(left.reaction_count || 0));
+        return items;
     }
 
     async getUserVotes(_userId, cursor = null) {
@@ -367,6 +417,43 @@ export class DemoAPI {
         item.user_has_upvoted = !item.user_has_upvoted;
         return { was_added: item.user_has_upvoted };
     }
+
+    reactionItem(targetId, activity = false) {
+        const items = activity ? [...this.tbhInbox, ...this.tbhSent, ...this.tbhSchool] : [...this.personalFeed, ...this.schoolFeed];
+        return items.find((item) => String(activity ? item.activity_id : item.question_answer_id) === String(targetId));
+    }
+
+    mutateReaction(targetId, reactionType, activity = false) {
+        const matching = (activity ? [...this.tbhInbox, ...this.tbhSent, ...this.tbhSchool] : [...this.personalFeed, ...this.schoolFeed])
+            .filter((item) => String(activity ? item.activity_id : item.question_answer_id) === String(targetId));
+        if (!matching.length) throw new Error("Post not found");
+        const item = matching[0];
+        const previous = item.current_user_reaction || null;
+        const summary = { ...(item.reaction_summary || {}) };
+        let count = Number(item.reaction_count || 0);
+        if (previous) {
+            summary[previous] = Math.max(0, Number(summary[previous] || 0) - 1);
+            if (!summary[previous]) delete summary[previous];
+        }
+        if (reactionType) {
+            summary[reactionType] = Number(summary[reactionType] || 0) + 1;
+            if (!previous) count += 1;
+        } else if (previous) count -= 1;
+        matching.forEach((candidate) => Object.assign(candidate, { reaction_count: Math.max(0, count), reaction_summary: { ...summary }, current_user_reaction: reactionType }));
+        return { [activity ? "activity_id" : "question_answer_id"]: targetId, reaction_type: reactionType, previous_reaction_type: previous, reaction_count: Math.max(0, count), reaction_summary: summary, changed: previous !== reactionType };
+    }
+
+    async setFeedReaction(_userId, answerId, reactionType) { return this.mutateReaction(answerId, reactionType, false); }
+    async removeFeedReaction(_userId, answerId) { return this.mutateReaction(answerId, null, false); }
+    async getFeedReactors(_userId, answerId) { return structuredClone(this.reactors[String(answerId)] || []); }
+    async getFeedItem(_userId, answerId) {
+        const item = [...this.personalFeed, ...this.schoolFeed].find((candidate) => String(candidate.question_answer_id) === String(answerId));
+        if (!item) throw new Error("Vote not found");
+        return structuredClone(item);
+    }
+    async setFeedActivityReaction(_userId, activityId, reactionType) { return this.mutateReaction(activityId, reactionType, true); }
+    async removeFeedActivityReaction(_userId, activityId) { return this.mutateReaction(activityId, null, true); }
+    async getFeedActivityReactors(_userId, activityId) { return structuredClone(this.reactors[String(activityId)] || []); }
 
     async revealSender(_userId, answerId) {
         const item = this.personalFeed.find((candidate) => candidate.question_answer_id === answerId);
@@ -401,6 +488,7 @@ export class DemoAPI {
     async getConfig() {
         return {
             nomination_aura_cost: 100,
+            tbh_request_aura_cost: 100,
             question_submission_aura_cost: 200,
             max_custom_question_length: 280,
             max_skips_per_set: 3,
@@ -410,6 +498,7 @@ export class DemoAPI {
             god_mode_price: 6.99,
             global_visibility_boost_cost: 400,
             targeted_visibility_boost_cost: 200,
+            enable_tbh_requests: true,
         };
     }
 
@@ -573,6 +662,46 @@ export class DemoAPI {
 
     async getAnonymousInbox() {
         return structuredClone(this.anonymousInbox);
+    }
+
+    async getTbhRequestTargets(_userId, search = "") {
+        const query = String(search).trim().toLowerCase();
+        return { items: structuredClone(this.tbhTargets.filter((target) => !query || `${target.first_name} ${target.last_name}`.toLowerCase().includes(query))), next_cursor: null };
+    }
+
+    async createTbhRequest(_userId, recipientUserId, promptKey) {
+        if (this.profile.aura_points < 100) throw new Error("You need more aura to request a TBH.");
+        const target = this.tbhTargets.find((item) => item.user_id === recipientUserId);
+        if (!target || target.state !== "eligible") throw new Error("This classmate is not available right now.");
+        this.profile.aura_points -= 100;
+        target.state = "active";
+        const request = { id: `tbh-request-${Date.now()}`, requester_user_id: "demo-user", recipient_user_id: recipientUserId, requester_first_name: "Jules", requester_last_name: "Rivera", requester_username: "jules", requester_profile_picture_url: this.profile.profile_picture_url, prompt_key: promptKey, status: "pending", aura_spent: 100, created_at: new Date().toISOString(), expires_at: ago(-10_000), snoozed_until: null, snooze_count: 0, opened_at: null };
+        return { request, aura_spent: 100, total_aura_points: this.profile.aura_points };
+    }
+
+    async getPendingTbhRequests() { return { items: structuredClone(this.tbhPending), actionable_count: this.tbhPending.length, snoozed_count: 0, next_cursor: null }; }
+    async openTbhRequest(_userId, requestId) { const request = this.tbhPending.find((item) => item.id === requestId); if (request) request.opened_at ||= new Date().toISOString(); }
+    async dismissTbhRequest(_userId, requestId) { this.tbhPending = this.tbhPending.filter((item) => item.id !== requestId); }
+    async suppressTbhRequester(_userId, requesterId) { this.tbhPending = this.tbhPending.filter((item) => item.requester_user_id !== requesterId); }
+    async respondToTbhRequest(_userId, requestId, body) {
+        const request = this.tbhPending.find((item) => item.id === requestId);
+        if (!request) throw new Error("This TBH request is no longer available.");
+        const response = { id: `tbh-response-${Date.now()}`, request_id: requestId, body, prompt_key: request.prompt_key, author_user_id: "demo-user", author_first_name: "Jules", author_last_name: "Rivera", author_username: "jules", author_profile_picture_url: this.profile.profile_picture_url, created_at: new Date().toISOString(), opened_at: null, activity_id: `activity-${Date.now()}`, reaction_count: 0, reaction_summary: {}, current_user_reaction: null, can_react: true };
+        this.tbhPending = this.tbhPending.filter((item) => item.id !== requestId);
+        return structuredClone(response);
+    }
+    async getTbhInbox() { return { items: structuredClone(this.tbhInbox) }; }
+    async getSentTbhs() { return { items: structuredClone(this.tbhSent) }; }
+    async getTbhSchoolFeed(_userId, sort = "recent") {
+        const items = structuredClone(this.tbhSchool);
+        if (sort === "hottest") items.sort((left, right) => Number(right.reaction_count || 0) - Number(left.reaction_count || 0));
+        return { items };
+    }
+    async getTbhResponse(_userId, responseId) {
+        const response = this.tbhInbox.find((item) => item.id === responseId);
+        if (!response) throw new Error("TBH not found");
+        response.opened_at ||= new Date().toISOString();
+        return structuredClone(response);
     }
 
     async openAnonymousQuestion(_userId, questionId) {
