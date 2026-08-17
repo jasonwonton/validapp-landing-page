@@ -89,6 +89,7 @@ const state = {
     topQuestionsAllTime: null,
     classmateDirectory: null,
     selectedClassmateProfile: null,
+    selectedClassmateAskTarget: null,
     selectedClassmateTopQuestionsWeekly: null,
     selectedClassmateTopQuestionsAllTime: null,
     classmateProfileReturnToDirectory: false,
@@ -135,6 +136,13 @@ const state = {
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
+
+function friendlyErrorMessage(error, fallback = "Something went wrong. Please try again.") {
+    const raw = typeof error === "string" ? error : error?.message;
+    const message = String(raw || "").trim();
+    if (!message || /<!doctype|<html|<body|<head/i.test(message) || message.length > 240) return fallback;
+    return message;
+}
 
 function syncVisualViewport() {
     const viewport = window.visualViewport;
@@ -249,7 +257,7 @@ function openDetailScreen(screen) {
     screen.classList.remove("hidden");
     screen.scrollTop = 0;
     document.body.classList.add("detail-screen-open");
-    screen.querySelector("[aria-label='Close']")?.focus({ preventScroll: true });
+    screen.querySelector("[aria-label='Close']")?.focus({ preventScroll: true, focusVisible: false });
 }
 
 function closeDetailScreen(screen) {
@@ -282,7 +290,8 @@ function showSignedOut(message = "") {
     $("#appView").classList.add("hidden");
     $("#bottomNav").classList.add("hidden");
     $("#logoutButton").classList.add("hidden");
-    $("#authStatus").textContent = message;
+    document.body.classList.remove("authenticated", "play-active");
+    $("#authStatus").textContent = friendlyErrorMessage(message, "");
 }
 
 async function showSignedIn() {
@@ -290,6 +299,7 @@ async function showSignedIn() {
     $("#appView").classList.remove("hidden");
     $("#bottomNav").classList.remove("hidden");
     $("#logoutButton").classList.remove("hidden");
+    document.body.classList.add("authenticated");
     syncVisualViewport();
     requestAnimationFrame(() => requestAnimationFrame(syncVisualViewport));
     setTimeout(syncVisualViewport, 120);
@@ -498,11 +508,11 @@ function renderProfilePanel() {
         </div>
     </article>`;
     renderSchoolCard();
-    renderProfilePolls($("#weeklyPolls"), state.topQuestionsWeekly, "No polls this week yet");
-    renderProfilePolls($("#allTimePolls"), state.topQuestionsAllTime, "No polls yet");
     renderGodModeCard();
     renderAuraPurchases();
+    renderProfileInviteCard();
     renderPasskeyStatus();
+    renderTabBadges();
 }
 
 function renderSchoolCard() {
@@ -527,6 +537,7 @@ function renderSchoolCard() {
         .slice(0, 20);
     container.innerHTML = `<article class="school-card">
         <div class="school-card-heading"><strong>School</strong>${activeClassmatesLabel}</div>
+        ${currentProfileSchoolName() ? `<div class="school-card-name">${escapeHTML(currentProfileSchoolName())}</div>` : ""}
         <p>Spotlight on classmates with the most votes this week.</p>
         ${ranked.length ? `<div class="school-leaderboard" role="list" aria-label="Classmates ranked by weekly votes">${ranked.map((classmate, index) => {
             const isCurrentUser = String(classmate.user_id) === String(state.profile?.user_id);
@@ -537,8 +548,54 @@ function renderSchoolCard() {
                 <small><span aria-hidden="true">♥</span> ${Number(classmate.weekly_vote_count || 0).toLocaleString()} this week</small>
             </button>`;
         }).join("")}</div>` : `<p>No classmates on Valid yet.</p>`}
-        <button id="viewClassmatesButton" class="secondary-button" type="button">View classmates</button>
+        <div class="school-card-actions"><button id="findContactsButton" class="secondary-button" type="button">Contacts</button><button id="viewClassmatesButton" class="secondary-button" type="button">Classmates</button></div>
     </article>`;
+}
+
+function renderProfileInviteCard() {
+    const container = $("#profileInviteCard");
+    const status = state.inviteStatus;
+    const goal = Math.max(1, Number(status?.aura_reward_goal || 3));
+    const progress = Math.max(0, Math.min(goal, Number(status?.aura_reward_progress || 0)));
+    const remaining = Math.max(0, goal - progress);
+    container.innerHTML = `<article class="profile-invite-card">
+        <div><strong>${remaining ? `Invite ${remaining} more ${remaining === 1 ? "friend" : "friends"}` : "Invite reward complete"}</strong><p>Bring friends to Valid and earn bonus aura when they join.</p></div>
+        <div class="profile-invite-progress"><span><strong>${progress} / ${goal}</strong><small>qualifying invites</small></span><progress max="${goal}" value="${progress}" aria-label="${progress} of ${goal} qualifying invites"></progress></div>
+        <div class="profile-invite-actions"><button class="profile-share-button snapchat" type="button" data-profile-invite="snapchat"><img src="../assets/app/snapchat-logo.png" alt=""><span>Snapchat</span></button><button class="profile-share-button imessage" type="button" data-profile-invite="imessage"><span aria-hidden="true">●</span><span>Messages</span></button></div>
+        <p id="profileInviteStatus" class="status-message" role="status"></p>
+    </article>`;
+}
+
+async function shareProfileInvite(button, channel) {
+    setButtonLoading(button, true, "Opening…");
+    const status = $("#profileInviteStatus");
+    status.textContent = "";
+    try {
+        const invite = await api.createInvite(api.user.id, channel);
+        const copy = `Join me on Valid — it’s more fun with classmates. ${invite.share_url}`;
+        if (channel === "imessage" && /iPhone|iPad|iPod/i.test(navigator.userAgent)) location.href = `sms:&body=${encodeURIComponent(copy)}`;
+        else if (navigator.share) await navigator.share({ title: "Join me on Valid", text: "Join me on Valid — it’s more fun with classmates.", url: invite.share_url });
+        else {
+            await navigator.clipboard.writeText(invite.share_url);
+            status.textContent = "Invite link copied.";
+        }
+    } catch (error) {
+        if (error.name !== "AbortError") status.textContent = friendlyErrorMessage(error, "Could not create an invite.");
+    } finally {
+        setButtonLoading(button, false);
+        state.inviteStatus = await api.getInviteStatus(api.user.id).catch(() => state.inviteStatus);
+        renderProfileInviteCard();
+    }
+}
+
+function renderTabBadges() {
+    const unread = state.tbhPendingRequests.filter((item) => !item.opened_at).length
+        + (state.anonymousInbox?.questions || []).filter((item) => !item.opened_at).length;
+    const feedBadge = $("#feedTabBadge");
+    feedBadge.textContent = unread > 9 ? "9+" : String(unread || "");
+    feedBadge.classList.toggle("hidden", unread < 1);
+    const profileIncomplete = !state.profile?.profile_picture_url || !String(state.profile?.bio || "").trim();
+    $("#profileTabBadge").classList.toggle("hidden", !profileIncomplete);
 }
 
 function renderPasskeyStatus() {
@@ -844,14 +901,16 @@ function renderTbhRequestFlow() {
     const target = state.tbhTargets.find((item) => String(item.user_id) === String(state.selectedTbhTargetId));
     if (!target) {
         $("#tbhRequestTitle").textContent = "Request a TBH";
+        $("#tbhRequestDialog [data-close-tbh-request] span").textContent = "Close";
         body.innerHTML = `<p>Who do you want an honest take from?</p><label class="feed-search"><span aria-hidden="true">⌕</span><input id="tbhTargetSearch" type="search" placeholder="Search classmates" autocomplete="off"></label><div id="tbhTargetList" class="tbh-target-list"></div>`;
         renderTbhTargetList();
         return;
     }
     $("#tbhRequestTitle").textContent = "Choose an angle";
-    body.innerHTML = `<div class="tbh-target-row">${avatarMarkup(target, "row-avatar")}<span><strong>Asking ${escapeHTML(target.first_name)}</strong><small>What do you want their honest take on?</small></span></div>
-        <div class="tbh-prompt-list">${TBH_PROMPTS.map((prompt) => `<button class="tbh-prompt-row ${state.selectedTbhPrompt === prompt.key ? "selected" : ""}" type="button" data-tbh-prompt="${prompt.key}" aria-pressed="${state.selectedTbhPrompt === prompt.key}"><span aria-hidden="true">${state.selectedTbhPrompt === prompt.key ? "●" : "○"}</span><strong>${escapeHTML(prompt.title)}</strong></button>`).join("")}</div>
-        <div class="tbh-consent-card"><strong>Public to your school</strong><p>If they answer, your name and their TBH will appear in School for classmates to see and react to. Their name stays private.</p></div>
+    $("#tbhRequestDialog [data-close-tbh-request] span").textContent = "Back";
+    body.innerHTML = `<div class="tbh-selected-target">${avatarMarkup(target, "row-avatar")}<span><strong>Asking ${escapeHTML(target.first_name)}</strong><small>What do you want their honest take on?</small></span></div>
+        <div class="tbh-prompt-list">${TBH_PROMPTS.map((prompt) => `<button class="tbh-prompt-row ${state.selectedTbhPrompt === prompt.key ? "selected" : ""}" type="button" data-tbh-prompt="${prompt.key}" aria-pressed="${state.selectedTbhPrompt === prompt.key}"><span class="tbh-prompt-check" aria-hidden="true">${state.selectedTbhPrompt === prompt.key ? "✓" : ""}</span><strong>${escapeHTML(prompt.title)}</strong></button>`).join("")}</div>
+        <div class="tbh-consent-card"><span class="tbh-consent-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M16 11a4 4 0 1 0-3.6-5.7M8 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-4 0-6 2-6 5v1h12v-1c0-3-2-5-6-5Zm8-1c3.5 0 6 1.8 6 5v2h-6"/></svg></span><span><strong>Public to your school</strong><p>If they answer, your name and their TBH will appear in School for classmates to see and react to. Their name stays private.</p></span></div>
         <button class="primary-button" type="button" data-send-tbh-request>Continue · ${tbhAuraCost().toLocaleString()} aura</button><p id="tbhRequestStatus" class="status-message" role="status"></p>`;
 }
 
@@ -875,20 +934,7 @@ async function openTbhRequestPurchase() {
 async function submitTbhRequest(button) {
     const target = state.tbhTargets.find((item) => String(item.user_id) === String(state.selectedTbhTargetId));
     if (!target) return;
-    const cost = tbhAuraCost();
-    if (!confirm(`Request a TBH from ${target.first_name}? Spend ${cost.toLocaleString()} aura. If they answer, your name and their TBH will be public in School; their name stays private.`)) return;
-    setButtonLoading(button, true, "Sending…");
-    try {
-        const response = await api.createTbhRequest(api.user.id, target.user_id, state.selectedTbhPrompt, state.tbhRequestIdempotencyKey);
-        if (state.profile) state.profile.aura_points = response.total_aura_points;
-        renderProfileHeader();
-        renderProfilePanel();
-        $("#tbhRequestTitle").textContent = "Request sent";
-        $("#tbhRequestBody").innerHTML = `<div class="tbh-success"><span aria-hidden="true">❝</span><h2>Request sent to ${escapeHTML(target.first_name)}</h2><p>If they answer, your name and their TBH will be posted in School for classmates to see and react to. Their name stays private.</p><button class="primary-button" type="button" data-close-tbh-request>Done</button></div>`;
-    } catch (error) {
-        $("#tbhRequestStatus").textContent = error.message || "Couldn't send request.";
-        setButtonLoading(button, false);
-    }
+    openAuraSpend("tbh", target);
 }
 
 function selectedTbhRequest() {
@@ -972,9 +1018,18 @@ async function openTbhDetail(value) {
     let item = (kind === "received" ? state.tbhInboxItems : kind === "sent" ? state.tbhSentItems : state.schoolTbhItems).find((candidate) => String(candidate.id) === String(id));
     if (!item) return;
     const name = kind === "received" ? item.author_first_name : item.subject_first_name;
-    $("#tbhDetailTitle").textContent = kind === "received" ? `TBH from ${name}` : kind === "sent" ? `TBH sent to ${name}` : `${name} got a TBH`;
-    $("#tbhDetailBody").innerHTML = `<article class="tbh-detail-card"><p>${escapeHTML(promptForKey(item.prompt_key).title)}</p><blockquote>${escapeHTML(item.body)}</blockquote>${kind === "school" ? `<small>${escapeHTML(tbhAuthorLine(item))}</small>` : kind === "sent" ? `<small>${escapeHTML(`${name} sees your name. School sees your TBH without your name.`)}</small>` : ""}</article>`;
-    $("#tbhDetailDialog").showModal();
+    const title = kind === "received" ? `TBH from ${name}` : kind === "sent" ? `TBH sent to ${name}` : `${name} got a TBH`;
+    const subject = { first_name: item.subject_first_name, last_name: item.subject_last_name, profile_picture_url: item.subject_profile_picture_url };
+    const hero = kind === "school"
+        ? avatarMarkup(subject, "row-avatar tbh-detail-avatar")
+        : `<span class="tbh-detail-quote" aria-hidden="true">❞</span>`;
+    const footer = kind === "school"
+        ? tbhAuthorLine(item)
+        : kind === "sent"
+            ? `${name} sees your name. School sees your TBH without your name.`
+            : "";
+    $("#tbhDetailBody").innerHTML = `<article class="tbh-detail-card"><div class="tbh-detail-hero">${hero}<h2 id="tbhDetailTitle">${escapeHTML(title)}</h2><p>${escapeHTML(promptForKey(item.prompt_key).title)}</p></div><blockquote>${escapeHTML(item.body)}</blockquote>${footer ? `<small>${escapeHTML(footer)}</small>` : ""}</article>`;
+    openDetailScreen($("#tbhDetailDialog"));
     if (kind === "received" && !item.opened_at) {
         try {
             const opened = await api.getTbhResponse(api.user.id, item.id);
@@ -1021,19 +1076,23 @@ async function shareTopPoll() {
 }
 
 function openAuraSpend(kind, target = null) {
-    const cost = kind === "reveal"
+    const cost = kind === "tbh"
+        ? tbhAuraCost()
+        : kind === "reveal"
         ? Math.max(0, Number(state.config?.full_reveal_aura_cost ?? DEFAULT_FULL_REVEAL_AURA_COST))
         : auraCost(kind);
     const aura = Math.max(0, Number(state.profile?.aura_points || 0));
     if (aura < cost) return showToast(`You need ${cost.toLocaleString()} aura.`);
-    const details = kind === "global"
+    const details = kind === "tbh"
+        ? [`Request a TBH from ${target.first_name}?`, "If they answer, your name and their TBH will be public in School. Their name stays private."]
+        : kind === "global"
         ? ["Get Boosted", "Jump to the top of your classmates' polls for 5 days or until you get voted 10 times."]
         : kind === "reveal"
             ? ["Reveal who sent this?", `Spend ${cost.toLocaleString()} aura to see who voted for you.`]
             : ["Boost toward your crush", `Show up more often in ${displayName(target)}'s polls. They will not be told.`];
     state.pendingAuraPurchase = { kind, target };
     const spendIcon = $("#auraSpendIcon");
-    const targetImage = kind === "targeted" ? api.assetURL(target?.profile_picture_url_medium || target?.profile_picture_url) : null;
+    const targetImage = ["targeted", "tbh"].includes(kind) ? api.assetURL(target?.profile_picture_url_medium || target?.profile_picture_url) : null;
     spendIcon.src = targetImage || (kind === "reveal" ? "../assets/app/magnifying_glass.png" : "../assets/app/rocket.png");
     spendIcon.alt = kind === "global" ? "Get Boosted" : kind === "reveal" ? "Reveal sender" : displayName(target);
     spendIcon.closest(".aura-spend-icon").classList.toggle("profile", Boolean(targetImage));
@@ -1052,10 +1111,16 @@ async function confirmAuraSpend() {
     const purchase = state.pendingAuraPurchase;
     if (!purchase) return;
     const button = $("#confirmAuraSpend");
-    setButtonLoading(button, true, purchase.kind === "reveal" ? "Revealing..." : "Purchasing...");
+    setButtonLoading(button, true, purchase.kind === "reveal" ? "Revealing..." : purchase.kind === "tbh" ? "Sending…" : "Purchasing...");
     $("#auraSpendStatus").textContent = "";
     try {
-        if (purchase.kind === "reveal") {
+        let tbhResponse = null;
+        if (purchase.kind === "tbh") {
+            tbhResponse = await api.createTbhRequest(api.user.id, purchase.target.user_id, state.selectedTbhPrompt, state.tbhRequestIdempotencyKey);
+            if (state.profile) state.profile.aura_points = tbhResponse.total_aura_points;
+            renderProfileHeader();
+            renderProfilePanel();
+        } else if (purchase.kind === "reveal") {
             const result = await api.revealSender(api.user.id, purchase.target.question_answer_id);
             applyFeedSenderReveal(purchase.target, result);
         } else if (purchase.kind === "global") await api.purchaseGlobalBoost(api.user.id);
@@ -1063,8 +1128,11 @@ async function confirmAuraSpend() {
         clearOptimisticEarnedProfile();
         $("#auraSpendDialog").close();
         state.pendingAuraPurchase = null;
-        if (purchase.kind !== "reveal") await refreshProfile();
-        showToast(purchase.kind === "reveal"
+        if (!["reveal", "tbh"].includes(purchase.kind)) await refreshProfile();
+        if (purchase.kind === "tbh") {
+            $("#tbhRequestTitle").textContent = "Request sent";
+            $("#tbhRequestBody").innerHTML = `<div class="tbh-success"><span class="tbh-detail-quote" aria-hidden="true">❞</span><h2>Request sent to ${escapeHTML(purchase.target.first_name)}</h2><p>If they answer, your name and their TBH will be posted in School for classmates to see and react to. Their name stays private.</p><button class="primary-button" type="button" data-close-tbh-request>Done</button></div>`;
+        } else showToast(purchase.kind === "reveal"
             ? `Revealed: ${purchase.target.voter_name}`
             : purchase.kind === "global"
                 ? "You're boosted 🚀"
@@ -1076,7 +1144,9 @@ async function confirmAuraSpend() {
     } finally {
         setButtonLoading(button, false);
         if (state.pendingAuraPurchase) {
-            const cost = state.pendingAuraPurchase.kind === "reveal"
+            const cost = state.pendingAuraPurchase.kind === "tbh"
+                ? tbhAuraCost()
+                : state.pendingAuraPurchase.kind === "reveal"
                 ? Math.max(0, Number(state.config?.full_reveal_aura_cost ?? DEFAULT_FULL_REVEAL_AURA_COST))
                 : auraCost(state.pendingAuraPurchase.kind);
             button.innerHTML = `<span>Spend ${cost.toLocaleString()} aura</span><img src="../assets/app/aura.png" alt="">`;
@@ -1115,22 +1185,29 @@ function renderClassmateDirectory() {
         return !query || searchable.includes(query);
     });
     $("#classmateDirectoryList").innerHTML = classmates.length
-        ? classmates.map((classmate) => `<button type="button" data-directory-classmate="${escapeHTML(classmate.user_id)}">${avatarMarkup(classmate, "row-avatar")}<span><strong>${escapeHTML(displayName(classmate))}</strong><small>${escapeHTML([classmate.username ? `@${classmate.username}` : "", formatGrade(classmate.grade || "")].filter(Boolean).join(" · ") || "Classmate")}</small></span><span aria-hidden="true">›</span></button>`).join("")
+        ? classmates.map((classmate) => `<button type="button" data-directory-classmate="${escapeHTML(classmate.user_id)}">${avatarMarkup(classmate, "row-avatar")}<span><strong>${escapeHTML(displayName(classmate))}</strong><small>${escapeHTML(formatGrade(classmate.grade || "Classmate"))}</small></span><span class="classmate-row-meta"><strong><span aria-hidden="true">♥</span> ${Number(classmate.weekly_vote_count || 0).toLocaleString()}</strong>${classmate.ask_link_active ? `<span class="classmate-ask-indicator" aria-label="Ask Me is on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5h14v10H10l-4.5 3v-3H5Z"/><path d="M10 9a2 2 0 1 1 2.8 1.8c-.8.3-.8.8-.8 1.2M12 14h.01"/></svg></span>` : ""}</span></button>`).join("")
         : `<div class="profile-poll-empty">${query ? "No matching classmates." : "No classmates are visible yet."}</div>`;
+}
+
+function updateClassmateDirectoryHeading(count = null) {
+    $("#classmateDirectoryTitle").textContent = Number.isFinite(count) ? `Classmates (${count})` : "Classmates";
 }
 
 async function openClassmateDirectory() {
     const dialog = $("#classmateDirectoryDialog");
     $("#classmateDirectorySearch").value = "";
-    $("#classmateDirectoryStatus").textContent = state.classmateDirectory
-        ? `${state.classmateDirectory.length} ${state.classmateDirectory.length === 1 ? "classmate" : "classmates"}`
-        : "Loading classmates...";
+    updateClassmateDirectoryHeading(state.classmateDirectory?.length ?? null);
+    $("#classmateDirectoryStatus").textContent = state.classmateDirectory ? "" : "Loading classmates...";
     renderClassmateDirectory();
     dialog.showModal();
+    requestAnimationFrame(() => {
+        if (document.activeElement?.closest?.("#classmateDirectoryDialog")) document.activeElement.blur();
+    });
     if (state.classmateDirectory) return;
     try {
         state.classmateDirectory = await api.getClassmates(api.user.id, "", 500);
-        $("#classmateDirectoryStatus").textContent = `${state.classmateDirectory.length} ${state.classmateDirectory.length === 1 ? "classmate" : "classmates"}`;
+        updateClassmateDirectoryHeading(state.classmateDirectory.length);
+        $("#classmateDirectoryStatus").textContent = "";
         renderClassmateDirectory();
     } catch (error) {
         $("#classmateDirectoryStatus").textContent = error.message || "Could not load classmates.";
@@ -1151,6 +1228,7 @@ function renderClassmateProfile() {
             <div class="profile-stat-card"><strong><span class="heart">♥</span>${Number(profile.vote_count || 0).toLocaleString()}</strong><span>Votes Received</span></div>
             ${tbhRequestsEnabled() ? `<div class="profile-stat-card"><strong><span aria-hidden="true">❝</span>${Number(profile.tbh_unique_requester_count || 0).toLocaleString()}</strong><span>TBH Requests</span></div>` : ""}
         </div>
+        ${state.selectedClassmateAskTarget?.public_token ? `<a class="primary-button classmate-ask-button" href="../a/${encodeURIComponent(state.selectedClassmateAskTarget.public_token)}">Ask ${escapeHTML(profile.first_name || displayName(profile))} anonymously</a>` : ""}
     </article>`;
     if (state.selectedClassmateTopQuestionsWeekly === null) {
         $("#classmateWeeklyPolls").innerHTML = '<div class="profile-poll-empty">Loading...</div>';
@@ -1172,6 +1250,7 @@ async function openClassmateProfile(userId) {
     state.classmateProfileReturnToDirectory = $("#classmateDirectoryDialog").open;
     if (state.classmateProfileReturnToDirectory) $("#classmateDirectoryDialog").close();
     state.selectedClassmateProfile = preview;
+    state.selectedClassmateAskTarget = null;
     state.selectedClassmateTopQuestionsWeekly = null;
     state.selectedClassmateTopQuestionsAllTime = null;
     renderClassmateProfile();
@@ -1181,6 +1260,7 @@ async function openClassmateProfile(userId) {
         api.getProfile(userId),
         api.getTopQuestions(userId, "weekly", 10),
         api.getTopQuestions(userId, "all_time", 3),
+        api.getProfileAskTarget(userId),
     ]);
     if (generation !== state.classmateProfileGeneration) return;
     if (requests[0].status === "fulfilled") state.selectedClassmateProfile = requests[0].value;
@@ -1188,6 +1268,7 @@ async function openClassmateProfile(userId) {
     else state.selectedClassmateTopQuestionsWeekly = [];
     if (requests[2].status === "fulfilled") state.selectedClassmateTopQuestionsAllTime = requests[2].value;
     else state.selectedClassmateTopQuestionsAllTime = [];
+    if (requests[3].status === "fulfilled") state.selectedClassmateAskTarget = requests[3].value?.target || null;
     const firstError = requests.find((result) => result.status === "rejected");
     $("#classmateProfileStatus").textContent = requests[0].status === "rejected"
         ? (requests[0].reason?.message || "Could not load this profile.")
@@ -1200,8 +1281,30 @@ function backToClassmates() {
     if (state.classmateProfileReturnToDirectory) {
         renderClassmateDirectory();
         $("#classmateDirectoryDialog").showModal();
+        requestAnimationFrame(() => document.activeElement?.closest?.("#classmateDirectoryDialog") && document.activeElement.blur());
     }
     state.classmateProfileReturnToDirectory = false;
+}
+
+async function moderateSelectedClassmate(action) {
+    const profile = state.selectedClassmateProfile;
+    if (!profile?.user_id) return;
+    const verb = action === "block" ? "block" : "report";
+    if (!confirm(`${verb === "block" ? "Block" : "Report"} ${displayName(profile)}?${verb === "block" ? " They will be removed from your Valid experience." : " Valid will review this profile."}`)) return;
+    $("#classmateProfileStatus").textContent = verb === "block" ? "Blocking profile…" : "Sending report…";
+    try {
+        if (verb === "block") {
+            await api.blockUser(api.user.id, profile.user_id);
+            state.classmateDirectory = (state.classmateDirectory || []).filter((item) => String(item.user_id) !== String(profile.user_id));
+            closeDetailScreen($("#classmateProfileDialog"));
+            showToast("Profile blocked");
+        } else {
+            await api.reportUser(api.user.id, profile.user_id);
+            $("#classmateProfileStatus").textContent = "Report sent. Thank you for helping keep Valid safe.";
+        }
+    } catch (error) {
+        $("#classmateProfileStatus").textContent = friendlyErrorMessage(error, `Could not ${verb} this profile.`);
+    }
 }
 
 async function loadProfilePanel() {
@@ -1211,11 +1314,10 @@ async function loadProfilePanel() {
         { key: "profile", promise: api.getProfile(api.user.id) },
         { key: "currentUser", promise: api.getUser(api.user.id) },
     ];
-    if (!state.topQuestionsWeekly) requests.push({ key: "weekly", promise: api.getTopQuestions(api.user.id, "weekly", 10) });
-    if (!state.topQuestionsAllTime) requests.push({ key: "allTime", promise: api.getTopQuestions(api.user.id, "all_time", 3) });
     if (!state.askLink) requests.push({ key: "askLink", promise: api.getAskLink(api.user.id) });
     if (!state.askAccess) requests.push({ key: "askAccess", promise: api.getAnonymousAskAccess(api.user.id) });
     if (!state.passkeyStatus) requests.push({ key: "passkeyStatus", promise: api.getPasskeyStatus() });
+    if (!state.inviteStatus) requests.push({ key: "inviteStatus", promise: api.getInviteStatus(api.user.id) });
     if (!state.classmateDirectory || state.activeClassmatesThisWeek === null) requests.push({ key: "classmates", promise: api.getClassmatesWithMetadata(api.user.id, "", 500) });
     const results = await Promise.allSettled(requests.map((request) => request.promise));
     let profileError = "";
@@ -1224,11 +1326,10 @@ async function loadProfilePanel() {
         if (result.status === "fulfilled") {
             if (request.key === "profile") state.profile = result.value;
             if (request.key === "currentUser") api.user = { ...api.user, ...result.value };
-            if (request.key === "weekly") state.topQuestionsWeekly = result.value;
-            if (request.key === "allTime") state.topQuestionsAllTime = result.value;
             if (request.key === "askLink") state.askLink = result.value;
             if (request.key === "askAccess") state.askAccess = result.value;
             if (request.key === "passkeyStatus") state.passkeyStatus = result.value;
+            if (request.key === "inviteStatus") state.inviteStatus = result.value;
             if (request.key === "classmates") {
                 state.classmateDirectory = result.value.classmates;
                 state.classmates = result.value.classmates;
@@ -1276,7 +1377,7 @@ async function handlePasskeySignIn() {
         api.saveSession(login);
         await showSignedIn();
     } catch (error) {
-        $("#authStatus").textContent = error.message || "Passkey sign-in failed.";
+        $("#authStatus").textContent = friendlyErrorMessage(error, "Passkey sign-in failed. Please try again.");
     } finally {
         setButtonLoading(button, false);
     }
@@ -1871,6 +1972,10 @@ function reactionControlMarkup(item, targetType, targetId) {
     </span>`;
 }
 
+function tbhAvatarMarkup(profile, request = false) {
+    return `<span class="tbh-avatar-shell ${request ? "request" : "response"}">${avatarMarkup(profile, "row-avatar tbh-avatar")}<span class="tbh-avatar-badge" aria-hidden="true">${request ? "TBH" : "❞"}</span></span>`;
+}
+
 function tbhAuthorLine(item) {
     const gender = String(item.author_gender || "").toLowerCase();
     const emoji = gender === "male" || gender === "boy" ? "👦💙" : gender === "female" || gender === "girl" ? "👧💗" : gender === "non-binary" || gender === "nonbinary" ? "🧑💛" : "";
@@ -1886,7 +1991,7 @@ function pendingTbhRows() {
     if (state.feedType !== "personal" || !tbhRequestsEnabled() || state.feedSearch.trim()) return [];
     return state.tbhPendingRequests.map((request) => ({ timestamp: request.created_at, html: `<article class="tbh-row tbh-request-row ${request.opened_at ? "" : "unread"}">
         <button class="tbh-row-main" type="button" data-tbh-request="${escapeHTML(request.id)}">
-            ${avatarMarkup({ first_name: request.requester_first_name, last_name: request.requester_last_name, profile_picture_url: request.requester_profile_picture_url }, "row-avatar tbh-avatar")}
+            ${tbhAvatarMarkup({ first_name: request.requester_first_name, last_name: request.requester_last_name, profile_picture_url: request.requester_profile_picture_url }, true)}
             <span class="tbh-row-copy"><span><strong>${escapeHTML(request.requester_first_name)} wants a TBH</strong>${request.opened_at ? "" : `<i aria-label="Unread"></i>`}</span><small>${escapeHTML(promptForKey(request.prompt_key).title)}</small></span>
         </button>
         <details class="tbh-row-menu"><summary aria-label="More options for ${escapeHTML(request.requester_first_name)}'s TBH request">•••</summary><span><button type="button" data-tbh-dismiss="${escapeHTML(request.id)}">Dismiss request</button><button type="button" data-tbh-suppress="${escapeHTML(request.requester_user_id)}">Stop requests from ${escapeHTML(request.requester_first_name)}</button></span></details>
@@ -1906,9 +2011,9 @@ function tbhFeedRows(items, kind) {
             ? `<strong>${escapeHTML(`${firstName} ${lastName}`)}</strong> got a TBH`
             : `<strong>${escapeHTML(`${firstName} ${lastName}`)}</strong> got your TBH`;
         const detail = school ? tbhAuthorLine(item) : promptForKey(item.prompt_key).title;
-        return { timestamp: item.created_at, item, html: `<article class="feed-card tbh-row" data-tbh-detail="${escapeHTML(`${kind}:${item.id}`)}" role="button" tabindex="0" aria-label="Open TBH details">
-            ${avatarMarkup({ first_name: firstName, last_name: lastName, profile_picture_url: picture }, "row-avatar tbh-avatar")}
-            <div class="feed-body"><div class="feed-meta"><span>${title}</span><time>${escapeHTML(relativeTime(item.created_at))}</time></div><div class="feed-question">${escapeHTML(item.body)}</div><div class="feed-answer">${escapeHTML(detail)}</div></div>
+        return { timestamp: item.created_at, item, html: `<article class="feed-card tbh-row tbh-feed-row tbh-${kind}" data-tbh-detail="${escapeHTML(`${kind}:${item.id}`)}" role="button" tabindex="0" aria-label="Open TBH details">
+            ${tbhAvatarMarkup({ first_name: firstName, last_name: lastName, profile_picture_url: picture })}
+            <div class="tbh-feed-copy"><div class="tbh-feed-title">${title}</div><div class="tbh-feed-body">${escapeHTML(item.body)}</div><div class="tbh-feed-meta"><span>${escapeHTML(detail)}</span><time>${escapeHTML(relativeTime(item.created_at))}</time></div></div>
             ${reactionControlMarkup(item, "activity", item.activity_id)}
         </article>` };
     });
@@ -1955,8 +2060,17 @@ function renderFeed() {
         : [];
     const filteredVotes = state.feedType === "school" && state.schoolFeedContent === "tbhs" ? [] : visible;
     if (!filteredVotes.length && !anonymousRows.length && !personalTbhRows.length && !schoolTbhRows.length) {
-        const text = state.feedSearch ? "No matching posts." : state.schoolFeedContent === "tbhs" ? "No TBHs yet. Public TBHs from your school will show up here." : state.myVotesOnly ? "You haven't voted yet. Answer questions in Play to see your votes here." : state.feedType === "personal" ? "Nothing in your Inbox yet. Votes, TBHs, and anonymous messages will show up here." : "No school activity yet.";
-        list.innerHTML = `<div class="empty-card">${escapeHTML(text)}</div>`;
+        const emptyState = query
+            ? { title: "No results found", message: "Try searching for a name or question." }
+            : state.schoolFeedContent === "tbhs"
+                ? { title: "No TBHs yet", message: "Public TBHs from your school will show up here." }
+                : state.myVotesOnly
+                    ? { title: "You haven't voted yet", message: "Answer some questions in the Play tab to see your votes here." }
+                    : state.feedType === "personal"
+                        ? { title: "Nothing in your Inbox yet", message: "Votes, TBHs, and anonymous messages will show up here." }
+                        : { title: "No school activity yet", message: "As students at your school answer questions, activity will appear here." };
+        list.innerHTML = `<div class="feed-empty-state"><span class="feed-empty-art" aria-hidden="true"><svg viewBox="0 0 160 120"><path d="M22 36 80 76l58-40v54a12 12 0 0 1-12 12H34a12 12 0 0 1-12-12Z"/><path d="m22 36 58-22 58 22-58 40Z"/><path d="m22 96 41-34M138 96 97 62"/></svg></span><strong>${escapeHTML(emptyState.title)}</strong><p>${escapeHTML(emptyState.message)}</p></div>`;
+        renderTabBadges();
         return;
     }
     const voteRows = filteredVotes.map((item) => {
@@ -1964,12 +2078,12 @@ function renderFeed() {
         const isPersonal = state.feedType === "personal";
         const title = isPersonal ? `${item.is_nomination ? "👑 " : ""}<strong>You</strong> got ${item.is_nomination ? "nominated" : "voted"}` : `<strong>${escapeHTML(item.voted_for_name || item.contact_name || "A classmate")}</strong> got voted`;
         const detail = formatVoterHint(item);
-        return { timestamp: item.timestamp, item, html: `<article class="feed-card" data-answer-id="${item.question_answer_id}" data-feed-detail="${item.question_answer_id}" role="button" tabindex="0" aria-label="Open poll details: ${escapeHTML(item.question_text)}">
+        return { timestamp: item.timestamp, item, html: `<article class="feed-card vote-feed-row" data-answer-id="${item.question_answer_id}" data-feed-detail="${item.question_answer_id}" role="button" tabindex="0" aria-label="Open poll details: ${escapeHTML(item.question_text)}">
             ${feedAvatar(item)}
             <div class="feed-body">
-                <div class="feed-meta"><span>${title}</span><time>${escapeHTML(relativeTime(item.timestamp))}</time></div>
+                <div class="feed-meta"><span>${title}</span></div>
                 <div class="feed-question">${escapeHTML(item.question_text)}</div>
-                ${detail ? `<div class="feed-answer">${escapeHTML(detail)}</div>` : ""}
+                <div class="feed-detail-row">${detail ? `<span class="feed-answer">${escapeHTML(detail)}</span>` : "<span></span>"}<time>${escapeHTML(relativeTime(item.timestamp))}</time></div>
             </div>
             ${reactionControlMarkup(item, "poll", item.question_answer_id)}
         </article>` };
@@ -1981,6 +2095,7 @@ function renderFeed() {
             : (Date.parse(right.timestamp) || 0) - (Date.parse(left.timestamp) || 0))
         .map((row) => row.html)
         .join("");
+    renderTabBadges();
 }
 
 function renderFeedClassmateResults() {
@@ -2114,14 +2229,25 @@ async function setReactionForTarget(target, reactionType) {
     }
 }
 
-function openReactionPicker(target) {
+function openReactionPicker(target, anchor) {
     const [targetType, targetId] = String(target).split(":");
     const item = reactionItems(targetType, targetId)[0];
     if (!item || item.can_react === false) return;
     normalizeReactionState(item);
     state.reactorTarget = target;
-    $("#reactionPickerOptions").innerHTML = FEED_REACTIONS.map((reaction) => `<button class="${item.current_user_reaction === reaction.type ? "selected" : ""}" type="button" data-select-reaction="${reaction.type}" aria-label="${reaction.label}" aria-pressed="${item.current_user_reaction === reaction.type}"><span aria-hidden="true">${reaction.emoji}</span><small>${reaction.label}</small></button>`).join("");
-    $("#reactionPickerDialog").showModal();
+    $("#reactionPickerOptions").innerHTML = FEED_REACTIONS.map((reaction) => `<button class="${item.current_user_reaction === reaction.type ? "selected" : ""}" type="button" data-select-reaction="${reaction.type}" aria-label="${reaction.label}" aria-pressed="${item.current_user_reaction === reaction.type}"><span aria-hidden="true">${reaction.emoji}</span><small class="visually-hidden">${reaction.label}</small></button>`).join("");
+    const dialog = $("#reactionPickerDialog");
+    if (dialog.open) dialog.close();
+    dialog.show();
+    const anchorRect = anchor?.getBoundingClientRect();
+    if (anchorRect) {
+        const pickerRect = dialog.getBoundingClientRect();
+        const left = Math.max(8, Math.min(window.innerWidth - pickerRect.width - 8, anchorRect.right - pickerRect.width));
+        const preferredTop = anchorRect.top - pickerRect.height - 8;
+        const top = preferredTop >= 8 ? preferredTop : Math.min(window.innerHeight - pickerRect.height - 8, anchorRect.bottom + 8);
+        dialog.style.left = `${left}px`;
+        dialog.style.top = `${Math.max(8, top)}px`;
+    }
     softHaptic();
 }
 
@@ -3370,7 +3496,6 @@ function renderLockedPlay() {
 function renderPlayCongrats() {
     $("#playProgress").textContent = "Complete";
     $("#playCard").innerHTML = `<article class="play-congrats-card">
-        <span class="eyebrow">POLL SET COMPLETE</span>
         <h3>Congrats!</h3>
         <img src="../assets/app/aura.png" alt="">
         <p>You just earned <strong>${Number(state.playAuraEarned).toLocaleString()} aura</strong></p>
@@ -3416,7 +3541,7 @@ function renderPlay() {
 
 async function loadPlay() {
     if (state.questions.length || state.playLocked) return renderPlay();
-    $("#playStatus").textContent = "Finding questions and classmates...";
+    $("#playStatus").innerHTML = `<span class="play-loading-state"><span class="play-loading-gear" aria-hidden="true">⚙</span><span>Finding questions and classmates…</span></span>`;
     try {
         const [questionBatch, classmates, inviteStatus, config] = await Promise.all([
             api.getPlayQuestions(api.user.id),
@@ -5224,7 +5349,7 @@ function bindEvents() {
     $("#feedList").addEventListener("click", (event) => {
         const reactionPicker = event.target.closest("[data-reaction-picker]");
         const reactors = event.target.closest("[data-reactors]");
-        if (reactionPicker) return openReactionPicker(reactionPicker.dataset.reactionPicker);
+        if (reactionPicker) return openReactionPicker(reactionPicker.dataset.reactionPicker, reactionPicker);
         if (reactors) return openReactorList(reactors.dataset.reactors);
         const tbhRequest = event.target.closest("[data-tbh-request]");
         const tbhDismiss = event.target.closest("[data-tbh-dismiss]");
@@ -5301,7 +5426,10 @@ function bindEvents() {
     document.addEventListener("click", (event) => {
         if (!event.target.closest(".detail-overflow")) closeDetailActionMenus();
     });
-    $$(".nav-item").forEach((button) => button.addEventListener("click", () => switchPanel(button.dataset.panel)));
+    $$(".nav-item").forEach((button) => button.addEventListener("click", (event) => {
+        switchPanel(button.dataset.panel);
+        if (event.detail > 0) button.blur();
+    }));
     $("#playCard").addEventListener("click", (event) => {
         const menuButton = event.target.closest("[data-toggle-play-menu]");
         if (menuButton) toggleDetailActionMenu(menuButton);
@@ -5354,6 +5482,10 @@ function bindEvents() {
         if (event.target.closest("[data-edit-bio]")) openBioDialog();
         if (event.target.closest("[data-edit-profile]")) openProfileDialog();
         if (event.target.closest("#viewClassmatesButton")) openClassmateDirectory();
+        if (event.target.closest("#findContactsButton")) openClassmatesDialog();
+        if (event.target.closest("#profileSignOutButton")) logoutAndReset();
+        const invite = event.target.closest("[data-profile-invite]");
+        if (invite) shareProfileInvite(invite, invite.dataset.profileInvite);
         const rankedClassmate = event.target.closest("[data-school-classmate]");
         if (rankedClassmate) openClassmateProfile(rankedClassmate.dataset.schoolClassmate);
         const poll = event.target.closest("[data-top-poll]");
@@ -5399,6 +5531,9 @@ function bindEvents() {
     });
     $("#tbhResponseText").addEventListener("input", updateTbhComposer);
     $("#tbhComposerForm").addEventListener("submit", submitTbhResponse);
+    $("#tbhDetailDialog").addEventListener("click", (event) => {
+        if (event.target.closest("[data-close-tbh-detail]")) closeDetailScreen($("#tbhDetailDialog"));
+    });
     $("#reactionPickerOptions").addEventListener("click", (event) => {
         const button = event.target.closest("[data-select-reaction]");
         if (!button || !state.reactorTarget) return;
@@ -5407,6 +5542,10 @@ function bindEvents() {
         const next = item?.current_user_reaction === button.dataset.selectReaction ? null : button.dataset.selectReaction;
         $("#reactionPickerDialog").close();
         setReactionForTarget(state.reactorTarget, next);
+    });
+    document.addEventListener("pointerdown", (event) => {
+        const dialog = $("#reactionPickerDialog");
+        if (dialog.open && !event.target.closest("#reactionPickerDialog") && !event.target.closest("[data-reaction-picker]")) dialog.close();
     });
     $("#godModePitchDialog").addEventListener("click", (event) => {
         if (event.target.closest("[data-close-dialog]")) {
@@ -5440,6 +5579,10 @@ function bindEvents() {
         if (classmate) openClassmateProfile(classmate.dataset.directoryClassmate);
     });
     $("#classmateProfileDialog").addEventListener("click", (event) => {
+        const menuButton = event.target.closest("[data-toggle-classmate-menu]");
+        if (menuButton) toggleDetailActionMenu(menuButton);
+        if (event.target.closest("[data-report-classmate]")) { closeDetailActionMenus(); moderateSelectedClassmate("report"); }
+        if (event.target.closest("[data-block-classmate]")) { closeDetailActionMenus(); moderateSelectedClassmate("block"); }
         const poll = event.target.closest("[data-top-poll]");
         if (poll) openTopPoll(poll.dataset.topPoll);
     });

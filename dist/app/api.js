@@ -104,8 +104,9 @@ export class ValidAPI {
             const waitSeconds = response.status === 429
                 ? retryAfterSeconds(response.headers.get("retry-after"))
                 : null;
-            const message = response.status >= 500 && !contentType.includes("application/json")
-                ? "Valid is temporarily unavailable. Please try again in a moment."
+            const detailIsHTML = typeof detail === "string" && /<!doctype|<html|<body|<head/i.test(detail);
+            const message = !contentType.includes("application/json") && (response.status >= 500 || detailIsHTML)
+                ? (response.status === 404 ? "That request is not available right now." : "Valid is temporarily unavailable. Please try again in a moment.")
                 : response.status === 429
                 ? retryMessage(waitSeconds)
                 : typeof detail === "string"
@@ -329,6 +330,15 @@ export class ValidAPI {
         return this.request(`/users/${userId}/questions/${questionId}/block-submitter`, { method: "POST" });
     }
 
+    reportUser(userId, reportedUserId, reason = "inappropriate") {
+        const params = new URLSearchParams({ reason });
+        return this.request(`/users/${userId}/reports/users/${reportedUserId}?${params}`, { method: "POST" });
+    }
+
+    blockUser(userId, blockedUserId) {
+        return this.request(`/users/${userId}/blocks/${blockedUserId}`, { method: "POST" });
+    }
+
     getPlayQuestions(userId) {
         return this.request(`/users/${userId}/questions/unanswered`);
     }
@@ -451,6 +461,10 @@ export class ValidAPI {
 
     getAskLink(userId) {
         return this.request(`/users/${userId}/ask-link`);
+    }
+
+    getProfileAskTarget(userId) {
+        return this.request(`/users/${userId}/ask-target`);
     }
 
     setAskLinkActive(userId, isActive) {

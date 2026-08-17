@@ -6,14 +6,14 @@ async function signInToDemo(page, query = "") {
     await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
 }
 
-test("bottom navigation clearly marks Feed, Play, and Settings as current", async ({ page }) => {
+test("bottom navigation clearly marks Feed, Play, and Profile as current", async ({ page }) => {
     await signInToDemo(page);
     const feed = page.getByRole("button", { name: "Feed", exact: true });
     const play = page.getByRole("button", { name: "Play", exact: true });
-    const settings = page.getByRole("button", { name: "Settings", exact: true });
+    const settings = page.getByRole("button", { name: "Profile", exact: true });
 
     await expect(feed).toHaveAttribute("aria-current", "page");
-    await expect(feed).toHaveCSS("background-color", "rgb(255, 255, 255)");
+    await expect(feed).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     await play.click();
     await expect(play).toHaveAttribute("aria-current", "page");
     await expect(feed).not.toHaveAttribute("aria-current", "page");
@@ -34,7 +34,7 @@ test("God Mode actions avoid duplicate icons and overflow dots are centered", as
     expect(await revealButton.evaluate((element) => getComputedStyle(element, "::before").backgroundImage)).toContain("crown.png");
     await page.getByRole("button", { name: "Close" }).click();
 
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
     const startCard = page.locator(".god-mode-start-button");
     await expect(startCard.locator("img")).toHaveCount(0);
     await startCard.click();
@@ -44,9 +44,9 @@ test("God Mode actions avoid duplicate icons and overflow dots are centered", as
 
 test("insufficient-aura purchase buttons are black and disabled", async ({ page }) => {
     await signInToDemo(page, "&aura=50");
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
     const buttons = page.locator("#auraPurchases .aura-price-button.insufficient");
-    await expect(buttons).toHaveCount(3);
+    await expect(buttons).toHaveCount(4);
     for (const button of await buttons.all()) {
         await expect(button).toBeDisabled();
         await expect(button).toHaveCSS("background-color", "rgb(0, 0, 0)");
@@ -56,7 +56,7 @@ test("insufficient-aura purchase buttons are black and disabled", async ({ page 
 
 test("Ask Me link can be paused, resumed, and reset from Settings", async ({ page }) => {
     await signInToDemo(page);
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
     const askCard = page.locator("#askLinkCard");
     const toggle = askCard.getByRole("switch", { name: "Allow private questions" });
     await expect(toggle).toHaveAttribute("aria-checked", "true");
@@ -72,7 +72,7 @@ test("Ask Me link can be paused, resumed, and reset from Settings", async ({ pag
 
 test("Ask Me appears directly below the profile header like iOS", async ({ page }) => {
     await signInToDemo(page);
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
 
     const order = await page.locator("#profilePanel").evaluate((panel) => {
         const children = Array.from(panel.children);
@@ -89,7 +89,7 @@ test("Ask Me appears directly below the profile header like iOS", async ({ page 
 
 test("Ask Me restriction copy does not invite a timed-out user to turn it on", async ({ page }) => {
     await signInToDemo(page, "&askrestriction=timeout");
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
     const askCard = page.locator("#askLinkCard");
 
     await expect(askCard.getByText("Ask Me access restricted")).toBeVisible();
@@ -107,9 +107,9 @@ test("Ask Me safety notices require acknowledgement and remain available in hist
     await notice.getByRole("button", { name: "I understand" }).click();
     await expect(notice).toBeHidden();
 
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
     await page.getByRole("button", { name: "Ask Me safety notices" }).click();
-    const history = page.getByRole("dialog", { name: "Safety notices" });
+    const history = page.getByRole("dialog", { name: "Ask Me safety" });
     await expect(history).toContainText("Ask Me safety warning");
 });
 
@@ -134,7 +134,7 @@ test("Ask Me reports distinguish guests from signed-in member senders", async ({
 
 test("Settings feedback form accepts a message and optional screenshot", async ({ page }) => {
     await signInToDemo(page);
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
     await page.getByRole("button", { name: "Leave feedback" }).click();
     const dialog = page.getByRole("dialog", { name: "Feedback" });
     const formBox = await dialog.locator("form").boundingBox();
@@ -153,7 +153,7 @@ test("Settings feedback form accepts a message and optional screenshot", async (
 
 test("school question artwork can be positioned and adjusted again", async ({ page }) => {
     await signInToDemo(page);
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
     await page.getByRole("button", { name: /Submit a school question for/i }).click();
     const question = page.getByRole("dialog", { name: "Submit a school question" });
     await question.getByLabel("Artwork").setInputFiles("assets/valid_logo.png");

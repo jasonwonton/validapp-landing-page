@@ -3,6 +3,12 @@ import { expect, test } from "@playwright/test";
 const API_ORIGIN = "https://api.six7.lol";
 const USER_ID = "11111111-1111-1111-1111-111111111111";
 
+async function useProductionApiOrigin(page) {
+    await page.addInitScript((apiOrigin) => {
+        window.VALID_API_BASE_URL = `${apiOrigin}/api/v1`;
+    }, API_ORIGIN);
+}
+
 async function attachAndCropQuestionArtwork(page, questionDialog) {
     await questionDialog.getByLabel("Artwork").setInputFiles("assets/valid_logo.png");
     const cropDialog = page.getByRole("dialog", { name: "Adjust crop" });
@@ -18,7 +24,6 @@ async function fillProductionSignupThroughGrade(dialog) {
     await dialog.locator('[data-signup-age="16"]').click();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("ZIP code").fill("90210");
-    await dialog.getByRole("button", { name: "Show schools" }).click();
     await dialog.getByRole("option", { name: /Westview High School/ }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByRole("radio", { name: /Senior/ }).click();
@@ -92,12 +97,13 @@ test("real adapter sends Ask Me safety requests with explicit report reasons", a
 });
 
 test("real adapter sends bounded, encoded unified-search queries", async ({ page }) => {
+    await useProductionApiOrigin(page);
     const urls = [];
     await page.route(`${API_ORIGIN}/api/v1/**`, async (route) => {
         urls.push(new URL(route.request().url()));
         await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
     });
-    await page.goto("/app/");
+    await page.goto("/app/?signin=1");
     await page.evaluate(async (userId) => {
         const { ValidAPI } = await import("/app/api.js");
         const api = new ValidAPI();
@@ -124,6 +130,7 @@ test("real adapter sends bounded, encoded unified-search queries", async ({ page
 });
 
 test("real adapter uses the scoped aura boost endpoints", async ({ page }) => {
+    await useProductionApiOrigin(page);
     const requests = [];
     await page.route(`${API_ORIGIN}/api/v1/**`, async (route) => {
         const request = route.request();
@@ -135,7 +142,7 @@ test("real adapter uses the scoped aura boost endpoints", async ({ page }) => {
         });
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ aura_points: 100 }) });
     });
-    await page.goto("/app/");
+    await page.goto("/app/?signin=1");
     await page.evaluate(async ({ userId, targetId }) => {
         const { ValidAPI } = await import("/app/api.js");
         const api = new ValidAPI();
@@ -175,7 +182,7 @@ test("real adapter matches the TBH and typed-reaction contracts", async ({ page 
         });
         await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
     });
-    await page.goto("/app/");
+    await page.goto("/app/?signin=1");
     requests.length = 0;
     await page.evaluate(async ({ userId }) => {
         const { ValidAPI } = await import("/app/api.js");
@@ -241,7 +248,7 @@ test("real adapter does not expose an upstream HTML error page", async ({ page }
             body: "<!DOCTYPE html><html><body>via_upstream</body></html>",
         });
     });
-    await page.goto("/app/");
+    await page.goto("/app/?signin=1");
 
     const error = await page.evaluate(async () => {
         const { ValidAPI } = await import("/app/api.js");
@@ -348,6 +355,7 @@ async function installWebPushStub(page, { existing = true } = {}) {
 }
 
 async function interceptProductionAPI(page, { signup = false, phoneExists = false, profileAura = 500, questionFailureCount = 0, webPushFailureCount = 0, feedLocked = false } = {}) {
+    await useProductionApiOrigin(page);
     const requests = [];
     let questionAttempts = 0;
     let webPushAttempts = 0;
@@ -503,7 +511,7 @@ test("real adapter signs in, authenticates API calls, and revokes logout", async
     await installCredentialStub(page, "get");
     const requests = await interceptProductionAPI(page);
 
-    await page.goto("/app/");
+    await page.goto("/app/?signin=1");
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
 
@@ -534,7 +542,7 @@ test("Settings submits authenticated multipart feedback", async ({ page }) => {
 
     await page.goto("/app/?signin=1");
     await page.getByRole("button", { name: /^sign in$/i }).click();
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
     await page.getByRole("button", { name: "Leave feedback" }).click();
     const dialog = page.getByRole("dialog", { name: "Feedback" });
     await dialog.getByLabel("What should we improve?").fill("Make the active tab easier to spot.");
@@ -564,7 +572,7 @@ test("incomplete Web Push setup stays retryable until the backend confirms regis
 
     await page.goto("/app/?signin=1");
     await page.getByRole("button", { name: /^sign in$/i }).click();
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
 
     const notificationButton = page.locator("#notificationButton");
     await expect(notificationButton).toContainText("Setup incomplete · tap to retry");
@@ -599,7 +607,7 @@ test("locked Feed shows received votes, vote-to-unlock, and notification activat
 test("unified search debounces rapid typing into one bounded request pair", async ({ page }) => {
     await installCredentialStub(page, "get");
     const requests = await interceptProductionAPI(page);
-    await page.goto("/app/");
+    await page.goto("/app/?signin=1");
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
     requests.length = 0;
@@ -615,7 +623,7 @@ test("real adapter links signup to the phone identity without an SMS request", a
     await installCredentialStub(page, "create");
     const requests = await interceptProductionAPI(page, { signup: true });
 
-    await page.goto("/app/");
+    await page.goto("/app/?signin=1");
     await page.getByRole("button", { name: "Create an account" }).click();
     const dialog = page.getByRole("dialog");
     await fillProductionSignup(dialog);
@@ -664,7 +672,7 @@ test("real adapter links signup to the phone identity without an SMS request", a
 
 test("signup sends existing phone identities back to sign in", async ({ page }) => {
     const requests = await interceptProductionAPI(page, { signup: true, phoneExists: true });
-    await page.goto("/app/");
+    await page.goto("/app/?signin=1");
     await page.getByRole("button", { name: "Create an account" }).click();
     const dialog = page.getByRole("dialog");
     await fillProductionSignupThroughGrade(dialog);
@@ -683,7 +691,7 @@ test("real adapter submits a Play vote and multipart school question", async ({ 
     await installCredentialStub(page, "get");
     const requests = await interceptProductionAPI(page);
 
-    await page.goto("/app/");
+    await page.goto("/app/?signin=1");
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
 
@@ -700,8 +708,8 @@ test("real adapter submits a Play vote and multipart school question", async ({ 
     expect(vote.body.selected_contact_user_id).toBeTruthy();
     expect(vote.body.presented_options).toHaveLength(4);
 
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await page.getByRole("button", { name: "View classmates" }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: "Classmates", exact: true }).click();
     const directory = page.getByRole("dialog", { name: "Classmates", exact: true });
     await directory.getByRole("button", { name: /Maya Chen/ }).click();
     const classmateProfile = page.getByRole("dialog", { name: "Profile", exact: true });
@@ -741,7 +749,7 @@ test("real adapter gives rate-limited users an actionable wait time", async ({ p
         body: JSON.stringify({ detail: "Too many requests. Please try again shortly." }),
     }));
 
-    await page.goto("/app/");
+    await page.goto("/app/?signin=1");
     await page.getByRole("button", { name: /^sign in$/i }).click();
 
     await expect(page.locator("#authStatus")).toHaveText("Too many requests. Try again in 42 seconds.");
@@ -750,9 +758,9 @@ test("real adapter gives rate-limited users an actionable wait time", async ({ p
 test("question submission refuses an aura overdraft before calling the API", async ({ page }) => {
     await installCredentialStub(page, "get");
     const requests = await interceptProductionAPI(page, { profileAura: 50 });
-    await page.goto("/app/");
+    await page.goto("/app/?signin=1");
     await page.getByRole("button", { name: /^sign in$/i }).click();
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
     await page.getByRole("button", { name: /Submit a school question/i }).click();
     const dialog = page.getByRole("dialog").filter({ hasText: "Submit a school question" });
     await dialog.getByLabel("What should your school vote on?").fill("Who makes school more welcoming?");
@@ -766,9 +774,9 @@ test("question submission refuses an aura overdraft before calling the API", asy
 test("ambiguous question retries reuse one idempotency key and never double-charge", async ({ page }) => {
     await installCredentialStub(page, "get");
     const requests = await interceptProductionAPI(page, { questionFailureCount: 1 });
-    await page.goto("/app/");
+    await page.goto("/app/?signin=1");
     await page.getByRole("button", { name: /^sign in$/i }).click();
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
     await page.getByRole("button", { name: /Submit a school question/i }).click();
     const dialog = page.getByRole("dialog").filter({ hasText: "Submit a school question" });
     await dialog.getByLabel("What should your school vote on?").fill("Who always makes people feel included?");

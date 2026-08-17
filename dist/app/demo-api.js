@@ -160,7 +160,7 @@ export class DemoAPI {
             { id: 204, question_text: "Who is secretly the funniest person here?", image_url: "../assets/AppIconV2.png" },
         ];
         this.classmates = [
-            { user_id: "classmate-1", first_name: "Maya", last_name: "Chen", username: "maya_c", grade: "Senior", school_name: "Westview High School", bio: "Student council and bad puns.", vote_count: 61, weekly_vote_count: 22, profile_picture_url: "../assets/app/anonymous.png" },
+            { user_id: "classmate-1", first_name: "Maya", last_name: "Chen", username: "maya_c", grade: "Senior", school_name: "Westview High School", bio: "Student council and bad puns.", vote_count: 61, weekly_vote_count: 22, ask_link_active: true, profile_picture_url: "../assets/app/anonymous.png" },
             { user_id: "classmate-2", first_name: "Noah", last_name: "Williams", username: "noahw", grade: "Sophomore", school_name: "Westview High School", vote_count: 44, weekly_vote_count: 19, profile_picture_url: "../assets/app/lock.png" },
             { user_id: "classmate-3", first_name: "Ava", last_name: "Patel", username: "avap", grade: "Junior", school_name: "Westview High School", vote_count: 39, weekly_vote_count: 14, profile_picture_url: "../assets/app/pencil-clipboard.png" },
             { user_id: "classmate-4", first_name: "Eli", last_name: "Brooks", username: "elib", grade: "Junior", school_name: "Westview High School", vote_count: 31, weekly_vote_count: 11, profile_picture_url: "../assets/AppIconV2.png" },
@@ -481,6 +481,15 @@ export class DemoAPI {
         return this.reportQuestion(_userId, questionId);
     }
 
+    async reportUser(_userId, reportedUserId) {
+        return { reported_user_id: reportedUserId };
+    }
+
+    async blockUser(_userId, blockedUserId) {
+        this.classmates = this.classmates.filter((classmate) => String(classmate.user_id) !== String(blockedUserId));
+        return { blocked_user_id: blockedUserId };
+    }
+
     async getPlayQuestions() {
         return { questions: this.questions.map((question) => ({ ...question })) };
     }
@@ -615,6 +624,11 @@ export class DemoAPI {
 
     async getAskLink() {
         return { ...this.askLink };
+    }
+
+    async getProfileAskTarget(userId) {
+        const classmate = this.classmates.find((item) => String(item.user_id) === String(userId));
+        return classmate?.ask_link_active ? { target: { public_token: `demo-${classmate.username}` } } : { target: null };
     }
 
     async setAskLinkActive(_userId, isActive) {

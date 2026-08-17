@@ -12,7 +12,7 @@ test("poll reactions can be set, changed, removed, and inspected", async ({ page
     await firstPoll.locator("[data-reactors]").click();
     const reactors = page.getByRole("dialog", { name: "Reactions" });
     await expect(reactors.getByText("Maya Chen")).toBeVisible();
-    await reactors.getByRole("button", { name: "Close" }).click();
+    await reactors.getByRole("button", { name: "Done" }).click();
 
     await page.getByRole("button", { name: "School", exact: true }).click();
     const poll = page.locator("[data-feed-detail='9003']");
@@ -29,13 +29,16 @@ test("poll reactions can be set, changed, removed, and inspected", async ({ page
 
 test("Settings purchases a TBH with an angle and authoritative aura balance", async ({ page }) => {
     await signIn(page);
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
     await page.getByRole("button", { name: "Request a TBH for 100 aura" }).click();
     const flow = page.getByRole("dialog", { name: "Request a TBH" });
     await flow.getByRole("button", { name: /Maya Chen/ }).click();
     await flow.getByRole("button", { name: /What vibe do I give off/ }).click();
-    page.once("dialog", (confirmation) => confirmation.accept());
     await flow.getByRole("button", { name: "Continue · 100 aura" }).click();
+    const confirmation = page.getByRole("dialog", { name: "Request a TBH from Maya?" });
+    await expect(confirmation.getByText("100 aura").first()).toBeVisible();
+    await expect(confirmation.getByText("1,180 aura")).toBeVisible();
+    await confirmation.getByRole("button", { name: "Spend 100 aura" }).click();
     await expect(flow.getByRole("heading", { name: "Request sent to Maya" })).toBeVisible();
     await flow.getByRole("button", { name: "Done" }).click();
     await expect(page.locator("#profileCard .profile-stat-card").filter({ hasText: "Aura" })).toContainText("1,180");

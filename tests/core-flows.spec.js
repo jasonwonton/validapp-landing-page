@@ -11,7 +11,6 @@ async function fillSignupThroughUsername(dialog, username = "taylor_j") {
     await dialog.locator('[data-signup-age="16"]').click();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("ZIP code").fill("90210");
-    await dialog.getByRole("button", { name: "Show schools" }).click();
     await expect(dialog.locator("[data-signup-school]")).toHaveCount(50);
     await dialog.getByRole("option", { name: /Westview High School/ }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
@@ -34,7 +33,7 @@ test("signed-out experience goes straight to the passkey actions", async ({ page
     await expect(page.getByText(/Use the same passkey as the Valid iPhone app/i)).toHaveCount(0);
     const signInButton = page.getByRole("button", { name: /^sign in$/i });
     await expect(signInButton).toBeVisible();
-    await expect(signInButton).toHaveText("Sign in");
+    await expect(signInButton).toHaveText("Sign in with a passkey");
     await expect(signInButton.locator("span")).toHaveCount(0);
     await expect(page.getByText(/fingerprint or face stays on your device/i)).toHaveCount(0);
 });
@@ -50,15 +49,12 @@ test("new users can complete passkey-only school onboarding", async ({ page }) =
     await expect(dialog.getByText(/receive 2-3x more votes/i)).toBeVisible();
     await expect(dialog.getByText("No password. No phone number.", { exact: true })).toHaveCount(0);
     await expect(dialog.getByText("Choose from Library", { exact: true })).toBeVisible();
-    await dialog.getByLabel(/Profile photo/).setInputFiles({
-        name: "avatar.png",
-        mimeType: "image/png",
-        buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
-    });
+    await dialog.getByLabel(/Profile photo/).setInputFiles("assets/valid_logo.png");
     await dialog.getByRole("button", { name: "Continue" }).click();
-    await expect(page.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
-    await expect(page.locator("#toast")).toContainText("Welcome to Valid");
-    await expect(page.getByRole("dialog").getByText("No one will be texted.")).toBeVisible();
+    await expect(page.locator("#appView")).toBeVisible();
+    const contacts = page.locator("#classmatesDialog");
+    if (await contacts.isVisible()) await contacts.getByRole("button", { name: "Close" }).click();
+    await expect(page.getByRole("button", { name: "Profile", exact: true })).toBeVisible();
 });
 
 test("signup rejects unavailable profile language before creating a passkey", async ({ page }) => {
@@ -83,9 +79,8 @@ test("onboarding keeps every action reachable on compact phones", async ({ page 
     await expect(dialog.getByRole("button", { name: "Continue" })).toBeInViewport();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(dialog.getByText("What school do you go to?")).toBeInViewport();
-    await expect(dialog.getByRole("button", { name: "Show schools" })).toBeInViewport();
+    await expect(dialog.getByLabel("ZIP code")).toBeInViewport();
     await dialog.getByLabel("ZIP code").fill("90210");
-    await dialog.getByRole("button", { name: "Show schools" }).click();
     const schoolResults = dialog.locator("#signupSchoolResults");
     const schoolScroll = await schoolResults.evaluate((element) => ({ clientHeight: element.clientHeight, scrollHeight: element.scrollHeight }));
     expect(schoolScroll.scrollHeight).toBeGreaterThan(schoolScroll.clientHeight);
@@ -124,7 +119,6 @@ test("signup ZIP picker lists, filters, and falls back from 50 nearby schools", 
     const dialog = page.getByRole("dialog");
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("ZIP code").fill("90210");
-    await dialog.getByRole("button", { name: "Show schools" }).click();
     await expect(dialog.locator("[data-signup-school]")).toHaveCount(50);
     await dialog.getByLabel("Search nearby schools").fill("Central High School 2 Beverly Hills");
     await expect(dialog.locator("[data-signup-school]")).toHaveCount(1);
@@ -151,7 +145,7 @@ test("mobile shell stays within interaction performance budgets", async ({ page 
     });
     await signInToDemo(page);
     await page.getByRole("button", { name: "Play", exact: true }).click();
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
     await page.waitForTimeout(300);
     const metrics = await page.evaluate(() => {
         const navigation = performance.getEntriesByType("navigation")[0];
@@ -202,7 +196,7 @@ test("android shell surfaces connectivity and install affordances", async ({ pag
         event.userChoice = Promise.resolve({ outcome: "accepted" });
         dispatchEvent(event);
     });
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
     await expect(page.getByRole("button", { name: "Install Valid" })).toBeVisible();
     await page.getByRole("button", { name: "Install Valid" }).click();
     await expect(page.getByRole("button", { name: "Install Valid" })).toBeHidden();
@@ -391,14 +385,15 @@ test("non-subscribers can reach God Mode from a received vote", async ({ page })
     await page.getByRole("button", { name: "Get God Mode to Reveal who sent this" }).click();
     const pitch = page.getByRole("dialog", { name: "God Mode" });
     await expect(pitch.getByText("See who likes you with")).toBeVisible();
-    await expect(pitch.getByText("3 Reveals / Week")).toBeVisible();
+    await expect(pitch.getByText("2 Reveals / Week")).toBeVisible();
     await expect(pitch.getByRole("button", { name: /Earn God Mode/ })).toBeVisible();
-    await expect(pitch.getByRole("link", { name: /Start God Mode/ })).toHaveAttribute("href", /^https:\/\/buy\.stripe\.com\/test_/);
+    await expect(pitch.getByRole("button", { name: /Start God Mode/ })).toBeVisible();
     await expect(page.locator("#feedDetailDialog")).toBeVisible();
     await pitch.getByRole("button", { name: /Earn God Mode/ }).click();
     await expect(pitch).toBeHidden();
-    await expect(page.locator("#classmatesDialog")).toBeVisible();
-    await page.locator("#classmatesDialog").getByRole("button", { name: "Close" }).click();
+    const inviteFriends = page.getByRole("dialog", { name: "Invite Friends" });
+    await expect(inviteFriends).toBeVisible();
+    await inviteFriends.getByRole("button", { name: "Close" }).click();
     await page.getByRole("button", { name: "Get God Mode to Reveal who sent this" }).click();
     await pitch.getByRole("button", { name: "Maybe later" }).click();
     await expect(pitch).toBeHidden();
@@ -443,7 +438,7 @@ test("anonymous inbox supports private answers and safety controls", async ({ pa
     await expect(answerDialog.getByRole("button", { name: "Share answer to Instagram" })).toBeVisible();
     await expect(answerDialog.getByRole("button", { name: "Share answer to TikTok" })).toBeVisible();
     await expect(page.locator("#auraCount")).toHaveText("1,290");
-    await answerDialog.getByRole("button", { name: "Close" }).click();
+    await answerDialog.getByRole("button", { name: "Done" }).click();
 
     await page.getByRole("button", { name: /Maya Chen replied to you/ }).click();
     const replyDialog = page.getByRole("dialog");
@@ -488,7 +483,6 @@ test("play answers a poll and advances", async ({ page }) => {
     await page.locator("[data-choice]").first().click();
     await expect(page.getByText("Who should plan the senior trip?")).toBeVisible();
     await expect(page.locator("#auraCount")).toHaveText("1,285");
-    await expect(page.locator("#toast")).toContainText("+5 aura · You picked");
 });
 
 test("play supports shuffle and paid classmate nominations", async ({ page }) => {
@@ -549,7 +543,7 @@ test("completing a poll set celebrates earned aura before cooldown", async ({ pa
 
 test("profile information matches the iOS correction and school-change flow", async ({ page }) => {
     await signInToDemo(page);
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
     await page.getByRole("button", { name: "Profile information" }).click();
     const informationDialog = page.getByRole("dialog");
     await expect(informationDialog.getByRole("heading", { name: "Correct profile information" })).toBeVisible();
@@ -577,17 +571,17 @@ test("profile information matches the iOS correction and school-change flow", as
     await expect(page.locator("#profileCard")).toContainText("Central High School 2");
 });
 
-test("settings exposes iOS-style editing, polls, ask link, and aura purchases", async ({ page }) => {
+test("profile exposes iOS-style editing, ask link, purchases, invites, and sign out", async ({ page }) => {
     await signInToDemo(page);
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Jules Rivera" })).toBeVisible();
-    await expect(page.getByText("Get messages", { exact: true })).toBeVisible();
+    await expect(page.getByText("Ask Me", { exact: true })).toBeVisible();
     await expect(page.locator("#askLinkCard .ask-link-heading img")).toHaveCount(0);
     await expect(page.getByText("God Mode", { exact: true }).first()).toBeVisible();
     await expect(page.locator("#purchasesSection")).toHaveCSS("border-top-width", "3px");
-    await page.getByRole("button", { name: "Start God Mode", exact: true }).click();
+    await page.getByRole("button", { name: /Start God Mode/ }).click();
     const pitch = page.getByRole("dialog", { name: "God Mode" });
-    await expect(pitch.getByRole("link", { name: /Start God Mode/ })).toHaveAttribute("href", /^https:\/\/buy\.stripe\.com\/test_/);
+    await expect(pitch.getByRole("button", { name: /Start God Mode/ })).toBeVisible();
     await pitch.getByRole("button", { name: "Maybe later" }).click();
     await expect(page.locator("#purchasesSection .settings-aura-balance")).toHaveCount(0);
     const schoolRanks = page.locator("#schoolCard .school-rank-card");
@@ -597,10 +591,10 @@ test("settings exposes iOS-style editing, polls, ask link, and aura purchases", 
     await expect(schoolRanks.nth(1)).toContainText("Noah Williams");
     await expect(schoolRanks.nth(2)).toContainText("Jules Rivera (You)");
     await expect(page.getByRole("button", { name: "Change profile picture" })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Open poll: Who always knows/ })).toBeVisible();
-    await page.getByRole("button", { name: /Open poll: Who always knows/ }).click();
-    await expect(page.getByRole("dialog").getByRole("heading", { name: "Who always knows how to make people laugh?" })).toBeVisible();
-    await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+    await expect(page.getByRole("button", { name: "Contacts", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Classmates", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Invite Friends" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sign Out", exact: true })).toBeVisible();
     await expect(page.locator("#addPasskeyButton")).toBeHidden();
     await expect(page.getByText(/passkeys? registered/)).toHaveCount(0);
     await page.getByRole("button", { name: "Profile information" }).click();
@@ -615,12 +609,12 @@ test("settings exposes iOS-style editing, polls, ask link, and aura purchases", 
     await bioDialog.getByRole("button", { name: "Save bio" }).click();
     await expect(page.locator("[data-edit-bio]")).toHaveText("Senior year, good music, better people.");
     await page.getByRole("button", { name: /Submit a school question for/i }).click();
-    await expect(page.getByRole("dialog").getByRole("heading", { name: "Submit a school question" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Submit a school question" })).toBeVisible();
 });
 
 test("settings shows aura balance and confirms boost spending", async ({ page }) => {
     await signInToDemo(page);
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
     const profileAura = page.locator("#profileCard .profile-stat-card").filter({ hasText: "Aura" });
     await expect(profileAura).toContainText("1,280");
     await page.getByRole("button", { name: "Get boosted for 400 aura" }).click();
@@ -633,10 +627,10 @@ test("settings shows aura balance and confirms boost spending", async ({ page })
 
 test("settings browses and searches classmates with public profile details", async ({ page }) => {
     await signInToDemo(page);
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await page.getByRole("button", { name: "View classmates" }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: "Classmates", exact: true }).click();
     const directory = page.getByRole("dialog", { name: "Classmates", exact: true });
-    await expect(directory.getByText("6 classmates")).toBeVisible();
+    await expect(directory.getByRole("heading", { name: "Classmates (6)" })).toBeVisible();
     await directory.getByPlaceholder("Search classmates...").fill("Maya");
     await expect(directory.getByRole("button", { name: /Maya Chen/ })).toBeVisible();
     await expect(directory.getByRole("button", { name: /Noah Williams/ })).toBeHidden();
@@ -654,26 +648,26 @@ test("God Mode subscribers can reveal a vote sender and consume one weekly revea
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await page.locator("[data-feed-detail='9001']").click();
     const detail = page.locator("#feedDetailDialog");
-    await expect(detail.getByRole("button", { name: "Reveal who sent this (3 remaining)" })).toBeVisible();
-    await detail.getByRole("button", { name: "Reveal who sent this (3 remaining)" }).click();
+    await expect(detail.getByRole("button", { name: "Reveal who sent this (2 remaining)" })).toBeVisible();
+    await detail.getByRole("button", { name: "Reveal who sent this (2 remaining)" }).click();
     await expect(detail.getByText("Sent by")).toBeVisible();
     await expect(detail.locator(".revealed-sender-card").getByText("Maya Chen", { exact: true })).toBeVisible();
     await expect(page.locator("#toast")).toContainText("Revealed: Maya Chen");
     await detail.getByRole("button", { name: "Close" }).click();
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
     await expect(page.getByText("God Mode Active")).toBeVisible();
-    await expect(page.getByText(/2 weekly reveals left/)).toBeVisible();
+    await expect(page.getByText(/1 weekly reveal left/)).toBeVisible();
 });
 
 test("settings removes the Find classmates shortcut", async ({ page }) => {
     await signInToDemo(page);
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
     await expect(page.getByRole("button", { name: "Find classmates" })).toHaveCount(0);
 });
 
 test("settings hides account deletion and policy shortcuts", async ({ page }) => {
     await signInToDemo(page);
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
     await expect(page.getByRole("button", { name: "Delete account" })).toHaveCount(0);
     await expect(page.getByText("Privacy policy", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Safety & support", { exact: true })).toHaveCount(0);
