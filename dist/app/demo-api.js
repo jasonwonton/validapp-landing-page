@@ -114,6 +114,7 @@ export class DemoAPI {
                 timestamp: ago(3),
                 question_id: 103,
                 question_text: "Who has the best music taste?",
+                image_url: "../assets/app/anonymous.png",
                 question_answer_id: 9003,
                 voted_for_name: "Maya Chen",
                 voted_for_profile_picture_url: "../assets/app/anonymous.png",

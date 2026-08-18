@@ -731,9 +731,9 @@ h3 { font-size: 1.45rem; }
 .classmate-profile-polls { margin: 0; }
 .profile-stats-grid.single { grid-template-columns: minmax(0, 280px); justify-content: center; }
 .reveal-sender-button { background: linear-gradient(145deg, #fff4a8, #ffd5df); }
-.revealed-sender-card { display: grid; grid-template-columns: 48px minmax(0, 1fr); align-items: center; gap: 10px; padding: 12px; border: 2px solid var(--ink); border-radius: 14px; background: linear-gradient(145deg, #fff4a8, #ffd5df); }
-.revealed-sender-card > span { display: grid; gap: 2px; }
-.revealed-sender-card small { color: var(--muted); }
+.revealed-sender-row { min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 2px 0; }
+.revealed-sender-row .row-avatar { width: 40px; height: 40px; border: 2px solid var(--ink); }
+.revealed-sender-row strong { font-size: 1rem; }
 
 .bottom-nav {
     position: fixed;

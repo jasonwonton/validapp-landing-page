@@ -517,9 +517,7 @@ function formatVoterHint(item) {
     return emoji ? `from ${emoji}` : "";
 }
 
-function formatVoterStatement(item) {
-    if (item.current_user_voted) return `${displayName(state.profile)} said`;
-    if (item.voter_name) return `${item.voter_name} said`;
+function formatVoterDemographicsStatement(item) {
     const gender = String(item.voter_gender || "").toLowerCase();
     const emoji = ["female", "girl"].includes(gender) ? "👧💗" : ["male", "boy"].includes(gender) ? "👦💙" : gender === "non-binary" ? "🧑💛" : "";
     const genderWord = ["female", "girl"].includes(gender) ? "Girl" : ["male", "boy"].includes(gender) ? "Boy" : gender === "non-binary" ? "Person" : "";
@@ -544,6 +542,12 @@ function formatVoterStatement(item) {
     if (grade && genderWord) return `${article} ${grade} ${emoji} ${genderWord} said`;
     if (genderWord) return `A ${emoji} ${genderWord} said`;
     return "Poll";
+}
+
+function formatVoterStatement(item) {
+    if (item.current_user_voted) return `${displayName(state.profile)} said`;
+    if (item.voter_name) return `${item.voter_name} said`;
+    return formatVoterDemographicsStatement(item);
 }
 
 function renderProfilePolls(container, questions, emptyMessage) {
@@ -2473,7 +2477,7 @@ function renderFeedDetail() {
         || (item.item_type === "received_vote" ? displayName(state.profile) : "A classmate");
     const options = Array.isArray(item.presented_options) ? item.presented_options : [];
     const artworkURL = api.assetURL(item.image_url);
-    const revealed = item.voter_name ? `<div class="revealed-sender-card">${avatarMarkup({ first_name: item.voter_name, profile_picture_url: item.voter_profile_picture_url }, "row-avatar")}<span><small>Sent by</small><strong>${escapeHTML(item.voter_name)}</strong></span></div>` : "";
+    const revealed = item.voter_name ? `<div class="revealed-sender-row">${avatarMarkup({ first_name: item.voter_name, profile_picture_url: item.voter_profile_picture_url }, "row-avatar")}<strong>Sent by ${escapeHTML(item.voter_name)}</strong></div>` : "";
     $("#feedDetailDialog .detail-screen-header > strong").textContent = formatVoterStatement(item);
     $("#feedDetailBody").innerHTML = `<article class="feed-detail-card">
         <h3>${escapeHTML(item.question_text)}</h3>
@@ -2549,8 +2553,24 @@ function drawCenteredCanvasText(context, text, centerX, top, maxWidth, lineHeigh
     return top + lines.length * lineHeight;
 }
 
-function loadShareArtwork(url) {
+async function loadShareArtwork(url) {
     if (!url) return Promise.resolve(null);
+    try {
+        const response = await fetch(url, { credentials: "omit", mode: "cors" });
+        if (response.ok) {
+            const objectURL = URL.createObjectURL(await response.blob());
+            const image = await new Promise((resolve) => {
+                const candidate = new Image();
+                candidate.onload = () => resolve(candidate);
+                candidate.onerror = () => resolve(null);
+                candidate.src = objectURL;
+            });
+            URL.revokeObjectURL(objectURL);
+            if (image) return image;
+        }
+    } catch (_) {
+        // The direct image path below still works for same-origin and CORS-enabled assets.
+    }
     return new Promise((resolve) => {
         const image = new Image();
         image.crossOrigin = "anonymous";
@@ -2561,21 +2581,27 @@ function loadShareArtwork(url) {
 }
 
 async function loadPollShareArtwork(item) {
-    const displayedArtwork = $("#feedDetailBody .feed-detail-art img")?.currentSrc;
-    const fallbackArtwork = new URL("../assets/app/pencil-clipboard.png", import.meta.url).href;
-    const candidates = [api.assetURL(item.image_url), displayedArtwork, fallbackArtwork]
+    const displayedArtwork = $("#feedDetailBody .feed-detail-art > img")?.currentSrc;
+    const candidates = [api.assetURL(item.image_url), displayedArtwork]
         .filter((url, index, urls) => url && urls.indexOf(url) === index);
     for (const url of candidates) {
         const artwork = await loadShareArtwork(url);
         if (artwork) return artwork;
     }
-    return null;
+    throw new Error("Question artwork is unavailable.");
 }
 
 function canvasBlob(canvas, type = "image/png", quality) {
     return new Promise((resolve, reject) => {
         canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Could not render image.")), type, quality);
     });
+}
+
+function pollShareNominationSubtitle(item) {
+    const voter = formatVoterDemographicsStatement(item);
+    if (voter === "Poll") return "got nominated";
+    const demographic = voter.replace(/ said$/, "").replace(/^(A|An)\s/, (article) => article.toLowerCase());
+    return `got nominated by ${demographic}`;
 }
 
 async function createPollShareFile(item) {
@@ -2589,16 +2615,18 @@ async function createPollShareFile(item) {
         || item.voted_for_name
         || item.contact_name
         || (item.item_type === "received_vote" ? displayName(state.profile) : "A classmate");
-    const options = Array.isArray(item.presented_options) ? item.presented_options.slice(0, 4) : [];
+    const isNomination = item.is_nomination === true;
+    const options = !isNomination && Array.isArray(item.presented_options) ? item.presented_options.slice(0, 4) : [];
     const artwork = await loadPollShareArtwork(item);
 
     context.fillStyle = "#ccf7f4";
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.fillStyle = "#000000";
-    const voterStatement = formatVoterStatement(item);
+    // iOS keeps the shared image anonymous even after a sender is revealed.
+    const voterStatement = formatVoterDemographicsStatement(item);
     const showsVoterStatement = voterStatement && voterStatement !== "Poll";
-    const gridRows = options.length ? Math.ceil(options.length / 2) : 2;
-    const gridHeight = options.length ? gridRows * 200 + Math.max(0, gridRows - 1) * 20 : 400;
+    const gridRows = options.length ? Math.ceil(options.length / 2) : 0;
+    const gridHeight = isNomination ? 400 : options.length ? gridRows * 200 + Math.max(0, gridRows - 1) * 20 : 0;
     const brandingHeight = 62;
     const brandingGap = 63;
 
@@ -2631,13 +2659,33 @@ async function createPollShareFile(item) {
 
     const gridTop = contentBottom + 24;
     let selectedPointer = null;
-    if (options.length) {
+    if (isNomination) {
+        const x = 40;
+        const y = gridTop;
+        const width = 820;
+        const height = 400;
+        context.fillStyle = "#ffb15e";
+        canvasRoundedRect(context, x, y, width, height, 32);
+        context.fill();
+        context.strokeStyle = "#000000";
+        context.lineWidth = 8;
+        context.stroke();
+        context.fillStyle = "#000000";
+        context.font = '64px "Jua", "Apple Color Emoji", sans-serif';
+        const nameLines = canvasTextLines(context, selectedName, width - 70, 2);
+        const nameTop = y + 105 - (nameLines.length - 1) * 32;
+        context.textAlign = "center";
+        context.textBaseline = "top";
+        nameLines.forEach((line, index) => context.fillText(line, centerX, nameTop + index * 72));
+        context.font = '36px "Jua", "Apple Color Emoji", sans-serif';
+        drawCenteredCanvasText(context, pollShareNominationSubtitle(item), centerX, y + 280, width - 70, 44, 2);
+    } else if (options.length) {
         const gap = 20;
         const cardWidth = 400;
         const cardHeight = 200;
         options.forEach((option, index) => {
             const name = option.name || option.contact_name || "A classmate";
-            const selected = name === selectedName;
+            const selected = option.is_selected === true || name === selectedName;
             const column = index % 2;
             const row = Math.floor(index / 2);
             const x = 40 + column * (cardWidth + gap);
@@ -2669,20 +2717,6 @@ async function createPollShareFile(item) {
             context.strokeText("👆", selectedPointer.x, selectedPointer.y);
             context.fillText("👆", selectedPointer.x, selectedPointer.y);
         }
-    } else {
-        const x = 40;
-        const y = gridTop;
-        const width = 820;
-        const height = 400;
-        context.fillStyle = "#ffb15e";
-        canvasRoundedRect(context, x, y, width, height, 32);
-        context.fill();
-        context.strokeStyle = "#000000";
-        context.lineWidth = 8;
-        context.stroke();
-        context.fillStyle = "#000000";
-        context.font = '64px "Jua", "Apple Color Emoji", sans-serif';
-        drawCenteredCanvasText(context, selectedName, centerX, y + 112, width - 70, 72, 2);
     }
 
     context.fillStyle = "#000000";

@@ -463,6 +463,8 @@ test("poll share buttons generate the iOS-style 9:16 photo", async ({ page }) =>
     await page.getByRole("button", { name: "School", exact: true }).click();
     await page.locator("[data-feed-detail='9003']").click();
     const dialog = page.locator("#feedDetailDialog");
+    await expect(dialog.locator(".feed-detail-art > img")).toHaveAttribute("src", /anonymous\.png/);
+    await expect(dialog.locator(".feed-detail-art .artwork-placeholder")).toHaveCount(0);
     await expect(dialog.getByText("Share this poll")).toHaveCount(0);
     await dialog.getByRole("button", { name: "Share poll to Snapchat" }).click();
     await expect(page.locator("#toast")).toContainText("Poll photo shared");
@@ -751,8 +753,11 @@ test("God Mode subscribers can reveal a vote sender and consume one weekly revea
     const detail = page.locator("#feedDetailDialog");
     await expect(detail.getByRole("button", { name: "Reveal who sent this (2 remaining)" })).toBeVisible();
     await detail.getByRole("button", { name: "Reveal who sent this (2 remaining)" }).click();
-    await expect(detail.getByText("Sent by")).toBeVisible();
-    await expect(detail.locator(".revealed-sender-card").getByText("Maya Chen", { exact: true })).toBeVisible();
+    const sender = detail.locator(".revealed-sender-row");
+    await expect(sender.getByText("Sent by Maya Chen", { exact: true })).toBeVisible();
+    await expect(sender).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(sender).toHaveCSS("border-top-width", "0px");
+    expect((await sender.boundingBox()).height).toBeLessThanOrEqual(48);
     await expect(page.locator("#toast")).toContainText("Revealed: Maya Chen");
     await detail.getByRole("button", { name: "Close" }).click();
     await page.getByRole("button", { name: "Profile", exact: true }).click();
