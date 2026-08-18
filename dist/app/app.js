@@ -117,6 +117,7 @@ const state = {
     questionArtworkPreviewURL: null,
     questionArtworkProcessing: false,
     questionCrop: null,
+    contactClassmateIds: new Set(),
     optimisticEarnedProfile: null,
     pendingProfileInformation: null,
     profileDraft: null,
@@ -176,7 +177,7 @@ function writeAppCache(name, data) {
 
 function clearCachedAppState(userId = api.user?.id) {
     if (!userId) return;
-    for (const name of ["profile", "feed-personal", "classmates"]) {
+    for (const name of ["profile", "feed-personal", "classmates", "contact-classmates"]) {
         try { localStorage.removeItem(`valid:pwa:v1:${userId}:${name}`); }
         catch (_) { /* Session logout still continues. */ }
     }
@@ -186,12 +187,14 @@ function restoreCachedAppState() {
     const cachedProfile = readAppCache("profile");
     const cachedFeed = readAppCache("feed-personal");
     const cachedClassmates = readAppCache("classmates");
+    const cachedContactClassmateIds = readAppCache("contact-classmates");
     if (cachedProfile) state.profile = cachedProfile;
     if (Array.isArray(cachedFeed)) state.feedItems = cachedFeed;
     if (Array.isArray(cachedClassmates)) {
         state.classmates = cachedClassmates;
         state.classmateDirectory = cachedClassmates;
     }
+    if (Array.isArray(cachedContactClassmateIds)) state.contactClassmateIds = new Set(cachedContactClassmateIds.map(String));
     if (state.profile) renderProfileHeader();
     if (state.feedItems.length) renderFeed();
 }
@@ -322,12 +325,51 @@ function initials(profile) {
 }
 
 function avatarMarkup(profile, className = "row-avatar", fallbackURL = null) {
-    const rawURL = profile?.profile_picture_url_thumb || profile?.profile_picture_url || fallbackURL;
-    const imageURL = api.assetURL(rawURL);
+    const originalURL = api.assetURL(profile?.profile_picture_url || fallbackURL);
+    const imageURL = api.assetURL(profile?.profile_picture_url_thumb) || originalURL;
+    const fallbackImageURL = originalURL && originalURL !== imageURL ? originalURL : null;
     const name = displayName(profile);
+    const fallbackInitials = initials(profile);
     return `<span class="${className}">${imageURL
-        ? `<img src="${escapeHTML(imageURL)}" alt="${escapeHTML(name)}">`
-        : `<span>${escapeHTML(initials(profile))}</span>`}</span>`;
+        ? `<img src="${escapeHTML(imageURL)}" alt="${escapeHTML(name)}" data-avatar-image data-avatar-initials="${escapeHTML(fallbackInitials)}"${fallbackImageURL ? ` data-avatar-fallback="${escapeHTML(fallbackImageURL)}"` : ""}>`
+        : `<span>${escapeHTML(fallbackInitials)}</span>`}</span>`;
+}
+
+function hasCustomProfilePicture(profile) {
+    const profilePictureURL = String(profile?.profile_picture_url || "").trim().toLowerCase();
+    return Boolean(profilePictureURL) && !profilePictureURL.includes("default.png");
+}
+
+function sortClassmatesLikeIOS(classmates) {
+    return (classmates || [])
+        .map((classmate, index) => ({ classmate, index }))
+        .sort((first, second) => {
+            const firstIsContact = state.contactClassmateIds.has(String(first.classmate.user_id));
+            const secondIsContact = state.contactClassmateIds.has(String(second.classmate.user_id));
+            if (firstIsContact !== secondIsContact) return firstIsContact ? -1 : 1;
+
+            const firstHasPhoto = hasCustomProfilePicture(first.classmate);
+            const secondHasPhoto = hasCustomProfilePicture(second.classmate);
+            if (firstHasPhoto !== secondHasPhoto) return firstHasPhoto ? -1 : 1;
+
+            const weeklyVoteDifference = Number(second.classmate.weekly_vote_count || 0) - Number(first.classmate.weekly_vote_count || 0);
+            return weeklyVoteDifference || first.index - second.index;
+        })
+        .map(({ classmate }) => classmate);
+}
+
+function handleAvatarImageError(event) {
+    const image = event.target;
+    if (!(image instanceof HTMLImageElement) || !image.matches("[data-avatar-image]")) return;
+    const fallbackURL = image.dataset.avatarFallback;
+    if (fallbackURL && image.src !== fallbackURL) {
+        delete image.dataset.avatarFallback;
+        image.src = fallbackURL;
+        return;
+    }
+    const fallback = document.createElement("span");
+    fallback.textContent = image.dataset.avatarInitials || "V";
+    image.replaceWith(fallback);
 }
 
 function shareIconMarkup(platform) {
@@ -342,8 +384,8 @@ function shareIconMarkup(platform) {
 
 function appSymbolMarkup(symbol, className = "app-symbol") {
     const icons = {
-        ask: `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5.2 3h13.6A3.2 3.2 0 0 1 22 6.2v8.1a3.2 3.2 0 0 1-3.2 3.2h-7.2L6 21.3v-3.8h-.8A3.2 3.2 0 0 1 2 14.3V6.2A3.2 3.2 0 0 1 5.2 3Z"/><path d="M9.3 8.6A2.9 2.9 0 0 1 12 7.1c1.7 0 3 1 3 2.5 0 1.3-.7 2-1.8 2.6-.9.5-1.2.9-1.2 1.8" fill="none" stroke="white" stroke-width="1.9" stroke-linecap="round"/><circle cx="12" cy="15.8" r="1" fill="white"/></svg>`,
-        tbh: `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5.2 3h13.6A3.2 3.2 0 0 1 22 6.2v8.1a3.2 3.2 0 0 1-3.2 3.2h-7.2L6 21.3v-3.8h-.8A3.2 3.2 0 0 1 2 14.3V6.2A3.2 3.2 0 0 1 5.2 3Z"/><path fill="white" d="M6.8 8h4.4v3.4c0 2.4-1.2 4-3.6 4.8l-.9-1.7c1.2-.4 1.8-1.1 1.9-2H6.8V8Zm6 0h4.4v3.4c0 2.4-1.2 4-3.6 4.8l-.9-1.7c1.2-.4 1.8-1.1 1.9-2h-1.8V8Z"/></svg>`,
+        ask: `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5.2 3h13.6A3.2 3.2 0 0 1 22 6.2v8.1a3.2 3.2 0 0 1-3.2 3.2h-7.2L6 21.3v-3.8h-.8A3.2 3.2 0 0 1 2 14.3V6.2A3.2 3.2 0 0 1 5.2 3Z"/><g transform="translate(0 -1.5)"><path d="M9.3 8.6A2.9 2.9 0 0 1 12 7.1c1.7 0 3 1 3 2.5 0 1.3-.7 2-1.8 2.6-.9.5-1.2.9-1.2 1.8" fill="none" stroke="white" stroke-width="1.9" stroke-linecap="round"/><circle cx="12" cy="15.8" r="1" fill="white"/></g></svg>`,
+        tbh: `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5.2 3h13.6A3.2 3.2 0 0 1 22 6.2v8.1a3.2 3.2 0 0 1-3.2 3.2h-7.2L6 21.3v-3.8h-.8A3.2 3.2 0 0 1 2 14.3V6.2A3.2 3.2 0 0 1 5.2 3Z"/><g transform="translate(0 -1.5)"><path fill="white" d="M6.8 8h4.4v3.4c0 2.4-1.2 4-3.6 4.8l-.9-1.7c1.2-.4 1.8-1.1 1.9-2H6.8V8Zm6 0h4.4v3.4c0 2.4-1.2 4-3.6 4.8l-.9-1.7c1.2-.4 1.8-1.1 1.9-2h-1.8V8Z"/></g></svg>`,
         link: `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 14.5 14.5 9M8 17H6.5a4.5 4.5 0 0 1 0-9H10M16 7h1.5a4.5 4.5 0 0 1 0 9H14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
         message: `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4.8 3h14.4A3.8 3.8 0 0 1 23 6.8v8.4a3.8 3.8 0 0 1-3.8 3.8h-8.1L5 22v-3.2A3.8 3.8 0 0 1 1 15V6.8A3.8 3.8 0 0 1 4.8 3Z"/><path d="M6.5 9h11M6.5 13h7" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round"/></svg>`,
         reset: `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 8.2A8 8 0 1 1 12 4M16 4h4v4" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
@@ -1241,6 +1283,12 @@ function openTopPoll(pollKey) {
     $("#pollSummaryDialog").showModal();
 }
 
+function closeTopPoll() {
+    state.selectedTopPoll = null;
+    const dialog = $("#pollSummaryDialog");
+    if (dialog.open) dialog.close();
+}
+
 async function shareTopPoll() {
     const question = state.selectedTopPoll;
     if (!question) return;
@@ -1370,7 +1418,7 @@ async function openTargetedBoostPicker() {
 
 function renderClassmateDirectory() {
     const query = $("#classmateDirectorySearch").value.trim().toLowerCase();
-    renderClassmatePickerList($("#classmateDirectoryList"), state.classmateDirectory || [], {
+    renderClassmatePickerList($("#classmateDirectoryList"), sortClassmatesLikeIOS(state.classmateDirectory), {
         query,
         emptyMessage: query ? "No matching classmates." : "No classmates are visible yet.",
         rowOptions: (classmate) => ({
@@ -1417,11 +1465,11 @@ function renderClassmateProfile() {
         <div class="profile-handle">${profile.username ? `@${escapeHTML(profile.username)}` : "Valid classmate"}</div>
         ${profile.bio ? `<p class="profile-bio">${escapeHTML(profile.bio)}</p>` : ""}
         <div class="profile-school-meta"><span class="profile-school-meta-item"><img src="../assets/app/profile-school.svg" alt=""><span>${escapeHTML(profile.school_name || state.profile?.school_name || "Your school")}</span></span>${profile.grade ? `<span class="profile-school-meta-item"><img src="../assets/app/profile-graduation-cap.svg" alt=""><span>${escapeHTML(formatGrade(profile.grade))}</span></span>` : ""}</div>
+        ${state.selectedClassmateAskTarget?.public_token ? `<a class="primary-button classmate-ask-button" href="../a/${encodeURIComponent(state.selectedClassmateAskTarget.public_token)}">${appSymbolMarkup("ask", "ask-me-symbol")}<span>Ask anonymously</span></a>` : ""}
         <div class="profile-stats-grid ${tbhRequestsEnabled() ? "" : "single"}">
             <div class="profile-stat-card"><strong><span class="heart">♥</span>${Number(profile.vote_count || 0).toLocaleString()}</strong><span>Votes Received</span></div>
             ${tbhRequestsEnabled() ? `<div class="profile-stat-card"><strong>${appSymbolMarkup("tbh", "profile-stat-symbol tbh-stat-symbol")}${Number(profile.tbh_unique_requester_count || 0).toLocaleString()}</strong><span>TBH Requests</span></div>` : ""}
         </div>
-        ${state.selectedClassmateAskTarget?.public_token ? `<a class="primary-button classmate-ask-button" href="../a/${encodeURIComponent(state.selectedClassmateAskTarget.public_token)}">${appSymbolMarkup("ask", "ask-me-symbol")}<span>Ask anonymously</span></a>` : ""}
     </article>`;
     if (state.selectedClassmateTopQuestionsWeekly === null) {
         $("#classmateWeeklyPolls").innerHTML = '<div class="profile-poll-empty">Loading...</div>';
@@ -5145,8 +5193,14 @@ async function chooseContacts() {
         for (let offset = 0; offset < contacts.length; offset += 250) {
             const accepted = await api.addContacts(api.user.id, contacts.slice(offset, offset + 250));
             acceptedCount += accepted.length;
+            for (const contact of accepted) {
+                if (contact.is_six7_user === false) continue;
+                const classmateId = contact.user_id || contact.matched_user_id || contact.contact_user_id;
+                if (classmateId) state.contactClassmateIds.add(String(classmateId));
+            }
         }
-        $("#classmatesStatus").textContent = `${acceptedCount} selected ${acceptedCount === 1 ? "contact" : "contacts"} synced. No messages were sent.`;
+        writeAppCache("contact-classmates", [...state.contactClassmateIds]);
+        $("#classmatesStatus").textContent = `${acceptedCount} ${acceptedCount === 1 ? "classmate" : "classmates"} added. No messages were sent.`;
         await new Promise((resolve) => setTimeout(resolve, demoMode ? 0 : 900));
         state.classmates = await api.getClassmates(api.user.id).catch(() => state.classmates);
         state.choicesByQuestion.clear();
@@ -5156,7 +5210,7 @@ async function chooseContacts() {
             if (state.activePanel === "play") renderPlay();
         }
     } catch (error) {
-        if (error.name !== "AbortError") $("#classmatesStatus").textContent = error.message || "Could not sync those contacts.";
+        if (error.name !== "AbortError") $("#classmatesStatus").textContent = error.message || "Could not add those classmates.";
     } finally {
         setButtonLoading(button, false);
     }
@@ -5984,7 +6038,15 @@ function bindEvents() {
         const button = event.target.closest("[data-share-god-mode-invite]");
         if (button) shareGodModeInvite(button, button.dataset.shareGodModeInvite);
     });
-    $("#pollSummaryDialog").addEventListener("click", (event) => { if (event.target.closest("[data-share-top-poll]")) shareTopPoll(); });
+    $("#pollSummaryDialog").addEventListener("click", (event) => {
+        if (event.target.closest("[data-close-top-poll]")) {
+            event.preventDefault();
+            closeTopPoll();
+            return;
+        }
+        if (event.target.closest("[data-share-top-poll]")) shareTopPoll();
+    });
+    $("#pollSummaryDialog").addEventListener("cancel", () => { state.selectedTopPoll = null; });
     $("#profilePictureInput").addEventListener("change", changeProfilePicture);
     $("#addPasskeyButton").addEventListener("click", () => addBackupPasskey($("#addPasskeyButton")));
     $("#enrollPasskeyButton").addEventListener("click", () => addBackupPasskey($("#enrollPasskeyButton")));
@@ -6116,6 +6178,7 @@ function bindEvents() {
     });
     $("#streakCelebration").addEventListener("click", hideStreakCelebration);
     $("#bioForm").addEventListener("submit", saveBio);
+    document.addEventListener("error", handleAvatarImageError, true);
     $$("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
     addEventListener("valid:session-expired", () => showSignedOut("Your session expired. Sign in with your passkey again."));
     addEventListener("popstate", handleAppPopState);

@@ -1,4 +1,4 @@
-const CACHE_NAME = "valid-web-v34";
+const CACHE_NAME = "valid-web-v37";
 const APP_SHELL = [
     "./",
     "./styles.css",

@@ -390,6 +390,11 @@ async function installWebPushStub(page, { existing = true } = {}) {
 
 async function interceptProductionAPI(page, { signup = false, phoneExists = false, profileAura = 500, questionFailureCount = 0, webPushFailureCount = 0, feedLocked = false, wrappedAskTarget = false } = {}) {
     await useProductionApiOrigin(page);
+    const imagePixel = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lM5gWQAAAABJRU5ErkJggg==", "base64");
+    await page.route("https://cdn.example/**", (route) => {
+        if (route.request().url().includes("_thumb.")) return route.fulfill({ status: 404 });
+        return route.fulfill({ status: 200, contentType: "image/png", body: imagePixel });
+    });
     const requests = [];
     let questionAttempts = 0;
     let webPushAttempts = 0;
@@ -490,10 +495,10 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
         }
         if (path === `/api/v1/users/${USER_ID}/classmates?limit=500`) {
             return fulfill([
-                { user_id: "21111111-1111-1111-1111-111111111111", first_name: "Maya", last_name: "Chen", grade: "Senior", profile_picture_url: "https://cdn.example/maya.jpg" },
-                { user_id: "31111111-1111-1111-1111-111111111111", first_name: "Noah", last_name: "Williams" },
-                { user_id: "41111111-1111-1111-1111-111111111111", first_name: "Ava", last_name: "Patel" },
-                { user_id: "51111111-1111-1111-1111-111111111111", first_name: "Eli", last_name: "Brooks" },
+                { user_id: "31111111-1111-1111-1111-111111111111", first_name: "Noah", last_name: "Williams", weekly_vote_count: 3, profile_picture_url: "https://cdn.example/noah.jpg" },
+                { user_id: "41111111-1111-1111-1111-111111111111", first_name: "Ava", last_name: "Patel", weekly_vote_count: 100, profile_picture_url: "https://cdn.example/default.png" },
+                { user_id: "21111111-1111-1111-1111-111111111111", first_name: "Maya", last_name: "Chen", grade: "Senior", weekly_vote_count: 22, profile_picture_url: "https://cdn.example/maya.jpg", profile_picture_url_thumb: "https://cdn.example/maya_thumb.jpg" },
+                { user_id: "51111111-1111-1111-1111-111111111111", first_name: "Eli", last_name: "Brooks", weekly_vote_count: 50 },
             ]);
         }
         if (path.startsWith(`/api/v1/users/${USER_ID}/classmates?limit=10&search=`)) {
@@ -795,10 +800,39 @@ test("real adapter renders a classmate Ask Me link from the production response"
     await page.getByRole("button", { name: "Profile", exact: true }).click();
     await page.getByRole("button", { name: "Classmates", exact: true }).click();
     const directory = page.getByRole("dialog", { name: "Classmates", exact: true });
-    await directory.getByRole("button", { name: /Maya Chen/ }).click();
+    await expect(directory.locator(".classmate-picker-copy strong")).toHaveText([
+        "Maya Chen",
+        "Noah Williams",
+        "Ava Patel",
+        "Eli Brooks",
+    ]);
+    const maya = directory.getByRole("button", { name: /Maya Chen/ });
+    await expect(maya.locator("img")).toHaveAttribute("src", "https://cdn.example/maya.jpg");
+    await expect.poll(() => maya.locator("img").evaluate((image) => image.naturalWidth)).toBeGreaterThan(0);
+    await maya.click();
     const classmateProfile = page.getByRole("dialog", { name: "Profile", exact: true });
     await expect(classmateProfile.getByRole("link", { name: "Ask anonymously", exact: true })).toHaveAttribute("href", "../a/maya-contract");
     expect(requests.some((request) => request.path.endsWith("21111111-1111-1111-1111-111111111111/ask-target"))).toBe(true);
+});
+
+test("classmate directory mirrors the iOS contact, photo, and weekly-vote order", async ({ page }) => {
+    await installCredentialStub(page, "get");
+    await page.addInitScript(({ key, contactUserId }) => {
+        localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), data: [contactUserId] }));
+    }, {
+        key: `valid:pwa:v1:${USER_ID}:contact-classmates`,
+        contactUserId: "31111111-1111-1111-1111-111111111111",
+    });
+    await interceptProductionAPI(page);
+
+    await page.goto("/app/?signin=1");
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: "Classmates", exact: true }).click();
+
+    await expect(page.getByRole("dialog", { name: "Classmates", exact: true })
+        .locator(".classmate-picker-copy strong"))
+        .toHaveText(["Noah Williams", "Maya Chen", "Ava Patel", "Eli Brooks"]);
 });
 
 test("real adapter accepts the deployed wrapped classmate Ask Me response", async ({ page }) => {
@@ -830,6 +864,7 @@ test("Request a TBH uses full classmate rows with profile pictures", async ({ pa
     const maya = dialog.getByRole("button", { name: "Maya Chen, Senior" });
     await expect(maya).toBeVisible();
     await expect(maya.locator("img")).toHaveAttribute("src", "https://cdn.example/maya.jpg");
+    await expect.poll(() => maya.locator("img").evaluate((image) => image.naturalWidth)).toBeGreaterThan(0);
     await expect(maya.getByText("Senior", { exact: true })).toBeVisible();
 });
 

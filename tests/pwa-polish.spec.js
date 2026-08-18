@@ -6,6 +6,57 @@ async function signInToDemo(page, query = "") {
     await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
 }
 
+test("shared action buttons use the iOS button tokens", async ({ page }) => {
+    await page.goto("/app/?demo=1&signin=1");
+    const styleSnapshot = (locator) => locator.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+            minHeight: style.minHeight,
+            borderRadius: style.borderRadius,
+            borderWidth: style.borderTopWidth,
+            background: style.backgroundColor,
+            color: style.color,
+            boxShadow: style.boxShadow,
+            fontSize: style.fontSize,
+        };
+    });
+
+    expect(await styleSnapshot(page.locator("#passkeyButton"))).toEqual({
+        minHeight: "60px",
+        borderRadius: "30px",
+        borderWidth: "0px",
+        background: "rgb(255, 177, 94)",
+        color: "rgb(0, 0, 0)",
+        boxShadow: "none",
+        fontSize: "22px",
+    });
+    expect(await styleSnapshot(page.locator("#createAccountButton"))).toMatchObject({
+        minHeight: "50px",
+        borderRadius: "25px",
+        borderWidth: "2px",
+        background: "rgb(255, 255, 255)",
+        color: "rgb(0, 0, 0)",
+        boxShadow: "none",
+        fontSize: "16px",
+    });
+    await expect(page.locator("#deleteAccountDialog .danger-button")).toHaveCSS("background-color", "rgb(255, 0, 0)");
+    await expect(page.locator("#deleteAccountDialog .danger-button")).toHaveCSS("color", "rgb(255, 255, 255)");
+
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    const godMode = page.locator(".god-mode-start-button");
+    await expect(godMode).toHaveCSS("min-height", "50px");
+    await expect(godMode).toHaveCSS("border-radius", "16px");
+    await expect(godMode).toHaveCSS("background-color", "rgb(255, 177, 94)");
+
+    await page.getByRole("button", { name: "Play", exact: true }).click();
+    const playActions = page.locator(".play-action-button");
+    await expect(playActions).toHaveCount(3);
+    await expect(playActions.first()).toHaveCSS("min-height", "50px");
+    await expect(playActions.first()).toHaveCSS("border-radius", "20px");
+    await expect(playActions.nth(1)).toHaveCSS("background-color", "rgb(255, 184, 214)");
+});
+
 test("bottom navigation clearly marks Feed, Play, and Profile as current", async ({ page }) => {
     await signInToDemo(page);
     const feed = page.getByRole("button", { name: "Feed", exact: true });
@@ -105,9 +156,22 @@ test("classmate browsing, targeted boost, and TBH use the same iOS-style rows", 
 
     await directoryRow.click();
     const classmateProfile = page.getByRole("dialog", { name: "Profile", exact: true });
-    await expect(classmateProfile.getByRole("link", { name: "Ask anonymously", exact: true })).toHaveAttribute("href", "../a/demo-maya_c");
+    const askButton = classmateProfile.getByRole("link", { name: "Ask anonymously", exact: true });
+    await expect(askButton).toHaveAttribute("href", "../a/demo-maya_c");
+    await expect(askButton).toHaveCSS("border-top-width", "3px");
+    await expect(askButton).toHaveCSS("box-shadow", "rgb(0, 0, 0) 4px 5px 0px 0px");
+    expect(await askButton.evaluate((button) => button.nextElementSibling?.matches(".profile-stats-grid"))).toBe(true);
+    await expect(askButton.locator(".ask-me-symbol > g")).toHaveAttribute("transform", "translate(0 -1.5)");
     await expect(classmateProfile.locator(".tbh-stat-symbol")).toBeVisible();
+    await expect(classmateProfile.locator(".tbh-stat-symbol > g")).toHaveAttribute("transform", "translate(0 -1.5)");
     await expect(classmateProfile.locator("#classmateProfileCard")).not.toContainText("❝");
+
+    await classmateProfile.getByRole("button", { name: /Open poll:/ }).first().click();
+    const pollSummary = page.locator("#pollSummaryDialog");
+    await expect(pollSummary).toBeVisible();
+    await pollSummary.getByRole("button", { name: "Close poll" }).click();
+    await expect(pollSummary).toBeHidden();
+
     await classmateProfile.getByRole("button", { name: "Back to classmates" }).click();
     await directory.getByRole("button", { name: "Close" }).click();
 
