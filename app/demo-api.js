@@ -24,6 +24,7 @@ export class DemoAPI {
         this.user = null;
         this.deletionRequestedAt = null;
         this.demoGodMode = demoParams.get("godmode") === "1";
+        this.profileAskTargetUnavailable = demoParams.get("asktarget") === "unavailable";
         this.passkeyCount = demoParams.get("passkeys") === "0" ? 0 : 1;
         this.feedVotesCast = demoParams.get("locked") === "1" ? 1 : 3;
         this.profile = {
@@ -634,6 +635,11 @@ export class DemoAPI {
     }
 
     async getProfileAskTarget(userId) {
+        if (this.profileAskTargetUnavailable) {
+            const error = new Error("Ask link unavailable");
+            error.status = 404;
+            throw error;
+        }
         const classmate = this.classmates.find((item) => String(item.user_id) === String(userId));
         return classmate?.ask_link_active ? { target: { public_token: `demo-${classmate.username}` } } : { target: null };
     }

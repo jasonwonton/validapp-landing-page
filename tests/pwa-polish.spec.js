@@ -88,8 +88,11 @@ test("classmate browsing, targeted boost, and TBH use the same iOS-style rows", 
     });
     const directoryStyles = await pickerStyles(directoryRow);
     const directorySearchStyles = await searchStyles(directory.locator(".classmate-picker-search"));
-    expect(directoryStyles.slice(-3)).toEqual(["1px", "0px", "rgba(0, 0, 0, 0)"]);
+    expect(directoryStyles).toEqual(["grid", "46px", "12px", "12px 14px", "74px", "2px", "20px", "rgb(255, 255, 255)"]);
+    expect(directorySearchStyles).toEqual(["50px", "2px", "20px", "rgb(255, 255, 255)"]);
     await expect(directoryRow.getByText("this week", { exact: true })).toBeVisible();
+    await expect(directoryRow).not.toContainText("@maya_c");
+    await expect(directoryRow.locator(".classmate-ask-indicator .ask-me-symbol")).toBeVisible();
     await directory.getByRole("button", { name: "Close" }).click();
 
     await page.getByRole("button", { name: /Choose a crush/ }).click();
@@ -104,6 +107,19 @@ test("classmate browsing, targeted boost, and TBH use the same iOS-style rows", 
     const tbh = page.locator("#tbhRequestDialog .classmate-picker-row").first();
     expect(await pickerStyles(tbh)).toEqual(directoryStyles);
     expect(await searchStyles(page.locator("#tbhRequestDialog .classmate-picker-search"))).toEqual(directorySearchStyles);
+});
+
+test("an unavailable Ask Me target does not make a classmate profile look broken", async ({ page }) => {
+    await signInToDemo(page, "&asktarget=unavailable");
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: "Classmates", exact: true }).click();
+    const directory = page.getByRole("dialog", { name: "Classmates", exact: true });
+    await directory.getByRole("button", { name: /Maya Chen/ }).click();
+    const profile = page.getByRole("dialog", { name: "Profile", exact: true });
+    await expect(profile.getByRole("heading", { name: "Maya Chen" })).toBeVisible();
+    await expect(profile.locator("#classmateProfileStatus")).toBeEmpty();
+    await expect(profile.getByText("Some profile details could not be loaded.")).toHaveCount(0);
+    await expect(profile.getByRole("link", { name: /Ask Maya anonymously/ })).toHaveCount(0);
 });
 
 test("pick a couple friends stays compact and keeps every action reachable", async ({ page }) => {
@@ -136,8 +152,22 @@ test("Ask Me link can be paused, resumed, and reset from Settings", async ({ pag
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-checked", "true");
     page.once("dialog", (dialog) => dialog.accept());
-    await askCard.getByRole("button", { name: "Reset link" }).click();
+    await askCard.getByRole("button", { name: "Reset ask link" }).click();
     await expect(page.locator("#toast")).toContainText("New ask me link created");
+});
+
+test("Ask Me uses the same question bubble and action symbols as iOS", async ({ page }) => {
+    await signInToDemo(page, "&safetynotice=1");
+    await page.getByRole("dialog", { name: "Ask Me safety warning" }).getByRole("button", { name: "I understand" }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    const askCard = page.locator("#askLinkCard");
+    await expect(askCard.locator(".ask-url .app-symbol")).toBeVisible();
+    await expect(askCard.locator("[data-rotate-link] .app-symbol")).toBeVisible();
+    await expect(askCard.locator("[data-ask-safety-history] .app-symbol")).toBeVisible();
+    await expect(askCard).not.toContainText("🔗");
+
+    await page.getByRole("button", { name: "Feed", exact: true }).click();
+    await expect(page.locator(".anonymous-question-row .anonymous-row-icon .ask-me-symbol").first()).toBeVisible();
 });
 
 test("Ask Me appears directly below the profile header like iOS", async ({ page }) => {

@@ -340,6 +340,16 @@ function shareIconMarkup(platform) {
     return `<img src="../assets/app/snapchat-logo.png" alt="Snapchat">`;
 }
 
+function appSymbolMarkup(symbol, className = "app-symbol") {
+    const icons = {
+        ask: `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5.2 3h13.6A3.2 3.2 0 0 1 22 6.2v8.1a3.2 3.2 0 0 1-3.2 3.2h-7.2L6 21.3v-3.8h-.8A3.2 3.2 0 0 1 2 14.3V6.2A3.2 3.2 0 0 1 5.2 3Z"/><path d="M9.3 8.6A2.9 2.9 0 0 1 12 7.1c1.7 0 3 1 3 2.5 0 1.3-.7 2-1.8 2.6-.9.5-1.2.9-1.2 1.8" fill="none" stroke="white" stroke-width="1.9" stroke-linecap="round"/><circle cx="12" cy="15.8" r="1" fill="white"/></svg>`,
+        link: `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 14.5 14.5 9M8 17H6.5a4.5 4.5 0 0 1 0-9H10M16 7h1.5a4.5 4.5 0 0 1 0 9H14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+        reset: `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 8.2A8 8 0 1 1 12 4M16 4h4v4" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+        shield: `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8 20 6v5.4c0 4.8-3.1 8.1-8 9.8-4.9-1.7-8-5-8-9.8V6l8-3.2Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8.3 8.2h7.4v7.2H8.3zM8.3 11.8h7.4M12 8.2v7.2" fill="none" stroke="currentColor" stroke-width="1.25"/></svg>`,
+    };
+    return icons[symbol] || "";
+}
+
 function openDetailScreen(screen, { historyMode = "push" } = {}) {
     closeDetailActionMenus();
     state.detailReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -1001,11 +1011,9 @@ function tbhTargetStatus(target) {
 
 function classmatePickerRowMarkup(classmate, { dataAttribute, trailingMarkup = "", disabled = false, extraClass = "" } = {}) {
     const grade = formatGrade(classmate.grade || "");
-    const username = String(classmate.username || "").trim();
-    const subtitle = [grade, username ? `@${username}` : ""].filter(Boolean).join(" · ");
-    return `<button class="classmate-picker-row ${extraClass}" type="button" ${dataAttribute} ${disabled ? "disabled" : ""}>
+    return `<button class="classmate-picker-row ${extraClass}" type="button" ${dataAttribute} ${disabled ? "disabled" : ""} aria-label="${escapeHTML([displayName(classmate), grade].filter(Boolean).join(", "))}">
         ${avatarMarkup(classmate, "row-avatar classmate-picker-avatar")}
-        <span class="classmate-picker-copy"><strong>${escapeHTML(displayName(classmate))}</strong>${subtitle ? `<small>${escapeHTML(subtitle)}</small>` : ""}</span>
+        <span class="classmate-picker-copy"><strong>${escapeHTML(displayName(classmate))}</strong>${grade ? `<small>${escapeHTML(grade)}</small>` : ""}</span>
         <span class="classmate-picker-trailing">${trailingMarkup}</span>
     </button>`;
 }
@@ -1345,7 +1353,7 @@ function renderClassmateDirectory() {
         rowOptions: (classmate) => ({
             dataAttribute: `data-directory-classmate="${escapeHTML(classmate.user_id)}"`,
             extraClass: "classmate-directory-row",
-            trailingMarkup: `<span class="classmate-row-meta"><strong><span aria-hidden="true">♥</span> ${Number(classmate.weekly_vote_count || 0).toLocaleString()}</strong><small>this week</small></span>${classmate.ask_link_active ? `<span class="classmate-ask-indicator" aria-label="Ask Me is on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5h14v10H10l-4.5 3v-3H5Z"/><path d="M10 9a2 2 0 1 1 2.8 1.8c-.8.3-.8.8-.8 1.2M12 14h.01"/></svg></span>` : ""}`,
+            trailingMarkup: `${classmate.ask_link_active ? `<span class="classmate-ask-indicator" aria-label="Ask Me is on">${appSymbolMarkup("ask", "ask-me-symbol")}</span>` : ""}<span class="classmate-row-meta"><strong><span aria-hidden="true">♥</span> ${Number(classmate.weekly_vote_count || 0).toLocaleString()}</strong><small>this week</small></span>`,
         }),
     });
 }
@@ -1390,7 +1398,7 @@ function renderClassmateProfile() {
             <div class="profile-stat-card"><strong><span class="heart">♥</span>${Number(profile.vote_count || 0).toLocaleString()}</strong><span>Votes Received</span></div>
             ${tbhRequestsEnabled() ? `<div class="profile-stat-card"><strong><span aria-hidden="true">❝</span>${Number(profile.tbh_unique_requester_count || 0).toLocaleString()}</strong><span>TBH Requests</span></div>` : ""}
         </div>
-        ${state.selectedClassmateAskTarget?.public_token ? `<a class="primary-button classmate-ask-button" href="../a/${encodeURIComponent(state.selectedClassmateAskTarget.public_token)}">Ask ${escapeHTML(profile.first_name || displayName(profile))} anonymously</a>` : ""}
+        ${state.selectedClassmateAskTarget?.public_token ? `<a class="primary-button classmate-ask-button" href="../a/${encodeURIComponent(state.selectedClassmateAskTarget.public_token)}">${appSymbolMarkup("ask", "ask-me-symbol")}<span>Ask ${escapeHTML(profile.first_name || displayName(profile))} anonymously</span></a>` : ""}
     </article>`;
     if (state.selectedClassmateTopQuestionsWeekly === null) {
         $("#classmateWeeklyPolls").innerHTML = '<div class="profile-poll-empty">Loading...</div>';
@@ -1431,10 +1439,9 @@ async function openClassmateProfile(userId) {
     if (requests[2].status === "fulfilled") state.selectedClassmateTopQuestionsAllTime = requests[2].value;
     else state.selectedClassmateTopQuestionsAllTime = [];
     if (requests[3].status === "fulfilled") state.selectedClassmateAskTarget = requests[3].value?.target || null;
-    const firstError = requests.find((result) => result.status === "rejected");
     $("#classmateProfileStatus").textContent = requests[0].status === "rejected"
         ? (requests[0].reason?.message || "Could not load this profile.")
-        : (firstError ? "Some profile details could not be loaded." : "");
+        : "";
     renderClassmateProfile();
 }
 
@@ -2232,7 +2239,7 @@ function anonymousInboxRows() {
         <span class="anonymous-row-state" aria-hidden="true">›</span>
     </button>` }));
     const questionRows = questions.map((question) => ({ timestamp: question.created_at, html: `<button class="anonymous-question-row ${question.opened_at ? "" : "unread"} ${question.status === "answered" ? "answered" : ""}" type="button" data-anonymous-question="${escapeHTML(question.id)}">
-        <span class="anonymous-row-icon" aria-hidden="true">?</span>
+        <span class="anonymous-row-icon" aria-hidden="true">${appSymbolMarkup("ask", "ask-me-symbol")}</span>
         <span class="anonymous-row-copy"><span class="anonymous-row-title"><strong>${escapeHTML(question.provenance_label)}</strong>${question.opened_at ? "" : `<span class="anonymous-new-pill">New</span>`}</span><span class="anonymous-row-message">${escapeHTML(question.body)}</span><span class="anonymous-row-meta"><span>${escapeHTML(question.source_platform ? `From ${question.source_platform[0].toUpperCase()}${question.source_platform.slice(1)}` : "Anonymous")}</span><time>${escapeHTML(relativeTime(question.created_at))}</time></span></span>
         <span class="anonymous-row-state" aria-hidden="true">›</span>
     </button>` }));
@@ -4137,11 +4144,11 @@ function renderAskLink() {
             <span><strong>${link.is_active && !restricted ? "Ask Me is on" : "Ask Me is off"}</strong><small>${escapeHTML(activeDescription)}</small></span>
             <span class="settings-switch" aria-hidden="true"><span></span></span>
         </button>
-        ${link.is_active && !restricted ? `<button class="ask-url" type="button" data-copy-link aria-label="Copy ask link"><span>🔗</span><span>${escapeHTML(link.share_url.replace(/^https:\/\//, ""))}</span><strong>Copy</strong></button>` : ""}
+        ${link.is_active && !restricted ? `<button class="ask-url" type="button" data-copy-link aria-label="Copy ask link"><span class="ask-url-icon">${appSymbolMarkup("link")}</span><span>${escapeHTML(link.share_url.replace(/^https:\/\//, ""))}</span><strong>Copy</strong></button>` : ""}
         ${link.is_active && !restricted ? `<div class="share-platform-row"><span class="share-platform-label">Open on:</span><button class="share-platform-button snapchat" type="button" data-share-link="snapchat" aria-label="Share ask link to Snapchat">${shareIconMarkup("snapchat")}</button><button class="share-platform-button instagram" type="button" data-share-link="instagram" aria-label="Share ask link to Instagram">${shareIconMarkup("instagram")}</button></div>` : ""}
         ${!link.is_active || restricted ? `<p class="ask-link-paused">${escapeHTML(inactiveCopy)}</p>` : ""}
-        <div class="ask-link-controls"><button class="text-button" type="button" data-rotate-link>Reset link</button></div>
-        ${state.askSafetyNoticeHistory.length ? `<button class="text-button ask-safety-history-button" type="button" data-ask-safety-history>🛡️ Ask Me safety notices</button>` : ""}
+        <div class="ask-link-controls"><button class="text-button icon-text-button" type="button" data-rotate-link>${appSymbolMarkup("reset")}<span>Reset ask link</span></button></div>
+        ${state.askSafetyNoticeHistory.length ? `<button class="text-button ask-safety-history-button icon-text-button" type="button" data-ask-safety-history>${appSymbolMarkup("shield")}<span>Ask Me safety notices</span></button>` : ""}
     </article>`;
 }
 
