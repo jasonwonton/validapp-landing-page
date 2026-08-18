@@ -468,6 +468,7 @@ h3 { font-size: 1.45rem; }
 }
 .profile-stat-card strong { display: flex; align-items: center; gap: 8px; font-size: 1.4rem; }
 .profile-stat-card strong > span { font-size: 1.8rem; }
+.profile-stat-symbol { width: 36px; height: 36px; display: block; flex: 0 0 36px; color: var(--peach); }
 .profile-aura-icon { width: 32px; height: 36px; object-fit: contain; }
 .profile-stat-card .heart { color: var(--heart-pink); }
 .profile-stat-card > span { color: rgba(5,9,20,.6); font-size: .82rem; text-align: center; }
@@ -728,8 +729,8 @@ h3 { font-size: 1.45rem; }
 .classmate-row-meta > strong { display: flex; align-items: center; gap: 4px; font-size: .88rem; }
 .classmate-row-meta > strong > span { color: var(--heart-pink); font-family: system-ui, sans-serif; font-size: .78rem; }
 .classmate-row-meta > small { color: rgba(0,0,0,.66); font-size: .72rem; }
-.classmate-ask-indicator { width: 20px; height: 20px; color: var(--peach-pressed); }
-.classmate-ask-indicator .ask-me-symbol { width: 20px; height: 20px; }
+.classmate-ask-indicator { width: 18px; height: 18px; display: grid; place-items: center; flex: 0 0 18px; align-self: center; color: var(--peach-pressed); line-height: 0; }
+.classmate-ask-indicator .ask-me-symbol { width: 18px; height: 18px; display: block; }
 .classmate-ask-button { display: flex; align-items: center; justify-content: center; gap: 9px; color: var(--ink); text-decoration: none; }
 .classmate-ask-button .ask-me-symbol { width: 23px; height: 23px; }
 .classmate-profile-card .full-profile-avatar { width: 104px; height: 104px; }

@@ -388,7 +388,7 @@ async function installWebPushStub(page, { existing = true } = {}) {
     }, { hasExistingSubscription: existing });
 }
 
-async function interceptProductionAPI(page, { signup = false, phoneExists = false, profileAura = 500, questionFailureCount = 0, webPushFailureCount = 0, feedLocked = false } = {}) {
+async function interceptProductionAPI(page, { signup = false, phoneExists = false, profileAura = 500, questionFailureCount = 0, webPushFailureCount = 0, feedLocked = false, wrappedAskTarget = false } = {}) {
     await useProductionApiOrigin(page);
     const requests = [];
     let questionAttempts = 0;
@@ -472,7 +472,8 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
             return fulfill({ ...profile("Maya", 0), user_id: "21111111-1111-1111-1111-111111111111", last_name: "Chen", username: "maya_c", bio: "Student council and bad puns.", vote_count: 61 });
         }
         if (path === "/api/v1/users/21111111-1111-1111-1111-111111111111/ask-target") {
-            return fulfill({ public_token: "maya-contract" });
+            const askTarget = { public_token: "maya-contract" };
+            return fulfill(wrappedAskTarget ? { target: askTarget } : askTarget);
         }
         if (path === `/api/v1/users/${USER_ID}/classmates/status`) {
             return fulfill(feedLocked
@@ -796,8 +797,24 @@ test("real adapter renders a classmate Ask Me link from the production response"
     const directory = page.getByRole("dialog", { name: "Classmates", exact: true });
     await directory.getByRole("button", { name: /Maya Chen/ }).click();
     const classmateProfile = page.getByRole("dialog", { name: "Profile", exact: true });
-    await expect(classmateProfile.getByRole("link", { name: "Ask Maya anonymously" })).toHaveAttribute("href", "../a/maya-contract");
+    await expect(classmateProfile.getByRole("link", { name: "Ask anonymously", exact: true })).toHaveAttribute("href", "../a/maya-contract");
     expect(requests.some((request) => request.path.endsWith("21111111-1111-1111-1111-111111111111/ask-target"))).toBe(true);
+});
+
+test("real adapter accepts the deployed wrapped classmate Ask Me response", async ({ page }) => {
+    await installCredentialStub(page, "get");
+    await interceptProductionAPI(page, { wrappedAskTarget: true });
+
+    await page.goto("/app/?signin=1");
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: "Classmates", exact: true }).click();
+    const directory = page.getByRole("dialog", { name: "Classmates", exact: true });
+    await directory.getByRole("button", { name: /Maya Chen/ }).click();
+
+    await expect(page.getByRole("dialog", { name: "Profile", exact: true })
+        .getByRole("link", { name: "Ask anonymously", exact: true }))
+        .toHaveAttribute("href", "../a/maya-contract");
 });
 
 test("Request a TBH uses full classmate rows with profile pictures", async ({ page }) => {

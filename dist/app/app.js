@@ -343,6 +343,7 @@ function shareIconMarkup(platform) {
 function appSymbolMarkup(symbol, className = "app-symbol") {
     const icons = {
         ask: `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5.2 3h13.6A3.2 3.2 0 0 1 22 6.2v8.1a3.2 3.2 0 0 1-3.2 3.2h-7.2L6 21.3v-3.8h-.8A3.2 3.2 0 0 1 2 14.3V6.2A3.2 3.2 0 0 1 5.2 3Z"/><path d="M9.3 8.6A2.9 2.9 0 0 1 12 7.1c1.7 0 3 1 3 2.5 0 1.3-.7 2-1.8 2.6-.9.5-1.2.9-1.2 1.8" fill="none" stroke="white" stroke-width="1.9" stroke-linecap="round"/><circle cx="12" cy="15.8" r="1" fill="white"/></svg>`,
+        tbh: `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5.2 3h13.6A3.2 3.2 0 0 1 22 6.2v8.1a3.2 3.2 0 0 1-3.2 3.2h-7.2L6 21.3v-3.8h-.8A3.2 3.2 0 0 1 2 14.3V6.2A3.2 3.2 0 0 1 5.2 3Z"/><path fill="white" d="M6.8 8h4.4v3.4c0 2.4-1.2 4-3.6 4.8l-.9-1.7c1.2-.4 1.8-1.1 1.9-2H6.8V8Zm6 0h4.4v3.4c0 2.4-1.2 4-3.6 4.8l-.9-1.7c1.2-.4 1.8-1.1 1.9-2h-1.8V8Z"/></svg>`,
         link: `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 14.5 14.5 9M8 17H6.5a4.5 4.5 0 0 1 0-9H10M16 7h1.5a4.5 4.5 0 0 1 0 9H14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
         message: `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4.8 3h14.4A3.8 3.8 0 0 1 23 6.8v8.4a3.8 3.8 0 0 1-3.8 3.8h-8.1L5 22v-3.2A3.8 3.8 0 0 1 1 15V6.8A3.8 3.8 0 0 1 4.8 3Z"/><path d="M6.5 9h11M6.5 13h7" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round"/></svg>`,
         reset: `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 8.2A8 8 0 1 1 12 4M16 4h4v4" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
@@ -1020,7 +1021,7 @@ function classmatePickerRowMarkup(classmate, { dataAttribute, trailingMarkup = "
 }
 
 function classmateSearchMarkup(inputId) {
-    return `<label class="feed-search classmate-picker-search"><span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg></span><input id="${inputId}" type="search" placeholder="Search classmates..." autocomplete="off"></label>`;
+    return `<label class="feed-search classmate-picker-search"><span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg></span><input id="${inputId}" type="search" placeholder="Search classmates" autocomplete="off"></label>`;
 }
 
 function classmatePickerMatches(classmate, query) {
@@ -1048,6 +1049,21 @@ function renderTbhTargetList() {
             disabled: target.state !== "eligible",
             trailingMarkup: target.state === "eligible" ? '<span class="classmate-picker-chevron" aria-hidden="true">›</span>' : `<small>${escapeHTML(tbhTargetStatus(target))}</small>`,
         }),
+    });
+}
+
+function mergeTbhTargetsWithClassmates(targets, classmates) {
+    const classmatesById = new Map((classmates || []).map((classmate) => [String(classmate.user_id), classmate]));
+    return (targets || []).map((target) => {
+        const classmate = classmatesById.get(String(target.user_id));
+        if (!classmate) return target;
+        return {
+            ...classmate,
+            ...target,
+            profile_picture_url: classmate.profile_picture_url || target.profile_picture_url || null,
+            profile_picture_url_thumb: classmate.profile_picture_url_thumb || target.profile_picture_url || null,
+            profile_picture_url_medium: classmate.profile_picture_url_medium || classmate.profile_picture_url || target.profile_picture_url || null,
+        };
     });
 }
 
@@ -1081,8 +1097,14 @@ async function openTbhRequestPurchase() {
     $("#tbhRequestBody").innerHTML = '<div class="empty-card">Loading classmates…</div>';
     openDetailScreen($("#tbhRequestDialog"));
     try {
-        const response = await api.getTbhRequestTargets(api.user.id);
-        state.tbhTargets = response.items || [];
+        const [targetResponse, classmateResponse] = await Promise.all([
+            api.getTbhRequestTargets(api.user.id),
+            api.getClassmatesWithMetadata(api.user.id, "", 500),
+        ]);
+        state.classmateDirectory = classmateResponse.classmates;
+        state.classmates = classmateResponse.classmates;
+        if (classmateResponse.activeThisWeekCount !== null) state.activeClassmatesThisWeek = classmateResponse.activeThisWeekCount;
+        state.tbhTargets = mergeTbhTargetsWithClassmates(targetResponse.items, classmateResponse.classmates);
         renderTbhRequestFlow();
     } catch (error) {
         $("#tbhRequestBody").innerHTML = `<div class="empty-card"><strong>Couldn't load classmates</strong><p>${escapeHTML(error.message || "Please try again.")}</p></div>`;
@@ -1397,9 +1419,9 @@ function renderClassmateProfile() {
         <div class="profile-school-meta"><span class="profile-school-meta-item"><img src="../assets/app/profile-school.svg" alt=""><span>${escapeHTML(profile.school_name || state.profile?.school_name || "Your school")}</span></span>${profile.grade ? `<span class="profile-school-meta-item"><img src="../assets/app/profile-graduation-cap.svg" alt=""><span>${escapeHTML(formatGrade(profile.grade))}</span></span>` : ""}</div>
         <div class="profile-stats-grid ${tbhRequestsEnabled() ? "" : "single"}">
             <div class="profile-stat-card"><strong><span class="heart">♥</span>${Number(profile.vote_count || 0).toLocaleString()}</strong><span>Votes Received</span></div>
-            ${tbhRequestsEnabled() ? `<div class="profile-stat-card"><strong><span aria-hidden="true">❝</span>${Number(profile.tbh_unique_requester_count || 0).toLocaleString()}</strong><span>TBH Requests</span></div>` : ""}
+            ${tbhRequestsEnabled() ? `<div class="profile-stat-card"><strong>${appSymbolMarkup("tbh", "profile-stat-symbol tbh-stat-symbol")}${Number(profile.tbh_unique_requester_count || 0).toLocaleString()}</strong><span>TBH Requests</span></div>` : ""}
         </div>
-        ${state.selectedClassmateAskTarget?.public_token ? `<a class="primary-button classmate-ask-button" href="../a/${encodeURIComponent(state.selectedClassmateAskTarget.public_token)}">${appSymbolMarkup("ask", "ask-me-symbol")}<span>Ask ${escapeHTML(profile.first_name || displayName(profile))} anonymously</span></a>` : ""}
+        ${state.selectedClassmateAskTarget?.public_token ? `<a class="primary-button classmate-ask-button" href="../a/${encodeURIComponent(state.selectedClassmateAskTarget.public_token)}">${appSymbolMarkup("ask", "ask-me-symbol")}<span>Ask anonymously</span></a>` : ""}
     </article>`;
     if (state.selectedClassmateTopQuestionsWeekly === null) {
         $("#classmateWeeklyPolls").innerHTML = '<div class="profile-poll-empty">Loading...</div>';
@@ -1439,7 +1461,13 @@ async function openClassmateProfile(userId) {
     else state.selectedClassmateTopQuestionsWeekly = [];
     if (requests[2].status === "fulfilled") state.selectedClassmateTopQuestionsAllTime = requests[2].value;
     else state.selectedClassmateTopQuestionsAllTime = [];
-    if (requests[3].status === "fulfilled") state.selectedClassmateAskTarget = requests[3].value?.target || null;
+    if (requests[3].status === "fulfilled") {
+        const askTargetResponse = requests[3].value;
+        const askTarget = askTargetResponse?.target || askTargetResponse;
+        state.selectedClassmateAskTarget = typeof askTarget?.public_token === "string" && askTarget.public_token.trim()
+            ? askTarget
+            : null;
+    }
     $("#classmateProfileStatus").textContent = requests[0].status === "rejected"
         ? (requests[0].reason?.message || "Could not load this profile.")
         : "";

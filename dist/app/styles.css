@@ -468,6 +468,7 @@ h3 { font-size: 1.45rem; }
 }
 .profile-stat-card strong { display: flex; align-items: center; gap: 8px; font-size: 1.4rem; }
 .profile-stat-card strong > span { font-size: 1.8rem; }
+.profile-stat-symbol { width: 36px; height: 36px; display: block; flex: 0 0 36px; color: var(--peach); }
 .profile-aura-icon { width: 32px; height: 36px; object-fit: contain; }
 .profile-stat-card .heart { color: var(--heart-pink); }
 .profile-stat-card > span { color: rgba(5,9,20,.6); font-size: .82rem; text-align: center; }
@@ -728,8 +729,8 @@ h3 { font-size: 1.45rem; }
 .classmate-row-meta > strong { display: flex; align-items: center; gap: 4px; font-size: .88rem; }
 .classmate-row-meta > strong > span { color: var(--heart-pink); font-family: system-ui, sans-serif; font-size: .78rem; }
 .classmate-row-meta > small { color: rgba(0,0,0,.66); font-size: .72rem; }
-.classmate-ask-indicator { width: 20px; height: 20px; color: var(--peach-pressed); }
-.classmate-ask-indicator .ask-me-symbol { width: 20px; height: 20px; }
+.classmate-ask-indicator { width: 18px; height: 18px; display: grid; place-items: center; flex: 0 0 18px; align-self: center; color: var(--peach-pressed); line-height: 0; }
+.classmate-ask-indicator .ask-me-symbol { width: 18px; height: 18px; display: block; }
 .classmate-ask-button { display: flex; align-items: center; justify-content: center; gap: 9px; color: var(--ink); text-decoration: none; }
 .classmate-ask-button .ask-me-symbol { width: 23px; height: 23px; }
 .classmate-profile-card .full-profile-avatar { width: 104px; height: 104px; }
@@ -1326,8 +1327,15 @@ body.detail-screen-open { overflow: hidden; }
 
 .tbh-flow-content { width: min(100%, 560px); margin: 0 auto; display: grid; align-content: start; gap: 14px; }
 .tbh-flow-content > p { margin: 0; font-size: 16px; }
-.tbh-flow-content.classmate-picker-page { gap: 0; padding-top: 12px; }
-.tbh-flow-content.classmate-picker-page > .classmate-picker-note { margin: 12px 6px; font-size: 1rem; }
+#tbhRequestDialog { display: flex; flex-direction: column; overflow: hidden; }
+#tbhRequestDialog.hidden { display: none; }
+#tbhRequestDialog .detail-screen-header { flex: 0 0 auto; }
+#tbhRequestDialog .detail-screen-header > strong { font-size: 1.25rem; }
+#tbhRequestDialog .detail-back-button { padding-left: 6px; }
+#tbhRequestBody { min-height: 0; flex: 1 1 auto; overflow-y: auto; }
+.tbh-flow-content.classmate-picker-page { width: min(100%, 560px); display: flex; flex-direction: column; gap: 0; overflow: hidden; padding: 12px 20px calc(20px + env(safe-area-inset-bottom)); }
+.tbh-flow-content.classmate-picker-page > .classmate-picker-note { margin: 0 0 12px; color: rgba(0,0,0,.8); font-size: 1rem; line-height: 1.35; }
+.tbh-flow-content.classmate-picker-page > .classmate-picker-list { gap: 14px; overflow-y: auto; padding-inline: 2px; }
 .tbh-target-list, .tbh-prompt-list { display: grid; gap: 10px; }
 .tbh-target-row, .tbh-prompt-row { width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 14px; border: 2px solid var(--ink); border-radius: 18px; background: var(--white); text-align: left; font: inherit; }
 .tbh-target-row:disabled { opacity: .55; }

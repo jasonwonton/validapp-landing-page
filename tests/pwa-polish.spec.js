@@ -92,7 +92,23 @@ test("classmate browsing, targeted boost, and TBH use the same iOS-style rows", 
     expect(directorySearchStyles).toEqual(["50px", "2px", "20px", "rgb(255, 255, 255)"]);
     await expect(directoryRow.getByText("this week", { exact: true })).toBeVisible();
     await expect(directoryRow).not.toContainText("@maya_c");
-    await expect(directoryRow.locator(".classmate-ask-indicator .ask-me-symbol")).toBeVisible();
+    const askIndicator = directoryRow.locator(".classmate-ask-indicator");
+    await expect(askIndicator.locator(".ask-me-symbol")).toBeVisible();
+    await expect(askIndicator).toHaveCSS("line-height", "0px");
+    await expect(askIndicator.locator(".ask-me-symbol")).toHaveCSS("display", "block");
+    const trailingAlignment = await directoryRow.evaluate((element) => {
+        const indicator = element.querySelector(".classmate-ask-indicator").getBoundingClientRect();
+        const meta = element.querySelector(".classmate-row-meta").getBoundingClientRect();
+        return Math.abs((indicator.top + indicator.height / 2) - (meta.top + meta.height / 2));
+    });
+    expect(trailingAlignment).toBeLessThan(1);
+
+    await directoryRow.click();
+    const classmateProfile = page.getByRole("dialog", { name: "Profile", exact: true });
+    await expect(classmateProfile.getByRole("link", { name: "Ask anonymously", exact: true })).toHaveAttribute("href", "../a/demo-maya_c");
+    await expect(classmateProfile.locator(".tbh-stat-symbol")).toBeVisible();
+    await expect(classmateProfile.locator("#classmateProfileCard")).not.toContainText("❝");
+    await classmateProfile.getByRole("button", { name: "Back to classmates" }).click();
     await directory.getByRole("button", { name: "Close" }).click();
 
     await page.getByRole("button", { name: /Choose a crush/ }).click();
@@ -122,7 +138,7 @@ test("an unavailable Ask Me target does not make a classmate profile look broken
     await expect(profile.getByRole("heading", { name: "Maya Chen" })).toBeVisible();
     await expect(profile.locator("#classmateProfileStatus")).toBeEmpty();
     await expect(profile.getByText("Some profile details could not be loaded.")).toHaveCount(0);
-    await expect(profile.getByRole("link", { name: /Ask Maya anonymously/ })).toHaveCount(0);
+    await expect(profile.getByRole("link", { name: "Ask anonymously", exact: true })).toHaveCount(0);
 });
 
 test("pick a couple friends stays compact and keeps every action reachable", async ({ page }) => {
