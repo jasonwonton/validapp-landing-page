@@ -78,27 +78,32 @@ test("classmate browsing, targeted boost, and TBH use the same iOS-style rows", 
     await page.getByRole("button", { name: "Classmates", exact: true }).click();
     const directory = page.locator("#classmateDirectoryDialog");
     const directoryRow = directory.locator(".classmate-picker-row").first();
-    await expect(directoryRow).toHaveCSS("background-color", "rgb(255, 255, 255)");
-    await expect(directoryRow).toHaveCSS("border-top-width", "2px");
-    await expect(directoryRow).toHaveCSS("border-radius", "18px");
+    const pickerStyles = (locator) => locator.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return [style.display, style.gridTemplateColumns.split(" ")[0], style.columnGap, style.padding, style.minHeight, style.borderBottomWidth, style.borderRadius, style.backgroundColor];
+    });
+    const searchStyles = (locator) => locator.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return [style.minHeight, style.borderTopWidth, style.borderRadius, style.backgroundColor];
+    });
+    const directoryStyles = await pickerStyles(directoryRow);
+    const directorySearchStyles = await searchStyles(directory.locator(".classmate-picker-search"));
+    expect(directoryStyles.slice(-3)).toEqual(["1px", "0px", "rgba(0, 0, 0, 0)"]);
     await expect(directoryRow.getByText("this week", { exact: true })).toBeVisible();
     await directory.getByRole("button", { name: "Close" }).click();
 
     await page.getByRole("button", { name: /Choose a crush/ }).click();
     const targeted = page.locator("#targetedBoostDialog .classmate-picker-row").first();
-    const targetedStyles = await targeted.evaluate((element) => {
-        const style = getComputedStyle(element);
-        return [style.display, style.columnGap, style.padding, style.borderRadius, style.backgroundColor];
-    });
+    const targetedStyles = await pickerStyles(targeted);
+    const targetedSearchStyles = await searchStyles(page.locator("#targetedBoostDialog .classmate-picker-search"));
+    expect(targetedStyles).toEqual(directoryStyles);
+    expect(targetedSearchStyles).toEqual(directorySearchStyles);
     await page.locator("#targetedBoostDialog [data-close-dialog]").click();
 
     await page.getByRole("button", { name: /Request a TBH for/ }).click();
     const tbh = page.locator("#tbhRequestDialog .classmate-picker-row").first();
-    const tbhStyles = await tbh.evaluate((element) => {
-        const style = getComputedStyle(element);
-        return [style.display, style.columnGap, style.padding, style.borderRadius, style.backgroundColor];
-    });
-    expect(tbhStyles).toEqual(targetedStyles);
+    expect(await pickerStyles(tbh)).toEqual(directoryStyles);
+    expect(await searchStyles(page.locator("#tbhRequestDialog .classmate-picker-search"))).toEqual(directorySearchStyles);
 });
 
 test("pick a couple friends stays compact and keeps every action reachable", async ({ page }) => {

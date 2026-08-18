@@ -1,4 +1,4 @@
-const CACHE_NAME = "valid-web-v31";
+const CACHE_NAME = "valid-web-v32";
 const APP_SHELL = [
     "./",
     "./styles.css",
@@ -25,7 +25,10 @@ const APP_SHELL = [
 
 self.addEventListener("install", (event) => {
     event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
-    self.skipWaiting();
+});
+
+self.addEventListener("message", (event) => {
+    if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
@@ -41,8 +44,10 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
         fetch(event.request)
             .then((response) => {
-                const copy = response.clone();
-                caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+                if (response.ok) {
+                    const copy = response.clone();
+                    caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+                }
                 return response;
             })
             .catch(() => caches.match(event.request).then((cached) => cached || caches.match("./")))
@@ -70,16 +75,23 @@ self.addEventListener("push", (event) => {
     event.waitUntil(self.registration.showNotification(payload.title || "Valid", {
         body: payload.body || "You have a new update.",
         icon: "/assets/pwa/icon-192.png",
+        badge: "/assets/pwa/icon-192.png",
         tag,
         renotify: Boolean(tag),
         timestamp: Number(payload.timestamp) || Date.now(),
+        actions: [
+            { action: "open", title: "Open Valid" },
+            { action: "play", title: "Play" },
+        ],
         data: { url: safeNotificationURL(payload.url) },
     }));
 });
 
 self.addEventListener("notificationclick", (event) => {
     event.notification.close();
-    const url = safeNotificationURL(event.notification.data?.url);
+    const url = event.action === "play"
+        ? safeNotificationURL("/app/?tab=play")
+        : safeNotificationURL(event.notification.data?.url);
     event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clients) => {
         for (const client of clients) {
             const clientURL = new URL(client.url);

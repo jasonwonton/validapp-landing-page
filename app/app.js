@@ -132,6 +132,13 @@ const state = {
     webPushRegistrationState: "off",
     webPushRegistrationError: "",
     detailReturnFocus: null,
+    tabScrollPositions: { feed: 0, play: 0, profile: 0 },
+    navigationInitialized: false,
+    handlingPopState: false,
+    pullRefreshStartY: null,
+    pullRefreshDistance: 0,
+    waitingServiceWorker: null,
+    appUpdateRequested: false,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -142,6 +149,88 @@ function friendlyErrorMessage(error, fallback = "Something went wrong. Please tr
     const message = String(raw || "").trim();
     if (!message || /<!doctype|<html|<body|<head/i.test(message) || message.length > 240) return fallback;
     return message;
+}
+
+function appCacheKey(name) {
+    return api.user?.id ? `valid:pwa:v1:${api.user.id}:${name}` : null;
+}
+
+function readAppCache(name) {
+    const key = appCacheKey(name);
+    if (!key) return null;
+    try {
+        const value = JSON.parse(localStorage.getItem(key) || "null");
+        return value?.savedAt && Date.now() - value.savedAt < 7 * 86_400_000 ? value.data : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+function writeAppCache(name, data) {
+    const key = appCacheKey(name);
+    if (!key) return;
+    try {
+        localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), data }));
+    } catch (_) { /* The live app remains authoritative when storage is unavailable. */ }
+}
+
+function clearCachedAppState(userId = api.user?.id) {
+    if (!userId) return;
+    for (const name of ["profile", "feed-personal", "classmates"]) {
+        try { localStorage.removeItem(`valid:pwa:v1:${userId}:${name}`); }
+        catch (_) { /* Session logout still continues. */ }
+    }
+}
+
+function restoreCachedAppState() {
+    const cachedProfile = readAppCache("profile");
+    const cachedFeed = readAppCache("feed-personal");
+    const cachedClassmates = readAppCache("classmates");
+    if (cachedProfile) state.profile = cachedProfile;
+    if (Array.isArray(cachedFeed)) state.feedItems = cachedFeed;
+    if (Array.isArray(cachedClassmates)) {
+        state.classmates = cachedClassmates;
+        state.classmateDirectory = cachedClassmates;
+    }
+    if (state.profile) renderProfileHeader();
+    if (state.feedItems.length) renderFeed();
+}
+
+function navigationURL(panel = state.activePanel, detail = null) {
+    const url = new URL(location.href);
+    if (panel === "feed") url.searchParams.delete("tab");
+    else url.searchParams.set("tab", panel);
+    url.hash = detail ? `screen=${encodeURIComponent(detail)}` : "";
+    return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function writeNavigationState(mode, detail = null) {
+    if (state.handlingPopState) return;
+    const payload = { validApp: true, panel: state.activePanel, detail };
+    history[mode === "replace" ? "replaceState" : "pushState"](payload, "", navigationURL(state.activePanel, detail));
+}
+
+function initializeAppNavigation() {
+    if (state.navigationInitialized) return;
+    state.navigationInitialized = true;
+    const requested = new URLSearchParams(location.search).get("tab");
+    const panel = ["feed", "play", "profile"].includes(requested) ? requested : "feed";
+    switchPanel(panel, { historyMode: "replace", restoreScroll: false });
+}
+
+function closeVisibleDetailScreens({ fromHistory = false } = {}) {
+    for (const screen of $$(".detail-screen:not(.hidden)")) closeDetailScreen(screen, { fromHistory });
+}
+
+function handleAppPopState(event) {
+    if (!document.body.classList.contains("authenticated")) return;
+    state.handlingPopState = true;
+    closeVisibleDetailScreens({ fromHistory: true });
+    const panel = ["feed", "play", "profile"].includes(event.state?.panel) ? event.state.panel : "feed";
+    switchPanel(panel, { historyMode: "none", restoreScroll: true });
+    const detail = event.state?.detail ? document.getElementById(event.state.detail) : null;
+    if (detail?.classList.contains("detail-screen")) openDetailScreen(detail, { historyMode: "none" });
+    state.handlingPopState = false;
 }
 
 function syncVisualViewport() {
@@ -251,21 +340,26 @@ function shareIconMarkup(platform) {
     return `<img src="../assets/app/snapchat-logo.png" alt="Snapchat">`;
 }
 
-function openDetailScreen(screen) {
+function openDetailScreen(screen, { historyMode = "push" } = {}) {
     closeDetailActionMenus();
     state.detailReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     screen.classList.remove("hidden");
+    screen.classList.remove("detail-screen-closing");
+    screen.classList.add("detail-screen-opening");
     screen.scrollTop = 0;
     document.body.classList.add("detail-screen-open");
+    if (historyMode !== "none" && history.state?.detail !== screen.id) writeNavigationState(historyMode, screen.id);
+    requestAnimationFrame(() => screen.classList.remove("detail-screen-opening"));
     screen.querySelector("[aria-label='Close']")?.focus({ preventScroll: true, focusVisible: false });
 }
 
-function closeDetailScreen(screen) {
+function closeDetailScreen(screen, { fromHistory = false } = {}) {
     closeDetailActionMenus();
     screen.classList.add("hidden");
     if (!$(".detail-screen:not(.hidden)")) document.body.classList.remove("detail-screen-open");
     state.detailReturnFocus?.focus?.({ preventScroll: true });
     state.detailReturnFocus = null;
+    if (!fromHistory && history.state?.detail === screen.id) history.back();
 }
 
 function closeDetailActionMenus() {
@@ -291,6 +385,8 @@ function showSignedOut(message = "") {
     $("#bottomNav").classList.add("hidden");
     $("#logoutButton").classList.add("hidden");
     document.body.classList.remove("authenticated", "play-active");
+    state.navigationInitialized = false;
+    state.tabScrollPositions = { feed: 0, play: 0, profile: 0 };
     $("#authStatus").textContent = friendlyErrorMessage(message, "");
 }
 
@@ -300,11 +396,14 @@ async function showSignedIn() {
     $("#bottomNav").classList.remove("hidden");
     $("#logoutButton").classList.remove("hidden");
     document.body.classList.add("authenticated");
+    document.body.classList.toggle("android-device", isAndroidDevice());
     syncVisualViewport();
     requestAnimationFrame(() => requestAnimationFrame(syncVisualViewport));
     setTimeout(syncVisualViewport, 120);
+    restoreCachedAppState();
+    if (!state.feedItems.length && !isFeedVoteLocked()) renderFeedSkeleton();
     try {
-        const [profile, currentUser, classmatesStatus, config, askAccess, askSafetyNotices, askSafetyNoticeHistory] = await Promise.all([
+        const [profile, currentUser, classmatesStatus, config, askAccess, askSafetyNotices, askSafetyNoticeHistory, passkeyStatus] = await Promise.all([
             api.getProfile(api.user.id),
             api.getUser(api.user.id).catch(() => api.user),
             api.getClassmatesStatus(api.user.id).catch(() => null),
@@ -321,6 +420,7 @@ async function showSignedIn() {
             api.getAnonymousAskAccess(api.user.id).catch(() => null),
             api.getAnonymousAskSafetyNotices(api.user.id).catch(() => []),
             api.getAnonymousAskSafetyNotices(api.user.id, true).catch(() => []),
+            api.getPasskeyStatus().catch(() => null),
         ]);
         api.user = { ...api.user, ...currentUser };
         state.profile = profile;
@@ -329,13 +429,18 @@ async function showSignedIn() {
         state.askAccess = askAccess;
         state.askSafetyNotices = askSafetyNotices;
         state.askSafetyNoticeHistory = askSafetyNoticeHistory;
+        state.passkeyStatus = passkeyStatus;
+        writeAppCache("profile", profile);
         renderProfileHeader();
+        renderPasskeyStatus();
         renderFeedGate();
+        initializeAppNavigation();
         refreshWebPushStatus({ sync: true });
         if (!isFeedVoteLocked()) await loadFeed(true);
         await handleNotificationRoute();
         if (api.user?.deletion_requested_at) showPendingDeletion();
         else showNextAskSafetyNotice();
+        maybePromptForPasskeyEnrollment();
     } catch (error) {
         if (error.status !== 401) $("#feedStatus").textContent = error.message || "Could not load your profile.";
     }
@@ -379,7 +484,7 @@ async function handleNotificationRoute() {
     params.delete("tbh_request_id");
     params.delete("tbh_response_id");
     params.delete("question_answer_id");
-    history.replaceState(null, "", `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`);
+    history.replaceState(history.state, "", `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`);
 }
 
 function renderProfileHeader() {
@@ -594,6 +699,10 @@ function renderTabBadges() {
     const feedBadge = $("#feedTabBadge");
     feedBadge.textContent = unread > 9 ? "9+" : String(unread || "");
     feedBadge.classList.toggle("hidden", unread < 1);
+    if ("setAppBadge" in navigator) {
+        const badgePromise = unread > 0 ? navigator.setAppBadge(unread) : navigator.clearAppBadge?.();
+        Promise.resolve(badgePromise).catch(() => null);
+    }
     const profileIncomplete = !state.profile?.profile_picture_url || !String(state.profile?.bio || "").trim();
     $("#profileTabBadge").classList.toggle("hidden", !profileIncomplete);
 }
@@ -602,11 +711,13 @@ function renderPasskeyStatus() {
     const count = Math.max(0, Number(state.passkeyStatus?.credentialCount || 0));
     const registered = state.passkeyStatus?.registered === true || count > 0;
     const button = $("#addPasskeyButton");
-    button.classList.toggle("hidden", !state.passkeyStatus || registered);
+    button.classList.toggle("hidden", !state.passkeyStatus);
     renderProfileActionsVisibility();
-    if (!state.passkeyStatus || registered) return;
-    button.querySelector("strong").textContent = "Register a passkey";
-    $("#passkeyStatusText").textContent = "Add a secure way to sign in";
+    if (!state.passkeyStatus) return;
+    button.querySelector("strong").textContent = registered ? "Add another passkey" : "Register a passkey";
+    $("#passkeyStatusText").textContent = registered
+        ? `${count} ${count === 1 ? "passkey" : "passkeys"} registered`
+        : "Add a secure way to sign in";
 }
 
 function renderProfileActionsVisibility() {
@@ -899,30 +1010,46 @@ function classmateSearchMarkup(inputId) {
     return `<label class="feed-search classmate-picker-search"><span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg></span><input id="${inputId}" type="search" placeholder="Search classmates..." autocomplete="off"></label>`;
 }
 
+function classmatePickerMatches(classmate, query) {
+    if (!query) return true;
+    return `${displayName(classmate)} ${classmate.username || ""} ${classmate.grade || ""}`.toLowerCase().includes(query);
+}
+
+function renderClassmatePickerList(list, items, { query = "", rowOptions, emptyMessage = "No classmates match your search." } = {}) {
+    const visibleItems = items.filter((classmate) => classmatePickerMatches(classmate, query));
+    list.innerHTML = visibleItems.length
+        ? visibleItems.map((classmate) => classmatePickerRowMarkup(classmate, rowOptions(classmate))).join("")
+        : `<div class="classmate-picker-empty">${escapeHTML(emptyMessage)}</div>`;
+}
+
 function renderTbhTargetList() {
     const query = $("#tbhTargetSearch")?.value.trim().toLowerCase() || "";
-    const targets = state.tbhTargets
-        .filter((target) => !query || `${target.first_name} ${target.last_name}`.toLowerCase().includes(query))
+    const targets = [...state.tbhTargets]
         .sort((left, right) => Number(right.state === "eligible") - Number(left.state === "eligible") || left.first_name.localeCompare(right.first_name));
     const list = $("#tbhTargetList");
     if (!list) return;
-    list.innerHTML = targets.length ? targets.map((target) => classmatePickerRowMarkup(target, {
-        dataAttribute: `data-tbh-target="${escapeHTML(target.user_id)}"`,
-        disabled: target.state !== "eligible",
-        trailingMarkup: target.state === "eligible" ? '<span class="classmate-picker-chevron" aria-hidden="true">›</span>' : `<small>${escapeHTML(tbhTargetStatus(target))}</small>`,
-    })).join("") : '<div class="empty-card">No classmates match your search.</div>';
+    renderClassmatePickerList(list, targets, {
+        query,
+        rowOptions: (target) => ({
+            dataAttribute: `data-tbh-target="${escapeHTML(target.user_id)}"`,
+            disabled: target.state !== "eligible",
+            trailingMarkup: target.state === "eligible" ? '<span class="classmate-picker-chevron" aria-hidden="true">›</span>' : `<small>${escapeHTML(tbhTargetStatus(target))}</small>`,
+        }),
+    });
 }
 
 function renderTbhRequestFlow() {
     const body = $("#tbhRequestBody");
     const target = state.tbhTargets.find((item) => String(item.user_id) === String(state.selectedTbhTargetId));
     if (!target) {
+        body.classList.add("classmate-picker-page");
         $("#tbhRequestTitle").textContent = "Request a TBH";
         $("#tbhRequestDialog [data-close-tbh-request] span").textContent = "Close";
-        body.innerHTML = `<p>Who do you want an honest take from?</p>${classmateSearchMarkup("tbhTargetSearch")}<div id="tbhTargetList" class="tbh-target-list classmate-picker-list"></div>`;
+        body.innerHTML = `<p class="classmate-picker-note">Who do you want an honest take from?</p>${classmateSearchMarkup("tbhTargetSearch")}<div id="tbhTargetList" class="classmate-picker-list"></div>`;
         renderTbhTargetList();
         return;
     }
+    body.classList.remove("classmate-picker-page");
     $("#tbhRequestTitle").textContent = "Choose an angle";
     $("#tbhRequestDialog [data-close-tbh-request] span").textContent = "Back";
     body.innerHTML = `<div class="tbh-selected-target">${avatarMarkup(target, "row-avatar")}<span><strong>Asking ${escapeHTML(target.first_name)}</strong><small>What do you want their honest take on?</small></span></div>
@@ -937,6 +1064,7 @@ async function openTbhRequestPurchase() {
     state.selectedTbhPrompt = "anything";
     state.tbhRequestIdempotencyKey = newIdempotencyKey();
     $("#tbhRequestTitle").textContent = "Request a TBH";
+    $("#tbhRequestBody").classList.add("classmate-picker-page");
     $("#tbhRequestBody").innerHTML = '<div class="empty-card">Loading classmates…</div>';
     openDetailScreen($("#tbhRequestDialog"));
     try {
@@ -1006,6 +1134,7 @@ async function submitTbhResponse(event) {
         });
         closeDetailScreen($("#tbhComposerDialog"));
         renderFeed();
+        successHaptic();
         showToast("TBH sent ✓");
         loadTbhContent();
     } catch (error) {
@@ -1144,6 +1273,7 @@ async function confirmAuraSpend() {
         else await api.purchaseTargetedBoost(api.user.id, purchase.target.user_id);
         clearOptimisticEarnedProfile();
         $("#auraSpendDialog").close();
+        successHaptic();
         state.pendingAuraPurchase = null;
         if (!["reveal", "tbh"].includes(purchase.kind)) await refreshProfile();
         if (purchase.kind === "tbh") {
@@ -1173,22 +1303,27 @@ async function confirmAuraSpend() {
 
 function renderTargetedBoostList() {
     const query = $("#targetedBoostSearch").value.trim().toLowerCase();
-    const classmates = (state.targetedBoostClassmates || []).filter((classmate) => !query || `${displayName(classmate)} ${classmate.username || ""}`.toLowerCase().includes(query));
     const cost = auraCost("targeted");
-    $("#targetedBoostList").innerHTML = classmates.length ? classmates.map((classmate) => {
-        const active = activeBoost("targeted", classmate.user_id);
-        return classmatePickerRowMarkup(classmate, {
-            dataAttribute: `data-targeted-boost="${escapeHTML(classmate.user_id)}"`,
-            disabled: active,
-            trailingMarkup: `<span class="nomination-cost ${active ? "active" : ""}">${active ? "Active" : `<span>${cost.toLocaleString()}</span><img src="../assets/app/aura.png" alt="aura">`}</span>`,
-        });
-    }).join("") : `<div class="profile-poll-empty">No matching classmates.</div>`;
+    renderClassmatePickerList($("#targetedBoostList"), state.targetedBoostClassmates || [], {
+        query,
+        rowOptions: (classmate) => {
+            const active = activeBoost("targeted", classmate.user_id);
+            return {
+                dataAttribute: `data-targeted-boost="${escapeHTML(classmate.user_id)}"`,
+                disabled: active,
+                trailingMarkup: `<span class="nomination-cost ${active ? "active" : ""}">${active ? "Active" : `<span>${cost.toLocaleString()}</span><img src="../assets/app/aura.png" alt="aura">`}</span>`,
+            };
+        },
+    });
 }
 
 async function openTargetedBoostPicker() {
     $("#targetedBoostSearch").value = "";
     $("#targetedBoostStatus").textContent = "Loading classmates...";
     $("#targetedBoostDialog").showModal();
+    requestAnimationFrame(() => {
+        if (document.activeElement?.closest?.("#targetedBoostDialog")) document.activeElement.blur();
+    });
     try {
         state.targetedBoostClassmates ||= await api.getClassmates(api.user.id, "", 500);
         $("#targetedBoostStatus").textContent = "";
@@ -1200,17 +1335,15 @@ async function openTargetedBoostPicker() {
 
 function renderClassmateDirectory() {
     const query = $("#classmateDirectorySearch").value.trim().toLowerCase();
-    const classmates = (state.classmateDirectory || []).filter((classmate) => {
-        const searchable = `${displayName(classmate)} ${classmate.username || ""} ${classmate.grade || ""}`.toLowerCase();
-        return !query || searchable.includes(query);
-    });
-    $("#classmateDirectoryList").innerHTML = classmates.length
-        ? classmates.map((classmate) => classmatePickerRowMarkup(classmate, {
+    renderClassmatePickerList($("#classmateDirectoryList"), state.classmateDirectory || [], {
+        query,
+        emptyMessage: query ? "No matching classmates." : "No classmates are visible yet.",
+        rowOptions: (classmate) => ({
             dataAttribute: `data-directory-classmate="${escapeHTML(classmate.user_id)}"`,
             extraClass: "classmate-directory-row",
             trailingMarkup: `<span class="classmate-row-meta"><strong><span aria-hidden="true">♥</span> ${Number(classmate.weekly_vote_count || 0).toLocaleString()}</strong><small>this week</small></span>${classmate.ask_link_active ? `<span class="classmate-ask-indicator" aria-label="Ask Me is on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5h14v10H10l-4.5 3v-3H5Z"/><path d="M10 9a2 2 0 1 1 2.8 1.8c-.8.3-.8.8-.8 1.2M12 14h.01"/></svg></span>` : ""}`,
-        })).join("")
-        : `<div class="profile-poll-empty">${query ? "No matching classmates." : "No classmates are visible yet."}</div>`;
+        }),
+    });
 }
 
 function updateClassmateDirectoryHeading(count = null) {
@@ -1230,6 +1363,7 @@ async function openClassmateDirectory() {
     if (state.classmateDirectory) return;
     try {
         state.classmateDirectory = await api.getClassmates(api.user.id, "", 500);
+        writeAppCache("classmates", state.classmateDirectory);
         updateClassmateDirectoryHeading(state.classmateDirectory.length);
         $("#classmateDirectoryStatus").textContent = "";
         renderClassmateDirectory();
@@ -1348,7 +1482,10 @@ async function loadProfilePanel() {
     requests.forEach((request, index) => {
         const result = results[index];
         if (result.status === "fulfilled") {
-            if (request.key === "profile") state.profile = result.value;
+            if (request.key === "profile") {
+                state.profile = result.value;
+                writeAppCache("profile", result.value);
+            }
             if (request.key === "currentUser") api.user = { ...api.user, ...result.value };
             if (request.key === "askLink") state.askLink = result.value;
             if (request.key === "askAccess") state.askAccess = result.value;
@@ -1358,6 +1495,7 @@ async function loadProfilePanel() {
                 state.classmateDirectory = result.value.classmates;
                 state.classmates = result.value.classmates;
                 state.activeClassmatesThisWeek = result.value.activeThisWeekCount;
+                writeAppCache("classmates", result.value.classmates);
             }
         } else if (request.key === "askLink" && result.reason?.status === 404) {
             $("#askLinkSection").classList.add("hidden");
@@ -1374,20 +1512,47 @@ async function loadProfilePanel() {
     }
 }
 
-async function addBackupPasskey() {
-    const button = $("#addPasskeyButton");
+function maybePromptForPasskeyEnrollment() {
+    const count = Math.max(0, Number(state.passkeyStatus?.credentialCount || 0));
+    if (!state.passkeyStatus || state.passkeyStatus.registered === true || count > 0) return;
+    const key = `valid:passkey-prompted:${api.user?.id || "user"}`;
+    try {
+        if (sessionStorage.getItem(key) === "1") return;
+        sessionStorage.setItem(key, "1");
+    } catch (_) { /* Prompt once in memory when session storage is unavailable. */ }
+    const openWhenReady = (attempt = 0) => {
+        const dialog = $("#passkeyEnrollmentDialog");
+        if (!dialog.open && !$("dialog[open]")) dialog.showModal();
+        else if (attempt < 10) setTimeout(() => openWhenReady(attempt + 1), 500);
+    };
+    setTimeout(openWhenReady, 350);
+}
+
+async function addBackupPasskey(trigger = null) {
+    const button = trigger instanceof HTMLElement ? trigger : $("#addPasskeyButton");
+    const profileButton = $("#addPasskeyButton");
+    const promptButton = $("#enrollPasskeyButton");
     button.disabled = true;
+    profileButton.disabled = true;
+    promptButton.disabled = true;
     $("#passkeyStatusText").textContent = "Confirm passkey setup on your device...";
+    $("#passkeyEnrollmentStatus").textContent = "Confirm with your phone's screen lock.";
     try {
         if (demoMode) await api.addDemoPasskey();
         else await createAdditionalPasskey(api, api.user.id);
         state.passkeyStatus = await api.getPasskeyStatus();
         renderPasskeyStatus();
+        if ($("#passkeyEnrollmentDialog").open) $("#passkeyEnrollmentDialog").close();
+        successHaptic();
         showToast("Backup passkey added 🔑");
     } catch (error) {
-        showToast(error.message || "Could not add that passkey.");
+        const message = error.message || "Could not add that passkey.";
+        $("#passkeyEnrollmentStatus").textContent = message;
+        showToast(message);
     } finally {
         button.disabled = false;
+        profileButton.disabled = false;
+        promptButton.disabled = false;
         renderPasskeyStatus();
     }
 }
@@ -2120,6 +2285,14 @@ function renderFeed() {
         .map((row) => row.html)
         .join("");
     renderTabBadges();
+}
+
+function renderFeedSkeleton() {
+    $("#feedList").innerHTML = Array.from({ length: 4 }, (_, index) => `<article class="feed-card feed-skeleton" aria-hidden="true">
+        <span class="skeleton-block skeleton-avatar"></span>
+        <span class="skeleton-copy"><i></i><i></i><i></i></span>
+        <span class="skeleton-block skeleton-reaction"></span>
+    </article>`).join("");
 }
 
 function renderFeedClassmateResults() {
@@ -3305,11 +3478,11 @@ async function loadFeed(reset = false) {
     const schoolContent = state.schoolFeedContent;
     const rawSearch = state.feedSearch.trim();
     const search = rawSearch.length >= 2 ? rawSearch : "";
+    const hadVisibleFeed = state.feedItems.length > 0;
     if (reset) {
-        state.feedItems = [];
         state.feedOffset = 0;
         state.feedCursor = null;
-        renderFeed();
+        if (!hadVisibleFeed) renderFeedSkeleton();
         loadTbhContent();
         if (feedType === "personal") loadAnonymousInbox();
         else {
@@ -3319,7 +3492,7 @@ async function loadFeed(reset = false) {
     }
     const status = $("#feedStatus");
     const loadMore = $("#loadMoreFeed");
-    status.textContent = "Loading votes...";
+    status.textContent = hadVisibleFeed && reset ? "Refreshing…" : "Loading votes...";
     loadMore.classList.add("hidden");
     try {
         let items;
@@ -3329,7 +3502,7 @@ async function loadFeed(reset = false) {
         const currentRawSearch = state.feedSearch.trim();
         const currentSearch = currentRawSearch.length >= 2 ? currentRawSearch : "";
         if (generation !== state.feedGeneration || feedType !== state.feedType || myVotesOnly !== state.myVotesOnly || schoolSort !== state.schoolFeedSort || schoolContent !== state.schoolFeedContent || search !== currentSearch) return;
-        state.feedItems.push(...items);
+        state.feedItems = reset ? items : [...state.feedItems, ...items];
         if (feedType === "personal") state.feedOffset += items.length;
         else if (items.length) {
             const last = items.at(-1);
@@ -3338,6 +3511,7 @@ async function loadFeed(reset = false) {
         status.textContent = "";
         state.feedAppliedSearch = search;
         renderFeed();
+        if (feedType === "personal" && !search) writeAppCache("feed-personal", state.feedItems.slice(0, 60));
         loadMore.classList.toggle("hidden", schoolSort === "hottest" || schoolContent === "tbhs" || items.length < 20);
     } catch (error) {
         if (generation !== state.feedGeneration) return;
@@ -3345,8 +3519,12 @@ async function loadFeed(reset = false) {
     }
 }
 
-function softHaptic() {
-    if (navigator.vibrate) navigator.vibrate(8);
+function softHaptic(duration = 8) {
+    if (isAndroidDevice() && navigator.vibrate) navigator.vibrate(duration);
+}
+
+function successHaptic() {
+    if (isAndroidDevice() && navigator.vibrate) navigator.vibrate([10, 35, 18]);
 }
 
 function expectedAuraPerAnswer() {
@@ -4959,15 +5137,22 @@ async function cancelAccountDeletion() {
 }
 
 async function logoutAndReset() {
+    clearCachedAppState();
     await detachWebPushSubscription().catch(() => null);
     await api.logout().catch(() => null);
     api.clearSession();
     location.href = "./?signin=1";
 }
 
-function switchPanel(panel) {
+function switchPanel(panel, { historyMode = "push", restoreScroll = true } = {}) {
+    if (!["feed", "play", "profile"].includes(panel)) return;
+    const previousPanel = state.activePanel;
+    if (previousPanel !== panel) state.tabScrollPositions[previousPanel] = window.scrollY;
+    else if (historyMode === "push") state.tabScrollPositions[panel] = 0;
     state.activePanel = panel;
     document.body.classList.toggle("play-active", panel === "play");
+    const direction = ["feed", "play", "profile"].indexOf(panel) >= ["feed", "play", "profile"].indexOf(previousPanel) ? "forward" : "back";
+    $("#appView").dataset.navigationDirection = direction;
     $$(".panel").forEach((element) => element.classList.add("hidden"));
     $(`#${panel}Panel`).classList.remove("hidden");
     $$(".nav-item").forEach((button) => {
@@ -4976,10 +5161,93 @@ function switchPanel(panel) {
         if (active) button.setAttribute("aria-current", "page");
         else button.removeAttribute("aria-current");
     });
-    scrollTo({ top: 0, behavior: "smooth" });
+    if (historyMode !== "none") writeNavigationState(historyMode);
+    const targetScroll = restoreScroll ? state.tabScrollPositions[panel] || 0 : 0;
+    requestAnimationFrame(() => scrollTo({ top: targetScroll, behavior: "instant" }));
     if (panel === "play") loadPlay();
     if (panel === "profile") loadProfilePanel();
     if (panel === "feed") refreshFeedGateStatus().then(() => { if (!isFeedVoteLocked() && !state.feedItems.length) loadFeed(true); });
+}
+
+async function refreshActivePanel() {
+    softHaptic(12);
+    if (state.activePanel === "feed") await loadFeed(true);
+    else if (state.activePanel === "profile") await loadProfilePanel();
+    else await loadPlay();
+    successHaptic();
+}
+
+function beginPullRefresh(event) {
+    if (!document.body.classList.contains("authenticated") || window.scrollY > 0 || $("dialog[open], .detail-screen:not(.hidden)")) return;
+    state.pullRefreshStartY = event.touches?.[0]?.clientY ?? null;
+    state.pullRefreshDistance = 0;
+}
+
+function movePullRefresh(event) {
+    if (state.pullRefreshStartY === null) return;
+    const currentY = event.touches?.[0]?.clientY;
+    if (!Number.isFinite(currentY)) return;
+    state.pullRefreshDistance = Math.max(0, Math.min(110, (currentY - state.pullRefreshStartY) * .55));
+    const indicator = $("#pullRefreshIndicator");
+    indicator.style.setProperty("--pull-distance", `${state.pullRefreshDistance}px`);
+    indicator.style.setProperty("--pull-opacity", String(Math.min(1, state.pullRefreshDistance / 50)));
+    indicator.classList.toggle("ready", state.pullRefreshDistance >= 64);
+}
+
+function endPullRefresh() {
+    if (state.pullRefreshStartY === null) return;
+    const shouldRefresh = state.pullRefreshDistance >= 64;
+    state.pullRefreshStartY = null;
+    state.pullRefreshDistance = 0;
+    const indicator = $("#pullRefreshIndicator");
+    indicator.style.removeProperty("--pull-distance");
+    indicator.style.removeProperty("--pull-opacity");
+    indicator.classList.remove("ready");
+    if (shouldRefresh) refreshActivePanel();
+}
+
+function installNativeSheetGestures() {
+    if (!isAndroidDevice()) return;
+    for (const dialog of $$("dialog.modal")) {
+        if (dialog.dataset.sheetGesture === "1" || dialog.classList.contains("reaction-picker-dialog")) continue;
+        dialog.dataset.sheetGesture = "1";
+        let startY = null;
+        dialog.addEventListener("pointerdown", (event) => {
+            const rect = dialog.getBoundingClientRect();
+            if (event.clientY - rect.top > 72 || event.target.closest("button, input, textarea, select, a")) return;
+            startY = event.clientY;
+            dialog.setPointerCapture?.(event.pointerId);
+        });
+        dialog.addEventListener("pointermove", (event) => {
+            if (startY === null) return;
+            const distance = Math.max(0, event.clientY - startY);
+            dialog.style.setProperty("--sheet-drag", `${distance}px`);
+        });
+        const finish = (event) => {
+            if (startY === null) return;
+            const distance = Math.max(0, event.clientY - startY);
+            startY = null;
+            dialog.style.removeProperty("--sheet-drag");
+            if (distance > 90 && dialog.open) dialog.close();
+        };
+        dialog.addEventListener("pointerup", finish);
+        dialog.addEventListener("pointercancel", () => {
+            startY = null;
+            dialog.style.removeProperty("--sheet-drag");
+        });
+    }
+
+    for (const screen of $$(".detail-screen")) {
+        let startX = null;
+        screen.addEventListener("pointerdown", (event) => {
+            if (event.clientX <= 24 && !event.target.closest("input, textarea, select")) startX = event.clientX;
+        });
+        screen.addEventListener("pointerup", (event) => {
+            if (startX !== null && event.clientX - startX > 88) closeDetailScreen(screen);
+            startX = null;
+        });
+        screen.addEventListener("pointercancel", () => { startX = null; });
+    }
 }
 
 function updateNetworkStatus() {
@@ -5050,6 +5318,31 @@ async function installWebApp() {
     if ($("#androidInstallDialog").open) {
         $("#androidInstallStatus").textContent = "Installation was canceled. Tap Install Valid when you’re ready.";
     }
+}
+
+function showAppUpdatePrompt(worker) {
+    if (!worker) return;
+    state.waitingServiceWorker = worker;
+    $("#appUpdatePrompt").classList.remove("hidden");
+}
+
+function registerAppServiceWorker() {
+    navigator.serviceWorker.register("./service-worker.js", { updateViaCache: "none" }).then((registration) => {
+        refreshWebPushStatus();
+        if (registration.waiting) showAppUpdatePrompt(registration.waiting);
+        registration.addEventListener("updatefound", () => {
+            const worker = registration.installing;
+            worker?.addEventListener("statechange", () => {
+                if (worker.state === "installed" && navigator.serviceWorker.controller) showAppUpdatePrompt(worker);
+            });
+        });
+    }).catch(() => null);
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (refreshing || !state.appUpdateRequested) return;
+        refreshing = true;
+        location.reload();
+    });
 }
 
 function webPushSupported() {
@@ -5591,7 +5884,8 @@ function bindEvents() {
     });
     $("#pollSummaryDialog").addEventListener("click", (event) => { if (event.target.closest("[data-share-top-poll]")) shareTopPoll(); });
     $("#profilePictureInput").addEventListener("change", changeProfilePicture);
-    $("#addPasskeyButton").addEventListener("click", addBackupPasskey);
+    $("#addPasskeyButton").addEventListener("click", () => addBackupPasskey($("#addPasskeyButton")));
+    $("#enrollPasskeyButton").addEventListener("click", () => addBackupPasskey($("#enrollPasskeyButton")));
     $("#feedbackButton").addEventListener("click", openFeedbackDialog);
     $("#feedbackForm").addEventListener("submit", submitFeedback);
     $("#feedbackPhoto").addEventListener("change", (event) => {
@@ -5632,6 +5926,11 @@ function bindEvents() {
     $("#installAppButton").addEventListener("click", installWebApp);
     $("#androidInstallButton").addEventListener("click", installWebApp);
     $("#androidInstallDialog").addEventListener("cancel", (event) => event.preventDefault());
+    $("#applyAppUpdate").addEventListener("click", () => {
+        $("#applyAppUpdate").disabled = true;
+        state.appUpdateRequested = true;
+        state.waitingServiceWorker?.postMessage({ type: "SKIP_WAITING" });
+    });
     $("#notificationButton").addEventListener("click", toggleWebPush);
     $("#questionForm").addEventListener("submit", reviewQuestionSubmission);
     $("#questionForm").addEventListener("input", resetQuestionSubmissionIfDraftChanged);
@@ -5717,6 +6016,7 @@ function bindEvents() {
     $("#bioForm").addEventListener("submit", saveBio);
     $$("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
     addEventListener("valid:session-expired", () => showSignedOut("Your session expired. Sign in with your passkey again."));
+    addEventListener("popstate", handleAppPopState);
     addEventListener("offline", updateNetworkStatus);
     addEventListener("online", updateNetworkStatus);
     addEventListener("focus", checkStripeCheckout);
@@ -5727,6 +6027,13 @@ function bindEvents() {
             refreshAskSafetyState();
         }
     });
+    $("#appView").addEventListener("touchstart", beginPullRefresh, { passive: true });
+    $("#appView").addEventListener("touchmove", movePullRefresh, { passive: true });
+    $("#appView").addEventListener("touchend", endPullRefresh, { passive: true });
+    document.addEventListener("click", (event) => {
+        const control = event.target.closest("button:not(:disabled), a.primary-button, [role='button']");
+        if (control) softHaptic(control.matches(".danger-button, [data-delete], [data-block-classmate]") ? 16 : 6);
+    }, { capture: true });
     addEventListener("beforeinstallprompt", (event) => {
         event.preventDefault();
         state.installPrompt = event;
@@ -5757,9 +6064,10 @@ document.addEventListener("focusin", () => {
 });
 document.addEventListener("focusout", () => requestAnimationFrame(syncVisualViewport));
 bindEvents();
+installNativeSheetGestures();
 if (!navigator.onLine) updateNetworkStatus();
 if ("serviceWorker" in navigator && !demoMode) {
-    navigator.serviceWorker.register("./service-worker.js", { updateViaCache: "none" }).then(() => refreshWebPushStatus()).catch(() => null);
+    registerAppServiceWorker();
     navigator.serviceWorker.addEventListener("message", (event) => {
         if (event.data?.type !== "VALID_NOTIFICATION_CLICK") return;
         const target = new URL(event.data.url || "./", location.origin);

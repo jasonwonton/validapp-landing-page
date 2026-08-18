@@ -5,10 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
     <base href="/app/">
     <meta name="theme-color" content="#ccf7f4">
+    <meta name="application-name" content="Valid">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="referrer" content="no-referrer">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'self'; connect-src 'self' https://api.six7.lol; font-src 'self'; form-action 'self'; frame-src https://challenges.cloudflare.com; img-src 'self' data: https:; manifest-src 'self'; object-src 'none'; script-src 'self' https://challenges.cloudflare.com; style-src 'self'; worker-src 'self'">
     <meta name="description" content="Answer polls, see your feed, and share your anonymous Valid link from any device.">
-    <title>Valid on the web</title>
+    <title>Valid</title>
     <link rel="icon" type="image/png" href="../assets/AppIconV2.png">
     <link rel="apple-touch-icon" href="../assets/AppIconV2.png">
     <link rel="manifest" href="manifest.webmanifest">
@@ -35,6 +37,11 @@
         </section>
 
         <section id="appView" class="app-view hidden" aria-live="polite">
+            <div id="pullRefreshIndicator" class="pull-refresh-indicator" aria-hidden="true"><span>↓</span></div>
+            <div id="appUpdatePrompt" class="app-update-prompt hidden" role="status">
+                <span><strong>Valid is ready to update</strong><small>Restart for the latest version.</small></span>
+                <button id="applyAppUpdate" type="button">Update</button>
+            </div>
             <section id="feedPanel" class="panel active-panel">
                 <div id="feedGateLock" class="hidden"></div>
                 <div id="feedUnlockedContent">
@@ -149,7 +156,7 @@
                     <div id="profileInviteCard"></div>
                 </section>
                 <section class="profile-actions" aria-label="Profile actions">
-                    <button id="addPasskeyButton" class="settings-row" type="button"><span class="settings-icon" aria-hidden="true">🔑</span><span><strong>Add a backup passkey</strong><small id="passkeyStatusText" class="visually-hidden">Add another secure way to sign in</small></span><span aria-hidden="true">›</span></button>
+                    <button id="addPasskeyButton" class="settings-row" type="button"><span class="settings-icon" aria-hidden="true">🔑</span><span><strong>Add another passkey</strong><small id="passkeyStatusText">Add another secure way to sign in</small></span><span aria-hidden="true">›</span></button>
                     <button id="notificationButton" class="settings-row hidden" type="button" role="switch" aria-checked="false"><span class="settings-icon notification-settings-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M10 21h4"/></svg></span><span><strong>Notifications</strong><small id="notificationStatusText" class="visually-hidden">Get updates from Valid</small></span><span class="settings-switch" aria-hidden="true"><span></span></span></button>
                     <button id="feedbackButton" class="settings-row" type="button"><span class="settings-icon feedback-settings-icon" aria-hidden="true">✎</span><span><strong>Leave feedback</strong></span><span aria-hidden="true">›</span></button>
                 </section>
@@ -173,6 +180,17 @@
             <p id="androidInstallCopy">Add Valid to your phone so it opens from your home screen like an app.</p>
             <button id="androidInstallButton" class="primary-button" type="button">Install Valid</button>
             <p id="androidInstallStatus" class="status-message" role="status">Chrome will show one confirmation.</p>
+        </div>
+    </dialog>
+
+    <dialog id="passkeyEnrollmentDialog" class="modal passkey-enrollment-dialog" aria-label="Secure your Valid account">
+        <div class="passkey-enrollment-content">
+            <span class="passkey-enrollment-icon" aria-hidden="true">🔑</span>
+            <h2>Secure your account</h2>
+            <p>Save a passkey on this phone for fast, private sign-in with your screen lock.</p>
+            <button id="enrollPasskeyButton" class="primary-button" type="button">Create a passkey</button>
+            <button class="text-button" type="button" data-close-dialog>Not now</button>
+            <p id="passkeyEnrollmentStatus" class="status-message" role="status"></p>
         </div>
     </dialog>
 
@@ -605,16 +623,17 @@
         <div id="reactorList" class="reactor-list"></div>
     </dialog>
 
-    <dialog id="targetedBoostDialog" class="modal">
-        <div class="nomination-modal">
-            <div class="modal-heading">
+    <dialog id="targetedBoostDialog" class="modal classmate-picker-dialog" aria-label="Choose your crush">
+        <div class="classmate-picker-shell">
+            <div class="sheet-heading classmate-picker-heading">
+                <button class="sheet-heading-control" aria-label="Close" type="button" data-close-dialog>Close</button>
                 <h2>Choose your crush</h2>
-                <button class="icon-button" aria-label="Close" type="button" data-close-dialog>×</button>
+                <span aria-hidden="true"></span>
             </div>
-            <p class="form-hint">You will show up more often in this classmate's polls. They will not be told you chose them.</p>
-            <label class="feed-search nomination-search"><span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg></span><input id="targetedBoostSearch" type="search" placeholder="Search classmates..." autocomplete="off"></label>
-            <div id="targetedBoostList" class="nomination-list classmate-picker-list"></div>
+            <p class="classmate-picker-note">You will show up more often in this classmate's polls. They will not be told you chose them.</p>
+            <label class="feed-search classmate-picker-search"><span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg></span><input id="targetedBoostSearch" type="search" placeholder="Search classmates..." autocomplete="off"></label>
             <p id="targetedBoostStatus" class="status-message" role="status"></p>
+            <div id="targetedBoostList" class="classmate-picker-list"></div>
         </div>
     </dialog>
 
@@ -639,16 +658,16 @@
         </div>
     </dialog>
 
-    <dialog id="classmateDirectoryDialog" class="modal classmate-directory-dialog" aria-label="Classmates">
-        <div class="classmate-directory-content">
-            <div class="sheet-heading classmate-directory-heading">
+    <dialog id="classmateDirectoryDialog" class="modal classmate-picker-dialog classmate-directory-dialog" aria-label="Classmates">
+        <div class="classmate-picker-shell classmate-directory-content">
+            <div class="sheet-heading classmate-picker-heading classmate-directory-heading">
                 <button class="sheet-heading-control" aria-label="Close" type="button" data-close-dialog>Close</button>
                 <h2 id="classmateDirectoryTitle">Classmates</h2>
                 <span aria-hidden="true"></span>
             </div>
-            <label class="feed-search classmate-directory-search"><span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg></span><input id="classmateDirectorySearch" type="search" placeholder="Search classmates..." autocomplete="off"></label>
+            <label class="feed-search classmate-picker-search classmate-directory-search"><span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg></span><input id="classmateDirectorySearch" type="search" placeholder="Search classmates..." autocomplete="off"></label>
             <p id="classmateDirectoryStatus" class="status-message" role="status"></p>
-            <div id="classmateDirectoryList" class="classmate-directory-list"></div>
+            <div id="classmateDirectoryList" class="classmate-picker-list classmate-directory-list"></div>
         </div>
     </dialog>
 

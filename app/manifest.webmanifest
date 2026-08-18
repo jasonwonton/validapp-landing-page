@@ -6,8 +6,36 @@
   "id": "/app/",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "categories": ["social", "entertainment"],
+  "prefer_related_applications": false,
+  "launch_handler": { "client_mode": "navigate-existing" },
   "background_color": "#ccf7f4",
   "theme_color": "#ccf7f4",
+  "shortcuts": [
+    {
+      "name": "Feed",
+      "short_name": "Feed",
+      "description": "See your latest votes and TBHs",
+      "url": "./?tab=feed",
+      "icons": [{ "src": "../assets/pwa/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Play",
+      "short_name": "Play",
+      "description": "Answer questions from your school",
+      "url": "./?tab=play",
+      "icons": [{ "src": "../assets/pwa/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Profile",
+      "short_name": "Profile",
+      "description": "Open your Valid profile",
+      "url": "./?tab=profile",
+      "icons": [{ "src": "../assets/pwa/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ],
   "icons": [
     {
       "src": "../assets/pwa/icon-192.png",

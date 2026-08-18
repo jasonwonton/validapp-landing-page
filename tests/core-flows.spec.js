@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-async function signInToDemo(page) {
-    await page.goto("/app/?demo=1&signin=1");
+async function signInToDemo(page, query = "") {
+    await page.goto(`/app/?demo=1&signin=1${query}`);
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
 }
@@ -36,6 +36,16 @@ test("signed-out experience goes straight to the passkey actions", async ({ page
     await expect(signInButton).toHaveText("Sign in with a passkey");
     await expect(signInButton.locator("span")).toHaveCount(0);
     await expect(page.getByText(/fingerprint or face stays on your device/i)).toHaveCount(0);
+});
+
+test("authenticated users without a credential are prompted to enroll a passkey", async ({ page }) => {
+    await signInToDemo(page, "&passkeys=0");
+    const enrollment = page.getByRole("dialog", { name: "Secure your Valid account" });
+    await expect(enrollment).toBeVisible();
+    await enrollment.getByRole("button", { name: "Create a passkey" }).click();
+    await expect(enrollment).toBeHidden();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await expect(page.locator("#passkeyStatusText")).toHaveText("1 passkey registered");
 });
 
 test("new users can complete passkey-only school onboarding", async ({ page }) => {
@@ -242,6 +252,9 @@ test("PWA ships install icons and Web Push worker handlers", async ({ request })
         expect.objectContaining({ sizes: "512x512", purpose: "any" }),
         expect.objectContaining({ sizes: "512x512", purpose: "maskable" }),
     ]));
+    expect(manifest.orientation).toBe("portrait-primary");
+    expect(manifest.shortcuts.map((shortcut) => shortcut.name)).toEqual(["Feed", "Play", "Profile"]);
+    expect(manifest.launch_handler.client_mode).toBe("navigate-existing");
 
     const workerResponse = await request.get("/app/service-worker.js");
     expect(workerResponse.ok()).toBeTruthy();
@@ -249,6 +262,93 @@ test("PWA ships install icons and Web Push worker handlers", async ({ request })
     expect(worker).toContain('addEventListener("push"');
     expect(worker).toContain('addEventListener("notificationclick"');
     expect(worker).toContain("safeNotificationURL");
+    expect(worker).toContain("SKIP_WAITING");
+    expect(worker).toContain('{ action: "play", title: "Play" }');
+});
+
+test("Android back and forward follow the in-app detail stack", async ({ page }) => {
+    await signInToDemo(page);
+    const detail = page.locator("#feedDetailDialog");
+    await page.locator("[data-feed-detail='9001']").click();
+    await expect(detail).toBeVisible();
+    await expect(page).toHaveURL(/#screen=feedDetailDialog/);
+    await page.goBack();
+    await expect(detail).toBeHidden();
+    await page.goForward();
+    await expect(detail).toBeVisible();
+});
+
+test("bottom tabs preserve independent scroll positions", async ({ page }) => {
+    await signInToDemo(page);
+    await page.evaluate(() => scrollTo(0, 360));
+    const feedScroll = await page.evaluate(() => scrollY);
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.evaluate(() => scrollTo(0, 720));
+    const profileScroll = await page.evaluate(() => scrollY);
+    await page.getByRole("button", { name: "Feed", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => scrollY)).toBe(feedScroll);
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => scrollY)).toBe(profileScroll);
+});
+
+test("the app retains recent profile and feed data for instant relaunch", async ({ page }) => {
+    await signInToDemo(page);
+    await expect.poll(() => page.evaluate(() => ({
+        profile: Boolean(localStorage.getItem("valid:pwa:v1:demo-user:profile")),
+        feed: Boolean(localStorage.getItem("valid:pwa:v1:demo-user:feed-personal")),
+    }))).toEqual({ profile: true, feed: true });
+});
+
+test("pulling from the top exposes the native refresh affordance", async ({ page }) => {
+    await signInToDemo(page);
+    await page.evaluate(() => {
+        const app = document.querySelector("#appView");
+        const touch = (type, y = null) => {
+            const event = new Event(type, { bubbles: true });
+            Object.defineProperty(event, "touches", { value: y === null ? [] : [{ clientY: y }] });
+            app.dispatchEvent(event);
+        };
+        scrollTo(0, 0);
+        touch("touchstart", 10);
+        touch("touchmove", 140);
+    });
+    await expect(page.locator("#pullRefreshIndicator")).toHaveClass(/ready/);
+    await page.evaluate(() => {
+        const event = new Event("touchend", { bubbles: true });
+        Object.defineProperty(event, "touches", { value: [] });
+        document.querySelector("#appView").dispatchEvent(event);
+    });
+    await expect(page.locator("#pullRefreshIndicator")).not.toHaveClass(/ready/);
+});
+
+test("Android receives the unread count through the app badge API", async ({ page }) => {
+    await page.addInitScript(() => {
+        window.__validBadgeCalls = [];
+        Object.defineProperty(Navigator.prototype, "setAppBadge", {
+            configurable: true,
+            value(value) { window.__validBadgeCalls.push(value); return Promise.resolve(); },
+        });
+        Object.defineProperty(Navigator.prototype, "clearAppBadge", {
+            configurable: true,
+            value() { window.__validBadgeCalls.push(0); return Promise.resolve(); },
+        });
+    });
+    await signInToDemo(page);
+    await expect.poll(() => page.evaluate(() => window.__validBadgeCalls.at(-1))).toBeGreaterThan(0);
+});
+
+test("Android modals present as draggable bottom sheets", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "android", "Android-only presentation behavior");
+    await signInToDemo(page);
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: /Choose a crush/ }).click();
+    const dialog = page.locator("#targetedBoostDialog");
+    const geometry = await dialog.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return { bottom: rect.bottom, viewport: innerHeight, radius: getComputedStyle(element).borderTopLeftRadius };
+    });
+    expect(Math.abs(geometry.viewport - geometry.bottom)).toBeLessThan(2);
+    expect(geometry.radius).toBe("28px");
 });
 
 test("feed navigation, filtering, and reactions work", async ({ page }) => {
@@ -595,8 +695,9 @@ test("profile exposes iOS-style editing, ask link, purchases, invites, and sign 
     await expect(page.getByRole("button", { name: "Classmates", exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Invite Friends" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Sign Out", exact: true })).toBeVisible();
-    await expect(page.locator("#addPasskeyButton")).toBeHidden();
-    await expect(page.getByText(/passkeys? registered/)).toHaveCount(0);
+    await expect(page.locator("#addPasskeyButton")).toBeVisible();
+    await expect(page.locator("#addPasskeyButton")).toContainText("Add another passkey");
+    await expect(page.locator("#passkeyStatusText")).toHaveText("1 passkey registered");
     await page.getByRole("button", { name: "Profile information" }).click();
     const informationDialog = page.getByRole("dialog");
     await expect(informationDialog.getByRole("heading", { name: "Correct profile information" })).toBeVisible();
