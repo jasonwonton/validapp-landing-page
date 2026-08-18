@@ -96,6 +96,40 @@ test("real adapter sends Ask Me safety requests with explicit report reasons", a
     ]);
 });
 
+test("real adapter privately dismisses a feed question through the feed endpoint", async ({ page }) => {
+    await useProductionApiOrigin(page);
+    const requests = [];
+    await page.route(`${API_ORIGIN}/api/v1/**`, async (route) => {
+        const request = route.request();
+        const path = new URL(request.url()).pathname;
+        if (path.endsWith("/feed/questions/101/dismiss")) {
+            requests.push({
+                method: request.method(),
+                path,
+                authorization: request.headers().authorization,
+            });
+        }
+        await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ message: "Question dismissed from feed" }),
+        });
+    });
+    await page.goto("/app/?signin=1");
+    await page.evaluate(async ({ userId }) => {
+        const { ValidAPI } = await import("/app/api.js");
+        const api = new ValidAPI();
+        api.saveSession({ access_token: "dismiss-token", user: { id: userId } });
+        await api.dismissFeedQuestion(userId, 101);
+    }, { userId: USER_ID });
+
+    expect(requests).toEqual([{
+        method: "POST",
+        path: `/api/v1/users/${USER_ID}/feed/questions/101/dismiss`,
+        authorization: "Bearer dismiss-token",
+    }]);
+});
+
 test("real adapter sends bounded, encoded unified-search queries", async ({ page }) => {
     await useProductionApiOrigin(page);
     const urls = [];

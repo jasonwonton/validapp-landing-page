@@ -43,6 +43,7 @@ test("production CSP permits only Cloudflare's Turnstile script and frame host",
     const policy = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute("content");
     expect(policy).toContain("script-src 'self' https://challenges.cloudflare.com");
     expect(policy).toContain("frame-src https://challenges.cloudflare.com");
+    expect(policy).toContain("connect-src 'self' https://api.six7.lol https://validappcdn.com");
 });
 
 

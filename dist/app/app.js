@@ -2588,7 +2588,9 @@ async function loadPollShareArtwork(item) {
         const artwork = await loadShareArtwork(url);
         if (artwork) return artwork;
     }
-    throw new Error("Question artwork is unavailable.");
+    // Older CDN objects may not expose CORS headers. The poll itself should
+    // still be shareable instead of failing the entire canvas render.
+    return null;
 }
 
 function canvasBlob(canvas, type = "image/png", quality) {
@@ -2629,13 +2631,14 @@ async function createPollShareFile(item) {
     const gridHeight = isNomination ? 400 : options.length ? gridRows * 200 + Math.max(0, gridRows - 1) * 20 : 0;
     const brandingHeight = 62;
     const brandingGap = 63;
+    const contentTop = artwork ? 60 : 260;
 
     context.font = '44px "Jua", "Apple Color Emoji", sans-serif';
     let contentBottom = showsVoterStatement
-        ? drawCenteredCanvasText(context, voterStatement, centerX, 60, 820, 52, 2)
+        ? drawCenteredCanvasText(context, voterStatement, centerX, contentTop, 820, 52, 2)
         : 0;
     context.font = '56px "Jua", "Apple Color Emoji", sans-serif';
-    const questionTop = showsVoterStatement ? contentBottom + 40 : 60;
+    const questionTop = showsVoterStatement ? contentBottom + 40 : contentTop;
     contentBottom = drawCenteredCanvasText(context, item.question_text, centerX, questionTop, 820, 63, 3);
 
     if (artwork) {
@@ -3142,20 +3145,35 @@ function applyFeedSenderReveal(item, result) {
 async function moderateFeedItem(action) {
     const item = selectedFeedItem();
     if (!item) return;
-    const message = action === "block"
-        ? "Block this question submitter? Their submitted questions will be hidden from you."
-        : "Report this question to Valid's moderation team?";
+    const messages = {
+        block: "Block this question submitter? Their submitted questions will be hidden from you.",
+        dismiss: "Delete this question? This question and its votes will be deleted from your Inbox and School Feed. It won't be reported or affect anyone else.",
+        report: "Report this question to Valid's moderation team?",
+    };
+    const message = messages[action];
+    if (!message) return;
     if (!confirm(message)) return;
     try {
         if (action === "block") await api.blockQuestionSubmitter(api.user.id, item.question_id);
+        else if (action === "dismiss") await api.dismissFeedQuestion(api.user.id, item.question_id);
         else await api.reportQuestion(api.user.id, item.question_id);
         state.feedItems = state.feedItems.filter((candidate) => candidate.question_id !== item.question_id);
         state.selectedFeedItemId = null;
         closeDetailScreen($("#feedDetailDialog"));
         renderFeed();
-        showToast(action === "block" ? "Submitter blocked" : "Question reported");
+        const successMessages = {
+            block: "Submitter blocked",
+            dismiss: "Question deleted",
+            report: "Question reported",
+        };
+        showToast(successMessages[action]);
     } catch (error) {
-        $("#feedDetailStatus").textContent = error.message || `Could not ${action} this question.`;
+        const fallbackMessages = {
+            block: "Could not block this submitter.",
+            dismiss: "Could not delete this question.",
+            report: "Could not report this question.",
+        };
+        $("#feedDetailStatus").textContent = error.message || fallbackMessages[action];
     }
 }
 
@@ -3307,7 +3325,7 @@ function selectedAnonymousQuestion() {
 function renderAnonymousQuestionDialog() {
     const question = selectedAnonymousQuestion();
     if (!question) return;
-    $("#anonymousQuestionBody").innerHTML = `<blockquote>${escapeHTML(question.body)}</blockquote><div><strong>${escapeHTML(question.provenance_label)}</strong><span>${escapeHTML(question.provenance_detail)}</span></div>`;
+    $("#anonymousQuestionBody").innerHTML = `<blockquote>${escapeHTML(question.body)}</blockquote><div><strong>${escapeHTML(question.provenance_label)}</strong></div>`;
     const answered = question.status === "answered";
     const restricted = Boolean(state.askAccess && state.askAccess.status !== "allowed");
     $("#anonymousReportButton").textContent = question.sender_type === "valid_member"
@@ -3461,7 +3479,7 @@ function openAnonymousReportDialog(question) {
         ? "Report and block sender"
         : "Report and remove";
     $("#anonymousReportExplanation").textContent = memberSender
-        ? "Valid will record and remove this question and block this account from sending you future Ask Me questions. Their identity stays hidden."
+        ? "Valid will record and remove this question and block this account from sending you future Ask Me questions."
         : "Valid will record and remove this question. Because it came from an anonymous guest link, no person, browser, or device will be blocked.";
     $("#confirmAnonymousReport").textContent = memberSender
         ? "Report and block sender"
@@ -5744,6 +5762,10 @@ function bindEvents() {
         if (event.target.closest("[data-report-feed-item]")) {
             closeDetailActionMenus();
             moderateFeedItem("report");
+        }
+        if (event.target.closest("[data-dismiss-feed-item]")) {
+            closeDetailActionMenus();
+            moderateFeedItem("dismiss");
         }
         if (event.target.closest("[data-block-feed-submitter]")) {
             closeDetailActionMenus();

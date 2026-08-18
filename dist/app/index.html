@@ -8,7 +8,7 @@
     <meta name="application-name" content="Valid">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="referrer" content="no-referrer">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'self'; connect-src 'self' https://api.six7.lol; font-src 'self'; form-action 'self'; frame-src https://challenges.cloudflare.com; img-src 'self' data: https:; manifest-src 'self'; object-src 'none'; script-src 'self' https://challenges.cloudflare.com; style-src 'self'; worker-src 'self'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'self'; connect-src 'self' https://api.six7.lol https://validappcdn.com; font-src 'self'; form-action 'self'; frame-src https://challenges.cloudflare.com; img-src 'self' data: https:; manifest-src 'self'; object-src 'none'; script-src 'self' https://challenges.cloudflare.com; style-src 'self'; worker-src 'self'">
     <meta name="description" content="Answer polls, see your feed, and share your anonymous Valid link from any device.">
     <title>Valid</title>
     <link rel="icon" type="image/png" href="../assets/AppIconV2.png">
@@ -103,6 +103,7 @@
                             <div class="detail-overflow">
                                 <button class="detail-overflow-button" type="button" data-toggle-feed-menu aria-label="More poll actions" aria-expanded="false">•••</button>
                                 <div class="detail-overflow-menu hidden" role="menu" aria-label="Poll actions">
+                                    <button type="button" role="menuitem" data-dismiss-feed-item>Delete This Question</button>
                                     <button type="button" role="menuitem" data-report-feed-item>Report question</button>
                                     <button id="blockFeedSubmitterButton" class="hidden" type="button" role="menuitem" data-block-feed-submitter>Block submitter</button>
                                 </div>

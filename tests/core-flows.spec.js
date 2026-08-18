@@ -415,14 +415,31 @@ test("feed polls open the iOS-style detail and moderation flow", async ({ page }
     await expect(dialog.getByRole("button", { name: "Share poll to Instagram" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Share poll to TikTok" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Get God Mode to Reveal who sent this" })).toBeVisible();
+    await expect(dialog.getByRole("menuitem", { name: "Delete This Question" })).toBeHidden();
     await expect(dialog.getByRole("menuitem", { name: "Report question" })).toBeHidden();
     await dialog.getByRole("button", { name: "More poll actions" }).click();
+    await expect(dialog.getByRole("menuitem", { name: "Delete This Question" })).toBeVisible();
     await expect(dialog.getByRole("menuitem", { name: "Report question" })).toBeVisible();
     page.once("dialog", (confirmation) => confirmation.accept());
     await dialog.getByRole("menuitem", { name: "Report question" }).click();
     await expect(dialog).toBeHidden();
     await expect(page.locator("#toast")).toContainText("Question reported");
     await expect(page.locator("[data-feed-detail='9001']")).toHaveCount(0);
+});
+
+test("feed polls can be privately deleted without reporting", async ({ page }) => {
+    await signInToDemo(page);
+    await page.locator("[data-feed-detail='9002']").click();
+    const dialog = page.locator("#feedDetailDialog");
+    await dialog.getByRole("button", { name: "More poll actions" }).click();
+    page.once("dialog", async (confirmation) => {
+        expect(confirmation.message()).toContain("It won't be reported or affect anyone else.");
+        await confirmation.accept();
+    });
+    await dialog.getByRole("menuitem", { name: "Delete This Question" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.locator("#toast")).toContainText("Question deleted");
+    await expect(page.locator("[data-feed-detail='9002']")).toHaveCount(0);
 });
 
 test("poll share buttons generate the iOS-style 9:16 photo", async ({ page }) => {
@@ -481,6 +498,38 @@ test("poll share buttons generate the iOS-style 9:16 photo", async ({ page }) =>
     expect(sharedPoll.artworkPixels).toBeGreaterThan(5_000);
 });
 
+test("poll sharing still creates a photo when CDN artwork cannot be read", async ({ page }) => {
+    await page.addInitScript(() => {
+        Object.defineProperty(navigator, "canShare", { configurable: true, value: () => true });
+        Object.defineProperty(navigator, "share", {
+            configurable: true,
+            value: async ({ files }) => {
+                const bitmap = await createImageBitmap(files[0]);
+                window.__sharedPollFallback = {
+                    width: bitmap.width,
+                    height: bitmap.height,
+                    size: files[0].size,
+                };
+                bitmap.close();
+            },
+        });
+    });
+    await signInToDemo(page);
+    await page.getByRole("button", { name: "School", exact: true }).click();
+    await page.locator("[data-feed-detail='9004']").click();
+    await page.getByRole("button", { name: "Share poll to Instagram" }).click();
+    await expect.poll(
+        () => page.evaluate(() => window.__sharedPollFallback || null),
+        { timeout: 15_000 },
+    ).not.toBeNull();
+    const sharedPoll = await page.evaluate(() => window.__sharedPollFallback);
+    expect(sharedPoll).toMatchObject({
+        width: 900,
+        height: 1600,
+    });
+    expect(sharedPoll.size).toBeGreaterThan(10_000);
+});
+
 test("non-subscribers can reach God Mode from a received vote", async ({ page }) => {
     await signInToDemo(page);
     await page.locator("[data-feed-detail='9001']").click();
@@ -533,6 +582,8 @@ test("anonymous inbox supports private answers and safety controls", async ({ pa
     const answerDialog = page.locator("#anonymousQuestionDialog");
     await expect(answerDialog).toHaveCSS("position", "fixed");
     await expect(answerDialog.getByText("From someone anonymous")).toBeVisible();
+    await expect(answerDialog).not.toContainText("Sent anonymously from the web.");
+    await expect(answerDialog).not.toContainText("Their identity");
     await answerDialog.getByLabel("Your reply").fill("Helping my friends through a hard semester.");
     await answerDialog.getByRole("button", { name: "Send reply" }).click();
     await expect(answerDialog.getByRole("button", { name: "✓ Reply sent" })).toBeVisible();

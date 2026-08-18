@@ -478,6 +478,12 @@ export class DemoAPI {
         return { message: "Report submitted successfully" };
     }
 
+    async dismissFeedQuestion(_userId, questionId) {
+        this.personalFeed = this.personalFeed.filter((item) => item.question_id !== questionId);
+        this.schoolFeed = this.schoolFeed.filter((item) => item.question_id !== questionId);
+        return { message: "Question dismissed from feed" };
+    }
+
     async blockQuestionSubmitter(_userId, questionId) {
         return this.reportQuestion(_userId, questionId);
     }

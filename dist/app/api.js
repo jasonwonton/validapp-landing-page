@@ -326,6 +326,10 @@ export class ValidAPI {
         return this.request(`/users/${userId}/questions/${questionId}/report-question?${params}`, { method: "POST" });
     }
 
+    dismissFeedQuestion(userId, questionId) {
+        return this.request(`/users/${userId}/feed/questions/${questionId}/dismiss`, { method: "POST" });
+    }
+
     blockQuestionSubmitter(userId, questionId) {
         return this.request(`/users/${userId}/questions/${questionId}/block-submitter`, { method: "POST" });
     }
