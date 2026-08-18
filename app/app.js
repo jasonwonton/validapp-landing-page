@@ -1020,7 +1020,7 @@ function classmatePickerRowMarkup(classmate, { dataAttribute, trailingMarkup = "
 }
 
 function classmateSearchMarkup(inputId) {
-    return `<label class="feed-search classmate-picker-search"><span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg></span><input id="${inputId}" type="search" placeholder="Search classmates..." autocomplete="off"></label>`;
+    return `<label class="feed-search classmate-picker-search"><span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg></span><input id="${inputId}" type="search" placeholder="Search classmates" autocomplete="off"></label>`;
 }
 
 function classmatePickerMatches(classmate, query) {
@@ -1048,6 +1048,21 @@ function renderTbhTargetList() {
             disabled: target.state !== "eligible",
             trailingMarkup: target.state === "eligible" ? '<span class="classmate-picker-chevron" aria-hidden="true">›</span>' : `<small>${escapeHTML(tbhTargetStatus(target))}</small>`,
         }),
+    });
+}
+
+function mergeTbhTargetsWithClassmates(targets, classmates) {
+    const classmatesById = new Map((classmates || []).map((classmate) => [String(classmate.user_id), classmate]));
+    return (targets || []).map((target) => {
+        const classmate = classmatesById.get(String(target.user_id));
+        if (!classmate) return target;
+        return {
+            ...classmate,
+            ...target,
+            profile_picture_url: classmate.profile_picture_url || target.profile_picture_url || null,
+            profile_picture_url_thumb: classmate.profile_picture_url_thumb || target.profile_picture_url || null,
+            profile_picture_url_medium: classmate.profile_picture_url_medium || classmate.profile_picture_url || target.profile_picture_url || null,
+        };
     });
 }
 
@@ -1081,8 +1096,14 @@ async function openTbhRequestPurchase() {
     $("#tbhRequestBody").innerHTML = '<div class="empty-card">Loading classmates…</div>';
     openDetailScreen($("#tbhRequestDialog"));
     try {
-        const response = await api.getTbhRequestTargets(api.user.id);
-        state.tbhTargets = response.items || [];
+        const [targetResponse, classmateResponse] = await Promise.all([
+            api.getTbhRequestTargets(api.user.id),
+            api.getClassmatesWithMetadata(api.user.id, "", 500),
+        ]);
+        state.classmateDirectory = classmateResponse.classmates;
+        state.classmates = classmateResponse.classmates;
+        if (classmateResponse.activeThisWeekCount !== null) state.activeClassmatesThisWeek = classmateResponse.activeThisWeekCount;
+        state.tbhTargets = mergeTbhTargetsWithClassmates(targetResponse.items, classmateResponse.classmates);
         renderTbhRequestFlow();
     } catch (error) {
         $("#tbhRequestBody").innerHTML = `<div class="empty-card"><strong>Couldn't load classmates</strong><p>${escapeHTML(error.message || "Please try again.")}</p></div>`;
@@ -1439,7 +1460,7 @@ async function openClassmateProfile(userId) {
     else state.selectedClassmateTopQuestionsWeekly = [];
     if (requests[2].status === "fulfilled") state.selectedClassmateTopQuestionsAllTime = requests[2].value;
     else state.selectedClassmateTopQuestionsAllTime = [];
-    if (requests[3].status === "fulfilled") state.selectedClassmateAskTarget = requests[3].value?.target || null;
+    if (requests[3].status === "fulfilled") state.selectedClassmateAskTarget = requests[3].value || null;
     $("#classmateProfileStatus").textContent = requests[0].status === "rejected"
         ? (requests[0].reason?.message || "Could not load this profile.")
         : "";

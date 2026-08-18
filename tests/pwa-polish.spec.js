@@ -107,6 +107,9 @@ test("classmate browsing, targeted boost, and TBH use the same iOS-style rows", 
     const tbh = page.locator("#tbhRequestDialog .classmate-picker-row").first();
     expect(await pickerStyles(tbh)).toEqual(directoryStyles);
     expect(await searchStyles(page.locator("#tbhRequestDialog .classmate-picker-search"))).toEqual(directorySearchStyles);
+    const tbhMaya = page.getByRole("dialog", { name: "Request a TBH" }).getByRole("button", { name: "Maya Chen, Senior" });
+    await expect(tbhMaya.locator("img")).toBeVisible();
+    await expect(tbhMaya.getByText("Senior", { exact: true })).toBeVisible();
 });
 
 test("an unavailable Ask Me target does not make a classmate profile look broken", async ({ page }) => {

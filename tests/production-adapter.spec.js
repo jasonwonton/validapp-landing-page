@@ -471,6 +471,9 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
         if (path === "/api/v1/users/21111111-1111-1111-1111-111111111111/profile") {
             return fulfill({ ...profile("Maya", 0), user_id: "21111111-1111-1111-1111-111111111111", last_name: "Chen", username: "maya_c", bio: "Student council and bad puns.", vote_count: 61 });
         }
+        if (path === "/api/v1/users/21111111-1111-1111-1111-111111111111/ask-target") {
+            return fulfill({ public_token: "maya-contract" });
+        }
         if (path === `/api/v1/users/${USER_ID}/classmates/status`) {
             return fulfill(feedLocked
                 ? { is_unlocked: false, lock_reasons: ["votes"], votes_cast: 1, required_votes: 3 }
@@ -486,7 +489,7 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
         }
         if (path === `/api/v1/users/${USER_ID}/classmates?limit=500`) {
             return fulfill([
-                { user_id: "21111111-1111-1111-1111-111111111111", first_name: "Maya", last_name: "Chen" },
+                { user_id: "21111111-1111-1111-1111-111111111111", first_name: "Maya", last_name: "Chen", grade: "Senior", profile_picture_url: "https://cdn.example/maya.jpg" },
                 { user_id: "31111111-1111-1111-1111-111111111111", first_name: "Noah", last_name: "Williams" },
                 { user_id: "41111111-1111-1111-1111-111111111111", first_name: "Ava", last_name: "Patel" },
                 { user_id: "51111111-1111-1111-1111-111111111111", first_name: "Eli", last_name: "Brooks" },
@@ -499,6 +502,8 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
         if (path === "/api/v1/config") return fulfill({
             nomination_aura_cost: 100,
             question_submission_aura_cost: 200,
+            tbh_request_aura_cost: 100,
+            enable_tbh_requests: true,
             max_custom_question_length: 280,
             max_skips_per_set: 3,
             play_lock_time_seconds: 60,
@@ -509,6 +514,12 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
         if (path.startsWith(`/api/v1/users/${USER_ID}/top-questions?`)) return fulfill([]);
         if (path === `/api/v1/users/${USER_ID}/ask-link`) {
             return fulfill({ share_url: "https://validapp.lol/a/contract", is_active: true });
+        }
+        if (path === `/api/v1/users/${USER_ID}/tbh-request-targets`) {
+            return fulfill({
+                items: [{ user_id: "21111111-1111-1111-1111-111111111111", first_name: "Maya", last_name: "Chen", username: "maya_c", profile_picture_url: null, state: "eligible", active_request_id: null, next_allowed_at: null }],
+                next_cursor: null,
+            });
         }
         if (path === `/api/v1/users/${USER_ID}/ask-sender-access`) {
             return fulfill({ status: "allowed", timeout_until: null, warning_count: 0, timeout_count: 0, message: null });
@@ -770,6 +781,39 @@ test("real adapter submits a Play vote and multipart school question", async ({ 
     expect(String(submission.body)).toContain("Who makes everyone feel included?");
     expect(String(submission.body)).toContain("idempotency_key");
     expect(String(submission.body)).toContain("valid_logo-square.jpg");
+});
+
+test("real adapter renders a classmate Ask Me link from the production response", async ({ page }) => {
+    await installCredentialStub(page, "get");
+    const requests = await interceptProductionAPI(page);
+
+    await page.goto("/app/?signin=1");
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: "Classmates", exact: true }).click();
+    const directory = page.getByRole("dialog", { name: "Classmates", exact: true });
+    await directory.getByRole("button", { name: /Maya Chen/ }).click();
+    const classmateProfile = page.getByRole("dialog", { name: "Profile", exact: true });
+    await expect(classmateProfile.getByRole("link", { name: "Ask Maya anonymously" })).toHaveAttribute("href", "../a/maya-contract");
+    expect(requests.some((request) => request.path.endsWith("21111111-1111-1111-1111-111111111111/ask-target"))).toBe(true);
+});
+
+test("Request a TBH uses full classmate rows with profile pictures", async ({ page }) => {
+    await installCredentialStub(page, "get");
+    await interceptProductionAPI(page);
+
+    await page.goto("/app/?signin=1");
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: /Request a TBH for/ }).click();
+
+    const dialog = page.getByRole("dialog", { name: "Request a TBH" });
+    const maya = dialog.getByRole("button", { name: "Maya Chen, Senior" });
+    await expect(maya).toBeVisible();
+    await expect(maya.locator("img")).toHaveAttribute("src", "https://cdn.example/maya.jpg");
+    await expect(maya.getByText("Senior", { exact: true })).toBeVisible();
 });
 
 test("real adapter gives rate-limited users an actionable wait time", async ({ page }) => {

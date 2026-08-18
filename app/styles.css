@@ -1326,8 +1326,15 @@ body.detail-screen-open { overflow: hidden; }
 
 .tbh-flow-content { width: min(100%, 560px); margin: 0 auto; display: grid; align-content: start; gap: 14px; }
 .tbh-flow-content > p { margin: 0; font-size: 16px; }
-.tbh-flow-content.classmate-picker-page { gap: 0; padding-top: 12px; }
-.tbh-flow-content.classmate-picker-page > .classmate-picker-note { margin: 12px 6px; font-size: 1rem; }
+#tbhRequestDialog { display: flex; flex-direction: column; overflow: hidden; }
+#tbhRequestDialog.hidden { display: none; }
+#tbhRequestDialog .detail-screen-header { flex: 0 0 auto; }
+#tbhRequestDialog .detail-screen-header > strong { font-size: 1.25rem; }
+#tbhRequestDialog .detail-back-button { padding-left: 6px; }
+#tbhRequestBody { min-height: 0; flex: 1 1 auto; overflow-y: auto; }
+.tbh-flow-content.classmate-picker-page { width: min(100%, 560px); display: flex; flex-direction: column; gap: 0; overflow: hidden; padding: 12px 20px calc(20px + env(safe-area-inset-bottom)); }
+.tbh-flow-content.classmate-picker-page > .classmate-picker-note { margin: 0 0 12px; color: rgba(0,0,0,.8); font-size: 1rem; line-height: 1.35; }
+.tbh-flow-content.classmate-picker-page > .classmate-picker-list { gap: 14px; overflow-y: auto; padding-inline: 2px; }
 .tbh-target-list, .tbh-prompt-list { display: grid; gap: 10px; }
 .tbh-target-row, .tbh-prompt-row { width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 14px; border: 2px solid var(--ink); border-radius: 18px; background: var(--white); text-align: left; font: inherit; }
 .tbh-target-row:disabled { opacity: .55; }

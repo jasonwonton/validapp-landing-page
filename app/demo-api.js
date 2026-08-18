@@ -641,7 +641,12 @@ export class DemoAPI {
             throw error;
         }
         const classmate = this.classmates.find((item) => String(item.user_id) === String(userId));
-        return classmate?.ask_link_active ? { target: { public_token: `demo-${classmate.username}` } } : { target: null };
+        if (!classmate?.ask_link_active) {
+            const error = new Error("Ask link unavailable");
+            error.status = 404;
+            throw error;
+        }
+        return { public_token: `demo-${classmate.username}` };
     }
 
     async setAskLinkActive(_userId, isActive) {
