@@ -216,8 +216,7 @@ h3 { font-size: 1.45rem; }
 .anonymous-question-row:last-child, .anonymous-reply-row:last-child { border-bottom: 3px solid var(--ink); }
 .anonymous-question-row, .anonymous-reply-row { cursor: pointer; color: inherit; font: inherit; }
 .anonymous-question-row.unread { background: var(--white); box-shadow: 0 2px 4px rgba(0,0,0,.1); }
-.anonymous-row-icon { width: 60px; height: 60px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--mint); color: var(--peach-pressed); }
-.anonymous-row-icon > .ask-me-symbol { width: 34px; height: 34px; }
+.anonymous-row-icon { width: 60px; height: 60px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--mint); color: var(--peach); font-size: 1.75rem; }
 .anonymous-row-icon.reply { overflow: hidden; background: var(--mint); }
 .anonymous-row-icon.reply img { width: 100%; height: 100%; object-fit: cover; }
 .anonymous-row-copy { min-width: 0; max-width: 100%; display: grid; gap: 4px; overflow: hidden; }
@@ -395,7 +394,8 @@ h3 { font-size: 1.45rem; }
 .ask-safety-notice-content { justify-items: center; text-align: center; }
 .ask-safety-notice-content h2, .ask-safety-notice-content p { margin: 0; }
 .ask-safety-notice-content > p:not(.eyebrow):not(.fine-print):not(.status-message) { color: var(--muted); line-height: 1.5; }
-.ask-safety-shield { font-size: 2.5rem; }
+.ask-safety-shield { width: 58px; height: 58px; display: grid; place-items: center; border: 2px solid var(--ink); border-radius: 50%; background: var(--white); color: var(--peach-pressed); }
+.ask-safety-shield svg { width: 34px; height: 34px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .ask-safety-notice-content .primary-button { width: 100%; }
 .ask-safety-history-list { display: grid; gap: 10px; }
 .ask-safety-history-card { display: grid; gap: 8px; padding: 14px; border: 2px solid var(--ink); border-radius: 14px; background: var(--white); }
@@ -454,6 +454,8 @@ h3 { font-size: 1.45rem; }
 .profile-handle { color: rgba(5,9,20,.68); }
 .profile-bio { max-width: 460px; margin: 2px 0; color: rgba(5,9,20,.72); text-align: center; line-height: 1.4; }
 .profile-school-meta { display: grid; justify-items: center; gap: 4px; color: rgba(5,9,20,.68); text-align: center; }
+.profile-school-meta-item { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.profile-school-meta-item img { width: 17px; height: 17px; opacity: .72; }
 .profile-stats-grid { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
 .profile-stat-card {
     display: grid;
@@ -526,8 +528,8 @@ h3 { font-size: 1.45rem; }
 .profile-share-button { min-height: 52px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 12px; border: 2px solid var(--ink); border-radius: 14px; cursor: pointer; }
 .profile-share-button img, .profile-share-button > span:first-child { width: 30px; height: 30px; display: grid; place-items: center; object-fit: contain; border-radius: 50%; }
 .profile-share-button.snapchat { background: #fffc00; }
-.profile-share-button.imessage { background: #fff; }
-.profile-share-button.imessage > span:first-child { background: #34c759; color: #fff; }
+.profile-share-button.messages { background: #fff; }
+.profile-share-button .messages-symbol { width: 30px; height: 30px; color: #1a73e8; }
 .profile-sign-out { width: 100%; min-height: 54px; margin: 22px 0 8px; border: 2px solid #d73535; border-radius: 15px; background: rgba(255,255,255,.82); color: #c82424; cursor: pointer; font-size: 1.05rem; }
 .school-leaderboard { display: flex; gap: 12px; overflow-x: auto; padding: 4px 2px 10px; scroll-snap-type: x proximity; scrollbar-width: none; }
 .school-leaderboard::-webkit-scrollbar { display: none; }
@@ -544,9 +546,9 @@ h3 { font-size: 1.45rem; }
 .settings-row:disabled { cursor: not-allowed; }
 .profile-actions a.settings-row { color: inherit; text-decoration: none; }
 .settings-row > img, .settings-icon { width: 42px; height: 42px; display: grid; place-items: center; object-fit: contain; font-size: 1.5rem; }
-.notification-settings-icon { border: 2px solid var(--ink); border-radius: 50%; background: var(--aqua); }
-.notification-settings-icon svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
-.feedback-settings-icon { border: 2px solid var(--ink); border-radius: 50%; background: var(--peach); font-size: 1.25rem; }
+.notification-settings-icon, .passkey-settings-icon { border: 2px solid var(--ink); border-radius: 50%; background: var(--aqua); }
+.notification-settings-icon svg, .passkey-settings-icon svg, .feedback-settings-icon svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
+.feedback-settings-icon { border: 2px solid var(--ink); border-radius: 50%; background: var(--peach); }
 .settings-row > span:nth-child(2) { display: grid; gap: 2px; }
 .settings-row small { color: var(--muted); }
 .settings-row > span:last-child { font-size: 2rem; }
@@ -783,7 +785,10 @@ body.play-active .play-actions { margin: 0; }
 .nav-item.active > span { font-weight: 700; }
 
 .modal { width: min(560px, calc(var(--visual-viewport-width, 100%) - 28px)); max-height: calc(var(--visual-viewport-height, 100vh) - 40px); overflow: auto; overscroll-behavior: contain; padding: 0; border: 0; border-radius: 32px; background: var(--aqua); box-shadow: 0 12px 30px rgba(0,0,0,.15); transform: translate(calc(var(--visual-viewport-center, 50vw) - 50vw), calc(var(--visual-viewport-middle, 50vh) - 50vh)); }
-.modal::backdrop { background: rgba(5,9,20,.55); backdrop-filter: blur(3px); }
+.modal[open] { animation: modal-enter .2s cubic-bezier(.2,.8,.2,1); }
+.modal::backdrop { background: rgba(5,9,20,.55); backdrop-filter: blur(3px); animation: modal-backdrop-enter .18s ease-out; }
+@keyframes modal-enter { from { opacity: 0; scale: .97; translate: 0 12px; } to { opacity: 1; scale: 1; translate: 0 0; } }
+@keyframes modal-backdrop-enter { from { opacity: 0; } to { opacity: 1; } }
 .modal form { display: grid; gap: 12px; padding: 22px; }
 .modal-heading { display: flex; justify-content: space-between; align-items: start; }
 .modal-heading .icon-button { position: relative; z-index: 2; flex: 0 0 44px; width: 44px; height: 44px; display: grid; place-items: center; margin: 0 0 0 8px; }
@@ -813,7 +818,8 @@ body.play-active .play-actions { margin: 0; }
 .android-install-dialog-content .primary-button { width: 100%; margin-top: 10px; }
 .android-install-dialog-content .status-message { min-height: 1.4em; font-size: .88rem; }
 .passkey-enrollment-content { display: grid; justify-items: stretch; gap: 13px; padding: 24px; text-align: center; }
-.passkey-enrollment-icon { font: 48px/1 system-ui, sans-serif; }
+.passkey-enrollment-icon { width: 92px; height: 92px; display: grid; place-items: center; justify-self: center; border: 3px solid var(--ink); border-radius: 50%; background: var(--white); }
+.passkey-enrollment-icon svg { width: 42px; height: 42px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .passkey-enrollment-content h2, .passkey-enrollment-content p { margin: 0; }
 .passkey-enrollment-content > p:not(.status-message) { color: var(--muted); line-height: 1.35; }
 .passkey-enrollment-content .text-button { justify-self: center; min-height: 40px; }
@@ -1269,11 +1275,11 @@ body.detail-screen-open { overflow: hidden; }
 .classmate-picker-page .classmate-picker-list { overflow: visible; }
 .classmate-picker-empty { padding: 36px 14px; color: var(--dark-teal); text-align: center; }
 
-.school-feed-controls { display: flex; gap: 10px; overflow-x: auto; padding: 0 2px 12px; scrollbar-width: none; }
+.school-feed-controls { display: flex; gap: 10px; overflow-x: auto; overscroll-behavior-x: contain; padding: 0 14px 12px 2px; scroll-padding-inline: 14px; scroll-snap-type: x proximity; scrollbar-width: none; touch-action: pan-x; -webkit-overflow-scrolling: touch; }
 .school-feed-controls::-webkit-scrollbar { display: none; }
 .school-feed-controls > div { display: flex; gap: 6px; flex: 0 0 auto; }
 .school-feed-controls > div + div { min-height: 24px; border-left: 1px solid rgba(0,0,0,.18); padding-left: 10px; }
-.school-feed-controls button { height: 36px; padding: 0 13px; border: 2px solid var(--ink); border-radius: 999px; background: rgba(255,255,255,.8); font: inherit; }
+.school-feed-controls button { height: 36px; padding: 0 13px; border: 2px solid var(--ink); border-radius: 999px; background: rgba(255,255,255,.8); font: inherit; scroll-snap-align: center; }
 .school-feed-controls button.active { border-color: var(--peach); background: var(--peach); color: var(--white); }
 
 .reaction-control { height: 34px; display: inline-flex; align-items: stretch; flex: 0 0 auto; overflow: hidden; border: 1px solid rgba(0,0,0,.22); border-radius: 999px; background: rgba(255,255,255,.78); }

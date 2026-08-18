@@ -344,6 +344,7 @@ function appSymbolMarkup(symbol, className = "app-symbol") {
     const icons = {
         ask: `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5.2 3h13.6A3.2 3.2 0 0 1 22 6.2v8.1a3.2 3.2 0 0 1-3.2 3.2h-7.2L6 21.3v-3.8h-.8A3.2 3.2 0 0 1 2 14.3V6.2A3.2 3.2 0 0 1 5.2 3Z"/><path d="M9.3 8.6A2.9 2.9 0 0 1 12 7.1c1.7 0 3 1 3 2.5 0 1.3-.7 2-1.8 2.6-.9.5-1.2.9-1.2 1.8" fill="none" stroke="white" stroke-width="1.9" stroke-linecap="round"/><circle cx="12" cy="15.8" r="1" fill="white"/></svg>`,
         link: `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 14.5 14.5 9M8 17H6.5a4.5 4.5 0 0 1 0-9H10M16 7h1.5a4.5 4.5 0 0 1 0 9H14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+        message: `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4.8 3h14.4A3.8 3.8 0 0 1 23 6.8v8.4a3.8 3.8 0 0 1-3.8 3.8h-8.1L5 22v-3.2A3.8 3.8 0 0 1 1 15V6.8A3.8 3.8 0 0 1 4.8 3Z"/><path d="M6.5 9h11M6.5 13h7" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round"/></svg>`,
         reset: `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 8.2A8 8 0 1 1 12 4M16 4h4v4" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
         shield: `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8 20 6v5.4c0 4.8-3.1 8.1-8 9.8-4.9-1.7-8-5-8-9.8V6l8-3.2Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8.3 8.2h7.4v7.2H8.3zM8.3 11.8h7.4M12 8.2v7.2" fill="none" stroke="currentColor" stroke-width="1.25"/></svg>`,
     };
@@ -615,7 +616,7 @@ function renderProfilePanel() {
         <h3>${escapeHTML(displayName(profile))}</h3>
         <div class="profile-handle">@${escapeHTML(profile.username || "valid")}</div>
         <button class="profile-bio-button ${profile.bio ? "" : "empty"}" type="button" data-edit-bio>${profile.bio ? escapeHTML(profile.bio) : "+ Add bio"}</button>
-        ${(schoolName || grade) ? `<div class="profile-school-meta">${schoolName ? `<span>🏫 ${escapeHTML(schoolName)}</span>` : ""}${grade ? `<span>🎓 ${escapeHTML(grade)}</span>` : ""}</div>` : ""}
+        ${(schoolName || grade) ? `<div class="profile-school-meta">${schoolName ? `<span class="profile-school-meta-item"><img src="../assets/app/profile-school.svg" alt=""><span>${escapeHTML(schoolName)}</span></span>` : ""}${grade ? `<span class="profile-school-meta-item"><img src="../assets/app/profile-graduation-cap.svg" alt=""><span>${escapeHTML(grade)}</span></span>` : ""}</div>` : ""}
         <button class="profile-information-inline" type="button" data-edit-profile>
             <span class="profile-information-icon">${profileInformationIcon(canChangeInformation)}</span>
             <span class="profile-information-copy"><strong>Profile information</strong>${informationStatus ? `<small>${escapeHTML(informationStatus)}</small>` : ""}</span>
@@ -680,7 +681,7 @@ function renderProfileInviteCard() {
     container.innerHTML = `<article class="profile-invite-card">
         <div><strong>${remaining ? `Invite ${remaining} more ${remaining === 1 ? "friend" : "friends"}` : "Invite reward complete"}</strong><p>Bring friends to Valid and earn bonus aura when they join.</p></div>
         <div class="profile-invite-progress"><span><strong>${progress} / ${goal}</strong><small>qualifying invites</small></span><progress max="${goal}" value="${progress}" aria-label="${progress} of ${goal} qualifying invites"></progress></div>
-        <div class="profile-invite-actions"><button class="profile-share-button snapchat" type="button" data-profile-invite="snapchat"><img src="../assets/app/snapchat-logo.png" alt=""><span>Snapchat</span></button><button class="profile-share-button imessage" type="button" data-profile-invite="imessage"><span aria-hidden="true">●</span><span>Messages</span></button></div>
+        <div class="profile-invite-actions"><button class="profile-share-button snapchat" type="button" data-profile-invite="snapchat"><img src="../assets/app/snapchat-logo.png" alt=""><span>Snapchat</span></button><button class="profile-share-button messages" type="button" data-profile-invite="imessage">${appSymbolMarkup("message", "messages-symbol")}<span>Messages</span></button></div>
         <p id="profileInviteStatus" class="status-message" role="status"></p>
     </article>`;
 }
@@ -1393,7 +1394,7 @@ function renderClassmateProfile() {
         <h3>${escapeHTML(displayName(profile))}</h3>
         <div class="profile-handle">${profile.username ? `@${escapeHTML(profile.username)}` : "Valid classmate"}</div>
         ${profile.bio ? `<p class="profile-bio">${escapeHTML(profile.bio)}</p>` : ""}
-        <div class="profile-school-meta"><span>🏫 ${escapeHTML(profile.school_name || state.profile?.school_name || "Your school")}</span>${profile.grade ? `<span>🎓 ${escapeHTML(formatGrade(profile.grade))}</span>` : ""}</div>
+        <div class="profile-school-meta"><span class="profile-school-meta-item"><img src="../assets/app/profile-school.svg" alt=""><span>${escapeHTML(profile.school_name || state.profile?.school_name || "Your school")}</span></span>${profile.grade ? `<span class="profile-school-meta-item"><img src="../assets/app/profile-graduation-cap.svg" alt=""><span>${escapeHTML(formatGrade(profile.grade))}</span></span>` : ""}</div>
         <div class="profile-stats-grid ${tbhRequestsEnabled() ? "" : "single"}">
             <div class="profile-stat-card"><strong><span class="heart">♥</span>${Number(profile.vote_count || 0).toLocaleString()}</strong><span>Votes Received</span></div>
             ${tbhRequestsEnabled() ? `<div class="profile-stat-card"><strong><span aria-hidden="true">❝</span>${Number(profile.tbh_unique_requester_count || 0).toLocaleString()}</strong><span>TBH Requests</span></div>` : ""}
@@ -1555,7 +1556,7 @@ async function addBackupPasskey(trigger = null) {
         renderPasskeyStatus();
         if ($("#passkeyEnrollmentDialog").open) $("#passkeyEnrollmentDialog").close();
         successHaptic();
-        showToast("Backup passkey added 🔑");
+        showToast("Backup passkey added");
     } catch (error) {
         const message = error.message || "Could not add that passkey.";
         $("#passkeyEnrollmentStatus").textContent = message;
@@ -2239,7 +2240,7 @@ function anonymousInboxRows() {
         <span class="anonymous-row-state" aria-hidden="true">›</span>
     </button>` }));
     const questionRows = questions.map((question) => ({ timestamp: question.created_at, html: `<button class="anonymous-question-row ${question.opened_at ? "" : "unread"} ${question.status === "answered" ? "answered" : ""}" type="button" data-anonymous-question="${escapeHTML(question.id)}">
-        <span class="anonymous-row-icon" aria-hidden="true">${appSymbolMarkup("ask", "ask-me-symbol")}</span>
+        <span class="anonymous-row-icon" aria-hidden="true">?</span>
         <span class="anonymous-row-copy"><span class="anonymous-row-title"><strong>${escapeHTML(question.provenance_label)}</strong>${question.opened_at ? "" : `<span class="anonymous-new-pill">New</span>`}</span><span class="anonymous-row-message">${escapeHTML(question.body)}</span><span class="anonymous-row-meta"><span>${escapeHTML(question.source_platform ? `From ${question.source_platform[0].toUpperCase()}${question.source_platform.slice(1)}` : "Anonymous")}</span><time>${escapeHTML(relativeTime(question.created_at))}</time></span></span>
         <span class="anonymous-row-state" aria-hidden="true">›</span>
     </button>` }));
@@ -3350,9 +3351,16 @@ function renderAnonymousQuestionDialog() {
     $("#anonymousAnswerButton").classList.toggle("hidden", restricted);
     $("#anonymousAnswerButton").dataset.label = answered ? "Update reply" : "Send reply";
     $("#anonymousAnswerButton").textContent = $("#anonymousAnswerButton").dataset.label;
+    updateAnonymousAnswerButton();
     $("#anonymousAnswerShare").classList.toggle("hidden", !answered);
     $("#anonymousAnswerStatus").textContent = "";
     $("#anonymousAnswerStatus").classList.remove("share-progress");
+}
+
+function updateAnonymousAnswerButton() {
+    const button = $("#anonymousAnswerButton");
+    if (!button || button.getAttribute("aria-busy") === "true") return;
+    button.disabled = !$("#anonymousAnswerText").value.trim();
 }
 
 async function shareAnonymousAnswer(platform) {
@@ -3453,7 +3461,7 @@ async function answerAnonymousQuestion(event) {
     } catch (error) {
         $("#anonymousAnswerStatus").textContent = error.message || "Could not answer this question.";
     } finally {
-        button.disabled = false;
+        updateAnonymousAnswerButton();
     }
 }
 
@@ -5696,11 +5704,13 @@ function bindEvents() {
         if (sort) {
             state.schoolFeedSort = sort.dataset.schoolSort;
             $$("[data-school-sort]").forEach((button) => button.classList.toggle("active", button === sort));
+            sort.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "nearest", inline: "center" });
         }
         if (content) {
             state.schoolFeedContent = content.dataset.schoolContent;
             state.myVotesOnly = state.schoolFeedContent === "my_votes";
             $$("[data-school-content]").forEach((button) => button.classList.toggle("active", button === content));
+            content.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "nearest", inline: "center" });
         }
         if (sort || content) loadFeed(true);
     });
@@ -5785,6 +5795,7 @@ function bindEvents() {
     });
     $("#feedNotificationButton").addEventListener("click", toggleWebPush);
     $("#anonymousAnswerForm").addEventListener("submit", answerAnonymousQuestion);
+    $("#anonymousAnswerText").addEventListener("input", updateAnonymousAnswerButton);
     $("#anonymousReportForm").addEventListener("submit", submitAnonymousReport);
     $("#acknowledgeAskSafetyNotice").addEventListener("click", acknowledgeAskSafetyNotice);
     $("#askSafetyNoticeDialog").addEventListener("cancel", (event) => event.preventDefault());

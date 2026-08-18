@@ -157,9 +157,9 @@
                     <div id="profileInviteCard"></div>
                 </section>
                 <section class="profile-actions" aria-label="Profile actions">
-                    <button id="addPasskeyButton" class="settings-row" type="button"><span class="settings-icon" aria-hidden="true">🔑</span><span><strong>Add another passkey</strong><small id="passkeyStatusText">Add another secure way to sign in</small></span><span aria-hidden="true">›</span></button>
+                    <button id="addPasskeyButton" class="settings-row" type="button"><span class="settings-icon passkey-settings-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="7.7" cy="12" r="4.3"/><path d="m11.1 9.4 8-6.2 1.7 1.7-2 2 1.5 1.5-2.2 2.2-1.5-1.5-5.5 4.2"/></svg></span><span><strong>Add another passkey</strong><small id="passkeyStatusText">Add another secure way to sign in</small></span><span aria-hidden="true">›</span></button>
                     <button id="notificationButton" class="settings-row hidden" type="button" role="switch" aria-checked="false"><span class="settings-icon notification-settings-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M10 21h4"/></svg></span><span><strong>Notifications</strong><small id="notificationStatusText" class="visually-hidden">Get updates from Valid</small></span><span class="settings-switch" aria-hidden="true"><span></span></span></button>
-                    <button id="feedbackButton" class="settings-row" type="button"><span class="settings-icon feedback-settings-icon" aria-hidden="true">✎</span><span><strong>Leave feedback</strong></span><span aria-hidden="true">›</span></button>
+                    <button id="feedbackButton" class="settings-row" type="button"><span class="settings-icon feedback-settings-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m4 16-.8 4.8 4.8-.8L19.2 7.8l-4-4L4 16Z"/><path d="m13.8 5.2 4 4M4 16l4 4"/></svg></span><span><strong>Leave feedback</strong></span><span aria-hidden="true">›</span></button>
                 </section>
                 <button id="installAppButton" class="settings-row hidden" type="button"><span class="settings-icon" aria-hidden="true">⇩</span><span><strong>Install Valid</strong><small>Add the app to your home screen</small></span><span aria-hidden="true">›</span></button>
                 <button id="profileSignOutButton" class="profile-sign-out" type="button">Sign Out</button>
@@ -186,7 +186,7 @@
 
     <dialog id="passkeyEnrollmentDialog" class="modal passkey-enrollment-dialog" aria-label="Secure your Valid account">
         <div class="passkey-enrollment-content">
-            <span class="passkey-enrollment-icon" aria-hidden="true">🔑</span>
+            <span class="passkey-enrollment-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="7.7" cy="12" r="4.3"/><path d="m11.1 9.4 8-6.2 1.7 1.7-2 2 1.5 1.5-2.2 2.2-1.5-1.5-5.5 4.2"/></svg></span>
             <h2>Secure your account</h2>
             <p>Save a passkey on this phone for fast, private sign-in with your screen lock.</p>
             <button id="enrollPasskeyButton" class="primary-button" type="button">Create a passkey</button>
@@ -734,7 +734,7 @@
 
     <dialog id="askSafetyNoticeDialog" class="modal ask-safety-notice-dialog" aria-labelledby="askSafetyNoticeTitle">
         <div class="ask-safety-notice-content">
-            <span class="ask-safety-shield" aria-hidden="true">🛡️</span>
+            <span class="ask-safety-shield" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2.8 20 6v5.4c0 4.8-3.1 8.1-8 9.8-4.9-1.7-8-5-8-9.8V6l8-3.2Z"/><path d="M8.3 8.2h7.4v7.2H8.3zM8.3 11.8h7.4M12 8.2v7.2"/></svg></span>
             <h2 id="askSafetyNoticeTitle">Important safety notice</h2>
             <p id="askSafetyNoticeMessage"></p>
             <p id="askSafetyNoticeDate" class="fine-print"></p>

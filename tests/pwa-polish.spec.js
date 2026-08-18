@@ -156,7 +156,7 @@ test("Ask Me link can be paused, resumed, and reset from Settings", async ({ pag
     await expect(page.locator("#toast")).toContainText("New ask me link created");
 });
 
-test("Ask Me uses the same question bubble and action symbols as iOS", async ({ page }) => {
+test("Ask Me uses the same action symbols and inbox question mark as iOS", async ({ page }) => {
     await signInToDemo(page, "&safetynotice=1");
     await page.getByRole("dialog", { name: "Ask Me safety warning" }).getByRole("button", { name: "I understand" }).click();
     await page.getByRole("button", { name: "Profile", exact: true }).click();
@@ -167,7 +167,50 @@ test("Ask Me uses the same question bubble and action symbols as iOS", async ({ 
     await expect(askCard).not.toContainText("🔗");
 
     await page.getByRole("button", { name: "Feed", exact: true }).click();
-    await expect(page.locator(".anonymous-question-row .anonymous-row-icon .ask-me-symbol").first()).toBeVisible();
+    const inboxIcon = page.locator(".anonymous-question-row .anonymous-row-icon").first();
+    await expect(inboxIcon).toHaveText("?");
+    await expect(inboxIcon.locator("svg")).toHaveCount(0);
+});
+
+test("profile and account actions use consistent app icons instead of platform emoji", async ({ page }) => {
+    await signInToDemo(page);
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+
+    const profileMeta = page.locator("#profileCard .profile-school-meta");
+    await expect(profileMeta.locator("img")).toHaveCount(2);
+    await expect(profileMeta).not.toContainText("🏫");
+    await expect(profileMeta).not.toContainText("🎓");
+    await expect(page.locator("#addPasskeyButton .passkey-settings-icon svg")).toBeVisible();
+    await expect(page.locator("#feedbackButton .feedback-settings-icon svg")).toBeVisible();
+    await expect(page.locator("#profileInviteCard .messages-symbol")).toBeVisible();
+    await expect(page.locator("#addPasskeyButton")).not.toContainText("🔑");
+});
+
+test("empty Ask Me replies stay disabled until there is something to send", async ({ page }) => {
+    await signInToDemo(page);
+    await page.locator(".anonymous-question-row").filter({ hasText: "genuinely proud" }).click();
+    const reply = page.getByRole("textbox", { name: "Your reply" });
+    const send = page.getByRole("button", { name: "Send reply" });
+    await expect(send).toBeDisabled();
+    await reply.fill("I kept showing up.");
+    await expect(send).toBeEnabled();
+    await reply.fill("   ");
+    await expect(send).toBeDisabled();
+});
+
+test("school filter chips scroll selected content into view and sheets animate in", async ({ page }) => {
+    await signInToDemo(page);
+    await page.getByRole("button", { name: "School", exact: true }).click();
+    const controls = page.locator("#schoolFeedControls");
+    await controls.getByRole("button", { name: "My Votes" }).click();
+    const overflows = await controls.evaluate((element) => element.scrollWidth > element.clientWidth);
+    if (overflows) {
+        await expect.poll(() => controls.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+    }
+
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: /Choose a crush/ }).click();
+    await expect(page.locator("#targetedBoostDialog")).toHaveCSS("animation-name", "modal-enter");
 });
 
 test("Ask Me appears directly below the profile header like iOS", async ({ page }) => {
@@ -204,6 +247,8 @@ test("Ask Me safety notices require acknowledgement and remain available in hist
     const notice = page.getByRole("dialog", { name: "Ask Me safety warning" });
     await expect(notice).toBeVisible();
     await expect(notice).toContainText("violate our safety rules");
+    await expect(notice.locator(".ask-safety-shield svg")).toBeVisible();
+    await expect(notice).not.toContainText("🛡️");
     await notice.getByRole("button", { name: "I understand" }).click();
     await expect(notice).toBeHidden();
 
