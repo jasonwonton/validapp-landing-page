@@ -26,10 +26,33 @@ const TBH_PROMPTS = [
     { key: "good_memory", title: "A good memory you have of me", starters: ["A memory I still think about is…", "I’ll always remember when…", "One good moment was…"] },
     { key: "something_to_hear", title: "Something I need to hear", starters: ["Something you should know is…", "Don’t forget that…", "I hope you realize…"] },
 ];
+const PERSONAL_INBOX_FILTERS = {
+    all: {
+        title: "All",
+        description: "Everything sent to you, newest first.",
+        empty: "Polls, TBHs, and Ask Me messages will show up here.",
+    },
+    polls: {
+        title: "Polls",
+        description: "Votes and nominations you received.",
+        empty: "Votes and nominations you receive will show up here.",
+    },
+    tbhs: {
+        title: "TBHs",
+        description: "Honest notes, requests, and TBHs you sent.",
+        empty: "TBH requests and honest notes will show up here.",
+    },
+    ask_me: {
+        title: "Ask Me",
+        description: "Private questions and replies from your Ask Me link.",
+        empty: "Questions and replies from your Ask Me link will show up here.",
+    },
+};
 const state = {
     profile: null,
     activePanel: "feed",
     feedType: "personal",
+    personalInboxFilter: "all",
     myVotesOnly: false,
     schoolFeedSort: "recent",
     schoolFeedContent: "all",
@@ -651,14 +674,17 @@ function renderProfilePanel() {
             ? `Available again ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(nextChangeDate)}`
             : "Profile change currently unavailable")
         : "";
+    const streak = Math.max(0, Number(profile.current_streak || 0));
+    const hasProfilePhoto = Boolean(imageURL && !String(profile.profile_picture_url || "").includes("default.png"));
     $("#profileCard").innerHTML = `<article class="full-profile-card">
         <button class="profile-photo-button" type="button" data-edit-photo aria-label="Change profile picture">
             <span class="full-profile-avatar">${imageURL ? `<img src="${escapeHTML(imageURL)}" alt="${escapeHTML(displayName(profile))}">` : `<span>${escapeHTML(initials(profile))}</span>`}</span>
             <span class="photo-edit-badge" aria-hidden="true">✎</span>
         </button>
+        ${hasProfilePhoto ? "" : '<p class="profile-photo-warning">⚠️ Users without profile pictures receive less votes.</p>'}
         <h3>${escapeHTML(displayName(profile))}</h3>
-        <div class="profile-handle">@${escapeHTML(profile.username || "valid")}</div>
-        <button class="profile-bio-button ${profile.bio ? "" : "empty"}" type="button" data-edit-bio>${profile.bio ? escapeHTML(profile.bio) : "+ Add bio"}</button>
+        <div class="profile-identity-line"><span class="profile-handle">@${escapeHTML(profile.username || "valid")}</span>${streak ? `<span class="profile-streak ${profile.streak_needs_activity ? "needs-activity" : ""}" aria-label="${streak} day streak">🔥 ${streak}</span>` : ""}</div>
+        <button class="profile-bio-button ${profile.bio ? "" : "empty"}" type="button" data-edit-bio>${profile.bio ? escapeHTML(profile.bio) : '<span>Add bio</span><span class="profile-add-bio-icon" aria-hidden="true">+</span>'}</button>
         ${(schoolName || grade) ? `<div class="profile-school-meta">${schoolName ? `<span class="profile-school-meta-item"><img src="../assets/app/profile-school.svg" alt=""><span>${escapeHTML(schoolName)}</span></span>` : ""}${grade ? `<span class="profile-school-meta-item"><img src="../assets/app/profile-graduation-cap.svg" alt=""><span>${escapeHTML(grade)}</span></span>` : ""}</div>` : ""}
         <button class="profile-information-inline" type="button" data-edit-profile>
             <span class="profile-information-icon">${profileInformationIcon(canChangeInformation)}</span>
@@ -752,8 +778,7 @@ async function shareProfileInvite(button, channel) {
 }
 
 function renderTabBadges() {
-    const unread = state.tbhPendingRequests.filter((item) => !item.opened_at).length
-        + (state.anonymousInbox?.questions || []).filter((item) => !item.opened_at).length;
+    const unread = personalInboxUnreadCounts().all;
     const feedBadge = $("#feedTabBadge");
     feedBadge.textContent = unread > 9 ? "9+" : String(unread || "");
     feedBadge.classList.toggle("hidden", unread < 1);
@@ -2323,19 +2348,53 @@ function anonymousInboxRows() {
     return [...answerRows, ...questionRows];
 }
 
+function personalInboxUnreadCounts() {
+    const polls = state.feedItems.filter((item) => item.is_new === true || item.unread === true).length;
+    const tbhs = state.tbhPendingRequests.filter((item) => !item.opened_at).length
+        + state.tbhInboxItems.filter((item) => !item.opened_at).length;
+    const askMe = (state.anonymousInbox?.questions || []).filter((item) => !item.opened_at).length;
+    return { all: polls + tbhs + askMe, polls, tbhs, ask_me: askMe };
+}
+
+function renderPersonalInboxControls() {
+    const controls = $("#personalInboxControls");
+    const visible = state.feedType === "personal" && !state.feedSearch.trim();
+    controls.classList.toggle("hidden", !visible);
+    if (!visible) return;
+
+    if (!PERSONAL_INBOX_FILTERS[state.personalInboxFilter]) state.personalInboxFilter = "all";
+    const counts = personalInboxUnreadCounts();
+    $$('[data-inbox-filter]').forEach((button) => {
+        const filter = button.dataset.inboxFilter;
+        const selected = filter === state.personalInboxFilter;
+        button.classList.toggle("active", selected);
+        button.setAttribute("aria-pressed", String(selected));
+        const badge = button.querySelector("[data-inbox-count]");
+        const count = counts[filter] || 0;
+        badge.textContent = count > 99 ? "99+" : String(count || "");
+        badge.classList.toggle("hidden", count < 1);
+    });
+    $("#personalInboxDescription").textContent = PERSONAL_INBOX_FILTERS[state.personalInboxFilter].description;
+}
+
 function renderFeed() {
     const list = $("#feedList");
     const query = state.feedSearch.trim().toLowerCase();
+    renderPersonalInboxControls();
     renderFeedClassmateResults();
     const visible = query ? state.feedItems.filter((item) => [item.question_text, item.voted_for_name, item.contact_name, item.voter_name].some((value) => String(value || "").toLowerCase().includes(query))) : state.feedItems;
-    const anonymousRows = anonymousInboxRows();
-    const personalTbhRows = state.feedType === "personal" && !query
+    const appliesPersonalFilter = state.feedType === "personal" && !query;
+    const showPolls = !appliesPersonalFilter || ["all", "polls"].includes(state.personalInboxFilter);
+    const showTbhs = !appliesPersonalFilter || ["all", "tbhs"].includes(state.personalInboxFilter);
+    const showAskMe = !appliesPersonalFilter || ["all", "ask_me"].includes(state.personalInboxFilter);
+    const anonymousRows = showAskMe ? anonymousInboxRows() : [];
+    const personalTbhRows = state.feedType === "personal" && !query && showTbhs
         ? [...pendingTbhRows(), ...tbhFeedRows(state.tbhInboxItems, "received"), ...tbhFeedRows(state.tbhSentItems, "sent")]
         : [];
     const schoolTbhRows = state.feedType === "school" && !query && state.schoolFeedContent !== "my_votes"
         ? tbhFeedRows(state.schoolTbhItems, "school")
         : [];
-    const filteredVotes = state.feedType === "school" && state.schoolFeedContent === "tbhs" ? [] : visible;
+    const filteredVotes = (state.feedType === "school" && state.schoolFeedContent === "tbhs") || !showPolls ? [] : visible;
     if (!filteredVotes.length && !anonymousRows.length && !personalTbhRows.length && !schoolTbhRows.length) {
         const emptyState = query
             ? { title: "No results found", message: "Try searching for a name or question." }
@@ -2344,7 +2403,10 @@ function renderFeed() {
                 : state.myVotesOnly
                     ? { title: "You haven't voted yet", message: "Answer some questions in the Play tab to see your votes here." }
                     : state.feedType === "personal"
-                        ? { title: "Nothing in your Inbox yet", message: "Votes, TBHs, and anonymous messages will show up here." }
+                        ? {
+                            title: state.personalInboxFilter === "all" ? "Nothing in your Inbox yet" : `No ${PERSONAL_INBOX_FILTERS[state.personalInboxFilter].title} yet`,
+                            message: PERSONAL_INBOX_FILTERS[state.personalInboxFilter].empty,
+                        }
                         : { title: "No school activity yet", message: "As students at your school answer questions, activity will appear here." };
         list.innerHTML = `<div class="feed-empty-state"><span class="feed-empty-art" aria-hidden="true"><svg viewBox="0 0 160 120"><path d="M22 36 80 76l58-40v54a12 12 0 0 1-12 12H34a12 12 0 0 1-12-12Z"/><path d="m22 36 58-22 58 22-58 40Z"/><path d="m22 96 41-34M138 96 97 62"/></svg></span><strong>${escapeHTML(emptyState.title)}</strong><p>${escapeHTML(emptyState.message)}</p></div>`;
         renderTabBadges();
@@ -5775,11 +5837,20 @@ function bindEvents() {
         $$(".segment").forEach((segment) => segment.classList.toggle("active", segment === button));
         $("#myVotesFilter").classList.add("hidden");
         $("#schoolFeedControls").classList.toggle("hidden", state.feedType !== "school");
+        $("#personalInboxControls").classList.toggle("hidden", state.feedType !== "personal");
         $("#myVotesFilter").classList.remove("active");
         $("#myVotesFilter").setAttribute("aria-pressed", "false");
         $("#myVotesFilter").textContent = "○ My Votes";
         loadFeed(true);
     }));
+    $("#personalInboxControls").addEventListener("click", (event) => {
+        const button = event.target.closest("[data-inbox-filter]");
+        if (!button || !PERSONAL_INBOX_FILTERS[button.dataset.inboxFilter]) return;
+        state.personalInboxFilter = button.dataset.inboxFilter;
+        softHaptic();
+        renderFeed();
+        button.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "nearest", inline: "center" });
+    });
     $("#schoolFeedControls").addEventListener("click", (event) => {
         const sort = event.target.closest("[data-school-sort]");
         const content = event.target.closest("[data-school-content]");

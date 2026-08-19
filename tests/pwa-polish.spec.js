@@ -313,6 +313,22 @@ test("Ask Me appears directly below the profile header like iOS", async ({ page 
     expect(order.askMe).toBeLessThan(order.school);
 });
 
+test("profile header mirrors the iOS identity card", async ({ page }) => {
+    await signInToDemo(page);
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+
+    const card = page.locator("#profileCard .full-profile-card");
+    await expect(card.getByRole("heading", { name: "Jules Rivera" })).toBeVisible();
+    await expect(card.locator(".profile-identity-line")).toContainText("@jules");
+    await expect(card.locator(".profile-streak")).toHaveText("🔥 7");
+    await expect(card.locator(".profile-school-meta")).toContainText("Westview High School");
+    await expect(card.locator(".profile-school-meta")).toContainText("Junior");
+    await expect(card.locator(".profile-school-meta img")).toHaveCount(2);
+    await expect(card.locator(".profile-stat-card")).toHaveCount(2);
+    await expect(card.locator(".profile-stat-card").filter({ hasText: "Aura" })).toContainText("1,280");
+    await expect(card.locator(".profile-stat-card").filter({ hasText: "Votes Received" })).toContainText("84");
+});
+
 test("Ask Me restriction copy does not invite a timed-out user to turn it on", async ({ page }) => {
     await signInToDemo(page, "&askrestriction=timeout");
     await page.getByRole("button", { name: "Profile", exact: true }).click();

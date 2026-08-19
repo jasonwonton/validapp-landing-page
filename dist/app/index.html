@@ -58,6 +58,15 @@
                         <label class="feed-search"><span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg></span><input id="feedSearch" type="search" placeholder="Search names, questions..." autocomplete="off"></label>
                         <button id="myVotesFilter" class="filter-button hidden" type="button" aria-pressed="false">○ My Votes</button>
                     </div>
+                    <div id="personalInboxControls" class="personal-inbox-controls" aria-label="Inbox filters">
+                        <div class="personal-inbox-filter-rail" role="group" aria-label="Inbox content">
+                            <button class="active" type="button" data-inbox-filter="all" aria-pressed="true"><span>All</span><small class="hidden" data-inbox-count="all"></small></button>
+                            <button type="button" data-inbox-filter="polls" aria-pressed="false"><span>Polls</span><small class="hidden" data-inbox-count="polls"></small></button>
+                            <button type="button" data-inbox-filter="tbhs" aria-pressed="false"><span>TBHs</span><small class="hidden" data-inbox-count="tbhs"></small></button>
+                            <button type="button" data-inbox-filter="ask_me" aria-label="Ask Me" aria-pressed="false"><span class="ask-me-filter-label" aria-hidden="true"></span><small class="hidden" data-inbox-count="ask_me"></small></button>
+                        </div>
+                        <p id="personalInboxDescription">Everything sent to you, newest first.</p>
+                    </div>
                     <div id="schoolFeedControls" class="school-feed-controls hidden" aria-label="School feed filters">
                         <div role="group" aria-label="School feed order"><button class="active" type="button" data-school-sort="recent">Recent</button><button type="button" data-school-sort="hottest">Hottest</button></div>
                         <div role="group" aria-label="School feed content"><button class="active" type="button" data-school-content="all">All</button><button type="button" data-school-content="tbhs">TBHs</button><button type="button" data-school-content="my_votes">My Votes</button></div>

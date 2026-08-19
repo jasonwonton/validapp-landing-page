@@ -59,6 +59,37 @@ test("Inbox TBH request composer enforces starter and length rules", async ({ pa
     await expect(request).toHaveCount(0);
 });
 
+test("Inbox filters match iOS All, Polls, TBHs, and Ask Me sections", async ({ page }) => {
+    await signIn(page);
+    const filters = page.getByRole("group", { name: "Inbox content" });
+
+    await expect(filters.getByRole("button", { name: /All/ })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#personalInboxDescription")).toHaveText("Everything sent to you, newest first.");
+    await expect(page.locator("[data-feed-detail]")).toHaveCount(2);
+    await expect(page.locator("[data-tbh-detail^='received:'], [data-tbh-detail^='sent:']")).toHaveCount(2);
+    await expect(page.locator("[data-anonymous-question], [data-anonymous-answer]")).toHaveCount(3);
+
+    await filters.getByRole("button", { name: "Polls", exact: true }).click();
+    await expect(page.locator("#personalInboxDescription")).toHaveText("Votes and nominations you received.");
+    await expect(page.locator("[data-feed-detail]")).toHaveCount(2);
+    await expect(page.locator("[data-tbh-detail], [data-tbh-request], [data-anonymous-question], [data-anonymous-answer]")).toHaveCount(0);
+
+    await filters.getByRole("button", { name: /TBHs/ }).click();
+    await expect(page.locator("#personalInboxDescription")).toHaveText("Honest notes, requests, and TBHs you sent.");
+    await expect(page.locator("[data-tbh-request]")).toHaveCount(1);
+    await expect(page.locator("[data-tbh-detail^='received:'], [data-tbh-detail^='sent:']")).toHaveCount(2);
+    await expect(page.locator("[data-feed-detail], [data-anonymous-question], [data-anonymous-answer]")).toHaveCount(0);
+
+    await filters.getByRole("button", { name: /Ask Me/ }).click();
+    await expect(page.locator("#personalInboxDescription")).toHaveText("Private questions and replies from your Ask Me link.");
+    await expect(page.locator("[data-anonymous-question], [data-anonymous-answer]")).toHaveCount(3);
+    await expect(page.locator("[data-feed-detail], [data-tbh-detail], [data-tbh-request]")).toHaveCount(0);
+
+    await page.getByRole("button", { name: "School", exact: true }).click();
+    await expect(page.locator("#personalInboxControls")).toBeHidden();
+    await expect(page.locator("#schoolFeedControls")).toBeVisible();
+});
+
 test("School merges public TBHs with Recent, Hottest, and content filters", async ({ page }) => {
     await signIn(page);
     await page.getByRole("button", { name: "School", exact: true }).click();
