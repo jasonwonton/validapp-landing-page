@@ -816,6 +816,20 @@ test("God Mode subscribers can reveal a vote sender and consume one weekly revea
     await expect(page.getByText(/1 weekly reveal left/)).toBeVisible();
 });
 
+test("God Mode subscribers can unsubscribe from edit profile details", async ({ page }) => {
+    await page.goto("/app/?demo=1&godmode=1");
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: "Profile information" }).click();
+    const informationDialog = page.getByRole("dialog");
+    const unsubscribe = informationDialog.getByRole("button", { name: /Unsubscribe from God Mode/ });
+    await expect(unsubscribe).toBeVisible();
+    page.once("dialog", (dialog) => dialog.accept());
+    await unsubscribe.click();
+    await expect(informationDialog.getByText(/Unsubscribed\. God Mode stays active through/)).toBeVisible();
+    await expect(informationDialog.getByRole("button", { name: /God Mode cancellation scheduled/ })).toBeDisabled();
+});
+
 test("settings removes the Find classmates shortcut", async ({ page }) => {
     await signInToDemo(page);
     await page.getByRole("button", { name: "Profile", exact: true }).click();

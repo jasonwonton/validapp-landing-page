@@ -53,6 +53,38 @@ test("local integration mode uses only the same-origin API proxy", async ({ page
     expect(baseURL).toBe("http://127.0.0.1:4173/api/v1");
 });
 
+test("real adapter sends Android God Mode unsubscribe to the authenticated endpoint", async ({ page }) => {
+    await useProductionApiOrigin(page);
+    const requests = [];
+    await page.route(`${API_ORIGIN}/api/v1/**`, async (route) => {
+        const request = route.request();
+        requests.push({
+            method: request.method(),
+            path: new URL(request.url()).pathname,
+            authorization: request.headers().authorization,
+        });
+        await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ provider: "stripe", cancel_at_period_end: true }),
+        });
+    });
+    await page.goto("/app/?signin=1");
+    requests.length = 0;
+    await page.evaluate(async (userId) => {
+        const { ValidAPI } = await import("/app/api.js");
+        const api = new ValidAPI();
+        api.saveSession({ access_token: "unsubscribe-token", user: { id: userId } });
+        await api.unsubscribeFromGodMode(userId);
+    }, USER_ID);
+
+    expect(requests).toEqual([{
+        method: "POST",
+        path: `/api/v1/users/${USER_ID}/god-mode/unsubscribe`,
+        authorization: "Bearer unsubscribe-token",
+    }]);
+});
+
 test("real adapter sends Ask Me safety requests with explicit report reasons", async ({ page }) => {
     const requests = [];
     await page.addInitScript((apiOrigin) => {

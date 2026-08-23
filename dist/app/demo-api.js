@@ -692,6 +692,14 @@ export class DemoAPI {
         return { completed: false, subscribed: false };
     }
 
+    async unsubscribeFromGodMode() {
+        return {
+            provider: "stripe",
+            cancel_at_period_end: true,
+            subscription_expires_at: ago(-4 * 24 * 60),
+        };
+    }
+
     async getAnonymousInbox() {
         return structuredClone(this.anonymousInbox);
     }

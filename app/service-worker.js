@@ -1,4 +1,4 @@
-const CACHE_NAME = "valid-web-v37";
+const CACHE_NAME = "valid-web-v38";
 const APP_SHELL = [
     "./",
     "./styles.css",
@@ -17,6 +17,7 @@ const APP_SHELL = [
     "../assets/app/anonymous.png",
     "../assets/app/pencil-clipboard.png",
     "../assets/app/lock.png",
+    "../assets/app/crown.png",
     "../assets/app/profile-at.svg",
     "../assets/app/profile-person-card.svg",
     "../assets/app/profile-school.svg",

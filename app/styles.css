@@ -898,6 +898,9 @@ body.play-active .play-actions { margin: 0; }
 .profile-editor-row small em.attention { color: #a3293c; }
 .profile-editor-row strong { overflow: hidden; font-size: 1.02rem; text-overflow: ellipsis; white-space: nowrap; }
 .profile-editor-row > span:last-child { color: rgba(5,9,20,.45); font-size: 1.6rem; }
+.god-mode-unsubscribe-row { border-color: #a3293c; color: #a3293c; }
+.god-mode-unsubscribe-row small, .god-mode-unsubscribe-row > span:last-child { color: #8a5962; }
+.god-mode-unsubscribe-row small em.scheduled { background: rgba(163,41,60,.12); color: #a3293c; }
 .profile-editor-validation { min-height: 20px; margin: 0; color: #a3293c; font-size: .82rem; line-height: 1.35; text-align: center; }
 .profile-username-field { min-height: 52px; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 4px; padding: 0 14px; border: 2px solid var(--ink); border-radius: 12px; background: var(--white); color: var(--ink) !important; font-size: 1.15rem; }
 .profile-information-flow .profile-username-field input { min-height: 48px !important; padding: 0 !important; border: 0 !important; background: transparent !important; font-size: 1.15rem; outline: 0; }

@@ -505,6 +505,10 @@ export class ValidAPI {
         return this.request(`/users/${userId}/stripe/checkout-session/${encodeURIComponent(sessionId)}`);
     }
 
+    unsubscribeFromGodMode(userId) {
+        return this.request(`/users/${userId}/god-mode/unsubscribe`, { method: "POST" });
+    }
+
     trackAskShare(userId, platform) {
         return this.request(`/users/${userId}/ask-shares`, {
             method: "POST",

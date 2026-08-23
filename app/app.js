@@ -123,6 +123,7 @@ const state = {
     stripeCheckoutSessionId: null,
     stripeCheckoutPollTimer: null,
     stripeCheckoutPollInFlight: false,
+    godModeCancellation: null,
     signupStep: 0,
     signupNearbySchools: [],
     signupSelectedSchool: null,
@@ -4530,9 +4531,44 @@ function renderProfileEditorHub() {
     const changeCount = profileChangedFieldCount();
     $("#profileReviewButton").textContent = changeCount === 1 ? "Review 1 change" : `Review ${changeCount} changes`;
     $("#profileReviewButton").disabled = !profileDraftIsValid();
+    const unsubscribeButton = $("#godModeUnsubscribeButton");
+    const cancellationScheduled = state.godModeCancellation?.cancel_at_period_end === true;
+    unsubscribeButton.classList.toggle("hidden", !hasActiveGodMode());
+    unsubscribeButton.disabled = cancellationScheduled;
+    $("#godModeUnsubscribeLabel").textContent = cancellationScheduled
+        ? "God Mode cancellation scheduled"
+        : "Unsubscribe from God Mode";
+    $("#godModeUnsubscribeBadge").textContent = cancellationScheduled ? "Scheduled" : "";
+    $("#godModeUnsubscribeBadge").className = cancellationScheduled ? "scheduled" : "";
     $("#profileEditHint").innerHTML = informationLocked
         ? `<strong>Profile changes are temporarily locked</strong><span>Username, name, school, and grade will be available again ${escapeHTML(relativeTime(state.profile.next_information_change_at))}.</span>`
         : "<strong>Profile changes are available every 14 days</strong><span>Change any combination below. Nothing is saved until you review and confirm everything.</span>";
+}
+
+async function unsubscribeFromGodMode() {
+    if (!hasActiveGodMode()) return;
+    const confirmed = confirm("Unsubscribe from God Mode? You’ll keep God Mode through the end of your current billing period, and then it won’t renew.");
+    if (!confirmed) return;
+    const button = $("#godModeUnsubscribeButton");
+    const status = $("#profileGodModeStatus");
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    status.textContent = "Updating your God Mode subscription...";
+    try {
+        const result = await api.unsubscribeFromGodMode(api.user.id);
+        state.godModeCancellation = result;
+        const ending = formatSafetyNoticeDate(result.subscription_expires_at);
+        status.textContent = ending
+            ? `Unsubscribed. God Mode stays active through ${ending}.`
+            : "Unsubscribed. God Mode stays active through the current billing period.";
+        showToast("God Mode renewal canceled");
+        renderProfileEditorHub();
+    } catch (error) {
+        status.textContent = friendlyErrorMessage(error, "Could not unsubscribe from God Mode.");
+        button.disabled = false;
+    } finally {
+        button.removeAttribute("aria-busy");
+    }
 }
 
 function renderProfileGradeOptions() {
@@ -4670,6 +4706,7 @@ function openProfileDialog() {
     $("#profileSchoolPicker").classList.add("hidden");
     $("#profileSchoolFallback").classList.add("hidden");
     $("#profileEditStatus").textContent = "";
+    $("#profileGodModeStatus").textContent = "";
     setProfileEditor("hub");
     $("#profileDialog").showModal();
 }
@@ -6194,6 +6231,7 @@ function bindEvents() {
     $("#profileEditorBack").addEventListener("click", () => setProfileEditor("hub"));
     $("#profileEditorCancel").addEventListener("click", cancelProfileEditor);
     $("#profileReviewButton").addEventListener("click", () => setProfileEditor("review"));
+    $("#godModeUnsubscribeButton").addEventListener("click", unsubscribeFromGodMode);
     $("#profileSchoolLookup").addEventListener("click", lookupProfileSchools);
     $("#profileSchoolSearch").addEventListener("input", renderProfileSchoolResults);
     $("#profileShowSchoolFallback").addEventListener("click", () => {
