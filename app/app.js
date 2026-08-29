@@ -585,14 +585,22 @@ function formatGrade(value = "") {
     return String(value).replace("S/O", "C/O").replace("Grade ", "");
 }
 
+function voterFirstLetterHint(item) {
+    const hint = String(item?.voter_first_letter_hint || "").trim();
+    return Array.from(hint)[0]?.toLocaleUpperCase() || "";
+}
+
 function formatVoterHint(item) {
     if (item.current_user_voted) return `from ${displayName(state.profile)}`;
     if (item.voter_name) return `from ${item.voter_name}`;
+    const firstLetter = voterFirstLetterHint(item);
+    const firstLetterSuffix = firstLetter ? ` (${firstLetter})` : "";
     const gender = String(item.voter_gender || "").toLowerCase();
     const emoji = ["female", "girl"].includes(gender) ? "👧💗" : ["male", "boy"].includes(gender) ? "👦💙" : gender === "non-binary" ? "🧑💛" : "";
     const grade = formatGrade(item.voter_grade || "");
-    if (grade) return `from ${emoji} ${grade}`.replace(/\s+/g, " ");
-    return emoji ? `from ${emoji}` : "";
+    if (grade) return `from ${emoji} ${grade}${firstLetterSuffix}`.replace(/\s+/g, " ");
+    if (emoji) return `from ${emoji}${firstLetterSuffix}`;
+    return firstLetter ? `from someone (${firstLetter})` : "";
 }
 
 function formatVoterDemographicsStatement(item) {
@@ -2625,6 +2633,8 @@ function renderFeedDetail() {
     const options = Array.isArray(item.presented_options) ? item.presented_options : [];
     const artworkURL = api.assetURL(item.image_url);
     const revealed = item.voter_name ? `<div class="revealed-sender-row">${avatarMarkup({ first_name: item.voter_name, profile_picture_url: item.voter_profile_picture_url }, "row-avatar")}<strong>Sent by ${escapeHTML(item.voter_name)}</strong></div>` : "";
+    const firstLetter = item.voter_name ? "" : voterFirstLetterHint(item);
+    const firstLetterHint = firstLetter ? `<p class="feed-detail-first-letter-hint">Hint: starts with ${escapeHTML(firstLetter)}</p>` : "";
     $("#feedDetailDialog .detail-screen-header > strong").textContent = formatVoterStatement(item);
     $("#feedDetailBody").innerHTML = `<article class="feed-detail-card">
         <h3>${escapeHTML(item.question_text)}</h3>
@@ -2634,6 +2644,7 @@ function renderFeedDetail() {
             const selected = name === selectedName;
             return `<div class="feed-detail-option ${selected ? "selected" : ""}"><strong>${escapeHTML(name)}</strong>${selected ? `<span class="feed-detail-selection-indicator" aria-label="Picked">👆</span>` : ""}</div>`;
         }).join("")}</div>` : `<div class="feed-detail-legacy-selection"><strong>Selected: ${escapeHTML(selectedName)}</strong><small>Options not available for this older vote</small></div>`}
+        ${firstLetterHint}
         ${revealed}
     </article>`;
     $("#blockFeedSubmitterButton").classList.toggle("hidden", !item.question_submitted_by_user_id || item.question_is_anonymous === true);

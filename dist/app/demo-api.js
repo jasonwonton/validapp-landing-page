@@ -76,6 +76,7 @@ export class DemoAPI {
                 voted_for_name: "Jules",
                 voter_gender: "female",
                 voter_grade: "Sophomore",
+                voter_first_letter_hint: this.demoGodMode ? "M" : null,
                 selected_contact_name: "Jules Rivera",
                 presented_options: [
                     { name: "Jules Rivera" }, { name: "Maya Chen" }, { name: "Noah Williams" }, { name: "Ava Patel" },
@@ -97,6 +98,7 @@ export class DemoAPI {
                 voted_for_name: "Jules",
                 voter_gender: "male",
                 voter_grade: "Senior",
+                voter_first_letter_hint: this.demoGodMode ? "E" : null,
                 selected_contact_name: "Jules Rivera",
                 presented_options: [
                     { name: "Jules Rivera" }, { name: "Eli Brooks" }, { name: "Sofia Kim" }, { name: "Mateo Lee" },

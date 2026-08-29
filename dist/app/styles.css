@@ -1147,6 +1147,7 @@ body.play-active .play-actions { margin: 0; }
 .feed-detail-selection-indicator { position: absolute; left: 50%; bottom: -17px; z-index: 2; font: 1.9rem/1 system-ui, sans-serif; filter: drop-shadow(2px 0 0 var(--ink)) drop-shadow(-2px 0 0 var(--ink)) drop-shadow(0 2px 0 var(--ink)) drop-shadow(0 -2px 0 var(--ink)); transform: translateX(-50%); }
 .feed-detail-legacy-selection { display: grid; gap: 9px; padding: 16px; border: 3px solid var(--ink); border-radius: 12px; background: rgba(255,255,255,.8); text-align: center; }
 .feed-detail-legacy-selection small { color: var(--muted); }
+.feed-detail-first-letter-hint { margin: -2px 0 0; color: var(--dark-teal); font-size: 1rem; text-align: center; }
 .feed-detail-actions { display: grid; gap: 8px; }
 .feed-detail-share { display: grid; gap: 0; }
 .reveal-sender-button { min-height: 60px; display: flex; align-items: center; justify-content: center; gap: 9px; border: 0; border-radius: 20px; background: rgba(255,255,255,.92); box-shadow: none; }

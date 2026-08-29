@@ -376,6 +376,14 @@ test("feed navigation, filtering, and reactions work", async ({ page }) => {
     await expect(detail.getByRole("heading", { name: "Who has the best music taste?" })).toBeVisible();
 });
 
+test("God Mode first-letter hints appear in the personal feed and poll detail", async ({ page }) => {
+    await signInToDemo(page, "&godmode=1");
+    const poll = page.locator("[data-feed-detail='9001']");
+    await expect(poll.locator(".feed-answer")).toContainText("Sophomore (M)");
+    await poll.click();
+    await expect(page.locator("#feedDetailDialog .feed-detail-first-letter-hint")).toHaveText("Hint: starts with M");
+});
+
 test("feed search includes classmates and filters their school activity", async ({ page }) => {
     await signInToDemo(page);
     await page.getByPlaceholder("Search names, questions...").fill("Maya");
