@@ -586,7 +586,7 @@ function formatGrade(value = "") {
 }
 
 function formatVoterHint(item) {
-    if (item.current_user_voted) return `from ${displayName(state.profile)}`;
+    if (item.current_user_voted) return `from ${displayName(state.profile)} (you 🫵)`;
     if (item.voter_name) return `from ${item.voter_name}`;
     const gender = String(item.voter_gender || "").toLowerCase();
     const emoji = ["female", "girl"].includes(gender) ? "👧💗" : ["male", "boy"].includes(gender) ? "👦💙" : gender === "non-binary" ? "🧑💛" : "";
