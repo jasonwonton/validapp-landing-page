@@ -591,7 +591,7 @@ function voterFirstLetterHint(item) {
 }
 
 function formatVoterHint(item) {
-    if (item.current_user_voted) return `from ${displayName(state.profile)}`;
+    if (item.current_user_voted) return `from ${displayName(state.profile)} (you 🫵)`;
     if (item.voter_name) return `from ${item.voter_name}`;
     const firstLetter = voterFirstLetterHint(item);
     const firstLetterSuffix = firstLetter ? ` (${firstLetter})` : "";
