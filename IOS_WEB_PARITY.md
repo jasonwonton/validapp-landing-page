@@ -148,12 +148,12 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 ## Device and evidence ledger
 
 Current candidate evidence: `npm run build`, UI runtime checks, and performance
-budgets pass. The exact current tree completed locally with **641 passed, 3
+budgets pass. The candidate code completed locally with **641 passed, 3
 expected non-Android skips, 0 failed, and no retries** across Pixel 7 Chromium,
-Desktop Chrome, Desktop Firefox, and Desktop WebKit. The prior
-[hosted run 33994169552](https://github.com/jasonwonton/validapp-landing-page/actions/runs/33994169552)
-completed with **629 passed, 3 expected skips, 0 failed, and no retries**; the
-new exact-head hosted run remains a release gate. The non-Chromium projects block service workers because
+Desktop Chrome, Desktop Firefox, and Desktop WebKit. The matching
+[hosted run 33997421524](https://github.com/jasonwonton/validapp-landing-page/actions/runs/33997421524)
+also passed static release checks and all four isolated browser jobs. The
+non-Chromium projects block service workers because
 [Playwright supports service workers only in Chromium-based browsers](https://playwright.dev/docs/service-workers);
 Chromium continues to cover install, offline-shell, cache-isolation, update, and
 push-worker behavior. A branded Google Chrome smoke against the production-style
