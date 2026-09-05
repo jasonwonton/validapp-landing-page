@@ -40,7 +40,10 @@ async function attachAndCropQuestionArtwork(page, questionDialog) {
 async function fillProductionSignupThroughGrade(dialog) {
     await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
     await dialog.locator('[data-signup-age="16"]').click();
+    await expect(dialog.locator("#signupAge")).toHaveValue("16");
     await dialog.getByRole("button", { name: "Continue" }).click();
+    await expect(dialog.getByLabel("ZIP code")).toBeVisible();
+    await expect(dialog.locator("#signupAge")).toHaveValue("16");
     await dialog.getByLabel("ZIP code").fill("90210");
     await dialog.getByRole("option", { name: /Westview High School/ }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();

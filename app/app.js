@@ -6143,6 +6143,12 @@ function bindEvents() {
         const wheel = event.currentTarget;
         if (signupAgeScrollFrame) cancelAnimationFrame(signupAgeScrollFrame);
         signupAgeScrollFrame = requestAnimationFrame(() => {
+            // Hiding the age step can reset the scroller and emit a late event.
+            // Never let that overwrite the age the user already committed.
+            if (state.signupStep !== 0) {
+                signupAgeScrollFrame = null;
+                return;
+            }
             const age = 13 + Math.round(wheel.scrollTop / 40);
             selectSignupAge(age, { scroll: false });
             signupAgeScrollFrame = null;
