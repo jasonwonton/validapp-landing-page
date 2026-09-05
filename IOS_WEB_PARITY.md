@@ -137,8 +137,8 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 ## Device and evidence ledger
 
 Current candidate evidence: `npm run build`, UI runtime checks, and performance
-budgets pass. [Hosted run 33991276822](https://github.com/jasonwonton/validapp-landing-page/actions/runs/33991276822)
-completed with **621 passed, 3 expected Android-only skips, 0 failed, and no
+budgets pass. [Hosted run 33994169552](https://github.com/jasonwonton/validapp-landing-page/actions/runs/33994169552)
+completed with **629 passed, 3 expected non-Android skips, 0 failed, and no
 retries** across isolated Pixel 7 Chromium, Desktop Chrome, Desktop Firefox, and
 Desktop WebKit jobs. The non-Chromium projects block service workers because
 [Playwright supports service workers only in Chromium-based browsers](https://playwright.dev/docs/service-workers);
