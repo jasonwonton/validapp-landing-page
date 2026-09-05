@@ -860,7 +860,7 @@ export class DemoAPI {
         };
     }
 
-    async getFeedbackHistory() {
+    async getFeedbackHistory(_feedbackId = null) {
         return {
             feedback: [
                 {

@@ -461,8 +461,11 @@ export class ValidAPI {
         });
     }
 
-    getFeedbackHistory() {
-        return this.request("/feedback");
+    getFeedbackHistory(feedbackId = null) {
+        const query = feedbackId
+            ? `?${new URLSearchParams({ feedback_id: String(feedbackId) })}`
+            : "";
+        return this.request(`/feedback${query}`);
     }
 
     updateInformation(userId, profile) {

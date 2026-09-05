@@ -676,7 +676,7 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
                 is_duplicate: questionFailureCount > 0,
             });
         }
-        if (path === "/api/v1/feedback" && request.method() === "GET") {
+        if (url.pathname === "/api/v1/feedback" && request.method() === "GET") {
             return fulfill({
                 feedback: [
                     {
@@ -1030,7 +1030,7 @@ test("feedback-response deep link opens the exact bounded history card", async (
     await expect(card).toBeFocused();
     await expect(card).toContainText("Make the active tab easier to spot.");
     await expect(card).toContainText("Thanks — we improved the active navigation state.");
-    expect(requests.filter((request) => request.method === "GET" && request.path === "/api/v1/feedback")).toHaveLength(1);
+    expect(requests.filter((request) => request.method === "GET" && request.path === "/api/v1/feedback?feedback_id=71111111-1111-1111-1111-111111111111")).toHaveLength(1);
     await expect(page).not.toHaveURL(/notification=|feedback_id=/);
     await expect(page).toHaveURL(/tab=profile/);
 });

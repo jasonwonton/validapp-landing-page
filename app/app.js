@@ -4903,7 +4903,7 @@ async function openFeedbackDialog(feedbackId = null) {
     $("#feedbackHistoryList").replaceChildren();
     $("#feedbackDialog").showModal();
     try {
-        const payload = await api.getFeedbackHistory();
+        const payload = await api.getFeedbackHistory(feedbackId);
         if (generation !== state.feedbackHistoryGeneration) return;
         state.feedbackHistory = Array.isArray(payload?.feedback) ? payload.feedback : [];
         renderFeedbackHistory();
