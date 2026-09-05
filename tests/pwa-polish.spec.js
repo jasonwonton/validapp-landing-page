@@ -449,7 +449,9 @@ test("school question artwork can be positioned and adjusted again", async ({ pa
     await crop.getByRole("button", { name: "Use photo" }).click();
 
     const adjust = question.getByRole("button", { name: "Adjust crop" });
-    await expect(adjust).toBeVisible();
+    // Canvas encode + data-URL preview creation can exceed the default action
+    // timeout on a contended mobile runner while the UI shows "Working...".
+    await expect(adjust).toBeVisible({ timeout: 15_000 });
     await adjust.click();
     await expect(crop).toBeVisible();
     await crop.getByRole("button", { name: "Cancel crop" }).click();
