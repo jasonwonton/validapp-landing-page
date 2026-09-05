@@ -43,7 +43,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Pending text after logout/deletion request | Equivalent | Not yet tested | Both text and media outboxes are erased for that user; automated coverage passes and final-origin verification remains. |
 | Daily Memento capture and JPEG preparation | Partial | Not yet tested | Browser camera/file input and bounded image preparation work, but the web flow captures one image rather than iOS's front/rear composite. Pixel, Samsung, and iPhone camera UX remain. |
 | Memento upload/finalize/publish | Equivalent | Not yet tested | Uses the same private backend lifecycle and one stable request ID; bounded origin-scoped IndexedDB recovery resumes on the next Chats open. Physical interruption testing remains. |
-| Memento reciprocity gate | Equivalent | Not yet tested | Locked message bodies stay out of the DOM; unlock journey passes in both lab projects. |
+| Memento reciprocity gate | Equivalent | Not yet tested | Locked message bodies stay out of the DOM; unlock journey passes in all four lab projects. |
 | Skip Memento for today | Equivalent | Not yet tested | Uses the same authoritative daily-row skip endpoint and unlocks without fabricating a post. |
 | Seven-day Memento history | Equivalent | Not yet tested | Date rail and historical rows are automated indirectly; timezone/DST physical tests remain. |
 | Multi-chat Memento audience | Equivalent | Not yet tested | Accepted-chat picker publishes one authoritative daily entry to all selected chats; automated coverage passes. |
@@ -63,14 +63,14 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Text/media overlays | Partial | Not yet tested | Centered accessible text overlays round-trip through the server; iOS-style positioning/editor gestures are absent. |
 | Voice messages | Partial | Not yet tested | Compatible browsers record MP4 audio locally with a five-minute ceiling; every browser retains M4A selection/capture, duration validation, private upload, playback, and recovery. Waveform editing and physical permission UX remain. |
 | Stickers | Partial | Not yet tested | Saved-sticker picker and idempotent send are automated; sticker creation remains in the iOS camera editor. |
-| Story rail, photo viewing, and view state | Equivalent | Not yet tested | Independently web-gated rail uses signed authoritative media and records a view only after reveal; Pixel/desktop automation passes, while final-origin and physical-device proof remain. |
+| Story rail, photo viewing, and view state | Equivalent | Not yet tested | Independently web-gated rail uses signed authoritative media and records a view only after reveal; four-project browser automation passes, while final-origin and physical-device proof remain. |
 | Story video viewing | Partial | Not yet tested | The same signed viewer supports controlled playback, but browser/device codec support must be proven and there is no safe universal web transcode. |
 | Story viewers, delete, and report | Equivalent | Not yet tested | Owner viewer/delete and non-owner moderation routes use the released contracts; production moderation and two-account smoke remain. |
 | Story creation/editor/publishing | Partial | Not yet tested | Photo/codec-compatible MP4 preparation, private upload/finalize, caption, centered overlay, stable publish IDs, and bounded reopen recovery are implemented. Multi-clip capture and gesture positioning remain iOS-only today. |
 | Story reply/share | Partial | Not yet tested | Text replies and up-to-10 classmate shares create or reuse authoritative chats with stable request IDs; iOS additionally offers registered-contact sharing for the Story owner, and physical two-account smoke remains. |
 | Conversation/inbox search | Equivalent | Not yet tested | Explicit bounded server search opens exact chats/messages; automation passes. |
 | Media recovery after refresh/network loss | Equivalent | Not yet tested | User-scoped IndexedDB retains at most 3 uploads/user and 10 globally for 24 hours, attempts at most 4 times, and reuses upload/send IDs. Mementos expire at the local day boundary rather than posting on the wrong day. Reopen delivery is automated; physical loss/recovery remains. |
-| Voice/video calls | Partial | Not yet tested | A separately gated, lazy LiveKit client supports open-app start, incoming accept/decline, microphone/video publication, authoritative camera slots, mute/camera controls, participant media, reconnect status, and end/leave. Mocked Pixel/desktop flows and released HTTP contracts pass; two-account LiveKit, device permissions, Bluetooth/audio route, participant moderation, rotation, backgrounding, and network handoff remain. Reliable closed-app/lock-screen ringing is native-only. |
+| Voice/video calls | Partial | Not yet tested | A separately gated, lazy LiveKit client supports open-app start, incoming accept/decline, microphone/video publication, authoritative camera slots, mute/camera controls, participant media, reconnect status, and end/leave. Mocked four-project browser flows and released HTTP contracts pass; two-account LiveKit, device permissions, Bluetooth/audio route, participant moderation, rotation, backgrounding, and network handoff remain. Reliable closed-app/lock-screen ringing is native-only. |
 | Group photo / appearance controls | Partial | Not yet tested | Owners can prepare and replace the authoritative group photo; richer iOS appearance controls remain absent. |
 
 ## Notifications and background behavior
@@ -85,7 +85,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Incoming-call Web Push | Partial | Not yet tested | With `ENABLE_WEB_CALLS=1`, the call-start transaction writes one durable browser intent per subscription with the authoritative ringing expiry, stable call collapse ID, and exact call route. It does not replace PushKit; final-origin notification/device proof remains. |
 | Closed-app incoming call | Native-only | Not yet tested | iOS uses PushKit and CallKit. The deliberate PWA alternative is an expiring visible Web Push that opens the exact call; browsers cannot guarantee immediate execution, full-screen ringing, or background media while the PWA is closed. |
 | TBH/feed push | Equivalent | Not yet tested | TBH, comment, reaction, vote, upvote, and reveal notifications with authoritative item IDs route to that exact PWA item; final-origin regression smoke remains. |
-| Question-approval push | Equivalent | Not yet tested | Approval enters the independently failure-isolated durable Web Push path without changing APNS and opens the exact authoritative submission in My Questions, even while Feed voting is locked. Pixel/desktop contract tests cover routing; final-origin tray proof remains. |
+| Question-approval push | Equivalent | Not yet tested | Approval enters the independently failure-isolated durable Web Push path without changing APNS and opens the exact authoritative submission in My Questions, even while Feed voting is locked. Four-project browser contract tests cover routing; final-origin tray proof remains. |
 | Silent inbox invalidation | Native-only | Not yet tested | iOS can receive a content-available background invalidation. The PWA deliberately avoids a misleading visible notification and repairs from the authoritative inbox when foregrounded. |
 | Notification grouping | Equivalent | Not yet tested | The service worker honors server tags, and durable collapse identities now become stable browser tags instead of being discarded; Android notification-tray validation remains. |
 | Notification preferences | Partial | Not yet tested | Global browser subscription and chat level work; full iOS notification-category audit remains. |
@@ -128,7 +128,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Onboarding/profile/classmates | Equivalent | Not yet tested | Candidate regression suite and physical responsive pass remain. |
 | Personal/School feed and reactions | Equivalent | Not yet tested | Existing automated journeys; production canary remains. |
 | Play, skips, nomination, question submission | Equivalent | Not yet tested | Server-configured costs/limits and idempotency covered; production canary remains. |
-| School-question history, results, withdrawal, and deactivation | Equivalent | Not yet tested | The bounded 100-row My Questions view uses the released GET/DELETE contracts, server-owned result thresholds, and exact approval target. Pixel/desktop automation covers published results, deactivation with poll preservation, and pending withdrawal/refund; final-origin and moderation smoke remain. |
+| School-question history, results, withdrawal, and deactivation | Equivalent | Not yet tested | The bounded 100-row My Questions view uses the released GET/DELETE contracts, server-owned result thresholds, and exact approval target. Four-project browser automation covers published results, deactivation with poll preservation, and pending withdrawal/refund; final-origin and moderation smoke remain. |
 | TBH and Anonymous Inbox | Equivalent | Not yet tested | Existing automation; exact Web Push routes remain in notification gate. |
 | Moderation/blocking | Equivalent | Not yet tested | Existing non-chat flows remain intact and chat-context block uses the same authoritative account-wide endpoint. |
 | Account deletion and cancellation | Equivalent | Not yet tested | Backend remains authoritative; PWA erases pending chat text and private media for that user on deletion request or logout. |
@@ -136,8 +136,13 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 ## Device and evidence ledger
 
 Current candidate evidence: `npm run build`, UI runtime checks, and performance
-budgets pass; the complete Playwright run is **311 passed, 1 expected
-desktop-only skip, 0 failed** across Pixel 7 and Desktop Chrome projects. The
+budgets pass; the complete Playwright run is **621 passed, 3 expected
+Android-only skips, 0 failed** across Pixel 7 Chromium, Desktop Chrome, Desktop
+Firefox, and Desktop WebKit projects. The non-Chromium projects block service
+workers because [Playwright supports service workers only in Chromium-based
+browsers](https://playwright.dev/docs/service-workers); Chromium continues to
+cover install, offline-shell, cache-isolation, update, and push-worker behavior.
+The
 header-emitting production-origin adapter passes **3 static-origin contract
 tests**, and its standalone DigitalOcean staging spec validates successfully. The
 scoped backend chat/Memento/Story/Web Push/config safety run is **273 passed, 0
@@ -148,11 +153,13 @@ approval.
 | Target | State | Required before release |
 | --- | --- | --- |
 | Pixel 7 Chromium emulation | Automated | Passing Chats/Mementos, Stories, voice-recording fallback, contract, outbox, dark-mode, adapter, runtime, and performance suites. Emulation is not a physical-device substitute. |
-| Desktop Chrome emulation | Automated | Same scoped suite passing; Firefox, Safari, and Edge remain. |
+| Desktop Chrome | Automated | Full suite passing with Chromium service-worker coverage. Branded Chrome hardware remains part of the final-origin smoke test. |
+| Desktop Firefox | Automated | Full application suite passing with service workers blocked at the Playwright boundary; real Firefox notification/install behavior remains a hands-on gate. |
+| Desktop WebKit engine | Automated | Full application suite passing with service workers blocked. This is neither branded Safari nor an installed iPhone PWA, so Safari service-worker, push, media, and install behavior remain open. |
 | Physical Pixel | Not yet tested | Install, camera, push, offline/reopen, keyboard, long scroll, update, two-account realtime. |
 | Physical Samsung | Not yet tested | Repeat with Samsung Internet and Chrome plus Samsung Keyboard and aggressive backgrounding. |
 | iPhone installed PWA | Not yet tested | Safari install, camera, keyboard/safe areas, push, exact links, passkey, update. |
-| Desktop Chrome/Edge/Firefox/Safari | Not yet tested | Supported-browser matrix, notification availability, keyboard/accessibility, and degraded alternatives. |
+| Desktop Edge and Safari | Not yet tested | Branded-browser final-origin smoke, notification availability, keyboard/accessibility, and degraded alternatives. |
 | Final `https://validapp.lol/app/` origin | Blocked | Current deployment fails the response-CSP framing gate; candidate headers, push subscription, and exact links still require private final-origin testing. |
 | Current App Store iOS binary | Not yet tested | Full smoke against the candidate backend before any production web flag changes. |
 

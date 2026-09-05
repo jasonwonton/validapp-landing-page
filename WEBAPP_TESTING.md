@@ -4,13 +4,17 @@
 
 ```bash
 npm ci
-npx playwright install chromium
+npx playwright install chromium firefox webkit
 npm run test:e2e
 ```
 
-The suite runs every core flow in a Pixel 7 viewport and desktop Chrome. The
-localhost-only demo never calls production and cannot be enabled on a public
-host.
+The suite runs every core flow in a Pixel 7 Chromium viewport plus Desktop
+Chrome, Firefox, and WebKit. Firefox and WebKit run with service workers blocked
+because Playwright supports service-worker automation only in Chromium; the two
+Chromium projects retain the install, offline-shell, cache-isolation, update,
+and push-worker coverage. WebKit is not branded Safari and does not replace the
+installed-iPhone gate below. The localhost-only demo never calls production and
+cannot be enabled on a public host.
 
 For hands-on testing:
 

@@ -12,10 +12,12 @@ const MAX_MEDIA_RECORDS_GLOBAL = 10;
 const MAX_MEDIA_AGE_MS = 24 * 60 * 60 * 1000;
 let latestCreatedAt = 0;
 let latestMediaCreatedAt = 0;
+let databasePromise = null;
 
 function openDatabase() {
     if (typeof indexedDB === "undefined") return Promise.resolve(null);
-    return new Promise((resolve, reject) => {
+    if (databasePromise) return databasePromise;
+    const openingPromise = new Promise((resolve, reject) => {
         const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
         request.onupgradeneeded = () => {
             const database = request.result;
@@ -28,9 +30,32 @@ function openDatabase() {
                 mediaStore.createIndex("user_id", "user_id", { unique: false });
             }
         };
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
+        request.onblocked = () => {
+            if (databasePromise === openingPromise) databasePromise = null;
+            reject(new Error("The local outbox database is blocked by another app window."));
+        };
+        request.onsuccess = () => {
+            const database = request.result;
+            if (databasePromise !== openingPromise) {
+                database.close();
+                return;
+            }
+            database.onversionchange = () => {
+                database.close();
+                if (databasePromise === openingPromise) databasePromise = null;
+            };
+            database.onclose = () => {
+                if (databasePromise === openingPromise) databasePromise = null;
+            };
+            resolve(database);
+        };
+        request.onerror = () => {
+            if (databasePromise === openingPromise) databasePromise = null;
+            reject(request.error);
+        };
     });
+    databasePromise = openingPromise;
+    return databasePromise;
 }
 
 function requestResult(request) {
@@ -47,23 +72,74 @@ async function withStore(mode, callback) {
 async function withNamedStore(storeName, mode, callback) {
     const database = await openDatabase();
     if (!database) return null;
-    try {
-        const transaction = database.transaction(storeName, mode);
-        const completion = new Promise((resolve, reject) => {
-            transaction.oncomplete = resolve;
-            transaction.onabort = () => reject(transaction.error);
-            transaction.onerror = () => reject(transaction.error);
-        });
-        const result = await callback(transaction.objectStore(storeName));
-        await completion;
-        return result;
-    } finally {
-        database.close();
-    }
+    const transaction = database.transaction(storeName, mode);
+    const completion = new Promise((resolve, reject) => {
+        transaction.oncomplete = resolve;
+        transaction.onabort = () => reject(transaction.error);
+        transaction.onerror = () => reject(transaction.error);
+    });
+    const result = await callback(transaction.objectStore(storeName));
+    await completion;
+    return result;
 }
 
 async function allMediaRecords() {
     return (await withNamedStore(MEDIA_STORE_NAME, "readonly", (store) => requestResult(store.getAll()))) || [];
+}
+
+async function serializeMediaValue(value) {
+    if (!value) return null;
+    if (typeof Blob !== "undefined" && value instanceof Blob) {
+        return {
+            bytes: await value.arrayBuffer(),
+            type: String(value.type || "application/octet-stream"),
+            name: typeof File !== "undefined" && value instanceof File ? String(value.name || "") : "",
+            last_modified: typeof File !== "undefined" && value instanceof File ? Number(value.lastModified || 0) : 0,
+        };
+    }
+    if (value instanceof ArrayBuffer) {
+        return { bytes: value.slice(0), type: "application/octet-stream", name: "", last_modified: 0 };
+    }
+    if (ArrayBuffer.isView(value)) {
+        return {
+            bytes: value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength),
+            type: "application/octet-stream",
+            name: "",
+            last_modified: 0,
+        };
+    }
+    throw new TypeError("Media recovery requires a Blob, File, or byte buffer.");
+}
+
+function hydrateMediaRecord(record) {
+    if (!record) return record;
+    const {
+        file: legacyFile,
+        thumbnail: legacyThumbnail,
+        file_bytes: fileBytes,
+        file_type: fileType,
+        file_name: fileName,
+        file_last_modified: fileLastModified,
+        thumbnail_bytes: thumbnailBytes,
+        thumbnail_type: thumbnailType,
+        thumbnail_name: thumbnailName,
+        thumbnail_last_modified: thumbnailLastModified,
+        ...metadata
+    } = record;
+    const restore = (legacy, bytes, type, name, lastModified) => {
+        if (legacy) return legacy;
+        if (!(bytes instanceof ArrayBuffer) && !ArrayBuffer.isView(bytes)) return null;
+        const parts = [bytes];
+        if (name && typeof File !== "undefined") {
+            return new File(parts, name, { type: type || "application/octet-stream", lastModified: Number(lastModified || 0) });
+        }
+        return new Blob(parts, { type: type || "application/octet-stream" });
+    };
+    return {
+        ...metadata,
+        file: restore(legacyFile, fileBytes, fileType, fileName, fileLastModified),
+        thumbnail: restore(legacyThumbnail, thumbnailBytes, thumbnailType, thumbnailName, thumbnailLastModified),
+    };
 }
 
 async function pruneMedia(now = Date.now()) {
@@ -179,23 +255,40 @@ export async function putChatMediaOutbox(record) {
     const now = Date.now();
     const createdAt = Number(previous?.created_at || record.created_at || Math.max(now, latestMediaCreatedAt + 1));
     latestMediaCreatedAt = Math.max(latestMediaCreatedAt, createdAt);
+    const { file, thumbnail, ...metadata } = record;
+    const [serializedFile, serializedThumbnail] = await Promise.all([
+        serializeMediaValue(file),
+        serializeMediaValue(thumbnail),
+    ]);
     const saved = {
-        ...record,
+        ...metadata,
         id: String(record.id),
         user_id: String(record.user_id),
+        file_bytes: serializedFile.bytes,
+        file_type: serializedFile.type,
+        file_name: serializedFile.name,
+        file_last_modified: serializedFile.last_modified,
+        thumbnail_bytes: serializedThumbnail?.bytes || null,
+        thumbnail_type: serializedThumbnail?.type || null,
+        thumbnail_name: serializedThumbnail?.name || null,
+        thumbnail_last_modified: serializedThumbnail?.last_modified || 0,
         created_at: createdAt,
         attempts: Number(record.attempts ?? previous?.attempts ?? 0),
         next_attempt_at: Number(record.next_attempt_at ?? previous?.next_attempt_at ?? 0),
     };
+    const hydratedSaved = hydrateMediaRecord(saved);
     await withNamedStore(MEDIA_STORE_NAME, "readwrite", (store) => requestResult(store.put(saved)));
     await pruneMedia();
-    return saved;
+    return hydratedSaved;
 }
 
 export async function listChatMediaOutbox(userId) {
     if (!userId) return [];
     await pruneMedia();
-    return (await allMediaRecords()).filter((record) => record.user_id === String(userId)).sort((left, right) => Number(left.created_at) - Number(right.created_at));
+    return (await allMediaRecords())
+        .filter((record) => record.user_id === String(userId))
+        .sort((left, right) => Number(left.created_at) - Number(right.created_at))
+        .map(hydrateMediaRecord);
 }
 
 export async function markChatMediaOutboxAttempt(id, now = Date.now()) {
@@ -204,7 +297,7 @@ export async function markChatMediaOutboxAttempt(id, now = Date.now()) {
     const attempts = Number(record.attempts || 0) + 1;
     const updated = { ...record, attempts, next_attempt_at: now + Math.min(5 * 60_000, 2_000 * (2 ** Math.min(attempts, 7))) };
     await withNamedStore(MEDIA_STORE_NAME, "readwrite", (store) => requestResult(store.put(updated)));
-    return updated;
+    return hydrateMediaRecord(updated);
 }
 
 export async function removeChatMediaOutbox(id) {
@@ -220,7 +313,8 @@ export async function clearChatMediaOutbox(userId) {
 }
 
 export async function clearChatOutboxes(userId) {
-    await Promise.all([clearChatTextOutbox(userId), clearChatMediaOutbox(userId)]);
+    await clearChatTextOutbox(userId);
+    await clearChatMediaOutbox(userId);
 }
 
 export function chatTextSendIsRetryable(error) {

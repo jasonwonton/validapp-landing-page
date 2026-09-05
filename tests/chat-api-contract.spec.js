@@ -43,7 +43,8 @@ test("production chat adapter matches the released iOS chat and Memento contract
         await api.createDailyHighlightUpload(userId, 12345, "66666666-6666-6666-6666-666666666666");
     }, { userId: USER_ID, chatId: CHAT_ID });
 
-    expect(requests.map(({ method, path, body }) => ({ method, path, body }))).toEqual([
+    const contractRequests = requests.filter((request) => request.path !== "/api/v1/auth/session");
+    expect(contractRequests.map(({ method, path, body }) => ({ method, path, body }))).toEqual([
         { method: "GET", path: `/api/v1/users/${USER_ID}/chats?limit=50&offset=0&timezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, body: null },
         { method: "GET", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/messages?limit=50&timezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}&after_sequence=8`, body: null },
         { method: "POST", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/messages`, body: { body: "Hi", client_request_id: "55555555-5555-5555-5555-555555555555", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } },
@@ -55,7 +56,7 @@ test("production chat adapter matches the released iOS chat and Memento contract
         { method: "POST", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/daily-row/skip`, body: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } },
         { method: "POST", path: `/api/v1/users/${USER_ID}/daily-highlight-uploads?delivery=proxy`, body: { content_type: "image/jpeg", size_bytes: 12345, client_request_id: "66666666-6666-6666-6666-666666666666" } },
     ]);
-    expect(requests.every((request) => request.authorization === "Bearer chat-token")).toBe(true);
+    expect(contractRequests.every((request) => request.authorization === "Bearer chat-token")).toBe(true);
 });
 
 test("production chat adapter preserves invitation, membership, moderation, and notification contracts", async ({ page }) => {

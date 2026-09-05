@@ -14,6 +14,8 @@ export default defineConfig({
     projects: [
         { name: "android", use: { ...devices["Pixel 7"] } },
         { name: "desktop", use: { ...devices["Desktop Chrome"] } },
+        { name: "desktop-firefox", use: { ...devices["Desktop Firefox"], serviceWorkers: "block" } },
+        { name: "desktop-webkit", workers: 1, use: { ...devices["Desktop Safari"], serviceWorkers: "block" } },
     ],
     webServer: {
         command: "python3 -m http.server 4173",

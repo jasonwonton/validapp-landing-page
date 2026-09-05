@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 
 const API_ORIGIN = "https://api.six7.lol";
@@ -443,7 +444,7 @@ async function installWebPushStub(page, { existing = true } = {}) {
 
 async function interceptProductionAPI(page, { signup = false, phoneExists = false, profileAura = 500, questionFailureCount = 0, webPushFailureCount = 0, feedLocked = false, wrappedAskTarget = false } = {}) {
     await useProductionApiOrigin(page);
-    const imagePixel = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lM5gWQAAAABJRU5ErkJggg==", "base64");
+    const imagePixel = readFileSync(new URL("../assets/pwa/icon-192.png", import.meta.url));
     await page.route("https://cdn.example/**", (route) => {
         if (route.request().url().includes("_thumb.")) return route.fulfill({ status: 404 });
         return route.fulfill({ status: 200, contentType: "image/png", body: imagePixel });

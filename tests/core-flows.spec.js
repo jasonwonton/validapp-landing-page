@@ -289,6 +289,7 @@ test("bottom tabs preserve independent scroll positions", async ({ page }) => {
     await page.evaluate(() => scrollTo(0, 360));
     const feedScroll = await page.evaluate(() => scrollY);
     await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
     await page.evaluate(() => scrollTo(0, 720));
     const profileScroll = await page.evaluate(() => scrollY);
     await page.getByRole("button", { name: "Feed", exact: true }).click();
@@ -442,8 +443,9 @@ test("feed polls open the iOS-style detail and moderation flow", async ({ page }
 
 test("feed polls can be privately deleted without reporting", async ({ page }) => {
     await signInToDemo(page);
-    await page.locator("[data-feed-detail='9002']").click();
+    await page.locator("[data-feed-detail='9002'] .feed-question").click();
     const dialog = page.locator("#feedDetailDialog");
+    await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "More poll actions" }).click();
     page.once("dialog", async (confirmation) => {
         expect(confirmation.message()).toContain("It won't be reported or affect anyone else.");

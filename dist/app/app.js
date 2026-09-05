@@ -5622,7 +5622,7 @@ function switchPanel(panel, { historyMode = "push", restoreScroll = true } = {})
     });
     if (historyMode !== "none") writeNavigationState(historyMode);
     const targetScroll = restoreScroll ? state.tabScrollPositions[panel] || 0 : 0;
-    requestAnimationFrame(() => scrollTo({ top: targetScroll, behavior: "instant" }));
+    requestAnimationFrame(() => scrollTo({ top: targetScroll, behavior: "auto" }));
     void activatePanelRoute(panel);
 }
 
@@ -5907,6 +5907,18 @@ function subscriptionUsesVapidKey(subscription, publicKey) {
     return current.length === expected.length && current.every((value, index) => value === expected[index]);
 }
 
+async function readyServiceWorker(timeoutMs = 5_000) {
+    let timeout;
+    try {
+        return await Promise.race([
+            navigator.serviceWorker.ready,
+            new Promise((resolve) => { timeout = setTimeout(() => resolve(null), timeoutMs); }),
+        ]);
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
 async function syncWebPushSubscription(subscription) {
     const config = await api.getWebPushConfig();
     if (!config?.enabled || !config.vapid_public_key) {
@@ -5915,7 +5927,8 @@ async function syncWebPushSubscription(subscription) {
     let current = subscription;
     if (!subscriptionUsesVapidKey(current, config.vapid_public_key)) {
         await current.unsubscribe();
-        const registration = await navigator.serviceWorker.ready;
+        const registration = await readyServiceWorker();
+        if (!registration) throw new Error("Notification setup is not ready. Try again in a moment.");
         current = await registration.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(config.vapid_public_key),
@@ -5937,7 +5950,8 @@ async function refreshWebPushStatus({ sync = false } = {}) {
         return;
     }
     try {
-        const registration = await navigator.serviceWorker.ready;
+        const registration = await readyServiceWorker();
+        if (!registration) throw new Error("Notification setup is not ready. Try again in a moment.");
         state.webPushSubscription = await registration.pushManager.getSubscription();
     } catch (_) {
         state.webPushSubscription = null;
@@ -5963,8 +5977,8 @@ async function refreshWebPushStatus({ sync = false } = {}) {
 
 async function detachWebPushSubscription() {
     if (!webPushSupported() || !api.user?.id) return;
-    const registration = await navigator.serviceWorker.ready;
-    const subscription = state.webPushSubscription || await registration.pushManager.getSubscription();
+    const registration = state.webPushSubscription ? null : await readyServiceWorker(1_500);
+    const subscription = state.webPushSubscription || await registration?.pushManager.getSubscription();
     if (!subscription) return;
     const endpoint = subscription.endpoint;
     await subscription.unsubscribe();
@@ -5992,7 +6006,8 @@ async function toggleWebPush() {
         const permissionPromise = Notification.permission === "default"
             ? Notification.requestPermission()
             : Promise.resolve(Notification.permission);
-        const registration = await navigator.serviceWorker.ready;
+        const registration = await readyServiceWorker();
+        if (!registration) throw new Error("Notification setup is not ready. Try again in a moment.");
         const existing = state.webPushSubscription || await registration.pushManager.getSubscription();
         if (existing) {
             if (state.webPushRegistrationState === "on") {

@@ -27,17 +27,21 @@ Never put a production `DATABASE_URL`, Redis URL, or messaging credential in a
 local `.env`. `make dev` disables outbound push, vote SMS, and delayed
 notifications, but a separate dev database is still required.
 
-## 1. Automated check (about two minutes)
+## 1. Automated check
 
 ```bash
 cd /path/to/validapp-landing-page
 npm ci
-npx playwright install chromium
+npx playwright install chromium firefox webkit
 npm run test:e2e
 ```
 
-The suite exercises the core flows in Pixel 7 and desktop Chrome profiles. It
-uses browser-level API contracts and demo data; it never calls production.
+The suite exercises the core flows in Pixel 7 Chromium, Desktop Chrome,
+Firefox, and WebKit profiles. Non-Chromium projects block service workers at
+Playwright's documented automation boundary; Chromium retains the PWA worker,
+offline, cache, update, and push checks. WebKit is not branded Safari and does
+not replace physical iPhone/Safari testing. The suite uses browser-level API
+contracts and demo data; it never calls production.
 
 For the cryptographic passkey integration check, keep the Six7 repository in a
 sibling directory with its virtual environment installed, then run:
