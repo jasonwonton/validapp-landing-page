@@ -1,6 +1,9 @@
 import { ValidAPI } from "./api.js";
 import { DemoAPI, localDemoAllowed } from "./demo-api.js";
 import { createAdditionalPasskey, createSignupPasskey, passkeysSupported, signInWithPasskey } from "./passkeys.js";
+import { startPerformanceMonitoring } from "./performance.js";
+import { createRealtimeList } from "./realtime-list.js";
+import { activateRoute, preloadRoute } from "./routes/route-loader.js";
 
 const demoMode = localDemoAllowed();
 const api = demoMode ? new DemoAPI() : new ValidAPI();
@@ -51,6 +54,7 @@ const PERSONAL_INBOX_FILTERS = {
 const state = {
     profile: null,
     activePanel: "feed",
+    chatUnreadCount: 0,
     feedType: "personal",
     personalInboxFilter: "all",
     myVotesOnly: false,
@@ -97,6 +101,10 @@ const state = {
     config: null,
     pendingQuestionSubmissionKey: null,
     pendingQuestionDraft: null,
+    questionSubmissions: [],
+    questionSubmissionsGeneration: 0,
+    questionSubmissionToRemove: null,
+    highlightedQuestionSubmissionId: null,
     askLink: null,
     askAccess: null,
     askSafetyNotices: [],
@@ -149,6 +157,8 @@ const state = {
     profileNearbySchools: [],
     profileSchoolLookupGeneration: 0,
     profileCheckedUsername: null,
+    profilePanelLoadedAt: 0,
+    profilePanelLoading: null,
     viewportBaselineWidth: window.innerWidth,
     viewportBaselineHeight: window.innerHeight,
     installPrompt: null,
@@ -157,7 +167,7 @@ const state = {
     webPushRegistrationState: "off",
     webPushRegistrationError: "",
     detailReturnFocus: null,
-    tabScrollPositions: { feed: 0, play: 0, profile: 0 },
+    tabScrollPositions: { feed: 0, play: 0, chats: 0, profile: 0 },
     navigationInitialized: false,
     handlingPopState: false,
     pullRefreshStartY: null,
@@ -166,8 +176,84 @@ const state = {
     appUpdateRequested: false,
 };
 
-const $ = (selector) => document.querySelector(selector);
-const $$ = (selector) => [...document.querySelectorAll(selector)];
+const feedItemsStore = createRealtimeList({
+    keyOf: (item) => item.question_answer_id,
+});
+
+function commitFeedItems(items, { reset = false } = {}) {
+    state.feedItems = reset
+        ? feedItemsStore.replace(items, { flush: "sync" })
+        : feedItemsStore.upsert(items, { flush: "sync", merge: false });
+    return state.feedItems;
+}
+
+let feedRealtimeRenderFrame = null;
+
+function applyFeedRealtimeEvent(event) {
+    feedItemsStore.apply(event);
+    if (feedRealtimeRenderFrame !== null) return;
+    feedRealtimeRenderFrame = requestAnimationFrame(() => {
+        feedRealtimeRenderFrame = null;
+        state.feedItems = feedItemsStore.snapshot();
+        if (state.activePanel === "feed" && document.body.classList.contains("authenticated")) renderFeed();
+    });
+}
+
+startPerformanceMonitoring({ disabled: demoMode, getRoute: () => state.activePanel });
+
+const parkedUIRoots = new Map();
+
+function queryParkedUI(selector, all = false) {
+    const matches = [];
+    for (const fragment of parkedUIRoots.values()) {
+        if (all) matches.push(...fragment.querySelectorAll(selector));
+        else {
+            const match = fragment.querySelector(selector);
+            if (match) return match;
+        }
+    }
+    return all ? matches : null;
+}
+
+const $ = (selector) => document.querySelector(selector) || queryParkedUI(selector);
+const $$ = (selector) => [...document.querySelectorAll(selector), ...queryParkedUI(selector, true)];
+
+function parkUIRoot(root) {
+    if (!root?.childNodes.length || parkedUIRoots.has(root)) return;
+    const fragment = document.createDocumentFragment();
+    fragment.append(...root.childNodes);
+    parkedUIRoots.set(root, fragment);
+    root.dataset.uiParked = "true";
+}
+
+function mountUIRoot(root) {
+    const fragment = parkedUIRoots.get(root);
+    if (!fragment) return root;
+    root.append(fragment);
+    parkedUIRoots.delete(root);
+    delete root.dataset.uiParked;
+    return root;
+}
+
+function initializeParkedUI() {
+    document.querySelectorAll("dialog:not(#deleteAccountDialog)").forEach((dialog) => {
+        dialog.addEventListener("close", () => requestAnimationFrame(() => {
+            if (!dialog.open) parkUIRoot(dialog);
+        }));
+        parkUIRoot(dialog);
+    });
+}
+
+const nativeShow = HTMLDialogElement.prototype.show;
+const nativeShowModal = HTMLDialogElement.prototype.showModal;
+HTMLDialogElement.prototype.show = function showMountedDialog() {
+    mountUIRoot(this);
+    return nativeShow.call(this);
+};
+HTMLDialogElement.prototype.showModal = function showMountedModal() {
+    mountUIRoot(this);
+    return nativeShowModal.call(this);
+};
 
 function friendlyErrorMessage(error, fallback = "Something went wrong. Please try again.") {
     const raw = typeof error === "string" ? error : error?.message;
@@ -213,7 +299,7 @@ function restoreCachedAppState() {
     const cachedClassmates = readAppCache("classmates");
     const cachedContactClassmateIds = readAppCache("contact-classmates");
     if (cachedProfile) state.profile = cachedProfile;
-    if (Array.isArray(cachedFeed)) state.feedItems = cachedFeed;
+    if (Array.isArray(cachedFeed)) commitFeedItems(cachedFeed, { reset: true });
     if (Array.isArray(cachedClassmates)) {
         state.classmates = cachedClassmates;
         state.classmateDirectory = cachedClassmates;
@@ -227,6 +313,7 @@ function navigationURL(panel = state.activePanel, detail = null) {
     const url = new URL(location.href);
     if (panel === "feed") url.searchParams.delete("tab");
     else url.searchParams.set("tab", panel);
+    if (panel !== "chats") url.searchParams.delete("chat");
     url.hash = detail ? `screen=${encodeURIComponent(detail)}` : "";
     return `${url.pathname}${url.search}${url.hash}`;
 }
@@ -241,7 +328,7 @@ function initializeAppNavigation() {
     if (state.navigationInitialized) return;
     state.navigationInitialized = true;
     const requested = new URLSearchParams(location.search).get("tab");
-    const panel = ["feed", "play", "profile"].includes(requested) ? requested : "feed";
+    const panel = ["feed", "play", "chats", "profile"].includes(requested) ? requested : "feed";
     switchPanel(panel, { historyMode: "replace", restoreScroll: false });
 }
 
@@ -253,7 +340,8 @@ function handleAppPopState(event) {
     if (!document.body.classList.contains("authenticated")) return;
     state.handlingPopState = true;
     closeVisibleDetailScreens({ fromHistory: true });
-    const panel = ["feed", "play", "profile"].includes(event.state?.panel) ? event.state.panel : "feed";
+    const requestedPanel = event.state?.panel || new URLSearchParams(location.search).get("tab");
+    const panel = ["feed", "play", "chats", "profile"].includes(requestedPanel) ? requestedPanel : "feed";
     switchPanel(panel, { historyMode: "none", restoreScroll: true });
     const detail = event.state?.detail ? document.getElementById(event.state.detail) : null;
     if (detail?.classList.contains("detail-screen")) openDetailScreen(detail, { historyMode: "none" });
@@ -283,6 +371,16 @@ function syncVisualViewport() {
     document.documentElement.style.setProperty("--signup-visual-offset", `${viewport.offsetTop}px`);
     document.documentElement.classList.toggle("keyboard-open", keyboardOpen);
     if (keyboardOpen) requestAnimationFrame(keepFocusedControlVisible);
+}
+
+let visualViewportFrame = null;
+
+function scheduleVisualViewportSync() {
+    if (visualViewportFrame !== null) return;
+    visualViewportFrame = requestAnimationFrame(() => {
+        visualViewportFrame = null;
+        syncVisualViewport();
+    });
 }
 
 function keepFocusedControlVisible() {
@@ -355,7 +453,7 @@ function avatarMarkup(profile, className = "row-avatar", fallbackURL = null) {
     const name = displayName(profile);
     const fallbackInitials = initials(profile);
     return `<span class="${className}">${imageURL
-        ? `<img src="${escapeHTML(imageURL)}" alt="${escapeHTML(name)}" data-avatar-image data-avatar-initials="${escapeHTML(fallbackInitials)}"${fallbackImageURL ? ` data-avatar-fallback="${escapeHTML(fallbackImageURL)}"` : ""}>`
+        ? `<img loading="lazy" decoding="async" src="${escapeHTML(imageURL)}" alt="${escapeHTML(name)}" data-avatar-image data-avatar-initials="${escapeHTML(fallbackInitials)}"${fallbackImageURL ? ` data-avatar-fallback="${escapeHTML(fallbackImageURL)}"` : ""}>`
         : `<span>${escapeHTML(fallbackInitials)}</span>`}</span>`;
 }
 
@@ -403,7 +501,7 @@ function shareIconMarkup(platform) {
     if (platform === "tiktok") {
         return `<svg viewBox="0 0 64 64" role="img" aria-label="TikTok"><rect width="64" height="64" rx="15" fill="#000"/><path d="M37 14c1 7 5 11 12 12v8c-5 0-9-2-12-4v13c0 9-7 14-15 12-7-2-11-9-9-16 2-6 7-10 14-10v8c-4 0-6 2-6 5 0 4 3 6 6 5 2-1 3-3 3-6V14h7Z" fill="#25f4ee" transform="translate(-2 1)"/><path d="M39 13c1 7 5 11 12 12v7c-5 0-9-2-12-4v14c0 8-7 14-15 12-6-2-10-8-9-14 1-7 7-11 14-11v7c-4 0-6 2-6 5 0 4 3 6 6 5 2-1 3-3 3-6V13h7Z" fill="#fe2c55" transform="translate(2 -1)"/><path d="M38 14c1 6 5 10 11 11v6c-4 0-8-1-11-4v14c0 7-6 12-13 11-6-1-10-7-8-13 1-5 5-8 11-8v6c-3 0-5 2-5 5 0 3 3 5 6 4 2-1 3-3 3-6V14h6Z" fill="#fff"/></svg>`;
     }
-    return `<img src="../assets/app/snapchat-logo.png" alt="Snapchat">`;
+    return `<img loading="lazy" decoding="async" src="../assets/app/snapchat-logo.webp" alt="Snapchat">`;
 }
 
 function appSymbolMarkup(symbol, className = "app-symbol") {
@@ -419,6 +517,7 @@ function appSymbolMarkup(symbol, className = "app-symbol") {
 }
 
 function openDetailScreen(screen, { historyMode = "push" } = {}) {
+    mountUIRoot(screen);
     closeDetailActionMenus();
     state.detailReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     screen.classList.remove("hidden");
@@ -464,7 +563,7 @@ function showSignedOut(message = "") {
     $("#logoutButton").classList.add("hidden");
     document.body.classList.remove("authenticated", "play-active");
     state.navigationInitialized = false;
-    state.tabScrollPositions = { feed: 0, play: 0, profile: 0 };
+    state.tabScrollPositions = { feed: 0, play: 0, chats: 0, profile: 0 };
     $("#authStatus").textContent = friendlyErrorMessage(message, "");
 }
 
@@ -480,8 +579,14 @@ async function showSignedIn() {
     setTimeout(syncVisualViewport, 120);
     restoreCachedAppState();
     if (!state.feedItems.length && !isFeedVoteLocked()) renderFeedSkeleton();
+    const deferredAccountState = Promise.all([
+        api.getAnonymousAskAccess(api.user.id).catch(() => null),
+        api.getAnonymousAskSafetyNotices(api.user.id).catch(() => []),
+        api.getAnonymousAskSafetyNotices(api.user.id, true).catch(() => []),
+        api.getPasskeyStatus().catch(() => null),
+    ]);
     try {
-        const [profile, currentUser, classmatesStatus, config, askAccess, askSafetyNotices, askSafetyNoticeHistory, passkeyStatus] = await Promise.all([
+        const [profile, currentUser, classmatesStatus, config] = await Promise.all([
             api.getProfile(api.user.id),
             api.getUser(api.user.id).catch(() => api.user),
             api.getClassmatesStatus(api.user.id).catch(() => null),
@@ -495,30 +600,31 @@ async function showSignedIn() {
                 full_reveal_aura_cost: DEFAULT_FULL_REVEAL_AURA_COST,
                 enable_tbh_requests: false,
             })),
-            api.getAnonymousAskAccess(api.user.id).catch(() => null),
-            api.getAnonymousAskSafetyNotices(api.user.id).catch(() => []),
-            api.getAnonymousAskSafetyNotices(api.user.id, true).catch(() => []),
-            api.getPasskeyStatus().catch(() => null),
         ]);
         api.user = { ...api.user, ...currentUser };
         state.profile = profile;
         state.classmatesStatus = classmatesStatus;
         state.config = config;
-        state.askAccess = askAccess;
-        state.askSafetyNotices = askSafetyNotices;
-        state.askSafetyNoticeHistory = askSafetyNoticeHistory;
-        state.passkeyStatus = passkeyStatus;
+        const chatsEnabled = config.enable_chats === true && config.enable_web_chats === true;
+        $('.nav-item[data-panel="chats"]').classList.toggle("hidden", !chatsEnabled);
+        $("#bottomNav").classList.toggle("chats-enabled", chatsEnabled);
         writeAppCache("profile", profile);
         renderProfileHeader();
-        renderPasskeyStatus();
         renderFeedGate();
         initializeAppNavigation();
         refreshWebPushStatus({ sync: true });
         if (!isFeedVoteLocked()) await loadFeed(true);
         await handleNotificationRoute();
         if (api.user?.deletion_requested_at) showPendingDeletion();
-        else showNextAskSafetyNotice();
-        maybePromptForPasskeyEnrollment();
+        void deferredAccountState.then(([askAccess, askSafetyNotices, askSafetyNoticeHistory, passkeyStatus]) => {
+            state.askAccess = askAccess;
+            state.askSafetyNotices = askSafetyNotices;
+            state.askSafetyNoticeHistory = askSafetyNoticeHistory;
+            state.passkeyStatus = passkeyStatus;
+            renderPasskeyStatus();
+            if (!api.user?.deletion_requested_at) showNextAskSafetyNotice();
+            maybePromptForPasskeyEnrollment();
+        });
     } catch (error) {
         if (error.status !== 401) $("#feedStatus").textContent = error.message || "Could not load your profile.";
     }
@@ -527,9 +633,12 @@ async function showSignedIn() {
 async function handleNotificationRoute() {
     const params = new URLSearchParams(location.search);
     const notification = params.get("notification");
-    if (!notification || isFeedVoteLocked()) return;
+    if (!notification) return;
+    if (isFeedVoteLocked() && notification !== "question_submission") return;
     switchPanel("feed");
-    if (notification === "tbh_request") {
+    if (notification === "question_submission") {
+        openQuestionDialog({ section: "history", submissionId: params.get("submission_id") });
+    } else if (notification === "tbh_request") {
         await loadTbhContent();
         const requestId = params.get("tbh_request_id");
         if (state.tbhPendingRequests.some((item) => String(item.id) === String(requestId))) openTbhComposer(requestId);
@@ -562,6 +671,7 @@ async function handleNotificationRoute() {
     params.delete("tbh_request_id");
     params.delete("tbh_response_id");
     params.delete("question_answer_id");
+    params.delete("submission_id");
     history.replaceState(history.state, "", `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`);
 }
 
@@ -577,7 +687,7 @@ function renderProfileHeader() {
     const imageURL = api.assetURL(profile.profile_picture_url_thumb || profile.profile_picture_url);
     $("#questionIdentityName").textContent = displayName(profile);
     $("#questionIdentityAvatar").innerHTML = imageURL
-        ? `<img src="${escapeHTML(imageURL)}" alt="">`
+        ? `<img loading="lazy" decoding="async" src="${escapeHTML(imageURL)}" alt="">`
         : escapeHTML(initials(profile));
 }
 
@@ -585,14 +695,22 @@ function formatGrade(value = "") {
     return String(value).replace("S/O", "C/O").replace("Grade ", "");
 }
 
+function voterFirstLetterHint(item) {
+    const hint = String(item?.voter_first_letter_hint || "").trim();
+    return Array.from(hint)[0]?.toLocaleUpperCase() || "";
+}
+
 function formatVoterHint(item) {
     if (item.current_user_voted) return `from ${displayName(state.profile)} (you 🫵)`;
     if (item.voter_name) return `from ${item.voter_name}`;
+    const firstLetter = voterFirstLetterHint(item);
+    const firstLetterSuffix = firstLetter ? ` (${firstLetter})` : "";
     const gender = String(item.voter_gender || "").toLowerCase();
     const emoji = ["female", "girl"].includes(gender) ? "👧💗" : ["male", "boy"].includes(gender) ? "👦💙" : gender === "non-binary" ? "🧑💛" : "";
     const grade = formatGrade(item.voter_grade || "");
-    if (grade) return `from ${emoji} ${grade}`.replace(/\s+/g, " ");
-    return emoji ? `from ${emoji}` : "";
+    if (grade) return `from ${emoji} ${grade}${firstLetterSuffix}`.replace(/\s+/g, " ");
+    if (emoji) return `from ${emoji}${firstLetterSuffix}`;
+    return firstLetter ? `from someone (${firstLetter})` : "";
 }
 
 function formatVoterDemographicsStatement(item) {
@@ -637,7 +755,7 @@ function renderProfilePolls(container, questions, emptyMessage) {
         const imageURL = api.assetURL(question.image_url);
         const pollKey = `${question.question_id || question.id || index}`;
         return `<button class="profile-poll-row" type="button" data-top-poll="${escapeHTML(pollKey)}" aria-label="Open poll: ${escapeHTML(question.question_text)}">
-            <div class="profile-poll-art">${imageURL ? `<img src="${escapeHTML(imageURL)}" alt="">` : `<span>${index + 1}</span>`}</div>
+            <div class="profile-poll-art">${imageURL ? `<img loading="lazy" decoding="async" src="${escapeHTML(imageURL)}" alt="">` : `<span>${index + 1}</span>`}</div>
             <div class="profile-poll-copy"><strong>${escapeHTML(question.question_text)}</strong><span>♥ ${Number(question.vote_count || 0).toLocaleString()} votes</span></div>
             <span class="profile-poll-chevron" aria-hidden="true">›</span>
         </button>`;
@@ -679,21 +797,21 @@ function renderProfilePanel() {
     const hasProfilePhoto = Boolean(imageURL && !String(profile.profile_picture_url || "").includes("default.png"));
     $("#profileCard").innerHTML = `<article class="full-profile-card">
         <button class="profile-photo-button" type="button" data-edit-photo aria-label="Change profile picture">
-            <span class="full-profile-avatar">${imageURL ? `<img src="${escapeHTML(imageURL)}" alt="${escapeHTML(displayName(profile))}">` : `<span>${escapeHTML(initials(profile))}</span>`}</span>
+            <span class="full-profile-avatar">${imageURL ? `<img loading="lazy" decoding="async" src="${escapeHTML(imageURL)}" alt="${escapeHTML(displayName(profile))}">` : `<span>${escapeHTML(initials(profile))}</span>`}</span>
             <span class="photo-edit-badge" aria-hidden="true">✎</span>
         </button>
         ${hasProfilePhoto ? "" : '<p class="profile-photo-warning">⚠️ Users without profile pictures receive less votes.</p>'}
         <h3>${escapeHTML(displayName(profile))}</h3>
         <div class="profile-identity-line"><span class="profile-handle">@${escapeHTML(profile.username || "valid")}</span>${streak ? `<span class="profile-streak ${profile.streak_needs_activity ? "needs-activity" : ""}" aria-label="${streak} day streak">🔥 ${streak}</span>` : ""}</div>
         <button class="profile-bio-button ${profile.bio ? "" : "empty"}" type="button" data-edit-bio>${profile.bio ? escapeHTML(profile.bio) : '<span>Add bio</span><span class="profile-add-bio-icon" aria-hidden="true">+</span>'}</button>
-        ${(schoolName || grade) ? `<div class="profile-school-meta">${schoolName ? `<span class="profile-school-meta-item"><img src="../assets/app/profile-school.svg" alt=""><span>${escapeHTML(schoolName)}</span></span>` : ""}${grade ? `<span class="profile-school-meta-item"><img src="../assets/app/profile-graduation-cap.svg" alt=""><span>${escapeHTML(grade)}</span></span>` : ""}</div>` : ""}
+        ${(schoolName || grade) ? `<div class="profile-school-meta">${schoolName ? `<span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-school.svg" alt=""><span>${escapeHTML(schoolName)}</span></span>` : ""}${grade ? `<span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-graduation-cap.svg" alt=""><span>${escapeHTML(grade)}</span></span>` : ""}</div>` : ""}
         <button class="profile-information-inline" type="button" data-edit-profile>
             <span class="profile-information-icon">${profileInformationIcon(canChangeInformation)}</span>
             <span class="profile-information-copy"><strong>Profile information</strong>${informationStatus ? `<small>${escapeHTML(informationStatus)}</small>` : ""}</span>
             <span class="profile-information-chevron" aria-hidden="true">›</span>
         </button>
         <div class="profile-stats-grid">
-            <div class="profile-stat-card"><strong><img class="profile-aura-icon" src="../assets/app/aura.png" alt="">${Number(profile.aura_points || 0).toLocaleString()}</strong><span>Aura</span></div>
+            <div class="profile-stat-card"><strong><img loading="lazy" decoding="async" class="profile-aura-icon" src="../assets/app/aura.webp" alt="">${Number(profile.aura_points || 0).toLocaleString()}</strong><span>Aura</span></div>
             <div class="profile-stat-card"><strong><span class="heart">♥</span>${Number(profile.vote_count || 0).toLocaleString()}</strong><span>Votes Received</span></div>
         </div>
     </article>`;
@@ -751,7 +869,7 @@ function renderProfileInviteCard() {
     container.innerHTML = `<article class="profile-invite-card">
         <div><strong>${remaining ? `Invite ${remaining} more ${remaining === 1 ? "friend" : "friends"}` : "Invite reward complete"}</strong><p>Bring friends to Valid and earn bonus aura when they join.</p></div>
         <div class="profile-invite-progress"><span><strong>${progress} / ${goal}</strong><small>qualifying invites</small></span><progress max="${goal}" value="${progress}" aria-label="${progress} of ${goal} qualifying invites"></progress></div>
-        <div class="profile-invite-actions"><button class="profile-share-button snapchat" type="button" data-profile-invite="snapchat"><img src="../assets/app/snapchat-logo.png" alt=""><span>Snapchat</span></button><button class="profile-share-button messages" type="button" data-profile-invite="imessage">${appSymbolMarkup("message", "messages-symbol")}<span>Messages</span></button></div>
+        <div class="profile-invite-actions"><button class="profile-share-button snapchat" type="button" data-profile-invite="snapchat"><img loading="lazy" decoding="async" src="../assets/app/snapchat-logo.webp" alt=""><span>Snapchat</span></button><button class="profile-share-button messages" type="button" data-profile-invite="imessage">${appSymbolMarkup("message", "messages-symbol")}<span>Messages</span></button></div>
         <p id="profileInviteStatus" class="status-message" role="status"></p>
     </article>`;
 }
@@ -778,17 +896,34 @@ async function shareProfileInvite(button, channel) {
     }
 }
 
+function personalInboxUnreadCounts() {
+    const polls = state.feedItems.filter((item) => item.is_new === true || item.unread === true).length;
+    const tbhs = state.tbhPendingRequests.filter((item) => !item.opened_at).length
+        + state.tbhInboxItems.filter((item) => !item.opened_at).length;
+    const askMe = (state.anonymousInbox?.questions || []).filter((item) => !item.opened_at).length;
+    return { all: polls + tbhs + askMe, polls, tbhs, ask_me: askMe };
+}
+
 function renderTabBadges() {
     const unread = personalInboxUnreadCounts().all;
     const feedBadge = $("#feedTabBadge");
     feedBadge.textContent = unread > 9 ? "9+" : String(unread || "");
     feedBadge.classList.toggle("hidden", unread < 1);
     if ("setAppBadge" in navigator) {
-        const badgePromise = unread > 0 ? navigator.setAppBadge(unread) : navigator.clearAppBadge?.();
+        const totalUnread = unread + Number(state.chatUnreadCount || 0);
+        const badgePromise = totalUnread > 0 ? navigator.setAppBadge(totalUnread) : navigator.clearAppBadge?.();
         Promise.resolve(badgePromise).catch(() => null);
     }
     const profileIncomplete = !state.profile?.profile_picture_url || !String(state.profile?.bio || "").trim();
     $("#profileTabBadge").classList.toggle("hidden", !profileIncomplete);
+}
+
+function renderChatUnreadBadge(count) {
+    state.chatUnreadCount = Math.max(0, Number(count || 0));
+    const badge = $("#chatsTabBadge");
+    badge.textContent = state.chatUnreadCount > 9 ? "9+" : String(state.chatUnreadCount || "");
+    badge.classList.toggle("hidden", state.chatUnreadCount < 1);
+    renderTabBadges();
 }
 
 function renderPasskeyStatus() {
@@ -816,7 +951,7 @@ function renderGodModeCard() {
     const weeklyReveals = Math.max(1, Number(state.config?.max_full_reveals_per_week || 2));
     const weeklyPrice = Math.max(0, Number(state.config?.god_mode_price || 6.99));
     $("#godModeCard").innerHTML = `<article class="god-mode-card ${active ? "active" : ""}">
-        <div class="god-mode-title"><span><img src="../assets/app/crown.png" alt=""></span><div><strong>${active ? "God Mode Active" : "God Mode"}</strong><small>${active ? "Everything unlocked" : `$${weeklyPrice.toFixed(2)} / week`}</small></div>${active ? `<span class="god-mode-active">✨ Active</span>` : ""}</div>
+        <div class="god-mode-title"><span><img loading="lazy" decoding="async" src="../assets/app/crown.webp" alt=""></span><div><strong>${active ? "God Mode Active" : "God Mode"}</strong><small>${active ? "Everything unlocked" : `$${weeklyPrice.toFixed(2)} / week`}</small></div>${active ? `<span class="god-mode-active">✨ Active</span>` : ""}</div>
         <p class="god-mode-benefits-heading">${active ? "You're enjoying:" : "Go legendary with:"}</p>
         <ul><li>${weeklyReveals} weekly reveals to see exactly who voted.</li><li>First-letter hints on every poll.</li><li>${multiplier}× aura on every answer you give.</li><li>Get boosted to the top of classmates' polls.</li></ul>
         ${active
@@ -857,19 +992,19 @@ function renderGodModePitch() {
     $("#godModePitchBody").innerHTML = `<div class="god-mode-pitch-topbar"><button class="god-mode-close-button" type="button" data-close-dialog aria-label="Close God Mode">×</button></div>
         <section class="god-mode-pitch-hero">
             <h2>See who likes you with</h2>
-            <div class="god-mode-pitch-brand"><img src="../assets/app/crown.png" alt=""><strong>God Mode</strong></div>
+            <div class="god-mode-pitch-brand"><img loading="lazy" decoding="async" src="../assets/app/crown.webp" alt=""><strong>God Mode</strong></div>
         </section>
         <div class="god-mode-benefit-carousel" aria-label="God Mode benefits">
             <article class="god-mode-benefit-card">
                 <div class="god-mode-reveal-preview" aria-hidden="true">
-                    <img class="god-mode-letter" src="../assets/app/letter_aligned.png" alt="">
-                    <span class="god-mode-lens"><img src="../assets/app/magnifying_glass.png" alt=""><span class="god-mode-reveal-names">${revealNames.map((name) => `<strong>${escapeHTML(name).replace(" ", "<br>")}</strong>`).join("")}</span></span>
+                    <img loading="lazy" decoding="async" class="god-mode-letter" src="../assets/app/letter_aligned.webp" alt="">
+                    <span class="god-mode-lens"><img loading="lazy" decoding="async" src="../assets/app/magnifying_glass.webp" alt=""><span class="god-mode-reveal-names">${revealNames.map((name) => `<strong>${escapeHTML(name).replace(" ", "<br>")}</strong>`).join("")}</span></span>
                 </div>
                 <h3>${weeklyReveals} Reveals / Week</h3><p>See the full names on ${weeklyReveals} polls every week.</p>
             </article>
-            <article class="god-mode-benefit-card"><img class="god-mode-benefit-image scroll" src="../assets/app/scroll.png" alt=""><h3>First-Letter Hints</h3><p>Get the first letter on every personal poll automatically.</p></article>
-            <article class="god-mode-benefit-card"><img class="god-mode-benefit-image aura" src="../assets/app/aura.png" alt=""><h3>${multiplier}× Aura Boost</h3><p>Earn ${multiplier === 2 ? "double" : `${multiplier}×`} aura for every answer you give in Play.</p></article>
-            <article class="god-mode-benefit-card"><img class="god-mode-benefit-image rocket" src="../assets/app/rocket.png" alt=""><h3>Get boosted</h3><p>Get boosted to the top of your classmates' polls to see what they think of you.</p></article>
+            <article class="god-mode-benefit-card"><img loading="lazy" decoding="async" class="god-mode-benefit-image scroll" src="../assets/app/scroll.webp" alt=""><h3>First-Letter Hints</h3><p>Get the first letter on every personal poll automatically.</p></article>
+            <article class="god-mode-benefit-card"><img loading="lazy" decoding="async" class="god-mode-benefit-image aura" src="../assets/app/aura.webp" alt=""><h3>${multiplier}× Aura Boost</h3><p>Earn ${multiplier === 2 ? "double" : `${multiplier}×`} aura for every answer you give in Play.</p></article>
+            <article class="god-mode-benefit-card"><img loading="lazy" decoding="async" class="god-mode-benefit-image rocket" src="../assets/app/rocket.webp" alt=""><h3>Get boosted</h3><p>Get boosted to the top of your classmates' polls to see what they think of you.</p></article>
         </div>
         <div class="god-mode-page-dots" aria-hidden="true"><span class="active"></span><span></span><span></span><span></span></div>
         <div class="god-mode-pitch-actions">
@@ -1057,7 +1192,7 @@ function renderAuraPurchases() {
             : insufficient
             ? `${label}. Need ${(cost - aura).toLocaleString()} more aura`
             : label;
-        return `<button class="aura-price-button ${insufficient ? "insufficient" : ""}" type="button" data-buy-aura="${kind}" aria-label="${escapeHTML(ariaLabel)}" ${active || insufficient ? "disabled" : ""}>${active ? "Active" : `<span>${cost.toLocaleString()}</span><img src="../assets/app/aura.png" alt="aura">`}</button>`;
+        return `<button class="aura-price-button ${insufficient ? "insufficient" : ""}" type="button" data-buy-aura="${kind}" aria-label="${escapeHTML(ariaLabel)}" ${active || insufficient ? "disabled" : ""}>${active ? "Active" : `<span>${cost.toLocaleString()}</span><img loading="lazy" decoding="async" src="../assets/app/aura.webp" alt="aura">`}</button>`;
     };
     container.innerHTML = `<article class="purchase-row"><span><strong>Get boosted</strong><small>Jump to the top of classmates' polls for 5 days or until you get voted 10 times.</small></span>${purchaseButton("global", globalCost, globalBoost ? "Global boost active" : `Get boosted for ${globalCost.toLocaleString()} aura`, Boolean(globalBoost))}</article>
         <article class="purchase-row"><span><strong>See what your crush thinks about you</strong><small>Your crush stays top secret. You appear more often in their polls.</small></span>${purchaseButton("targeted", targetedCost, `Choose a crush for ${targetedCost.toLocaleString()} aura`)}</article>
@@ -1301,7 +1436,7 @@ function openTopPoll(pollKey) {
     state.selectedTopPoll = question;
     const imageURL = api.assetURL(question.image_url);
     $("#pollSummaryBody").innerHTML = `<article class="poll-summary-card">
-        ${imageURL ? `<div class="profile-poll-art"><img src="${escapeHTML(imageURL)}" alt=""></div>` : ""}
+        ${imageURL ? `<div class="profile-poll-art"><img loading="lazy" decoding="async" src="${escapeHTML(imageURL)}" alt=""></div>` : ""}
         <h3>${escapeHTML(question.question_text)}</h3>
         <span class="poll-summary-votes"><span aria-hidden="true">♥</span><strong>${Number(question.vote_count || 0).toLocaleString()} votes</strong></span>
         <button class="primary-button" type="button" data-share-top-poll>Share poll</button>
@@ -1348,7 +1483,7 @@ function openAuraSpend(kind, target = null) {
     state.pendingAuraPurchase = { kind, target };
     const spendIcon = $("#auraSpendIcon");
     const targetImage = ["targeted", "tbh"].includes(kind) ? api.assetURL(target?.profile_picture_url_medium || target?.profile_picture_url) : null;
-    spendIcon.src = targetImage || (kind === "reveal" ? "../assets/app/magnifying_glass.png" : "../assets/app/rocket.png");
+    spendIcon.src = targetImage || (kind === "reveal" ? "../assets/app/magnifying_glass.webp" : "../assets/app/rocket.webp");
     spendIcon.alt = kind === "global" ? "Get Boosted" : kind === "reveal" ? "Reveal sender" : displayName(target);
     spendIcon.closest(".aura-spend-icon").classList.toggle("profile", Boolean(targetImage));
     $("#auraSpendTitle").textContent = details[0];
@@ -1357,7 +1492,7 @@ function openAuraSpend(kind, target = null) {
     $("#auraSpendRemaining").textContent = `${Math.max(0, aura - cost).toLocaleString()} aura`;
     const confirmButton = $("#confirmAuraSpend");
     confirmButton.dataset.label = `Spend ${cost.toLocaleString()} aura`;
-    confirmButton.innerHTML = `<span>Spend ${cost.toLocaleString()} aura</span><img src="../assets/app/aura.png" alt="">`;
+    confirmButton.innerHTML = `<span>Spend ${cost.toLocaleString()} aura</span><img loading="lazy" decoding="async" src="../assets/app/aura.webp" alt="">`;
     $("#auraSpendStatus").textContent = "";
     $("#auraSpendDialog").showModal();
 }
@@ -1405,7 +1540,7 @@ async function confirmAuraSpend() {
                 : state.pendingAuraPurchase.kind === "reveal"
                 ? Math.max(0, Number(state.config?.full_reveal_aura_cost ?? DEFAULT_FULL_REVEAL_AURA_COST))
                 : auraCost(state.pendingAuraPurchase.kind);
-            button.innerHTML = `<span>Spend ${cost.toLocaleString()} aura</span><img src="../assets/app/aura.png" alt="">`;
+            button.innerHTML = `<span>Spend ${cost.toLocaleString()} aura</span><img loading="lazy" decoding="async" src="../assets/app/aura.webp" alt="">`;
         }
     }
 }
@@ -1420,7 +1555,7 @@ function renderTargetedBoostList() {
             return {
                 dataAttribute: `data-targeted-boost="${escapeHTML(classmate.user_id)}"`,
                 disabled: active,
-                trailingMarkup: `<span class="nomination-cost ${active ? "active" : ""}">${active ? "Active" : `<span>${cost.toLocaleString()}</span><img src="../assets/app/aura.png" alt="aura">`}</span>`,
+                trailingMarkup: `<span class="nomination-cost ${active ? "active" : ""}">${active ? "Active" : `<span>${cost.toLocaleString()}</span><img loading="lazy" decoding="async" src="../assets/app/aura.webp" alt="aura">`}</span>`,
             };
         },
     });
@@ -1486,11 +1621,11 @@ function renderClassmateProfile() {
     if (!profile) return;
     const imageURL = api.assetURL(profile.profile_picture_url_medium || profile.profile_picture_url);
     $("#classmateProfileCard").innerHTML = `<article class="full-profile-card classmate-profile-card">
-        <span class="full-profile-avatar">${imageURL ? `<img src="${escapeHTML(imageURL)}" alt="${escapeHTML(displayName(profile))}">` : `<span>${escapeHTML(initials(profile))}</span>`}</span>
+        <span class="full-profile-avatar">${imageURL ? `<img loading="lazy" decoding="async" src="${escapeHTML(imageURL)}" alt="${escapeHTML(displayName(profile))}">` : `<span>${escapeHTML(initials(profile))}</span>`}</span>
         <h3>${escapeHTML(displayName(profile))}</h3>
         <div class="profile-handle">${profile.username ? `@${escapeHTML(profile.username)}` : "Valid classmate"}</div>
         ${profile.bio ? `<p class="profile-bio">${escapeHTML(profile.bio)}</p>` : ""}
-        <div class="profile-school-meta"><span class="profile-school-meta-item"><img src="../assets/app/profile-school.svg" alt=""><span>${escapeHTML(profile.school_name || state.profile?.school_name || "Your school")}</span></span>${profile.grade ? `<span class="profile-school-meta-item"><img src="../assets/app/profile-graduation-cap.svg" alt=""><span>${escapeHTML(formatGrade(profile.grade))}</span></span>` : ""}</div>
+        <div class="profile-school-meta"><span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-school.svg" alt=""><span>${escapeHTML(profile.school_name || state.profile?.school_name || "Your school")}</span></span>${profile.grade ? `<span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-graduation-cap.svg" alt=""><span>${escapeHTML(formatGrade(profile.grade))}</span></span>` : ""}</div>
         ${state.selectedClassmateAskTarget?.public_token ? `<a class="primary-button classmate-ask-button" href="../a/${encodeURIComponent(state.selectedClassmateAskTarget.public_token)}">${appSymbolMarkup("ask", "ask-me-symbol")}<span>Ask anonymously</span></a>` : ""}
         <div class="profile-stats-grid ${tbhRequestsEnabled() ? "" : "single"}">
             <div class="profile-stat-card"><strong><span class="heart">♥</span>${Number(profile.vote_count || 0).toLocaleString()}</strong><span>Votes Received</span></div>
@@ -1579,8 +1714,20 @@ async function moderateSelectedClassmate(action) {
     }
 }
 
-async function loadProfilePanel() {
+async function loadProfilePanel({ force = false } = {}) {
     renderProfilePanel();
+    if (!force && Date.now() - state.profilePanelLoadedAt < 60_000) return;
+    if (state.profilePanelLoading) return state.profilePanelLoading;
+    state.profilePanelLoading = refreshProfilePanelData();
+    try {
+        await state.profilePanelLoading;
+        state.profilePanelLoadedAt = Date.now();
+    } finally {
+        state.profilePanelLoading = null;
+    }
+}
+
+async function refreshProfilePanelData() {
     $("#profileStatus").textContent = "Loading your profile...";
     const requests = [
         { key: "profile", promise: api.getProfile(api.user.id) },
@@ -1922,7 +2069,7 @@ function renderSignupSchoolResults() {
         const logoURL = school.logo_url ? api.assetURL(school.logo_url) : "";
         const initials = String(school.name || "S").split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase();
         return `<button class="signup-school-result ${selected ? "selected" : ""}" type="button" role="option" aria-selected="${selected}" data-signup-school="${escapeHTML(school.id)}">
-            <span class="signup-school-logo">${logoURL ? `<img src="${escapeHTML(logoURL)}" alt="">` : escapeHTML(initials)}</span>
+            <span class="signup-school-logo">${logoURL ? `<img loading="lazy" decoding="async" src="${escapeHTML(logoURL)}" alt="">` : escapeHTML(initials)}</span>
             <span><strong>${escapeHTML(school.name)}</strong><small>${escapeHTML(schoolLocationLabel(school))}${Number.isFinite(Number(school.distance_miles)) ? ` · ${Number(school.distance_miles).toFixed(1)} mi` : ""}</small></span>
             <span class="signup-school-check" aria-hidden="true">${selected ? "✓" : "›"}</span>
         </button>`;
@@ -2235,12 +2382,6 @@ async function createAccount(event) {
     }
 }
 
-function feedAvatar(item) {
-    if (state.feedType === "personal") return avatarMarkup(state.profile);
-    const votedFor = { first_name: item.voted_for_name || item.contact_name || "Student", profile_picture_url: item.voted_for_profile_picture_url };
-    return avatarMarkup(votedFor);
-}
-
 function promptForKey(key) {
     return TBH_PROMPTS.find((prompt) => prompt.key === key) || TBH_PROMPTS[0];
 }
@@ -2262,23 +2403,6 @@ function dominantReaction(item) {
         .map(([type]) => REACTION_BY_TYPE.get(type))[0] || null;
 }
 
-function reactionControlMarkup(item, targetType, targetId) {
-    normalizeReactionState(item);
-    const displayed = dominantReaction(item);
-    const selected = REACTION_BY_TYPE.get(item.current_user_reaction);
-    const canReact = item.can_react !== false && Boolean(targetId);
-    const target = `${targetType}:${targetId}`;
-    return `<span class="reaction-control ${selected ? "selected" : ""} ${canReact ? "" : "disabled"}" data-reaction-control="${escapeHTML(target)}">
-        <button class="reaction-picker-button" type="button" data-reaction-picker="${escapeHTML(target)}" aria-label="${escapeHTML(selected ? `Your reaction is ${selected.label}. Change reaction` : "React")}" ${canReact ? "" : "disabled"}>${displayed ? `<span aria-hidden="true">${displayed.emoji}</span>` : `<span aria-hidden="true">☺</span>`}</button>
-        <span class="reaction-divider" aria-hidden="true"></span>
-        <button class="reaction-count-button" type="button" data-reactors="${escapeHTML(target)}" aria-label="View ${Number(item.reaction_count || 0)} reactions">${Number(item.reaction_count || 0)}</button>
-    </span>`;
-}
-
-function tbhAvatarMarkup(profile, request = false) {
-    return `<span class="tbh-avatar-shell ${request ? "request" : "response"}">${avatarMarkup(profile, "row-avatar tbh-avatar")}<span class="tbh-avatar-badge" aria-hidden="true">${request ? "TBH" : "❞"}</span></span>`;
-}
-
 function tbhAuthorLine(item) {
     const gender = String(item.author_gender || "").toLowerCase();
     const emoji = gender === "male" || gender === "boy" ? "👦💙" : gender === "female" || gender === "girl" ? "👧💗" : gender === "non-binary" || gender === "nonbinary" ? "🧑💛" : "";
@@ -2290,152 +2414,40 @@ function tbhAuthorLine(item) {
     return classmatesInGrade >= 2 ? `from a ${emoji} ${normalized}` : `from a ${emoji} (grade hidden until more classmates join)`;
 }
 
-function pendingTbhRows() {
-    if (state.feedType !== "personal" || !tbhRequestsEnabled() || state.feedSearch.trim()) return [];
-    return state.tbhPendingRequests.map((request) => ({ timestamp: request.created_at, html: `<article class="tbh-row tbh-request-row ${request.opened_at ? "" : "unread"}">
-        <button class="tbh-row-main" type="button" data-tbh-request="${escapeHTML(request.id)}">
-            ${tbhAvatarMarkup({ first_name: request.requester_first_name, last_name: request.requester_last_name, profile_picture_url: request.requester_profile_picture_url }, true)}
-            <span class="tbh-row-copy"><span><strong>${escapeHTML(request.requester_first_name)} wants a TBH</strong>${request.opened_at ? "" : `<i aria-label="Unread"></i>`}</span><small>${escapeHTML(promptForKey(request.prompt_key).title)}</small></span>
-        </button>
-        <details class="tbh-row-menu"><summary aria-label="More options for ${escapeHTML(request.requester_first_name)}'s TBH request">•••</summary><span><button type="button" data-tbh-dismiss="${escapeHTML(request.id)}">Dismiss request</button><button type="button" data-tbh-suppress="${escapeHTML(request.requester_user_id)}">Stop requests from ${escapeHTML(request.requester_first_name)}</button></span></details>
-    </article>` }));
-}
+let feedView = null;
+let feedViewPromise = null;
+let pendingFeedRender = false;
 
-function tbhFeedRows(items, kind) {
-    return items.map((item) => {
-        const received = kind === "received";
-        const school = kind === "school";
-        const firstName = received ? item.author_first_name : item.subject_first_name;
-        const lastName = received ? item.author_last_name : item.subject_last_name;
-        const picture = received ? item.author_profile_picture_url : item.subject_profile_picture_url;
-        const title = received
-            ? `<strong>${escapeHTML(`${firstName} ${lastName}`)}</strong> sent your TBH`
-            : school
-            ? `<strong>${escapeHTML(`${firstName} ${lastName}`)}</strong> got a TBH`
-            : `<strong>${escapeHTML(`${firstName} ${lastName}`)}</strong> got your TBH`;
-        const detail = school ? tbhAuthorLine(item) : promptForKey(item.prompt_key).title;
-        return { timestamp: item.created_at, item, html: `<article class="feed-card tbh-row tbh-feed-row tbh-${kind}" data-tbh-detail="${escapeHTML(`${kind}:${item.id}`)}" role="button" tabindex="0" aria-label="Open TBH details">
-            ${tbhAvatarMarkup({ first_name: firstName, last_name: lastName, profile_picture_url: picture })}
-            <div class="tbh-feed-copy"><div class="tbh-feed-title">${title}</div><div class="tbh-feed-body">${escapeHTML(item.body)}</div><div class="tbh-feed-meta"><span>${escapeHTML(detail)}</span><time>${escapeHTML(relativeTime(item.created_at))}</time></div></div>
-            ${reactionControlMarkup(item, "activity", item.activity_id)}
-        </article>` };
-    });
-}
-
-function schoolHotScore(entry) {
-    const item = entry.item;
-    normalizeReactionState(item);
-    const total = Number(item.reaction_count || 0);
-    const negative = Number(item.reaction_summary?.thumbs_down || 0);
-    const positive = Math.max(0, total - negative);
-    const hours = Math.max(0, (Date.now() - (Date.parse(entry.timestamp) || Date.now())) / 3_600_000);
-    return (positive * 2 + total) / Math.pow(hours + 2, 1.15);
-}
-
-function anonymousInboxRows() {
-    if (state.feedType !== "personal" || !state.anonymousInbox || state.feedSearch.trim()) return [];
-    const questions = state.anonymousInbox.questions || [];
-    const answers = state.anonymousInbox.answers || [];
-    const answerRows = answers.map((answer) => ({ timestamp: answer.answered_at, html: `<button class="anonymous-reply-row" type="button" data-anonymous-answer="${escapeHTML(answer.id)}">
-        ${avatarMarkup({ first_name: answer.recipient_display_name, profile_picture_url: answer.recipient_profile_picture_url }, "anonymous-row-icon reply")}
-        <span class="anonymous-row-copy"><strong>${escapeHTML(answer.recipient_display_name)} replied to you</strong><span class="anonymous-row-message">${escapeHTML(answer.answer_text)}</span><span class="anonymous-row-meta"><span>Your message: ${escapeHTML(answer.question_body)}</span><time>${escapeHTML(relativeTime(answer.answered_at))}</time></span></span>
-        <span class="anonymous-row-state" aria-hidden="true">›</span>
-    </button>` }));
-    const questionRows = questions.map((question) => ({ timestamp: question.created_at, html: `<button class="anonymous-question-row ${question.opened_at ? "" : "unread"} ${question.status === "answered" ? "answered" : ""}" type="button" data-anonymous-question="${escapeHTML(question.id)}">
-        <span class="anonymous-row-icon" aria-hidden="true">?</span>
-        <span class="anonymous-row-copy"><span class="anonymous-row-title"><strong>${escapeHTML(question.provenance_label)}</strong>${question.opened_at ? "" : `<span class="anonymous-new-pill">New</span>`}</span><span class="anonymous-row-message">${escapeHTML(question.body)}</span><span class="anonymous-row-meta"><span>${escapeHTML(question.source_platform ? `From ${question.source_platform[0].toUpperCase()}${question.source_platform.slice(1)}` : "Anonymous")}</span><time>${escapeHTML(relativeTime(question.created_at))}</time></span></span>
-        <span class="anonymous-row-state" aria-hidden="true">›</span>
-    </button>` }));
-    return [...answerRows, ...questionRows];
-}
-
-function personalInboxUnreadCounts() {
-    const polls = state.feedItems.filter((item) => item.is_new === true || item.unread === true).length;
-    const tbhs = state.tbhPendingRequests.filter((item) => !item.opened_at).length
-        + state.tbhInboxItems.filter((item) => !item.opened_at).length;
-    const askMe = (state.anonymousInbox?.questions || []).filter((item) => !item.opened_at).length;
-    return { all: polls + tbhs + askMe, polls, tbhs, ask_me: askMe };
-}
-
-function renderPersonalInboxControls() {
-    const controls = $("#personalInboxControls");
-    const visible = state.feedType === "personal" && !state.feedSearch.trim();
-    controls.classList.toggle("hidden", !visible);
-    if (!visible) return;
-
-    if (!PERSONAL_INBOX_FILTERS[state.personalInboxFilter]) state.personalInboxFilter = "all";
-    const counts = personalInboxUnreadCounts();
-    $$('[data-inbox-filter]').forEach((button) => {
-        const filter = button.dataset.inboxFilter;
-        const selected = filter === state.personalInboxFilter;
-        button.classList.toggle("active", selected);
-        button.setAttribute("aria-pressed", String(selected));
-        const badge = button.querySelector("[data-inbox-count]");
-        const count = counts[filter] || 0;
-        badge.textContent = count > 99 ? "99+" : String(count || "");
-        badge.classList.toggle("hidden", count < 1);
-    });
-    $("#personalInboxDescription").textContent = PERSONAL_INBOX_FILTERS[state.personalInboxFilter].description;
+function prepareFeedView() {
+    if (!feedViewPromise) {
+        feedViewPromise = preloadRoute("feed").then((route) => {
+            feedView = route.createFeedView({
+                $, $$, state, api,
+                personalInboxFilters: PERSONAL_INBOX_FILTERS,
+                reactionByType: REACTION_BY_TYPE,
+                avatarMarkup, displayName, escapeHTML, formatGrade, relativeTime,
+                normalizeReactionState, dominantReaction, promptForKey, tbhAuthorLine,
+                tbhRequestsEnabled, renderTabBadges, formatVoterHint, showToast,
+            });
+            return feedView;
+        });
+    }
+    return feedViewPromise;
 }
 
 function renderFeed() {
-    const list = $("#feedList");
-    const query = state.feedSearch.trim().toLowerCase();
-    renderPersonalInboxControls();
-    renderFeedClassmateResults();
-    const visible = query ? state.feedItems.filter((item) => [item.question_text, item.voted_for_name, item.contact_name, item.voter_name].some((value) => String(value || "").toLowerCase().includes(query))) : state.feedItems;
-    const appliesPersonalFilter = state.feedType === "personal" && !query;
-    const showPolls = !appliesPersonalFilter || ["all", "polls"].includes(state.personalInboxFilter);
-    const showTbhs = !appliesPersonalFilter || ["all", "tbhs"].includes(state.personalInboxFilter);
-    const showAskMe = !appliesPersonalFilter || ["all", "ask_me"].includes(state.personalInboxFilter);
-    const anonymousRows = showAskMe ? anonymousInboxRows() : [];
-    const personalTbhRows = state.feedType === "personal" && !query && showTbhs
-        ? [...pendingTbhRows(), ...tbhFeedRows(state.tbhInboxItems, "received"), ...tbhFeedRows(state.tbhSentItems, "sent")]
-        : [];
-    const schoolTbhRows = state.feedType === "school" && !query && state.schoolFeedContent !== "my_votes"
-        ? tbhFeedRows(state.schoolTbhItems, "school")
-        : [];
-    const filteredVotes = (state.feedType === "school" && state.schoolFeedContent === "tbhs") || !showPolls ? [] : visible;
-    if (!filteredVotes.length && !anonymousRows.length && !personalTbhRows.length && !schoolTbhRows.length) {
-        const emptyState = query
-            ? { title: "No results found", message: "Try searching for a name or question." }
-            : state.schoolFeedContent === "tbhs"
-                ? { title: "No TBHs yet", message: "Public TBHs from your school will show up here." }
-                : state.myVotesOnly
-                    ? { title: "You haven't voted yet", message: "Answer some questions in the Play tab to see your votes here." }
-                    : state.feedType === "personal"
-                        ? {
-                            title: state.personalInboxFilter === "all" ? "Nothing in your Inbox yet" : `No ${PERSONAL_INBOX_FILTERS[state.personalInboxFilter].title} yet`,
-                            message: PERSONAL_INBOX_FILTERS[state.personalInboxFilter].empty,
-                        }
-                        : { title: "No school activity yet", message: "As students at your school answer questions, activity will appear here." };
-        list.innerHTML = `<div class="feed-empty-state"><span class="feed-empty-art" aria-hidden="true"><svg viewBox="0 0 160 120"><path d="M22 36 80 76l58-40v54a12 12 0 0 1-12 12H34a12 12 0 0 1-12-12Z"/><path d="m22 36 58-22 58 22-58 40Z"/><path d="m22 96 41-34M138 96 97 62"/></svg></span><strong>${escapeHTML(emptyState.title)}</strong><p>${escapeHTML(emptyState.message)}</p></div>`;
-        renderTabBadges();
-        return;
-    }
-    const voteRows = filteredVotes.map((item) => {
-        normalizeReactionState(item);
-        const isPersonal = state.feedType === "personal";
-        const title = isPersonal ? `${item.is_nomination ? "👑 " : ""}<strong>You</strong> got ${item.is_nomination ? "nominated" : "voted"}` : `<strong>${escapeHTML(item.voted_for_name || item.contact_name || "A classmate")}</strong> got voted`;
-        const detail = formatVoterHint(item);
-        return { timestamp: item.timestamp, item, html: `<article class="feed-card vote-feed-row" data-answer-id="${item.question_answer_id}" data-feed-detail="${item.question_answer_id}" role="button" tabindex="0" aria-label="Open poll details: ${escapeHTML(item.question_text)}">
-            ${feedAvatar(item)}
-            <div class="feed-body">
-                <div class="feed-meta"><span>${title}</span></div>
-                <div class="feed-question">${escapeHTML(item.question_text)}</div>
-                <div class="feed-detail-row">${detail ? `<span class="feed-answer">${escapeHTML(detail)}</span>` : "<span></span>"}<time>${escapeHTML(relativeTime(item.timestamp))}</time></div>
-            </div>
-            ${reactionControlMarkup(item, "poll", item.question_answer_id)}
-        </article>` };
+    if (feedView) return feedView.renderFeed();
+    if (pendingFeedRender) return;
+    pendingFeedRender = true;
+    void prepareFeedView().then((view) => {
+        pendingFeedRender = false;
+        view.renderFeed();
     });
-    const rows = [...anonymousRows, ...personalTbhRows, ...schoolTbhRows, ...voteRows];
-    list.innerHTML = rows
-        .sort((left, right) => state.feedType === "school" && state.schoolFeedSort === "hottest"
-            ? schoolHotScore(right) - schoolHotScore(left)
-            : (Date.parse(right.timestamp) || 0) - (Date.parse(left.timestamp) || 0))
-        .map((row) => row.html)
-        .join("");
-    renderTabBadges();
+}
+
+function renderFeedClassmateResults() {
+    if (feedView) return feedView.renderFeedClassmateResults();
+    void prepareFeedView().then((view) => view.renderFeedClassmateResults());
 }
 
 function renderFeedSkeleton() {
@@ -2444,18 +2456,6 @@ function renderFeedSkeleton() {
         <span class="skeleton-copy"><i></i><i></i><i></i></span>
         <span class="skeleton-block skeleton-reaction"></span>
     </article>`).join("");
-}
-
-function renderFeedClassmateResults() {
-    const container = $("#feedClassmateResults");
-    const query = state.feedSearch.trim();
-    if (query.length < 2 || !state.feedClassmateResults.length) {
-        container.classList.add("hidden");
-        container.innerHTML = "";
-        return;
-    }
-    container.innerHTML = `<div class="feed-search-section-heading"><span>CLASSMATES</span><small>${state.feedClassmateResults.length}</small></div><div class="feed-classmate-list">${state.feedClassmateResults.slice(0, 10).map((classmate) => `<button type="button" data-feed-classmate="${escapeHTML(classmate.user_id)}">${avatarMarkup(classmate, "row-avatar")}<span><strong>${escapeHTML(displayName(classmate))}</strong><small>${escapeHTML(formatGrade(classmate.grade || "Classmate"))}</small></span><span aria-hidden="true">›</span></button>`).join("")}</div>`;
-    container.classList.remove("hidden");
 }
 
 function selectFeedClassmate(classmateId) {
@@ -2521,15 +2521,35 @@ function reactionSnapshot(item) {
     };
 }
 
+function patchReactionControls(targetType, targetId, item) {
+    const target = `${targetType}:${targetId}`;
+    const displayed = dominantReaction(item);
+    const selected = REACTION_BY_TYPE.get(item.current_user_reaction);
+    const count = Math.max(0, Number(item.reaction_count || 0));
+    $$(`[data-reaction-control="${CSS.escape(target)}"]`).forEach((control) => {
+        control.classList.toggle("selected", Boolean(selected));
+        const picker = control.querySelector("[data-reaction-picker]");
+        const emoji = picker?.querySelector("[aria-hidden='true']");
+        if (emoji) emoji.textContent = displayed?.emoji || "☺";
+        if (picker) picker.setAttribute("aria-label", selected ? `Your reaction is ${selected.label}. Change reaction` : "React");
+        const countButton = control.querySelector("[data-reactors]");
+        if (countButton) {
+            countButton.textContent = String(count);
+            countButton.setAttribute("aria-label", `View ${count} reactions`);
+        }
+    });
+}
+
 function applyReactionState(targetType, targetId, next) {
-    reactionItems(targetType, targetId).forEach((item) => {
+    const items = reactionItems(targetType, targetId);
+    items.forEach((item) => {
         item.reaction_count = Math.max(0, Number(next.reaction_count || 0));
         item.reaction_summary = { ...(next.reaction_summary || {}) };
         item.current_user_reaction = next.current_user_reaction ?? next.reaction_type ?? null;
         item.upvote_count = item.reaction_count;
         item.user_has_upvoted = Boolean(item.current_user_reaction);
     });
-    renderFeed();
+    if (items[0]) patchReactionControls(targetType, targetId, items[0]);
 }
 
 function optimisticReactionState(original, reactionType) {
@@ -2625,15 +2645,18 @@ function renderFeedDetail() {
     const options = Array.isArray(item.presented_options) ? item.presented_options : [];
     const artworkURL = api.assetURL(item.image_url);
     const revealed = item.voter_name ? `<div class="revealed-sender-row">${avatarMarkup({ first_name: item.voter_name, profile_picture_url: item.voter_profile_picture_url }, "row-avatar")}<strong>Sent by ${escapeHTML(item.voter_name)}</strong></div>` : "";
+    const firstLetter = item.voter_name ? "" : voterFirstLetterHint(item);
+    const firstLetterHint = firstLetter ? `<p class="feed-detail-first-letter-hint">Hint: starts with ${escapeHTML(firstLetter)}</p>` : "";
     $("#feedDetailDialog .detail-screen-header > strong").textContent = formatVoterStatement(item);
     $("#feedDetailBody").innerHTML = `<article class="feed-detail-card">
         <h3>${escapeHTML(item.question_text)}</h3>
-        <div class="feed-detail-art">${artworkURL ? `<img src="${escapeHTML(artworkURL)}" alt="">` : `<div class="artwork-placeholder"><img src="../assets/app/pencil-clipboard.png" alt=""><span>Image unavailable</span></div>`}</div>
+        <div class="feed-detail-art">${artworkURL ? `<img loading="lazy" decoding="async" src="${escapeHTML(artworkURL)}" alt="">` : `<div class="artwork-placeholder"><img loading="lazy" decoding="async" src="../assets/app/pencil-clipboard.webp" alt=""><span>Image unavailable</span></div>`}</div>
         ${options.length ? `<div class="feed-detail-options">${options.map((option) => {
             const name = option.name || option.contact_name || "A classmate";
             const selected = name === selectedName;
             return `<div class="feed-detail-option ${selected ? "selected" : ""}"><strong>${escapeHTML(name)}</strong>${selected ? `<span class="feed-detail-selection-indicator" aria-label="Picked">👆</span>` : ""}</div>`;
         }).join("")}</div>` : `<div class="feed-detail-legacy-selection"><strong>Selected: ${escapeHTML(selectedName)}</strong><small>Options not available for this older vote</small></div>`}
+        ${firstLetterHint}
         ${revealed}
     </article>`;
     $("#blockFeedSubmitterButton").classList.toggle("hidden", !item.question_submitted_by_user_id || item.question_is_anonymous === true);
@@ -3343,7 +3366,7 @@ function renderFeedGate() {
     const received = Math.max(0, Number(state.profile?.vote_count || 0));
     const receivedLabel = received === 1 ? "vote" : "votes";
     $("#feedGateLock").innerHTML = `<article class="feed-gate-card">
-        <img class="feed-gate-lock" src="../assets/app/lock.png" alt="" aria-hidden="true">
+        <img loading="lazy" decoding="async" class="feed-gate-lock" src="../assets/app/lock.webp" alt="" aria-hidden="true">
         <p class="feed-gate-eyebrow">You got</p>
         <h3 class="feed-gate-vote-count">${received.toLocaleString()} ${receivedLabel}</h3>
         <p>Cast ${remaining} more ${remaining === 1 ? "vote" : "votes"} to unlock your Feed and see what classmates said.</p>
@@ -3708,7 +3731,7 @@ async function loadFeed(reset = false) {
         const currentRawSearch = state.feedSearch.trim();
         const currentSearch = currentRawSearch.length >= 2 ? currentRawSearch : "";
         if (generation !== state.feedGeneration || feedType !== state.feedType || myVotesOnly !== state.myVotesOnly || schoolSort !== state.schoolFeedSort || schoolContent !== state.schoolFeedContent || search !== currentSearch) return;
-        state.feedItems = reset ? items : [...state.feedItems, ...items];
+        commitFeedItems(items, { reset });
         if (feedType === "personal") state.feedOffset += items.length;
         else if (items.length) {
             const last = items.at(-1);
@@ -3784,7 +3807,7 @@ function animateAuraChange(amount, sourceElement = null) {
         const target = chip.getBoundingClientRect();
         const flight = document.createElement("span");
         flight.className = "aura-flight";
-        flight.innerHTML = `<img src="../assets/app/aura.png" alt=""><strong>+${Number(amount).toLocaleString()}</strong>`;
+        flight.innerHTML = `<img loading="lazy" decoding="async" src="../assets/app/aura.webp" alt=""><strong>+${Number(amount).toLocaleString()}</strong>`;
         flight.style.left = `${source.left + source.width / 2}px`;
         flight.style.top = `${source.top + source.height / 2}px`;
         flight.style.setProperty("--aura-flight-x", `${target.left + target.width / 2 - source.left - source.width / 2}px`);
@@ -3874,10 +3897,10 @@ function renderLockedPlay() {
     state.playLockTimer = null;
     $("#playCard").innerHTML = `<article class="locked-play-card">
         <h3>Next Poll Set Locked</h3>
-        <img class="lock-art" src="../assets/app/lock.png" alt="">
+        <img loading="lazy" decoding="async" class="lock-art" src="../assets/app/lock.webp" alt="">
         <p id="playLockMessage">${until ? "Checking unlock time..." : "New polls drop soon."}</p>
         ${renderInviteUnlock()}
-        <button class="question-secondary-action" type="button" data-open-question><img src="../assets/app/pencil-clipboard.png" alt="">Submit a school question</button>
+        <button class="question-secondary-action" type="button" data-open-question><img loading="lazy" decoding="async" src="../assets/app/pencil-clipboard.webp" alt="">Submit a school question</button>
     </article>`;
     if (until) {
         const tick = () => {
@@ -3905,7 +3928,7 @@ function renderPlayCongrats() {
     $("#playProgress").textContent = "Complete";
     $("#playCard").innerHTML = `<article class="play-congrats-card">
         <h3>Congrats!</h3>
-        <img src="../assets/app/aura.png" alt="">
+        <img loading="lazy" decoding="async" src="../assets/app/aura.webp" alt="">
         <p>You just earned <strong>${Number(state.playAuraEarned).toLocaleString()} aura</strong></p>
         <button class="primary-button" type="button" data-finish-play>W aura</button>
     </article>`;
@@ -3929,19 +3952,19 @@ function renderPlay() {
     }
     const choices = choicesForQuestion(question);
     if (choices.length < 4) {
-        card.innerHTML = `<div class="empty-card locked-card"><img class="empty-state-art" src="../assets/app/lock.png" alt=""><strong>Add more classmates to play Valid.</strong><span>You need at least four classmates before a poll can start.</span><button class="primary-button" type="button" data-find-classmates>Find classmates</button><button class="secondary-button" type="button" data-invite-unlock>Share an invite</button></div>`;
+        card.innerHTML = `<div class="empty-card locked-card"><img loading="lazy" decoding="async" class="empty-state-art" src="../assets/app/lock.webp" alt=""><strong>Add more classmates to play Valid.</strong><span>You need at least four classmates before a poll can start.</span><button class="primary-button" type="button" data-find-classmates>Find classmates</button><button class="secondary-button" type="button" data-invite-unlock>Share an invite</button></div>`;
         return;
     }
     const artworkURL = api.assetURL(question.image_url);
-    const attribution = question.is_user_submitted ? `<div class="question-attribution">${question.is_anonymous ? avatarMarkup({ first_name: "Anonymous", profile_picture_url: "../assets/app/anonymous.png" }, "attribution-avatar") : avatarMarkup({ first_name: question.submitted_by_name || "A classmate", profile_picture_url: question.submitted_by_avatar_url }, "attribution-avatar")}<span><small>Question submitted by</small><strong>${escapeHTML(question.is_anonymous ? "Someone at your school" : question.submitted_by_name || "A classmate")}</strong></span><div class="detail-overflow play-overflow"><button class="detail-overflow-button play-overflow-button" type="button" data-toggle-play-menu aria-label="More question actions" aria-expanded="false">•••</button><div class="detail-overflow-menu hidden" role="menu" aria-label="Question actions"><button type="button" role="menuitem" data-play-question-action="report">Report question</button>${question.is_anonymous ? "" : `<button type="button" role="menuitem" data-play-question-action="block">Block submitter</button>`}</div></div></div>` : "";
+    const attribution = question.is_user_submitted ? `<div class="question-attribution">${question.is_anonymous ? avatarMarkup({ first_name: "Anonymous", profile_picture_url: "../assets/app/anonymous.webp" }, "attribution-avatar") : avatarMarkup({ first_name: question.submitted_by_name || "A classmate", profile_picture_url: question.submitted_by_avatar_url }, "attribution-avatar")}<span><small>Question submitted by</small><strong>${escapeHTML(question.is_anonymous ? "Someone at your school" : question.submitted_by_name || "A classmate")}</strong></span><div class="detail-overflow play-overflow"><button class="detail-overflow-button play-overflow-button" type="button" data-toggle-play-menu aria-label="More question actions" aria-expanded="false">•••</button><div class="detail-overflow-menu hidden" role="menu" aria-label="Question actions"><button type="button" role="menuitem" data-play-question-action="report">Report question</button>${question.is_anonymous ? "" : `<button type="button" role="menuitem" data-play-question-action="block">Block submitter</button>`}</div></div></div>` : "";
     const remainingSkips = Math.max(0, Number(state.config?.max_skips_per_set ?? 3) - state.skipsUsedInSet);
     card.innerHTML = `<article class="play-card">
         <div class="play-question-copy"><h3>${escapeHTML(question.question_text)}</h3>${attribution}</div>
-        <div class="question-artwork">${artworkURL ? `<img src="${escapeHTML(artworkURL)}" alt="">` : `<div class="artwork-placeholder"><img src="../assets/app/pencil-clipboard.png" alt=""><span>Question artwork</span></div>`}</div>
+        <div class="question-artwork">${artworkURL ? `<img loading="lazy" decoding="async" src="${escapeHTML(artworkURL)}" alt="">` : `<div class="artwork-placeholder"><img loading="lazy" decoding="async" src="../assets/app/pencil-clipboard.webp" alt=""><span>Question artwork</span></div>`}</div>
         <div class="choice-grid">${choices.map(choiceMarkup).join("")}</div>
         <div class="play-actions">
             <button class="play-action-button" data-shuffle type="button"><span aria-hidden="true">↻</span> Shuffle</button>
-            <button class="play-action-button nominate" data-nominate type="button"><img src="../assets/app/crown.png" alt="">Nominate</button>
+            <button class="play-action-button nominate" data-nominate type="button"><img loading="lazy" decoding="async" src="../assets/app/crown.webp" alt="">Nominate</button>
             <button class="play-action-button" data-skip="${question.id}" type="button" ${remainingSkips < 1 ? "disabled" : ""}>Skip (${remainingSkips})</button>
         </div>
     </article>`;
@@ -3999,7 +4022,7 @@ function renderNominationList() {
     const cost = Number(state.config?.nomination_aura_cost ?? 100);
     $("#nominationList").innerHTML = candidates.length ? candidates.map((candidate) => `<button class="nomination-row" type="button" data-nomination="${escapeHTML(candidate.user_id)}">
         ${avatarMarkup(candidate, "choice-avatar")}<strong>${escapeHTML(displayName(candidate))}</strong>
-        <span class="nomination-cost"><img src="../assets/app/aura.png" alt="">${cost}</span>
+        <span class="nomination-cost"><img loading="lazy" decoding="async" src="../assets/app/aura.webp" alt="">${cost}</span>
     </button>`).join("") : `<div class="empty-card">${query ? "No matching classmates." : "Everyone else is already in this round. Shuffle for new choices."}</div>`;
 }
 
@@ -4596,7 +4619,7 @@ function renderProfileSchoolResults() {
         const logoURL = school.logo_url ? api.assetURL(school.logo_url) : "";
         const initials = String(school.name || "S").split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase();
         return `<button class="signup-school-result ${selected ? "selected" : ""}" type="button" role="option" aria-selected="${selected}" data-profile-school="${escapeHTML(school.id)}">
-            <span class="signup-school-logo">${logoURL ? `<img src="${escapeHTML(logoURL)}" alt="">` : escapeHTML(initials)}</span>
+            <span class="signup-school-logo">${logoURL ? `<img loading="lazy" decoding="async" src="${escapeHTML(logoURL)}" alt="">` : escapeHTML(initials)}</span>
             <span><strong>${escapeHTML(school.name)}</strong><small>${escapeHTML(schoolLocationLabel(school))}${Number.isFinite(Number(school.distance_miles)) ? ` · ${Number(school.distance_miles).toFixed(1)} mi` : ""}</small></span>
             <span class="signup-school-check" aria-hidden="true">${selected ? "✓" : "›"}</span>
         </button>`;
@@ -4783,7 +4806,7 @@ async function saveProfile(event) {
         $("#profileForm").reset();
         $("#profileDialog").close();
         showToast("Profile updated");
-        if (flags.school) await loadProfilePanel();
+        if (flags.school) await loadProfilePanel({ force: true });
     } catch (error) {
         $("#profileInformationConfirmStatus").textContent = error.message || "Could not save all profile changes.";
     } finally { setButtonLoading(button, false); }
@@ -5058,7 +5081,7 @@ async function applyQuestionArtworkCrop() {
         state.questionArtworkFile = croppedFile;
         state.questionArtworkSourceFile = crop.file;
         state.questionArtworkPreviewURL = await readFileDataURL(croppedFile);
-        $("#questionImagePreview").innerHTML = `<img src="${escapeHTML(state.questionArtworkPreviewURL)}" alt="Square crop preview">`;
+        $("#questionImagePreview").innerHTML = `<img loading="lazy" decoding="async" src="${escapeHTML(state.questionArtworkPreviewURL)}" alt="Square crop preview">`;
         $("#adjustQuestionCrop").classList.remove("hidden");
         $(".question-image-change").textContent = "Choose another";
         clearQuestionCrop();
@@ -5183,12 +5206,188 @@ async function confirmQuestionSubmission() {
     }
 }
 
-function openQuestionDialog() {
+function questionSubmissionDisplayStatus(question) {
+    if (question.status === "pending") return { label: "Awaiting review", kind: "pending" };
+    if (question.status === "approved" && question.question_is_active === false) return { label: "Deactivated", kind: "inactive" };
+    if (question.status === "approved") return { label: "Published", kind: "approved" };
+    if (question.status === "rejected") return { label: "Not approved", kind: "rejected" };
+    return { label: String(question.status || "Unknown"), kind: "inactive" };
+}
+
+function clearQuestionSubmissionState() {
+    state.questionSubmissionsGeneration += 1;
+    state.questionSubmissions = [];
+    state.questionSubmissionToRemove = null;
+    state.highlightedQuestionSubmissionId = null;
+    state.pendingQuestionSubmissionKey = null;
+    state.pendingQuestionDraft = null;
+    $("#questionHistoryList").replaceChildren();
+    $("#questionHistoryStatus").textContent = "";
+    $("#questionForm").reset();
+    resetQuestionArtworkPreview();
+    if ($("#questionRemovalDialog").open) $("#questionRemovalDialog").close();
+}
+
+function questionSubmissionDate(value) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+    });
+}
+
+function questionResultsProgress(voteCount, minimumVotes) {
+    const needed = Math.max(0, minimumVotes - voteCount);
+    if (!voteCount) return `Results become visible after this question receives ${minimumVotes} votes.`;
+    if (needed === 1) return `${voteCount} of ${minimumVotes} votes received. One more vote will reveal the results.`;
+    return `${voteCount} of ${minimumVotes} votes received. ${needed} more votes will reveal the results.`;
+}
+
+function questionSubmissionStateMarkup(question) {
+    if (question.status === "pending") {
+        return `<div class="question-history-state pending"><strong>Waiting for review</strong><span>Your school’s moderators are reviewing it. We’ll notify you when they decide.</span></div>`;
+    }
+    if (question.status === "rejected") {
+        const reason = String(question.rejection_reason || "").trim();
+        return `<div class="question-history-state rejected"><strong>Not approved</strong><span>${escapeHTML(reason || "This question wasn’t approved for your school. It stays here so you can review the decision.")}</span></div>`;
+    }
+    if (question.status === "approved" && question.question_is_active === false) {
+        return `<div class="question-history-state inactive"><strong>Question deactivated</strong><span>It won’t appear in future school polls. Existing votes and results are kept.</span></div>`;
+    }
+    return "";
+}
+
+function questionPollActivityMarkup(question) {
+    if (question.status !== "approved") return "";
+    const voteCount = Math.max(0, Number(question.vote_count) || 0);
+    const minimumVotes = Math.max(1, Number(question.results_minimum_votes) || 5);
+    const visibleResults = Array.isArray(question.vote_results) ? question.vote_results.slice(0, 5) : [];
+    let content = "";
+    if (question.results_visible === true) {
+        content = visibleResults.length
+            ? `<div class="question-result-list">${visibleResults.map((result) => `<div><span>${escapeHTML(result.name || "Classmate")}</span><strong>${Math.max(0, Number(result.vote_count) || 0).toLocaleString()} ${Number(result.vote_count) === 1 ? "vote" : "votes"}</strong></div>`).join("")}</div>`
+            : `<p>Results are being prepared. Refresh to check again.</p>`;
+    } else {
+        content = `<progress value="${Math.min(voteCount, minimumVotes)}" max="${minimumVotes}"></progress><p>${escapeHTML(questionResultsProgress(voteCount, minimumVotes))}</p>`;
+    }
+    return `<section class="question-poll-activity"><div><strong>Poll activity</strong><span>${voteCount.toLocaleString()} ${voteCount === 1 ? "vote" : "votes"}</span></div>${content}</section>`;
+}
+
+function renderQuestionSubmissions({ loading = false } = {}) {
+    const list = $("#questionHistoryList");
+    if (loading && !state.questionSubmissions.length) {
+        list.innerHTML = `<div class="question-history-empty" role="status">Loading your questions…</div>`;
+        return;
+    }
+    if (!state.questionSubmissions.length) {
+        list.innerHTML = `<div class="question-history-empty"><strong>No questions yet</strong><p>Questions you submit will appear here with their review status and results.</p><button class="mini-button" type="button" data-question-submit-empty>Submit a question</button></div>`;
+        return;
+    }
+    list.innerHTML = state.questionSubmissions.map((question) => {
+        const status = questionSubmissionDisplayStatus(question);
+        const imageURL = question.image_url ? api.assetURL(question.image_url) : null;
+        const canRemove = question.status === "pending" || (question.status === "approved" && question.question_is_active !== false);
+        const removalLabel = question.status === "approved" ? "Deactivate question" : "Delete submission";
+        return `<article class="question-history-card" data-question-submission="${escapeHTML(question.id)}" tabindex="-1">
+            <header><span class="question-history-badge ${status.kind}">${escapeHTML(status.label)}</span><time datetime="${escapeHTML(question.submitted_at || "")}">Submitted ${escapeHTML(questionSubmissionDate(question.submitted_at))}</time></header>
+            <div class="question-history-summary">${imageURL ? `<img src="${escapeHTML(imageURL)}" alt="" loading="lazy" decoding="async">` : `<span class="question-history-image-placeholder" aria-hidden="true">▧</span>`}<div><strong>${escapeHTML(question.question_text || "Question")}</strong><small>${question.is_anonymous ? "Posted anonymously" : "Posted with your name"}</small></div></div>
+            ${questionSubmissionStateMarkup(question)}
+            ${questionPollActivityMarkup(question)}
+            ${canRemove ? `<button class="question-history-remove" type="button" data-remove-question-submission="${escapeHTML(question.id)}">${escapeHTML(removalLabel)}</button>` : ""}
+        </article>`;
+    }).join("");
+}
+
+function focusQuestionSubmission(submissionId) {
+    if (!submissionId) return;
+    const card = [...$$("[data-question-submission]")].find((item) => item.dataset.questionSubmission === String(submissionId));
+    if (!card) return;
+    card.classList.add("notification-target");
+    card.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    card.focus({ preventScroll: true });
+}
+
+async function loadQuestionSubmissions({ submissionId = state.highlightedQuestionSubmissionId } = {}) {
+    const generation = ++state.questionSubmissionsGeneration;
+    state.highlightedQuestionSubmissionId = submissionId || null;
+    $("#questionHistoryStatus").textContent = "";
+    renderQuestionSubmissions({ loading: true });
+    try {
+        const result = await api.getQuestionSubmissions(api.user.id, 100);
+        if (generation !== state.questionSubmissionsGeneration) return;
+        state.questionSubmissions = Array.isArray(result) ? result.slice(0, 100) : [];
+        renderQuestionSubmissions();
+        requestAnimationFrame(() => focusQuestionSubmission(state.highlightedQuestionSubmissionId));
+    } catch (error) {
+        if (generation !== state.questionSubmissionsGeneration) return;
+        if (!state.questionSubmissions.length) renderQuestionSubmissions();
+        $("#questionHistoryStatus").textContent = error.message || "Could not load your questions. Try again.";
+    }
+}
+
+function setQuestionSection(section, { submissionId = null, refresh = false } = {}) {
+    const historySelected = section === "history";
+    $("#questionSubmitTab").classList.toggle("active", !historySelected);
+    $("#questionSubmitTab").setAttribute("aria-selected", String(!historySelected));
+    $("#questionHistoryTab").classList.toggle("active", historySelected);
+    $("#questionHistoryTab").setAttribute("aria-selected", String(historySelected));
+    $("#questionForm").classList.toggle("hidden", historySelected);
+    $("#questionHistoryPanel").classList.toggle("hidden", !historySelected);
+    if (historySelected) {
+        state.highlightedQuestionSubmissionId = submissionId || null;
+        if (refresh || !state.questionSubmissions.length || submissionId) void loadQuestionSubmissions({ submissionId });
+        else requestAnimationFrame(() => focusQuestionSubmission(submissionId));
+    }
+}
+
+function openQuestionRemoval(submissionId) {
+    const question = state.questionSubmissions.find((item) => String(item.id) === String(submissionId));
+    if (!question) return;
+    const approved = question.status === "approved";
+    state.questionSubmissionToRemove = question;
+    $("#questionRemovalTitle").textContent = approved ? "Deactivate question?" : "Delete submission?";
+    $("#questionRemovalMessage").textContent = approved
+        ? "This stops the question from appearing in future school polls. Existing polls, votes, and results will stay."
+        : "This removes the submission from review and refunds the aura you spent.";
+    $("#confirmQuestionRemoval").textContent = approved ? "Deactivate question" : "Delete submission";
+    $("#questionRemovalStatus").textContent = "";
+    $("#questionRemovalDialog").showModal();
+}
+
+async function confirmQuestionRemoval() {
+    const question = state.questionSubmissionToRemove;
+    if (!question) return;
+    const button = $("#confirmQuestionRemoval");
+    const approved = question.status === "approved";
+    setButtonLoading(button, true, approved ? "Deactivating…" : "Deleting…");
+    $("#questionRemovalStatus").textContent = "";
+    try {
+        const result = await api.deleteQuestionSubmission(api.user.id, question.id);
+        if (result.question_removed_from_school) await loadQuestionSubmissions({ submissionId: question.id });
+        else {
+            state.questionSubmissions = state.questionSubmissions.filter((item) => String(item.id) !== String(question.id));
+            renderQuestionSubmissions();
+        }
+        if (Number(result.aura_refunded) > 0) await refreshProfile();
+        $("#questionRemovalDialog").close();
+        $("#questionHistoryStatus").textContent = `${result.message || (approved ? "Question deactivated." : "Submission deleted.")}${Number(result.aura_refunded) > 0 ? ` ${Number(result.aura_refunded).toLocaleString()} aura refunded.` : ""}`;
+        state.questionSubmissionToRemove = null;
+    } catch (error) {
+        $("#questionRemovalStatus").textContent = error.message || (approved ? "Could not deactivate that question." : "Could not delete that submission.");
+    } finally {
+        setButtonLoading(button, false);
+        button.textContent = approved ? "Deactivate question" : "Delete submission";
+    }
+}
+
+function openQuestionDialog({ section = "submit", submissionId = null } = {}) {
     $("#questionStatus").textContent = "";
     const maxLength = Math.max(3, Number(state.config?.max_custom_question_length ?? 280));
     $("#questionText").maxLength = maxLength;
     if (!state.questionArtworkFile) resetQuestionArtworkPreview();
     updateQuestionSubmissionUI();
+    setQuestionSection(section, { submissionId, refresh: section === "history" });
     $("#questionDialog .question-submission-scroll").scrollTop = 0;
     openDetailScreen($("#questionDialog"));
 }
@@ -5212,7 +5411,7 @@ function previewSignupPhoto() {
         return;
     }
     const reader = new FileReader();
-    reader.addEventListener("load", () => { preview.innerHTML = `<img src="${escapeHTML(reader.result)}" alt="">`; }, { once: true });
+    reader.addEventListener("load", () => { preview.innerHTML = `<img loading="lazy" decoding="async" src="${escapeHTML(reader.result)}" alt="">`; }, { once: true });
     reader.addEventListener("error", resetSignupPhotoPreview, { once: true });
     reader.readAsDataURL(file);
 }
@@ -5346,9 +5545,14 @@ async function requestAccountDeletion(event) {
     setButtonLoading(button, true, "Scheduling...");
     $("#deleteAccountStatus").textContent = "";
     try {
+        await preloadRoute("chats").then((route) => route?.beforeSessionEnd?.()).catch(() => null);
         const result = await api.requestAccountDeletion(api.user.id);
         const scheduled = new Intl.DateTimeFormat(undefined, { dateStyle: "long", timeStyle: "short" }).format(new Date(result.scheduled_for));
         $("#deleteAccountDialog").close();
+        await import("./chat/outbox.js")
+            .then(({ clearChatOutboxes }) => clearChatOutboxes(api.user.id))
+            .catch(() => null);
+        clearQuestionSubmissionState();
         api.clearSession();
         showSignedOut(`Account deletion is scheduled for ${scheduled}. Sign in with your passkey before then if you want to keep it.`);
     } catch (error) {
@@ -5385,24 +5589,31 @@ async function cancelAccountDeletion() {
 }
 
 async function logoutAndReset() {
+    const userId = api.user?.id;
     clearCachedAppState();
+    await preloadRoute("chats").then((route) => route?.beforeSessionEnd?.()).catch(() => null);
     await detachWebPushSubscription().catch(() => null);
     await api.logout().catch(() => null);
+    await import("./chat/outbox.js")
+        .then(({ clearChatOutboxes }) => clearChatOutboxes(userId))
+        .catch(() => null);
+    clearQuestionSubmissionState();
     api.clearSession();
     location.href = "./?signin=1";
 }
 
 function switchPanel(panel, { historyMode = "push", restoreScroll = true } = {}) {
-    if (!["feed", "play", "profile"].includes(panel)) return;
+    if (!["feed", "play", "chats", "profile"].includes(panel)) return;
+    if (panel === "chats" && !(state.config?.enable_chats === true && state.config?.enable_web_chats === true)) return;
     const previousPanel = state.activePanel;
     if (previousPanel !== panel) state.tabScrollPositions[previousPanel] = window.scrollY;
     else if (historyMode === "push") state.tabScrollPositions[panel] = 0;
     state.activePanel = panel;
     document.body.classList.toggle("play-active", panel === "play");
-    const direction = ["feed", "play", "profile"].indexOf(panel) >= ["feed", "play", "profile"].indexOf(previousPanel) ? "forward" : "back";
+    const direction = ["feed", "play", "chats", "profile"].indexOf(panel) >= ["feed", "play", "chats", "profile"].indexOf(previousPanel) ? "forward" : "back";
     $("#appView").dataset.navigationDirection = direction;
     $$(".panel").forEach((element) => element.classList.add("hidden"));
-    $(`#${panel}Panel`).classList.remove("hidden");
+    mountUIRoot($(`#${panel}Panel`)).classList.remove("hidden");
     $$(".nav-item").forEach((button) => {
         const active = button.dataset.panel === panel;
         button.classList.toggle("active", active);
@@ -5412,15 +5623,46 @@ function switchPanel(panel, { historyMode = "push", restoreScroll = true } = {})
     if (historyMode !== "none") writeNavigationState(historyMode);
     const targetScroll = restoreScroll ? state.tabScrollPositions[panel] || 0 : 0;
     requestAnimationFrame(() => scrollTo({ top: targetScroll, behavior: "instant" }));
-    if (panel === "play") loadPlay();
-    if (panel === "profile") loadProfilePanel();
-    if (panel === "feed") refreshFeedGateStatus().then(() => { if (!isFeedVoteLocked() && !state.feedItems.length) loadFeed(true); });
+    void activatePanelRoute(panel);
+}
+
+function activatePanelRoute(panel) {
+    const context = { isCurrent: () => state.activePanel === panel };
+    if (panel === "feed") Object.assign(context, {
+        refreshGate: refreshFeedGateStatus,
+        isLocked: isFeedVoteLocked,
+        hasItems: () => state.feedItems.length > 0,
+        load: loadFeed,
+    });
+    if (panel === "play") context.load = loadPlay;
+    if (panel === "chats") Object.assign(context, {
+        root: $("#chatsRoot"), api,
+        getUser: () => api.user,
+        getConfig: () => state.config,
+        softHaptic, successHaptic, showToast,
+        onUnreadChange: renderChatUnreadBadge,
+    });
+    if (panel === "profile") context.load = loadProfilePanel;
+    return activateRoute(panel, context).catch(() => {
+        if (!context.isCurrent()) return;
+        if (panel === "feed") return context.refreshGate().then(() => {
+            if (!context.isLocked() && !context.hasItems()) return context.load(true);
+        });
+        return context.load();
+    });
 }
 
 async function refreshActivePanel() {
     softHaptic(12);
-    if (state.activePanel === "feed") await loadFeed(true);
-    else if (state.activePanel === "profile") await loadProfilePanel();
+    if (state.activePanel === "feed") {
+        await loadFeed(true);
+        await (await prepareFeedView()).refreshStories?.();
+    }
+    else if (state.activePanel === "chats") {
+        const route = await preloadRoute("chats");
+        await route.refresh?.();
+    }
+    else if (state.activePanel === "profile") await loadProfilePanel({ force: true });
     else await loadPlay();
     successHaptic();
 }
@@ -5431,15 +5673,22 @@ function beginPullRefresh(event) {
     state.pullRefreshDistance = 0;
 }
 
+let pullRefreshFrame = null;
+
+function renderPullRefreshDistance() {
+    pullRefreshFrame = null;
+    const indicator = $("#pullRefreshIndicator");
+    indicator.style.setProperty("--pull-distance", `${state.pullRefreshDistance}px`);
+    indicator.style.setProperty("--pull-opacity", String(Math.min(1, state.pullRefreshDistance / 50)));
+    indicator.classList.toggle("ready", state.pullRefreshDistance >= 64);
+}
+
 function movePullRefresh(event) {
     if (state.pullRefreshStartY === null) return;
     const currentY = event.touches?.[0]?.clientY;
     if (!Number.isFinite(currentY)) return;
     state.pullRefreshDistance = Math.max(0, Math.min(110, (currentY - state.pullRefreshStartY) * .55));
-    const indicator = $("#pullRefreshIndicator");
-    indicator.style.setProperty("--pull-distance", `${state.pullRefreshDistance}px`);
-    indicator.style.setProperty("--pull-opacity", String(Math.min(1, state.pullRefreshDistance / 50)));
-    indicator.classList.toggle("ready", state.pullRefreshDistance >= 64);
+    if (pullRefreshFrame === null) pullRefreshFrame = requestAnimationFrame(renderPullRefreshDistance);
 }
 
 function endPullRefresh() {
@@ -5447,6 +5696,8 @@ function endPullRefresh() {
     const shouldRefresh = state.pullRefreshDistance >= 64;
     state.pullRefreshStartY = null;
     state.pullRefreshDistance = 0;
+    if (pullRefreshFrame !== null) cancelAnimationFrame(pullRefreshFrame);
+    pullRefreshFrame = null;
     const indicator = $("#pullRefreshIndicator");
     indicator.style.removeProperty("--pull-distance");
     indicator.style.removeProperty("--pull-opacity");
@@ -5460,6 +5711,8 @@ function installNativeSheetGestures() {
         if (dialog.dataset.sheetGesture === "1" || dialog.classList.contains("reaction-picker-dialog")) continue;
         dialog.dataset.sheetGesture = "1";
         let startY = null;
+        let dragDistance = 0;
+        let dragFrame = null;
         dialog.addEventListener("pointerdown", (event) => {
             const rect = dialog.getBoundingClientRect();
             if (event.clientY - rect.top > 72 || event.target.closest("button, input, textarea, select, a")) return;
@@ -5468,19 +5721,29 @@ function installNativeSheetGestures() {
         });
         dialog.addEventListener("pointermove", (event) => {
             if (startY === null) return;
-            const distance = Math.max(0, event.clientY - startY);
-            dialog.style.setProperty("--sheet-drag", `${distance}px`);
+            dragDistance = Math.max(0, event.clientY - startY);
+            if (dragFrame !== null) return;
+            dragFrame = requestAnimationFrame(() => {
+                dragFrame = null;
+                dialog.style.setProperty("--sheet-drag", `${dragDistance}px`);
+            });
         });
         const finish = (event) => {
             if (startY === null) return;
             const distance = Math.max(0, event.clientY - startY);
             startY = null;
+            dragDistance = 0;
+            if (dragFrame !== null) cancelAnimationFrame(dragFrame);
+            dragFrame = null;
             dialog.style.removeProperty("--sheet-drag");
             if (distance > 90 && dialog.open) dialog.close();
         };
         dialog.addEventListener("pointerup", finish);
         dialog.addEventListener("pointercancel", () => {
             startY = null;
+            dragDistance = 0;
+            if (dragFrame !== null) cancelAnimationFrame(dragFrame);
+            dragFrame = null;
             dialog.style.removeProperty("--sheet-drag");
         });
     }
@@ -6007,10 +6270,22 @@ function bindEvents() {
     document.addEventListener("click", (event) => {
         if (!event.target.closest(".detail-overflow")) closeDetailActionMenus();
     });
-    $$(".nav-item").forEach((button) => button.addEventListener("click", (event) => {
-        switchPanel(button.dataset.panel);
-        if (event.detail > 0) button.blur();
-    }));
+    $$(".nav-item").forEach((button) => {
+        const preload = () => { void preloadRoute(button.dataset.panel); };
+        button.addEventListener("pointerenter", preload, { passive: true });
+        button.addEventListener("focus", preload);
+        button.addEventListener("click", (event) => {
+            let historyMode = "push";
+            if (button.dataset.panel === "chats" && state.activePanel === "chats" && new URLSearchParams(location.search).has("chat")) {
+                const url = new URL(location.href);
+                url.searchParams.delete("chat");
+                history.pushState({ validApp: true, panel: "chats" }, "", `${url.pathname}${url.search}`);
+                historyMode = "none";
+            }
+            switchPanel(button.dataset.panel, { historyMode });
+            if (event.detail > 0) button.blur();
+        });
+    });
     $("#playCard").addEventListener("click", (event) => {
         const menuButton = event.target.closest("[data-toggle-play-menu]");
         if (menuButton) toggleDetailActionMenu(menuButton);
@@ -6207,6 +6482,19 @@ function bindEvents() {
     $("#questionForm").addEventListener("submit", reviewQuestionSubmission);
     $("#questionForm").addEventListener("input", resetQuestionSubmissionIfDraftChanged);
     $("#questionForm").addEventListener("change", resetQuestionSubmissionIfDraftChanged);
+    $("#questionSubmitTab").addEventListener("click", () => setQuestionSection("submit"));
+    $("#questionHistoryTab").addEventListener("click", () => setQuestionSection("history", { refresh: true }));
+    $("#refreshQuestionHistory").addEventListener("click", () => loadQuestionSubmissions());
+    $("#questionHistoryList").addEventListener("click", (event) => {
+        if (event.target.closest("[data-question-submit-empty]")) setQuestionSection("submit");
+        const removal = event.target.closest("[data-remove-question-submission]");
+        if (removal) openQuestionRemoval(removal.dataset.removeQuestionSubmission);
+    });
+    $("#confirmQuestionRemoval").addEventListener("click", confirmQuestionRemoval);
+    $("#questionRemovalDialog").addEventListener("close", () => {
+        state.questionSubmissionToRemove = null;
+        $("#questionRemovalStatus").textContent = "";
+    });
     $("#questionImage").addEventListener("change", previewQuestionArtwork);
     $("#adjustQuestionCrop").addEventListener("click", () => openQuestionArtworkCrop(state.questionArtworkSourceFile));
     $("#cancelQuestionCrop").addEventListener("click", cancelQuestionArtworkCrop);
@@ -6290,6 +6578,7 @@ function bindEvents() {
     document.addEventListener("error", handleAvatarImageError, true);
     $$("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
     addEventListener("valid:session-expired", () => showSignedOut("Your session expired. Sign in with your passkey again."));
+    addEventListener("valid:feed-update", (event) => applyFeedRealtimeEvent(event.detail));
     addEventListener("popstate", handleAppPopState);
     addEventListener("offline", updateNetworkStatus);
     addEventListener("online", updateNetworkStatus);
@@ -6304,10 +6593,6 @@ function bindEvents() {
     $("#appView").addEventListener("touchstart", beginPullRefresh, { passive: true });
     $("#appView").addEventListener("touchmove", movePullRefresh, { passive: true });
     $("#appView").addEventListener("touchend", endPullRefresh, { passive: true });
-    document.addEventListener("click", (event) => {
-        const control = event.target.closest("button:not(:disabled), a.primary-button, [role='button']");
-        if (control) softHaptic(control.matches(".danger-button, [data-delete], [data-block-classmate]") ? 16 : 6);
-    }, { capture: true });
     addEventListener("beforeinstallprompt", (event) => {
         event.preventDefault();
         state.installPrompt = event;
@@ -6329,16 +6614,17 @@ $$('[data-share-anonymous], [data-share-feed-platform]').forEach((button) => {
     button.innerHTML = `${shareIconMarkup(platform)}${button.classList.contains("expanded") ? `<span>Share on ${escapeHTML(label)}</span>` : ""}`;
 });
 syncVisualViewport();
-window.visualViewport?.addEventListener("resize", syncVisualViewport);
-window.visualViewport?.addEventListener("scroll", syncVisualViewport);
-addEventListener("resize", syncVisualViewport);
+window.visualViewport?.addEventListener("resize", scheduleVisualViewportSync);
+window.visualViewport?.addEventListener("scroll", scheduleVisualViewportSync);
+addEventListener("resize", scheduleVisualViewportSync);
 document.addEventListener("focusin", () => {
-    syncVisualViewport();
+    scheduleVisualViewportSync();
     setTimeout(keepFocusedControlVisible, 250);
 });
-document.addEventListener("focusout", () => requestAnimationFrame(syncVisualViewport));
+document.addEventListener("focusout", scheduleVisualViewportSync);
 bindEvents();
 installNativeSheetGestures();
+initializeParkedUI();
 if (!navigator.onLine) updateNetworkStatus();
 if ("serviceWorker" in navigator && !demoMode) {
     registerAppServiceWorker();

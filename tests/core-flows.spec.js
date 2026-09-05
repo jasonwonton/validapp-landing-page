@@ -253,7 +253,7 @@ test("PWA ships install icons and Web Push worker handlers", async ({ request })
         expect.objectContaining({ sizes: "512x512", purpose: "maskable" }),
     ]));
     expect(manifest.orientation).toBe("portrait-primary");
-    expect(manifest.shortcuts.map((shortcut) => shortcut.name)).toEqual(["Feed", "Play", "Profile"]);
+    expect(manifest.shortcuts.map((shortcut) => shortcut.name)).toEqual(["Feed", "Play", "Chats", "Profile"]);
     expect(manifest.launch_handler.client_mode).toBe("navigate-existing");
 
     const workerResponse = await request.get("/app/service-worker.js");
@@ -264,6 +264,12 @@ test("PWA ships install icons and Web Push worker handlers", async ({ request })
     expect(worker).toContain("safeNotificationURL");
     expect(worker).toContain("SKIP_WAITING");
     expect(worker).toContain('{ action: "play", title: "Play" }');
+    expect(worker).toContain('url.pathname.startsWith("/api/")');
+    expect(worker).not.toContain("cache.put(");
+    expect(worker).not.toContain("Jua-Regular.ttf");
+    expect(worker).toContain("Jua-Latin.woff2");
+    expect(worker).toContain("./routes/route-loader.js");
+    expect(worker).toContain("./realtime-list.js");
 });
 
 test("Android back and forward follow the in-app detail stack", async ({ page }) => {
@@ -376,6 +382,14 @@ test("feed navigation, filtering, and reactions work", async ({ page }) => {
     await expect(detail.getByRole("heading", { name: "Who has the best music taste?" })).toBeVisible();
 });
 
+test("God Mode first-letter hints appear in the personal feed and poll detail", async ({ page }) => {
+    await signInToDemo(page, "&godmode=1");
+    const poll = page.locator("[data-feed-detail='9001']");
+    await expect(poll.locator(".feed-answer")).toContainText("Sophomore (M)");
+    await poll.click();
+    await expect(page.locator("#feedDetailDialog .feed-detail-first-letter-hint")).toHaveText("Hint: starts with M");
+});
+
 test("feed search includes classmates and filters their school activity", async ({ page }) => {
     await signInToDemo(page);
     await page.getByPlaceholder("Search names, questions...").fill("Maya");
@@ -479,7 +493,7 @@ test("poll share buttons generate the iOS-style 9:16 photo", async ({ page }) =>
     await page.getByRole("button", { name: "School", exact: true }).click();
     await page.locator("[data-feed-detail='9003']").click();
     const dialog = page.locator("#feedDetailDialog");
-    await expect(dialog.locator(".feed-detail-art > img")).toHaveAttribute("src", /anonymous\.png/);
+    await expect(dialog.locator(".feed-detail-art > img")).toHaveAttribute("src", /anonymous\.webp/);
     await expect(dialog.locator(".feed-detail-art .artwork-placeholder")).toHaveCount(0);
     await expect(dialog.getByText("Share this poll")).toHaveCount(0);
     await dialog.getByRole("button", { name: "Share poll to Snapchat" }).click();
@@ -555,7 +569,7 @@ test("new users vote to unlock Feed just like iOS", async ({ page }) => {
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await expect(page.getByRole("heading", { name: "84 votes" })).toBeVisible();
     await expect(page.getByText("Cast 2 more votes to unlock your Feed and see what classmates said.")).toBeVisible();
-    await expect(page.locator(".feed-gate-lock")).toHaveAttribute("src", "../assets/app/lock.png");
+    await expect(page.locator(".feed-gate-lock")).toHaveAttribute("src", "../assets/app/lock.webp");
     await expect(page.getByText("1 / 3 votes cast")).toBeVisible();
     await page.getByRole("button", { name: "Vote now to unlock Feed" }).click();
     await expect(page.getByText("Who would survive longest on a deserted island?")).toBeVisible();
@@ -762,7 +776,7 @@ test("profile exposes iOS-style editing, ask link, purchases, invites, and sign 
     await bioDialog.getByRole("button", { name: "Save bio" }).click();
     await expect(page.locator("[data-edit-bio]")).toHaveText("Senior year, good music, better people.");
     await page.getByRole("button", { name: /Submit a school question for/i }).click();
-    await expect(page.getByRole("dialog", { name: "Submit a school question" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "School Questions" })).toBeVisible();
 });
 
 test("settings shows aura balance and confirms boost spending", async ({ page }) => {

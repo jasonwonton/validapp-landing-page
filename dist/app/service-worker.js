@@ -1,4 +1,5 @@
-const CACHE_NAME = "valid-web-v38";
+const CACHE_PREFIX = "valid-web-";
+const CACHE_NAME = `${CACHE_PREFIX}v51`;
 const APP_SHELL = [
     "./",
     "./styles.css",
@@ -6,22 +7,31 @@ const APP_SHELL = [
     "./api.js",
     "./demo-api.js",
     "./passkeys.js",
+    "./performance.js",
+    "./keyed-list.js",
+    "./realtime-list.js",
+    "./routes/route-loader.js",
+    "./routes/feed.js",
+    "./routes/play.js",
+    "./routes/chats.js",
+    "./routes/profile.js",
+    "./chat/styles.css",
+    "./chat/index.js",
+    "./chat/models.js",
+    "./chat/store.js",
+    "./chat/media.js",
+    "./chat/outbox.js",
+    "./calls/index.js",
+    "./stories/index.js",
+    "./stories/styles.css",
+    "./calls/styles.css",
     "./manifest.webmanifest",
     "../assets/AppIconV2.png",
     "../assets/pwa/icon-192.png",
     "../assets/pwa/icon-512.png",
     "../assets/pwa/icon-maskable-512.png",
     "../assets/valid_logo.png",
-    "../assets/Jua-Regular.ttf",
-    "../assets/app/aura.png",
-    "../assets/app/anonymous.png",
-    "../assets/app/pencil-clipboard.png",
-    "../assets/app/lock.png",
-    "../assets/app/crown.png",
-    "../assets/app/profile-at.svg",
-    "../assets/app/profile-person-card.svg",
-    "../assets/app/profile-school.svg",
-    "../assets/app/profile-graduation-cap.svg",
+    "../assets/Jua-Latin.woff2",
 ];
 
 self.addEventListener("install", (event) => {
@@ -35,24 +45,30 @@ self.addEventListener("message", (event) => {
 self.addEventListener("activate", (event) => {
     event.waitUntil(
         caches.keys()
-            .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+            .then((keys) => Promise.all(keys
+                .filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
+                .map((key) => caches.delete(key))))
             .then(() => self.clients.claim())
     );
 });
 
 self.addEventListener("fetch", (event) => {
-    if (event.request.method !== "GET" || new URL(event.request.url).origin !== self.location.origin) return;
-    event.respondWith(
-        fetch(event.request)
-            .then((response) => {
-                if (response.ok) {
-                    const copy = response.clone();
-                    caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-                }
-                return response;
-            })
-            .catch(() => caches.match(event.request).then((cached) => cached || caches.match("./")))
-    );
+    const url = new URL(event.request.url);
+    if (event.request.method !== "GET" || url.origin !== self.location.origin) return;
+
+    // Authenticated JSON is deliberately network-only. The app owns the small,
+    // user-scoped snapshots that are safe to restore offline.
+    if (url.pathname.startsWith("/api/")) return;
+
+    if (event.request.mode === "navigate") {
+        event.respondWith(caches.open(CACHE_NAME).then((cache) => cache.match("./")).then((cached) => cached || fetch(event.request)));
+        return;
+    }
+
+    // Only files explicitly listed in APP_SHELL can ever be read from Cache
+    // Storage. Unlisted same-origin media and other runtime responses stay on
+    // the network even when an origin accidentally omits a private directive.
+    event.respondWith(caches.open(CACHE_NAME).then((cache) => cache.match(event.request)).then((cached) => cached || fetch(event.request)));
 });
 
 function safeNotificationURL(value) {
@@ -73,6 +89,7 @@ self.addEventListener("push", (event) => {
         payload = { body: event.data?.text() || "You have a new update." };
     }
     const tag = typeof payload.tag === "string" && payload.tag.trim() ? payload.tag.trim() : undefined;
+    const incomingCall = payload.data?.type === "incoming_call";
     event.waitUntil(self.registration.showNotification(payload.title || "Valid", {
         body: payload.body || "You have a new update.",
         icon: "/assets/pwa/icon-192.png",
@@ -80,10 +97,9 @@ self.addEventListener("push", (event) => {
         tag,
         renotify: Boolean(tag),
         timestamp: Number(payload.timestamp) || Date.now(),
-        actions: [
-            { action: "open", title: "Open Valid" },
-            { action: "play", title: "Play" },
-        ],
+        actions: incomingCall
+            ? [{ action: "open", title: "Open call" }]
+            : [{ action: "open", title: "Open Valid" }, { action: "play", title: "Play" }],
         data: { url: safeNotificationURL(payload.url) },
     }));
 });

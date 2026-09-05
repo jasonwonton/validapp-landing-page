@@ -1,8 +1,8 @@
 /app/*
-  Content-Security-Policy: default-src 'none'; base-uri 'self'; connect-src 'self' https://api.six7.lol https://validappcdn.com; font-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data: https:; manifest-src 'self'; object-src 'none'; script-src 'self'; style-src 'self'; worker-src 'self'
+  Content-Security-Policy: default-src 'none'; base-uri 'self'; connect-src 'self' https://api.six7.lol https://validappcdn.com wss://livekit.six7.lol wss://livekit-staging-150-136-43-223.sslip.io wss://livekit-prod-150-136-43-223.sslip.io; font-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' blob: data: https:; manifest-src 'self'; media-src 'self' blob: https:; object-src 'none'; script-src 'self'; style-src 'self'; worker-src 'self'
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Resource-Policy: same-origin
-  Permissions-Policy: camera=(), geolocation=(), microphone=(), payment=(), usb=()
+  Permissions-Policy: camera=(self), geolocation=(), microphone=(self), payment=(), usb=()
   Referrer-Policy: no-referrer
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY

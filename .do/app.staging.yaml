@@ -1,0 +1,45 @@
+# Standalone private-origin smoke target. The production validapp.lol ingress
+# remains in the Six7 backend app until this service passes the release gates.
+name: validapp-web-staging
+region: sfo
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
+ingress:
+  rules:
+    - match:
+        path:
+          prefix: /
+      component:
+        name: validapp-web
+        preserve_path_prefix: true
+services:
+  - name: validapp-web
+    github:
+      repo: jasonwonton/validapp-landing-page
+      branch: codex/pwa-parity-release
+      deploy_on_push: false
+    source_dir: /
+    build_command: npm ci --include=dev && npm run build
+    run_command: npm start
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    health_check:
+      http_path: /app/
+      initial_delay_seconds: 10
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3
+    liveness_health_check:
+      http_path: /app/
+      initial_delay_seconds: 20
+      period_seconds: 20
+      timeout_seconds: 5
+      failure_threshold: 3
+    alerts:
+      - rule: RESTART_COUNT
+        operator: GREATER_THAN
+        value: 2
+        window: TEN_MINUTES

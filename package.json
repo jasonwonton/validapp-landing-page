@@ -1,14 +1,23 @@
 {
   "name": "validapp-landing-page",
   "private": true,
+  "type": "module",
   "scripts": {
     "build": "node scripts/build-static.mjs",
+    "start": "node scripts/serve-production.mjs",
+    "test:static-origin": "node --test scripts/tests/static-origin.test.mjs",
+    "test:performance": "node scripts/check-performance-budgets.mjs",
+    "test:ui-runtime": "node scripts/test-ui-runtime.mjs",
     "test:e2e": "playwright test",
     "test:e2e:update": "playwright test --update-snapshots",
     "test:passkey-integration": "node scripts/test-passkey-backend.mjs",
     "test:production": "node scripts/check-production.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1"
+    "@playwright/test": "^1.62.1",
+    "esbuild": "^0.25.9"
+  },
+  "dependencies": {
+    "livekit-client": "^2.22.2"
   }
 }

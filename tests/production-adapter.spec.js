@@ -3,6 +3,23 @@ import { expect, test } from "@playwright/test";
 const API_ORIGIN = "https://api.six7.lol";
 const USER_ID = "11111111-1111-1111-1111-111111111111";
 
+async function installTurnstileStub(page) {
+    await page.addInitScript(() => {
+        window.turnstile = {
+            render(_selector, options) {
+                setTimeout(() => options.callback("verified-browser-token"), 0);
+                return "widget-1";
+            },
+            getResponse() { return ""; },
+            reset() {},
+            remove() {},
+        };
+    });
+    await page.route("https://challenges.cloudflare.com/turnstile/v0/api.js?*", (route) => (
+        route.fulfill({ status: 200, contentType: "application/javascript", body: "" })
+    ));
+}
+
 async function useProductionApiOrigin(page) {
     await page.addInitScript((apiOrigin) => {
         window.VALID_API_BASE_URL = `${apiOrigin}/api/v1`;
@@ -33,6 +50,8 @@ async function fillProductionSignupThroughGrade(dialog) {
 async function fillProductionSignup(dialog) {
     await fillProductionSignupThroughGrade(dialog);
     await dialog.getByLabel("Phone number").fill("4155550123");
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await dialog.getByLabel("Verification code").fill("123456");
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("First name").fill("Taylor");
     await dialog.getByRole("button", { name: "Continue" }).click();
@@ -170,6 +189,7 @@ test("real adapter sends bounded, encoded unified-search queries", async ({ page
         await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
     });
     await page.goto("/app/?signin=1");
+    urls.length = 0;
     await page.evaluate(async (userId) => {
         const { ValidAPI } = await import("/app/api.js");
         const api = new ValidAPI();
@@ -209,6 +229,7 @@ test("real adapter uses the scoped aura boost endpoints", async ({ page }) => {
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ aura_points: 100 }) });
     });
     await page.goto("/app/?signin=1");
+    requests.length = 0;
     await page.evaluate(async ({ userId, targetId }) => {
         const { ValidAPI } = await import("/app/api.js");
         const api = new ValidAPI();
@@ -430,6 +451,40 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
     const requests = [];
     let questionAttempts = 0;
     let webPushAttempts = 0;
+    const questionSubmissions = [
+        {
+            id: "61111111-1111-1111-1111-111111111111",
+            status: "approved",
+            question_text: "Who makes everyone feel included?",
+            image_url: "https://cdn.example/question.png",
+            aura_spent: 200,
+            is_anonymous: false,
+            submitted_at: "2026-09-01T12:00:00Z",
+            reviewed_at: "2026-09-02T12:00:00Z",
+            question_id: 99,
+            question_is_active: true,
+            vote_count: 8,
+            results_visible: true,
+            results_minimum_votes: 5,
+            vote_results: [{ name: "Maya Chen", vote_count: 5 }, { name: "Noah Williams", vote_count: 3 }],
+        },
+        {
+            id: "62222222-2222-2222-2222-222222222222",
+            status: "pending",
+            question_text: "Who has the most creative study routine?",
+            image_url: null,
+            aura_spent: 200,
+            is_anonymous: true,
+            submitted_at: "2026-09-04T12:00:00Z",
+            reviewed_at: null,
+            question_id: null,
+            question_is_active: null,
+            vote_count: 0,
+            results_visible: false,
+            results_minimum_votes: 5,
+            vote_results: [],
+        },
+    ];
     await page.route(`${API_ORIGIN}/api/v1/**`, async (route) => {
         const request = route.request();
         const url = new URL(request.url());
@@ -452,6 +507,9 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
             body: payload === null ? "" : JSON.stringify(payload),
         });
 
+        if (path === "/api/v1/auth/session") {
+            return fulfill({ detail: "signed out" }, 401);
+        }
         if (path === "/api/v1/auth/passkey/authenticate/challenge") {
             return fulfill({
                 challenge: "AQIDBA==",
@@ -500,6 +558,28 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
                 has_profile: phoneExists,
             });
         }
+        if (path === "/api/v1/auth/phone/request/web") {
+            return fulfill({
+                phone_number: "4155550123",
+                channel: "sms",
+                status: "pending",
+                attempt_count: 1,
+                check_count: 0,
+                last_sent_at: new Date().toISOString(),
+                can_resend: false,
+            });
+        }
+        if (path === "/api/v1/auth/phone/confirm") {
+            return fulfill({
+                phone_number: "4155550123",
+                channel: "sms",
+                status: "approved",
+                attempt_count: 1,
+                check_count: 1,
+                last_sent_at: new Date().toISOString(),
+                is_approved: true,
+            });
+        }
         if (path === "/api/v1/auth/passkey/signup/complete") {
             return fulfill({ access_token: "session-token", user: { id: USER_ID, subscribed_user: false }, profile: profile("Taylor", profileAura) });
         }
@@ -545,6 +625,7 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
             max_custom_question_length: 280,
             max_skips_per_set: 3,
             play_lock_time_seconds: 60,
+            turnstile_site_key: "public-site-key",
         });
         if (path === `/api/v1/users/${USER_ID}/question-answers`) {
             return fulfill({ aura_points_earned: 5, total_aura_points: 55, current_streak: 1, streak_multiplier: 1 });
@@ -564,7 +645,21 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
         }
         if (path === `/api/v1/users/${USER_ID}/ask-safety-notices`) return fulfill([]);
         if (path === `/api/v1/users/${USER_ID}/ask-safety-notices?include_acknowledged=true`) return fulfill([]);
-        if (path === `/api/v1/users/${USER_ID}/question-submissions`) {
+        if (path === `/api/v1/users/${USER_ID}/question-submissions?limit=100` && request.method() === "GET") {
+            return fulfill(questionSubmissions);
+        }
+        if (path.startsWith(`/api/v1/users/${USER_ID}/question-submissions/`) && request.method() === "DELETE") {
+            const submissionId = path.split("/").at(-1);
+            const question = questionSubmissions.find((item) => item.id === submissionId);
+            if (!question) return fulfill({ detail: "Question submission not found" }, 404);
+            if (question.status === "approved") {
+                question.question_is_active = false;
+                return fulfill({ id: question.id, message: "Question deactivated and removed from future school questions. Existing polls and results were kept.", aura_refunded: 0, question_removed_from_school: true });
+            }
+            questionSubmissions.splice(questionSubmissions.indexOf(question), 1);
+            return fulfill({ id: question.id, message: "Question deleted before approval and removed from review.", aura_refunded: question.aura_spent, question_removed_from_school: false });
+        }
+        if (path === `/api/v1/users/${USER_ID}/question-submissions` && request.method() === "POST") {
             questionAttempts += 1;
             if (questionAttempts <= questionFailureCount) return fulfill({ detail: "Temporary upstream failure" }, 500);
             return fulfill({
@@ -610,7 +705,8 @@ test("real adapter signs in, authenticates API calls, and revokes logout", async
     const profileRequest = requests.find((request) => request.path.endsWith("/profile"));
     expect(profileRequest.authorization).toBe("Bearer session-token");
 
-    await page.getByRole("button", { name: "Log out" }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: "Sign Out", exact: true }).click();
     await expect.poll(() => requests.some((request) => request.path === "/api/v1/auth/logout")).toBe(true);
     const logout = requests.find((request) => request.path === "/api/v1/auth/logout");
     expect(logout.authorization).toBe("Bearer session-token");
@@ -702,8 +798,9 @@ test("unified search debounces rapid typing into one bounded request pair", asyn
     expect(requests.filter((request) => request.path.includes("/feed?limit=20&offset=0&search=")).length).toBe(1);
 });
 
-test("real adapter links signup to the phone identity without an SMS request", async ({ page }) => {
+test("real adapter links signup only after Turnstile-backed SMS verification", async ({ page }) => {
     await installCredentialStub(page, "create");
+    await installTurnstileStub(page);
     const requests = await interceptProductionAPI(page, { signup: true });
 
     await page.goto("/app/?signin=1");
@@ -750,7 +847,14 @@ test("real adapter links signup to the phone identity without an SMS request", a
     const photo = requests.find((request) => request.path.endsWith("/profile-picture"));
     expect(photo.authorization).toBe("Bearer session-token");
     expect(photo.contentType).toMatch(/^multipart\/form-data; boundary=/);
-    expect(requests.some((request) => /sms|phone\/(request|confirm)/i.test(request.path))).toBe(false);
+    const verificationRequest = requests.find((request) => request.path === "/api/v1/auth/phone/request/web");
+    expect(verificationRequest.body).toEqual({
+        phone_number: "4155550123",
+        channel: "sms",
+        turnstile_token: "verified-browser-token",
+    });
+    const verificationConfirmation = requests.find((request) => request.path === "/api/v1/auth/phone/confirm");
+    expect(verificationConfirmation.body).toEqual({ phone_number: "4155550123", code: "123456" });
 });
 
 test("signup sends existing phone identities back to sign in", async ({ page }) => {
@@ -801,10 +905,11 @@ test("real adapter submits a Play vote and multipart school question", async ({ 
     await classmateProfile.getByRole("button", { name: "Back to classmates" }).click();
     await directory.getByRole("button", { name: "Close" }).click();
     await page.getByRole("button", { name: /Submit a school question/i }).click();
-    const dialog = page.getByRole("dialog", { name: "Submit a school question" });
+    const dialog = page.getByRole("dialog", { name: "School Questions" });
     await dialog.getByLabel("What should your school vote on?").fill("Who makes everyone feel included?");
     await attachAndCropQuestionArtwork(page, dialog);
-    await dialog.getByLabel(/permission to use this image/i).check();
+    await dialog.getByText("I have permission", { exact: true }).click();
+    await expect(page.locator("#questionPermission")).toBeChecked();
     await dialog.getByRole("button", { name: "Submit for review" }).click();
     const confirmation = page.getByRole("dialog").filter({ hasText: "Submit this poll?" });
     await expect(confirmation.getByText("200 aura", { exact: true })).toBeVisible();
@@ -819,6 +924,45 @@ test("real adapter submits a Play vote and multipart school question", async ({ 
     expect(String(submission.body)).toContain("Who makes everyone feel included?");
     expect(String(submission.body)).toContain("idempotency_key");
     expect(String(submission.body)).toContain("valid_logo-square.jpg");
+});
+
+test("question approval deep link opens the exact submission history and deactivates through the released contract", async ({ page }) => {
+    await installCredentialStub(page, "get");
+    const requests = await interceptProductionAPI(page, { feedLocked: true });
+
+    await page.goto("/app/?signin=1&notification=question_submission&submission_id=61111111-1111-1111-1111-111111111111");
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+
+    const dialog = page.getByRole("dialog", { name: "School Questions" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("tab", { name: "My Questions" })).toHaveAttribute("aria-selected", "true");
+    const card = dialog.locator('[data-question-submission="61111111-1111-1111-1111-111111111111"]');
+    await expect(card).toBeFocused();
+    await expect(card).toContainText("Published");
+    await expect(card).toContainText("8 votes");
+    await expect(card).toContainText("Maya Chen");
+    await expect(page).not.toHaveURL(/notification=|submission_id=/);
+
+    await card.getByRole("button", { name: "Deactivate question" }).click();
+    const confirmation = page.getByRole("dialog", { name: "Deactivate question?" });
+    await expect(confirmation).toContainText("Existing polls, votes, and results will stay.");
+    await confirmation.getByRole("button", { name: "Deactivate question" }).click();
+    await expect(confirmation).toBeHidden();
+    await expect(card).toContainText("Deactivated");
+    await expect(card).toContainText("Existing votes and results are kept.");
+
+    const pending = dialog.locator('[data-question-submission="62222222-2222-2222-2222-222222222222"]');
+    await pending.getByRole("button", { name: "Delete submission" }).click();
+    const deleteConfirmation = page.getByRole("dialog", { name: "Delete submission?" });
+    await expect(deleteConfirmation).toContainText("refunds the aura you spent");
+    await deleteConfirmation.getByRole("button", { name: "Delete submission" }).click();
+    await expect(deleteConfirmation).toBeHidden();
+    await expect(pending).toHaveCount(0);
+    await expect(dialog.locator("#questionHistoryStatus")).toContainText("200 aura refunded");
+
+    expect(requests.some((request) => request.method === "GET" && request.path.endsWith("/question-submissions?limit=100"))).toBe(true);
+    expect(requests.some((request) => request.method === "DELETE" && request.path.endsWith("/question-submissions/61111111-1111-1111-1111-111111111111"))).toBe(true);
+    expect(requests.some((request) => request.method === "DELETE" && request.path.endsWith("/question-submissions/62222222-2222-2222-2222-222222222222"))).toBe(true);
 });
 
 test("real adapter renders a classmate Ask Me link from the production response", async ({ page }) => {
@@ -901,6 +1045,12 @@ test("Request a TBH uses full classmate rows with profile pictures", async ({ pa
 });
 
 test("real adapter gives rate-limited users an actionable wait time", async ({ page }) => {
+    await useProductionApiOrigin(page);
+    await page.route(`${API_ORIGIN}/api/v1/auth/session`, (route) => route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "signed out" }),
+    }));
     await page.route(`${API_ORIGIN}/api/v1/auth/passkey/authenticate/challenge`, (route) => route.fulfill({
         status: 429,
         contentType: "application/json",
@@ -923,13 +1073,9 @@ test("question submission refuses an aura overdraft before calling the API", asy
     await page.goto("/app/?signin=1");
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await page.getByRole("button", { name: "Profile", exact: true }).click();
-    await page.getByRole("button", { name: /Submit a school question/i }).click();
-    const dialog = page.getByRole("dialog").filter({ hasText: "Submit a school question" });
-    await dialog.getByLabel("What should your school vote on?").fill("Who makes school more welcoming?");
-    await attachAndCropQuestionArtwork(page, dialog);
-    await dialog.getByLabel(/permission to use this image/i).check();
-    await dialog.getByRole("button", { name: "Submit for review" }).click();
-    await expect(dialog.locator("#questionStatus")).toHaveText("You need 200 aura to submit this question.");
+    const submit = page.getByRole("button", { name: /Submit a school question/i });
+    await expect(submit).toBeDisabled();
+    await expect(submit).toHaveAccessibleName("Submit a school question for 200 aura. Need 150 more aura");
     expect(requests.filter((request) => request.path.endsWith("/question-submissions"))).toHaveLength(0);
 });
 
@@ -940,10 +1086,11 @@ test("ambiguous question retries reuse one idempotency key and never double-char
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await page.getByRole("button", { name: "Profile", exact: true }).click();
     await page.getByRole("button", { name: /Submit a school question/i }).click();
-    const dialog = page.getByRole("dialog").filter({ hasText: "Submit a school question" });
+    const dialog = page.getByRole("dialog", { name: "School Questions" });
     await dialog.getByLabel("What should your school vote on?").fill("Who always makes people feel included?");
     await attachAndCropQuestionArtwork(page, dialog);
-    await dialog.getByLabel(/permission to use this image/i).check();
+    await dialog.getByText("I have permission", { exact: true }).click();
+    await expect(page.locator("#questionPermission")).toBeChecked();
     await dialog.getByRole("button", { name: "Submit for review" }).click();
     await page.getByRole("dialog").filter({ hasText: "Submit this poll?" })
         .getByRole("button", { name: "Spend 200 aura" }).click();

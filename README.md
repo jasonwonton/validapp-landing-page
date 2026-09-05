@@ -77,6 +77,11 @@ layout, motion, Feed, Play, Settings, onboarding, selected-contact discovery,
 question submission, anonymous Inbox, install UI, and account-deletion UI.
 Demo mode cannot send an API request or an SMS.
 
+The Python server is for local demo use only. The deployable origin is
+`npm start`, which serves `dist/`, reads the `/app/*` security policy from
+`dist/_headers`, and emits those values as real HTTP response headers. Run
+`npm run build && npm run test:static-origin` before deploying that service.
+
 Useful variants:
 
 - `http://127.0.0.1:4173/app/?demo=1&locked=1` starts with Feed vote-locked.
