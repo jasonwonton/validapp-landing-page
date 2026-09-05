@@ -5622,8 +5622,24 @@ function switchPanel(panel, { historyMode = "push", restoreScroll = true } = {})
     });
     if (historyMode !== "none") writeNavigationState(historyMode);
     const targetScroll = restoreScroll ? state.tabScrollPositions[panel] || 0 : 0;
-    requestAnimationFrame(() => window.scrollTo(0, targetScroll));
+    restorePanelScroll(panel, targetScroll);
     void activatePanelRoute(panel);
+}
+
+let panelScrollRestoreGeneration = 0;
+
+function restorePanelScroll(panel, targetScroll) {
+    const generation = ++panelScrollRestoreGeneration;
+    const apply = () => {
+        if (generation === panelScrollRestoreGeneration && state.activePanel === panel) {
+            window.scrollTo(0, targetScroll);
+        }
+    };
+    apply();
+    requestAnimationFrame(() => {
+        apply();
+        requestAnimationFrame(apply);
+    });
 }
 
 function activatePanelRoute(panel) {

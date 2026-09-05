@@ -286,10 +286,15 @@ test("Android back and forward follow the in-app detail stack", async ({ page })
 
 test("bottom tabs preserve independent scroll positions", async ({ page }) => {
     await signInToDemo(page);
+    const waitForPanelRestore = () => page.evaluate(() => new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+    }));
+    await waitForPanelRestore();
     await page.evaluate(() => scrollTo(0, 360));
     const feedScroll = await page.evaluate(() => scrollY);
     await page.getByRole("button", { name: "Profile", exact: true }).click();
     await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+    await waitForPanelRestore();
     await page.evaluate(() => scrollTo(0, 720));
     const profileScroll = await page.evaluate(() => scrollY);
     await page.getByRole("button", { name: "Feed", exact: true }).click();
