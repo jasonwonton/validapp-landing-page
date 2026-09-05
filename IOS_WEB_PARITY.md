@@ -136,13 +136,16 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 ## Device and evidence ledger
 
 Current candidate evidence: `npm run build`, UI runtime checks, and performance
-budgets pass; the complete Playwright run is **621 passed, 3 expected
-Android-only skips, 0 failed** across Pixel 7 Chromium, Desktop Chrome, Desktop
-Firefox, and Desktop WebKit projects. The non-Chromium projects block service
-workers because [Playwright supports service workers only in Chromium-based
-browsers](https://playwright.dev/docs/service-workers); Chromium continues to
-cover install, offline-shell, cache-isolation, update, and push-worker behavior.
-The
+budgets pass. [Hosted run 33991276822](https://github.com/jasonwonton/validapp-landing-page/actions/runs/33991276822)
+completed with **621 passed, 3 expected Android-only skips, 0 failed, and no
+retries** across isolated Pixel 7 Chromium, Desktop Chrome, Desktop Firefox, and
+Desktop WebKit jobs. The non-Chromium projects block service workers because
+[Playwright supports service workers only in Chromium-based browsers](https://playwright.dev/docs/service-workers);
+Chromium continues to cover install, offline-shell, cache-isolation, update, and
+push-worker behavior. A branded Google Chrome smoke against the production-style
+v55 local origin also passed install affordance, demo sign-in, Chats/Memento
+navigation and history, unlocked text send, exact chat URL, and cold
+reload/sign-in restoration. The
 header-emitting production-origin adapter passes **3 static-origin contract
 tests**, and its standalone DigitalOcean staging spec validates successfully. The
 scoped backend chat/Memento/Story/Web Push/config safety run is **273 passed, 0
@@ -153,7 +156,7 @@ approval.
 | Target | State | Required before release |
 | --- | --- | --- |
 | Pixel 7 Chromium emulation | Automated | Passing Chats/Mementos, Stories, voice-recording fallback, contract, outbox, dark-mode, adapter, runtime, and performance suites. Emulation is not a physical-device substitute. |
-| Desktop Chrome | Automated | Full suite passing with Chromium service-worker coverage. Branded Chrome hardware remains part of the final-origin smoke test. |
+| Desktop Chrome | Automated + branded smoke | Full hosted suite passes with Chromium service-worker coverage. Branded Chrome on macOS passes the production-style local-origin smoke; final-origin notification and passkey behavior remain open. |
 | Desktop Firefox | Automated | Full application suite passing with service workers blocked at the Playwright boundary; real Firefox notification/install behavior remains a hands-on gate. |
 | Desktop WebKit engine | Automated | Full application suite passing with service workers blocked. This is neither branded Safari nor an installed iPhone PWA, so Safari service-worker, push, media, and install behavior remain open. |
 | Physical Pixel | Not yet tested | Install, camera, push, offline/reopen, keyboard, long scroll, update, two-account realtime. |
