@@ -111,7 +111,8 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Accessibility semantics/focus | Partial | Not yet tested | Labels, live regions, reduced motion, and touch targets exist; screen-reader and contrast audit remain. |
 | Offline shell/installability | Equivalent | Not yet tested | Manifest/service-worker shell tests pass; installed physical-device update/reopen remains. |
 | Offline private-data isolation | Equivalent | Not yet tested | No authenticated API/media response enters Cache Storage; scoped snapshots/outbox are cleared at account exit. |
-| Predictable app updates | Partial | Not yet tested | Versioned shell and update prompt exist; waiting-worker rollback/update soak remains. |
+| Predictable app updates | Partial | Not yet tested | v56 precaches the trusted runtime-style module and keeps telemetry/cache versions synchronized; waiting-worker rollback/update soak remains. |
+| Strict CSP runtime behavior | Equivalent | Not yet tested | Response and meta policies keep `style-src 'self'` without `unsafe-inline`; bounded same-origin CSSOM rules cover dynamic progress, overlays, viewport, crop, and drag state in all four lab projects. Final-origin header verification remains. |
 | Dark Mode | Equivalent | Not yet tested | System color scheme now drives the core shell, Chats, Mementos, forms, and dialogs; automated computed-style check plus visual/accessibility review remain. |
 | Haptics | Partial | Not yet tested | Android vibration is progressive enhancement; precise native haptic parity is unavailable. |
 | Contact picking | Native-only | Not yet tested | Web alternative is the user-gesture Contact Picker with explicit selection only. |
@@ -143,7 +144,7 @@ Desktop WebKit jobs. The non-Chromium projects block service workers because
 [Playwright supports service workers only in Chromium-based browsers](https://playwright.dev/docs/service-workers);
 Chromium continues to cover install, offline-shell, cache-isolation, update, and
 push-worker behavior. A branded Google Chrome smoke against the production-style
-v55 local origin also passed install affordance, demo sign-in, Chats/Memento
+local origin also passed install affordance, demo sign-in, Chats/Memento
 navigation and history, unlocked text send, exact chat URL, and cold
 reload/sign-in restoration. Branded Safari on macOS passed the same
 production-style local origin for demo sign-in, Chats list and DM navigation,

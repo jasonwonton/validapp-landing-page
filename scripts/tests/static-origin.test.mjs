@@ -33,7 +33,12 @@ test("serves the app shell with enforceable security and device policies", async
     const response = await fetch(`${origin}/app/`);
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-type") || "", /^text\/html/);
-    assert.match(response.headers.get("content-security-policy") || "", /frame-ancestors 'none'/);
+    const policy = response.headers.get("content-security-policy") || "";
+    assert.match(policy, /frame-ancestors 'none'/);
+    assert.match(policy, /frame-src https:\/\/challenges\.cloudflare\.com/);
+    assert.match(policy, /script-src 'self' https:\/\/challenges\.cloudflare\.com/);
+    assert.match(policy, /style-src 'self'/);
+    assert.doesNotMatch(policy, /'unsafe-inline'/);
     assert.match(response.headers.get("permissions-policy") || "", /camera=\(self\)/);
     assert.match(response.headers.get("permissions-policy") || "", /microphone=\(self\)/);
     assert.equal(response.headers.get("x-frame-options"), "DENY");

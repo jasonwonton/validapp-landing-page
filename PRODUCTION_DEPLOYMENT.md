@@ -144,6 +144,11 @@ HTML. Keep the candidate `Permissions-Policy` scoped to `microphone=(self)` and
 `camera=(self)` so compatible browsers can record voice messages and join
 feature-gated calls; geolocation, payment, and USB remain disabled. Preserve
 the exact LiveKit WebSocket hosts and `media-src` directive in the candidate CSP.
+The effective response policy must also allow
+`https://challenges.cloudflare.com` in both `script-src` and `frame-src` or
+Turnstile-backed signup will be blocked. Keep `style-src 'self'` without
+`'unsafe-inline'`; dynamic layout values are applied through the bounded,
+same-origin `runtime-style.js` stylesheet rules.
 
 ## 3. Go/no-go checks
 

@@ -435,17 +435,17 @@ test("school question artwork can be positioned and adjusted again", async ({ pa
     const crop = page.getByRole("dialog", { name: "Adjust crop" });
     await expect(crop).toBeVisible();
     const cropImage = crop.getByAltText("Photo being cropped");
-    const initialTransform = await cropImage.evaluate((image) => image.style.transform);
+    const initialTransform = await cropImage.evaluate((image) => getComputedStyle(image).transform);
     await crop.getByLabel("Zoom").fill("2");
-    await expect.poll(() => cropImage.evaluate((image) => image.style.transform)).not.toBe(initialTransform);
-    const zoomedTransform = await cropImage.evaluate((image) => image.style.transform);
+    await expect.poll(() => cropImage.evaluate((image) => getComputedStyle(image).transform)).not.toBe(initialTransform);
+    const zoomedTransform = await cropImage.evaluate((image) => getComputedStyle(image).transform);
     const viewport = crop.locator("#questionCropViewport");
     const viewportBox = await viewport.boundingBox();
     await page.mouse.move(viewportBox.x + viewportBox.width / 2, viewportBox.y + viewportBox.height / 2);
     await page.mouse.down();
     await page.mouse.move(viewportBox.x + viewportBox.width / 2 + 40, viewportBox.y + viewportBox.height / 2, { steps: 3 });
     await page.mouse.up();
-    await expect.poll(() => cropImage.evaluate((image) => image.style.transform)).not.toBe(zoomedTransform);
+    await expect.poll(() => cropImage.evaluate((image) => getComputedStyle(image).transform)).not.toBe(zoomedTransform);
     await crop.getByRole("button", { name: "Use photo" }).click();
 
     const adjust = question.getByRole("button", { name: "Adjust crop" });

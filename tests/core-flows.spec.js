@@ -270,6 +270,7 @@ test("PWA ships install icons and Web Push worker handlers", async ({ request })
     expect(worker).toContain("Jua-Latin.woff2");
     expect(worker).toContain("./routes/route-loader.js");
     expect(worker).toContain("./realtime-list.js");
+    expect(worker).toContain("./runtime-style.js");
 });
 
 test("Android back and forward follow the in-app detail stack", async ({ page }) => {

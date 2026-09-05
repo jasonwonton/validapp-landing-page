@@ -7,6 +7,7 @@ import {
     putChatMediaOutbox,
     removeChatMediaOutbox,
 } from "../chat/outbox.js";
+import { setRuntimeStyles } from "../runtime-style.js";
 
 const REFRESH_MS = 30_000;
 const MAX_RECORDED_VIEWS = 200;
@@ -201,8 +202,10 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
         const overlay = $(".story-text-overlay");
         overlay.hidden = !item.text_overlay;
         overlay.textContent = item.text_overlay || "";
-        overlay.style.left = `${Number(item.text_overlay_x ?? 0.5) * 100}%`;
-        overlay.style.top = `${Number(item.text_overlay_y ?? 0.5) * 100}%`;
+        setRuntimeStyles(overlay, {
+            left: `${Number(item.text_overlay_x ?? 0.5) * 100}%`,
+            top: `${Number(item.text_overlay_y ?? 0.5) * 100}%`,
+        });
         $(".story-copy p").textContent = item.caption || "";
         $(".story-copy small").textContent = `Expires ${new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(item.expires_at))}`;
         $("[data-story-viewers]").hidden = !author.is_owner;
@@ -360,7 +363,7 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
             await putChatMediaOutbox(record);
             saved = true;
             await deliverStoryRecord(record, { onProgress: (progress) => {
-                $(".story-upload-progress span").style.width = `${Math.round(progress * 100)}%`;
+                setRuntimeStyles($(".story-upload-progress span"), { width: `${Math.round(progress * 100)}%` });
             } });
             await removeChatMediaOutbox(record.id);
             $(".story-composer").close();
@@ -432,7 +435,7 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
         $(".story-composer-preview").innerHTML = `<span aria-hidden="true">＋</span><p>Choose a photo or an MP4 video.</p>`;
         $(".story-composer-status").textContent = "";
         $(".story-upload-progress").classList.add("hidden");
-        $(".story-upload-progress span").style.width = "0";
+        setRuntimeStyles($(".story-upload-progress span"), { width: "0" });
         $(".story-publish").textContent = "Post Story";
         $(".story-publish").disabled = true;
     }

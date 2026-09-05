@@ -4,6 +4,7 @@ import { createAdditionalPasskey, createSignupPasskey, passkeysSupported, signIn
 import { startPerformanceMonitoring } from "./performance.js";
 import { createRealtimeList } from "./realtime-list.js";
 import { activateRoute, preloadRoute } from "./routes/route-loader.js";
+import { clearRuntimeStyles, setRuntimeStyles } from "./runtime-style.js";
 
 const demoMode = localDemoAllowed();
 const api = demoMode ? new DemoAPI() : new ValidAPI();
@@ -361,14 +362,16 @@ function syncVisualViewport() {
     }
     const bottomInset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
     const keyboardOpen = focusedControl && state.viewportBaselineHeight - viewport.height > 140;
-    document.documentElement.style.setProperty("--visual-viewport-bottom", `${bottomInset}px`);
-    document.documentElement.style.setProperty("--visual-viewport-top", `${viewport.offsetTop}px`);
-    document.documentElement.style.setProperty("--visual-viewport-left", `${viewport.offsetLeft}px`);
-    document.documentElement.style.setProperty("--visual-viewport-center", `${viewport.offsetLeft + viewport.width / 2}px`);
-    document.documentElement.style.setProperty("--visual-viewport-middle", `${viewport.offsetTop + viewport.height / 2}px`);
-    document.documentElement.style.setProperty("--visual-viewport-width", `${viewport.width}px`);
-    document.documentElement.style.setProperty("--visual-viewport-height", `${viewport.height}px`);
-    document.documentElement.style.setProperty("--signup-visual-offset", `${viewport.offsetTop}px`);
+    setRuntimeStyles(document.documentElement, {
+        "--visual-viewport-bottom": `${bottomInset}px`,
+        "--visual-viewport-top": `${viewport.offsetTop}px`,
+        "--visual-viewport-left": `${viewport.offsetLeft}px`,
+        "--visual-viewport-center": `${viewport.offsetLeft + viewport.width / 2}px`,
+        "--visual-viewport-middle": `${viewport.offsetTop + viewport.height / 2}px`,
+        "--visual-viewport-width": `${viewport.width}px`,
+        "--visual-viewport-height": `${viewport.height}px`,
+        "--signup-visual-offset": `${viewport.offsetTop}px`,
+    });
     document.documentElement.classList.toggle("keyboard-open", keyboardOpen);
     if (keyboardOpen) requestAnimationFrame(keepFocusedControlVisible);
 }
@@ -1933,7 +1936,7 @@ function selectSignupGender(value) {
 }
 
 function openSignupDialog() {
-    $("#signupDialog").style.setProperty("--signup-layout-height", `${window.innerHeight}px`);
+    setRuntimeStyles($("#signupDialog"), { "--signup-layout-height": `${window.innerHeight}px` });
     $("#signupStatus").textContent = "";
     resetSignupPhotoPreview();
     resetSignupSchoolPicker();
@@ -2613,8 +2616,7 @@ function openReactionPicker(target, anchor) {
         const left = Math.max(8, Math.min(window.innerWidth - pickerRect.width - 8, anchorRect.right - pickerRect.width));
         const preferredTop = anchorRect.top - pickerRect.height - 8;
         const top = preferredTop >= 8 ? preferredTop : Math.min(window.innerHeight - pickerRect.height - 8, anchorRect.bottom + 8);
-        dialog.style.left = `${left}px`;
-        dialog.style.top = `${Math.max(8, top)}px`;
+        setRuntimeStyles(dialog, { left: `${left}px`, top: `${Math.max(8, top)}px` });
     }
     softHaptic();
 }
@@ -3207,8 +3209,7 @@ async function copyShareLink(text) {
         const field = document.createElement("textarea");
         field.value = text;
         field.setAttribute("readonly", "");
-        field.style.position = "fixed";
-        field.style.opacity = "0";
+        setRuntimeStyles(field, { position: "fixed", opacity: "0" });
         document.body.append(field);
         try {
             field.select();
@@ -3808,10 +3809,12 @@ function animateAuraChange(amount, sourceElement = null) {
         const flight = document.createElement("span");
         flight.className = "aura-flight";
         flight.innerHTML = `<img loading="lazy" decoding="async" src="../assets/app/aura.webp" alt=""><strong>+${Number(amount).toLocaleString()}</strong>`;
-        flight.style.left = `${source.left + source.width / 2}px`;
-        flight.style.top = `${source.top + source.height / 2}px`;
-        flight.style.setProperty("--aura-flight-x", `${target.left + target.width / 2 - source.left - source.width / 2}px`);
-        flight.style.setProperty("--aura-flight-y", `${target.top + target.height / 2 - source.top - source.height / 2}px`);
+        setRuntimeStyles(flight, {
+            left: `${source.left + source.width / 2}px`,
+            top: `${source.top + source.height / 2}px`,
+            "--aura-flight-x": `${target.left + target.width / 2 - source.left - source.width / 2}px`,
+            "--aura-flight-y": `${target.top + target.height / 2 - source.top - source.height / 2}px`,
+        });
         document.body.append(flight);
         requestAnimationFrame(() => flight.classList.add("flying"));
         flight.addEventListener("animationend", () => flight.remove(), { once: true });
@@ -4988,9 +4991,11 @@ function renderQuestionCrop() {
     const layout = questionCropLayout();
     if (!crop || !layout) return;
     const image = $("#questionCropImage");
-    image.style.width = `${layout.baseWidth}px`;
-    image.style.height = `${layout.baseHeight}px`;
-    image.style.transform = `translate(-50%, -50%) translate(${crop.offsetX}px, ${crop.offsetY}px) scale(${layout.zoom})`;
+    setRuntimeStyles(image, {
+        width: `${layout.baseWidth}px`,
+        height: `${layout.baseHeight}px`,
+        transform: `translate(-50%, -50%) translate(${crop.offsetX}px, ${crop.offsetY}px) scale(${layout.zoom})`,
+    });
 }
 
 async function openQuestionArtworkCrop(file) {
@@ -5694,8 +5699,10 @@ let pullRefreshFrame = null;
 function renderPullRefreshDistance() {
     pullRefreshFrame = null;
     const indicator = $("#pullRefreshIndicator");
-    indicator.style.setProperty("--pull-distance", `${state.pullRefreshDistance}px`);
-    indicator.style.setProperty("--pull-opacity", String(Math.min(1, state.pullRefreshDistance / 50)));
+    setRuntimeStyles(indicator, {
+        "--pull-distance": `${state.pullRefreshDistance}px`,
+        "--pull-opacity": String(Math.min(1, state.pullRefreshDistance / 50)),
+    });
     indicator.classList.toggle("ready", state.pullRefreshDistance >= 64);
 }
 
@@ -5715,8 +5722,7 @@ function endPullRefresh() {
     if (pullRefreshFrame !== null) cancelAnimationFrame(pullRefreshFrame);
     pullRefreshFrame = null;
     const indicator = $("#pullRefreshIndicator");
-    indicator.style.removeProperty("--pull-distance");
-    indicator.style.removeProperty("--pull-opacity");
+    clearRuntimeStyles(indicator, "--pull-distance", "--pull-opacity");
     indicator.classList.remove("ready");
     if (shouldRefresh) refreshActivePanel();
 }
@@ -5741,7 +5747,7 @@ function installNativeSheetGestures() {
             if (dragFrame !== null) return;
             dragFrame = requestAnimationFrame(() => {
                 dragFrame = null;
-                dialog.style.setProperty("--sheet-drag", `${dragDistance}px`);
+                setRuntimeStyles(dialog, { "--sheet-drag": `${dragDistance}px` });
             });
         });
         const finish = (event) => {
@@ -5751,7 +5757,7 @@ function installNativeSheetGestures() {
             dragDistance = 0;
             if (dragFrame !== null) cancelAnimationFrame(dragFrame);
             dragFrame = null;
-            dialog.style.removeProperty("--sheet-drag");
+            clearRuntimeStyles(dialog, "--sheet-drag");
             if (distance > 90 && dialog.open) dialog.close();
         };
         dialog.addEventListener("pointerup", finish);
@@ -5760,7 +5766,7 @@ function installNativeSheetGestures() {
             dragDistance = 0;
             if (dragFrame !== null) cancelAnimationFrame(dragFrame);
             dragFrame = null;
-            dialog.style.removeProperty("--sheet-drag");
+            clearRuntimeStyles(dialog, "--sheet-drag");
         });
     }
 
@@ -6134,9 +6140,10 @@ function bindEvents() {
     $("#signupBackToNearby").addEventListener("click", () => showSignupSchoolFallback(false));
     let signupAgeScrollFrame = null;
     $("#signupAgeWheel").addEventListener("scroll", (event) => {
+        const wheel = event.currentTarget;
         if (signupAgeScrollFrame) cancelAnimationFrame(signupAgeScrollFrame);
         signupAgeScrollFrame = requestAnimationFrame(() => {
-            const age = 13 + Math.round(event.currentTarget.scrollTop / 40);
+            const age = 13 + Math.round(wheel.scrollTop / 40);
             selectSignupAge(age, { scroll: false });
             signupAgeScrollFrame = null;
         });
@@ -6145,11 +6152,13 @@ function bindEvents() {
         if (!['ArrowUp', 'ArrowDown'].includes(event.key)) return;
         event.preventDefault();
         const direction = event.key === 'ArrowDown' ? 1 : -1;
-        selectSignupAge(Number($("#signupAge").value) + direction, { smooth: true });
+        selectSignupAge(Number($("#signupAge").value) + direction);
     });
     $("#signupDialog").addEventListener("click", (event) => {
         const age = event.target.closest("[data-signup-age]");
-        if (age) selectSignupAge(age.dataset.signupAge, { smooth: true });
+        // Commit the exact tapped age immediately. A smooth scroll can continue
+        // after the user advances and overwrite the hidden value mid-signup.
+        if (age) selectSignupAge(age.dataset.signupAge);
         const grade = event.target.closest("[data-signup-grade]");
         if (grade) selectSignupGrade(grade.dataset.signupGrade);
         const gender = event.target.closest("[data-signup-gender]");

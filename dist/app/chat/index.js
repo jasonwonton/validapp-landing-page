@@ -19,6 +19,7 @@ import {
     removeChatTextOutbox,
 } from "./outbox.js";
 import { createCallsController } from "../calls/index.js";
+import { setRuntimeStyles } from "../runtime-style.js";
 
 const REFRESH_MS = 30_000;
 const MAX_VOICE_RECORDING_MS = 300_000;
@@ -359,11 +360,12 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             return `<button type="button" data-memento-date="${key}" class="${selected ? "selected" : ""}" aria-label="${escapeChatHTML(new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric" }).format(date))}" aria-pressed="${selected}"><small>${escapeChatHTML(new Intl.DateTimeFormat(undefined, { weekday: "narrow" }).format(date))}</small><strong>${date.getDate()}</strong>${cached ? `<span>${Number(cached.posted_count || 0)}/${Number(cached.eligible_count || 0)}</span>` : `<i></i>`}</button>`;
         }).join("");
         const completion = eligible ? Math.min(100, Math.round((posted / eligible) * 100)) : 0;
-        container.innerHTML = `<div class="chat-memento-week" aria-label="Memento dates">${dateButtons}</div><button type="button" data-open-memento ${!isToday || row.viewer_is_eligible === false || row.viewer_has_posted_today ? "data-show-mementos" : ""}><span class="chat-daily-icon">📸</span><span><strong>${isToday ? (row.viewer_has_posted_today ? "Today's Mementos" : "Take today's Memento") : `${dateLabel}'s Mementos`}</strong><small>${posted} of ${eligible} captured${row.view_gate_locked ? " · add yours to reveal" : ""}</small><span class="chat-daily-progress" aria-hidden="true"><i style="width:${completion}%"></i></span></span><b>›</b></button><div class="chat-memento-strip">${entries.map((entry) => {
+        container.innerHTML = `<div class="chat-memento-week" aria-label="Memento dates">${dateButtons}</div><button type="button" data-open-memento ${!isToday || row.viewer_is_eligible === false || row.viewer_has_posted_today ? "data-show-mementos" : ""}><span class="chat-daily-icon">📸</span><span><strong>${isToday ? (row.viewer_has_posted_today ? "Today's Mementos" : "Take today's Memento") : `${dateLabel}'s Mementos`}</strong><small>${posted} of ${eligible} captured${row.view_gate_locked ? " · add yours to reveal" : ""}</small><span class="chat-daily-progress" aria-hidden="true"><i></i></span></span><b>›</b></button><div class="chat-memento-strip">${entries.map((entry) => {
             const src = safeMediaURL(entry.image_url, api);
             const name = escapeChatHTML(entry.first_name || "Student");
             return src ? `<button type="button" data-view-memento="${escapeChatHTML(src)}" data-memento-owner="${escapeChatHTML(displayMember(entry))}" data-memento-entry="${escapeChatHTML(entry.entry_id || "")}"><img src="${escapeChatHTML(src)}" alt="${escapeChatHTML(displayMember(entry))}'s Memento" loading="lazy" decoding="async"><span>${name}</span></button>` : `<span class="chat-memento-missing"><i aria-hidden="true">${entry.has_posted ? "🔒" : "⌛"}</i><span>${name}</span><small>${entry.has_posted ? "Locked" : "Waiting"}</small></span>`;
         }).join("")}</div>`;
+        setRuntimeStyles($(".chat-daily-progress i"), { width: `${completion}%` });
         const locked = row.view_gate_locked === true;
         $(".chat-timeline").classList.toggle("chat-content-locked", locked);
         $(".chat-composer").classList.toggle("hidden", locked);
@@ -384,6 +386,10 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             key: message.id,
             html: messageMarkup(message, byId.get(String(message.reply_to_message_id)), items[index - 1], items[index + 1]),
         })));
+        $$(".chat-media-text[data-overlay-x]").forEach((overlay) => setRuntimeStyles(overlay, {
+            left: `${Number(overlay.dataset.overlayX) * 100}%`,
+            top: `${Number(overlay.dataset.overlayY) * 100}%`,
+        }));
         const page = store.state.messagePageByChat.get(String(store.state.activeChatId));
         $(".chat-load-earlier").classList.toggle("hidden", !page?.next_before_sequence || items.length >= MAX_MESSAGES_PER_CHAT);
         if (!items.length && !store.state.loadingRoom && !store.state.dailyRow?.view_gate_locked) timeline.innerHTML = `<div class="chat-room-empty"><strong>Start the conversation</strong><p>Send a message or capture today's Memento.</p></div>`;
@@ -401,7 +407,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         const replyMarkup = reply ? `<button type="button" class="chat-reply-preview" data-scroll-message="${escapeChatHTML(reply.id)}"><strong>${escapeChatHTML(reply.sender_first_name || "Message")}</strong><span>${escapeChatHTML(reply.kind === "memento" ? "Memento" : reply.kind === "story" ? "Story" : reply.body || "Media")}</span></button>` : "";
         const mediaURL = safeMediaURL(message.kind === "memento" ? message.memento_image_url : message.kind === "story" ? message.story_thumbnail_url || message.story_media_url : message.sticker_image_url || message.photo_image_url || message.video_thumbnail_url, api);
         const overlay = message.kind === "story" ? { text: message.story_text_overlay, x: message.story_text_overlay_x, y: message.story_text_overlay_y } : message.media_text_overlay;
-        const mediaOverlay = overlay?.text ? `<span class="chat-media-text" style="left:${Number(overlay.x || 0.5) * 100}%;top:${Number(overlay.y || 0.5) * 100}%">${escapeChatHTML(overlay.text)}</span>` : "";
+        const mediaOverlay = overlay?.text ? `<span class="chat-media-text" data-overlay-x="${Number(overlay.x || 0.5)}" data-overlay-y="${Number(overlay.y || 0.5)}">${escapeChatHTML(overlay.text)}</span>` : "";
         const persistentMedia = mediaURL ? `<button class="chat-message-media ${message.kind === "sticker" ? "sticker" : ""}" type="button" ${message.kind === "memento" ? `data-view-memento="${escapeChatHTML(mediaURL)}" data-memento-owner="${escapeChatHTML(message.sender_first_name || "Memento")}" data-memento-entry="${escapeChatHTML(message.daily_entry_id || "")}"` : `data-open-chat-media-message="${escapeChatHTML(message.id)}"`}><img src="${escapeChatHTML(mediaURL)}" alt="${message.kind === "memento" ? "Memento" : message.kind === "video" ? "Video thumbnail" : message.kind === "sticker" ? "Sticker" : "Photo"}" loading="lazy" decoding="async">${mediaOverlay}${message.kind === "video" ? `<span class="chat-video-play" aria-hidden="true">▶</span>` : ""}</button>` : "";
         const audioURL = safeMediaURL(message.audio_url, api);
         const audioMedia = message.kind === "audio" ? (audioURL ? `<div class="chat-audio-message"><strong>Voice message</strong><audio src="${escapeChatHTML(audioURL)}" controls preload="metadata" aria-label="Voice message"></audio><small>${Math.max(1, Math.round(Number(message.audio_duration_ms || 0) / 1000))}s</small></div>` : `<div class="chat-audio-message unavailable">Voice message unavailable</div>`) : "";
@@ -808,7 +814,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             };
             await putChatMediaOutbox(record);
             recoverySaved = true;
-            const result = await deliverMediaRecord(record, { onProgress: (progress) => $(".memento-progress span").style.width = `${Math.round(progress * 100)}%` });
+            const result = await deliverMediaRecord(record, { onProgress: (progress) => setRuntimeStyles($(".memento-progress span"), { width: `${Math.round(progress * 100)}%` }) });
             await removeChatMediaOutbox(record.id);
             $("[data-memento-dialog]").close();
             successHaptic?.();
@@ -845,7 +851,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         $(".memento-preview").innerHTML = `<span aria-hidden="true">📸</span><p>Capture one real moment from today.</p>`;
         $(".memento-status").textContent = "";
         $(".memento-progress").classList.add("hidden");
-        $(".memento-progress span").style.width = "0";
+        setRuntimeStyles($(".memento-progress span"), { width: "0" });
     }
 
     function openChatMediaComposer() {
@@ -955,8 +961,9 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     function stopVoiceRecorder({ discard = false } = {}) {
         if (!voiceRecorder) return;
         discardVoiceRecording = discard;
-        if (voiceRecorder.state !== "inactive") voiceRecorder.stop();
-        voiceRecorder.stream?.getTracks().forEach((track) => track.stop());
+        const recorder = voiceRecorder;
+        if (recorder.state !== "inactive") recorder.stop();
+        recorder.stream?.getTracks().forEach((track) => track.stop());
     }
 
     async function toggleVoiceRecording() {
@@ -1055,10 +1062,10 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             await putChatMediaOutbox(record);
             recoverySaved = true;
             const message = await deliverMediaRecord(record, { onProgress: (progress) => {
-                $(".chat-media-progress span").style.width = `${Math.round(progress * 100)}%`;
+                setRuntimeStyles($(".chat-media-progress span"), { width: `${Math.round(progress * 100)}%` });
             } });
             await removeChatMediaOutbox(record.id);
-            $(".chat-media-progress span").style.width = "100%";
+            setRuntimeStyles($(".chat-media-progress span"), { width: "100%" });
             store.updateMessage(chatId, message);
             store.state.replyToMessageId = null;
             $("[data-chat-media-dialog]").close();
@@ -1101,7 +1108,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         $(".chat-media-preview").innerHTML = `<span aria-hidden="true">＋</span><p>Choose a photo, an MP4 video, or an M4A voice recording.</p>`;
         $(".chat-media-status").textContent = "";
         $(".chat-media-progress").classList.add("hidden");
-        $(".chat-media-progress span").style.width = "0";
+        setRuntimeStyles($(".chat-media-progress span"), { width: "0" });
         $(".chat-media-publish").disabled = true;
     }
 
@@ -1151,8 +1158,10 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         overlayNode.hidden = !overlay?.text;
         overlayNode.textContent = overlay?.text || "";
         if (overlay?.text) {
-            overlayNode.style.left = `${Number(overlay.x || 0.5) * 100}%`;
-            overlayNode.style.top = `${Number(overlay.y || 0.5) * 100}%`;
+            setRuntimeStyles(overlayNode, {
+                left: `${Number(overlay.x || 0.5) * 100}%`,
+                top: `${Number(overlay.y || 0.5) * 100}%`,
+            });
         }
         dialog.showModal();
         await Promise.race([

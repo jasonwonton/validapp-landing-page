@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "valid-web-";
-const CACHE_NAME = `${CACHE_PREFIX}v55`;
+const CACHE_NAME = `${CACHE_PREFIX}v56`;
 const APP_SHELL = [
     "./",
     "./styles.css",
@@ -10,6 +10,7 @@ const APP_SHELL = [
     "./performance.js",
     "./keyed-list.js",
     "./realtime-list.js",
+    "./runtime-style.js",
     "./routes/route-loader.js",
     "./routes/feed.js",
     "./routes/play.js",
