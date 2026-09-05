@@ -636,7 +636,7 @@ test("play answers a poll and advances", async ({ page }) => {
     await expect(page.locator(".play-streak-chip")).toContainText("1.5x");
     await expect(page.locator("#auraCount")).toHaveText("1,280");
     const artworkBox = await page.locator("#playCard .question-artwork").boundingBox();
-    expect(Math.abs(artworkBox.width - artworkBox.height)).toBeLessThan(16);
+    expect(Math.abs(artworkBox.width - artworkBox.height)).toBeLessThan(1);
     await expect(page.locator("#playCard .choice-button").first()).toHaveCSS("min-height", "90px");
     for (const name of [/Shuffle/, /Nominate/, /Skip \(3\)/]) {
         const button = page.getByRole("button", { name });
