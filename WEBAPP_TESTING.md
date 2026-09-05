@@ -8,6 +8,19 @@ npx playwright install chromium firefox webkit
 npm run test:e2e
 ```
 
+To run the edge, signed-out shell, and service-worker smoke suite against an
+already deployed, unbound staging origin, set its HTTPS origin explicitly:
+
+```bash
+PLAYWRIGHT_BASE_URL=https://example.ondigitalocean.app npm run test:e2e:deployed
+```
+
+The deployed-origin mode does not start a local server or enable the localhost-
+only demo fixtures. Use only an origin that serves the exact reviewed candidate;
+confirm its deployment commit before accepting the results. Authenticated
+journeys still require the private final origin because passkeys and first-party
+session cookies are origin-bound.
+
 The suite runs every core flow in a Pixel 7 Chromium viewport plus Desktop
 Chrome, Firefox, and WebKit. Firefox and WebKit run with service workers blocked
 because Playwright supports service-worker automation only in Chromium; the two

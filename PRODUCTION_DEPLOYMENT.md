@@ -151,6 +151,19 @@ validapp.lol/*                                  -> this static site
 api.six7.lol/*                                  -> Six7 FastAPI
 ```
 
+The current unbound smoke target is
+`https://validapp-web-staging-luibq.ondigitalocean.app` (DigitalOcean app
+`7c62d12a-bfe2-4fa7-8107-430f53c06b5d`). Confirm its active deployment commit
+matches the reviewed branch, then run:
+
+```bash
+PLAYWRIGHT_BASE_URL=https://validapp-web-staging-luibq.ondigitalocean.app npm run test:e2e:deployed
+```
+
+This staging suite deliberately stays signed out: demo fixtures are restricted
+to localhost, and passkeys/session cookies must be tested on the private final
+origin. A passing staging run does not authorize public routing.
+
 The web origin must apply the rules in `_headers` to `/app/*`; `npm start`
 does this directly. Do not rely only on the CSP meta tag: framing protection
 requires the actual `Content-Security-Policy` response header. Also preserve the manifest and

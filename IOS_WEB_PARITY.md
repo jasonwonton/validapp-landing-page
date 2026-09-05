@@ -164,7 +164,12 @@ production-style local origin for demo sign-in, Chats list and DM navigation,
 an unlocked text send, exact-chat cold reload/sign-in restoration, Memento
 viewing, and prior-day Memento history. The
 header-emitting production-origin adapter passes **3 static-origin contract
-tests**, and its standalone DigitalOcean staging spec validates successfully. The
+tests**. The unbound DigitalOcean staging service is active at
+`https://validapp-web-staging-luibq.ondigitalocean.app`; its real edge/browser
+suite passes **14 tests with 2 intentional non-Chromium service-worker skips**.
+That run verifies the emitted CSP and device policies, MIME and cache behavior,
+write/API/traversal rejection, signed-out boot, install metadata, service-worker
+registration, and the absence of API/CDN responses from Cache Storage. The
 scoped backend chat/Memento/Story/Web Push/config safety run is **273 passed, 0
 failed**; the latest current-tree lifecycle/notification/call/config rerun is **280
 passed, 0 failed**. These are lab results, not production or physical-device
@@ -177,6 +182,7 @@ approval.
 | Desktop Firefox | Automated | Full application suite passing with service workers blocked at the Playwright boundary; real Firefox notification/install behavior remains a hands-on gate. |
 | Desktop WebKit engine | Automated | Full application suite passing with service workers blocked. This is neither branded Safari nor an installed iPhone PWA, so Safari service-worker, push, media, and install behavior remain open. |
 | Desktop Safari | Branded local smoke | Production-style local-origin demo sign-in, Chats list, direct conversation, text send, exact-chat reload/sign-in restore, Memento viewer, and prior-day history pass in branded Safari on macOS. Final-origin service worker, push, passkey, media permissions, and install behavior remain open. |
+| Unbound DigitalOcean staging origin | Automated edge smoke | The deployed header-emitting service passes 14/14 applicable checks across Pixel-class Chromium, desktop Chromium, Firefox, and WebKit; Firefox/WebKit service-worker checks are intentionally skipped. Authenticated and passkey journeys require the private final origin. |
 | Desktop Edge | Not yet tested | Edge is not installed on the available macOS test host; final-origin smoke, notifications, keyboard/accessibility, and degraded alternatives remain. |
 | Physical Pixel | Not yet tested | Install, camera, push, offline/reopen, keyboard, long scroll, update, two-account realtime. |
 | Physical Samsung | Not yet tested | Repeat with Samsung Internet and Chrome plus Samsung Keyboard and aggressive backgrounding. |
@@ -190,11 +196,12 @@ approval.
 
 The read-only production preflight currently passes the manifest/service worker,
 related-origin passkey, and API/CORS checks, but fails the app-shell security
-header gate because the deployed `/app/` response does not include a CSP with
+header gate because the public `/app/` response does not include a CSP with
 `frame-ancestors 'none'`. The live DigitalOcean static component exposes
 `_headers` as a file instead of applying it. The candidate `npm start` origin
-now emits those policies and passes three static-origin contract tests, but the
-production component has not been switched; keep the public gate closed.
+now emits those policies in the real DigitalOcean edge and passes both the
+three local static-origin contracts and the 14-check deployed-origin suite, but
+the production component has not been switched; keep the public gate closed.
 
 Safe rollout order:
 

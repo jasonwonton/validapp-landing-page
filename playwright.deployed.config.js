@@ -1,15 +1,19 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const baseURL = process.env.PLAYWRIGHT_BASE_URL?.replace(/\/$/, "");
+if (!baseURL || !/^https:\/\//.test(baseURL)) {
+    throw new Error("PLAYWRIGHT_BASE_URL must be the reviewed staging HTTPS origin");
+}
+
 export default defineConfig({
     testDir: "./tests",
-    testIgnore: "**/deployed-origin.spec.js",
+    testMatch: "deployed-origin.spec.js",
     fullyParallel: true,
     forbidOnly: true,
-    retries: process.env.CI ? 1 : 0,
-    workers: process.env.CI ? 1 : undefined,
+    retries: 0,
     reporter: "list",
     use: {
-        baseURL: "http://127.0.0.1:4173",
+        baseURL,
         trace: "retain-on-failure",
     },
     projects: [
@@ -18,11 +22,4 @@ export default defineConfig({
         { name: "desktop-firefox", use: { ...devices["Desktop Firefox"], serviceWorkers: "block" } },
         { name: "desktop-webkit", workers: 1, use: { ...devices["Desktop Safari"], serviceWorkers: "block" } },
     ],
-    webServer: {
-        command: "python3 -m http.server 4173",
-        url: "http://127.0.0.1:4173/app/",
-        reuseExistingServer: true,
-        stdout: "ignore",
-        stderr: "ignore",
-    },
 });
