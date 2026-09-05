@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-    <meta name="valid-app-version" content="web-v56">
+    <meta name="valid-app-version" content="web-v57">
     <base href="/app/">
     <meta name="theme-color" content="#ccf7f4" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#0b2528" media="(prefers-color-scheme: dark)">
@@ -552,6 +552,11 @@
             <label class="feedback-photo-field">Add a screenshot <span>(optional)</span><span class="feedback-photo-picker"><strong>Choose screenshot</strong><small id="feedbackPhotoName">No screenshot selected</small><input id="feedbackPhoto" type="file" accept="image/jpeg,image/png,image/webp"></span></label>
             <p id="feedbackStatus" class="status-message" role="status"></p>
             <button id="feedbackSubmitButton" class="primary-button" type="submit">Send feedback</button>
+            <section class="feedback-history" aria-labelledby="feedbackHistoryTitle">
+                <div class="feedback-history-heading"><h3 id="feedbackHistoryTitle">Your feedback &amp; replies</h3><small>Most recent 20</small></div>
+                <p id="feedbackHistoryStatus" class="status-message" role="status"></p>
+                <div id="feedbackHistoryList" class="feedback-history-list"></div>
+            </section>
         </form>
     </dialog>
 

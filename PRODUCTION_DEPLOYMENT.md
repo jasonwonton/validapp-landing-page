@@ -23,6 +23,8 @@ WEB_UPLOAD_RATE_LIMIT_PER_HOUR=30
 WEB_SCHOOL_REQUEST_RATE_LIMIT_PER_HOUR=60
 WEB_MAX_REQUEST_BODY_BYTES=12582912
 LEGACY_SUBSCRIPTION_TOGGLE_MODE=observe
+WEB_PUSH_DELIVERY_MODE=shadow
+WEB_PUSH_OUTBOX_WORKER_ENABLED=0
 ENABLE_WEB_CHATS=0
 ENABLE_WEB_MEMENTOS=0
 ENABLE_WEB_STORIES=0
@@ -80,6 +82,19 @@ rollbackable throughout this check.
 Keep `ENABLE_WEB_CHATS`, `ENABLE_WEB_MEMENTOS`, `ENABLE_WEB_STORIES`, and
 `ENABLE_WEB_CALLS` set to
 `0` in production until their separate release gates pass.
+
+Keep Web Push in `shadow` for the backend/current-iOS canary. Shadow mode keeps
+the established direct browser sends intact where they already exist, records
+content-free non-sendable rows, and lets transactional producers prove their
+fan-out without contacting a provider under a database transaction. After the
+outbox schema, row volume, collapse identities, and retention metrics are clean,
+start the Web Push worker while still in `shadow`, then change
+`WEB_PUSH_DELIVERY_MODE=durable` for the private final-origin cohort. Durable
+mode is required before testing web-only streak recipients or claiming the new
+transactional notification paths. If its age, dead-letter, duplicate, or APNS
+comparison gates fail, return the mode to `shadow`, stop the worker after its
+current lease window, and retain the rows for diagnosis; never truncate the
+outbox as a rollback step.
 
 ### Existing iOS release gate
 

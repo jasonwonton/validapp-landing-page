@@ -173,7 +173,15 @@ Firefox, and Safari where the capability is supported:
    and the intended destination. Story capture must open the exact Story and
    group only matching Story/viewer events. Question approval must open the
    exact `?notification=question_submission&submission_id=<id>` history card,
-   including when Feed voting is locked.
+   including when Feed voting is locked. Send `questions_unlocked`,
+   `streak_warning`, and `memento_streak_warning`; verify the first two open
+   Play, the Memento warning opens Chats, and one authenticated streak-warning
+   open receipt is recorded after cold sign-in. Send a feedback response and
+   verify it opens the exact bounded thread without caching it. A
+   camera-filter-ready push may open Chats, but must not claim an exact web
+   filter editor while that matrix row remains Missing. Record poll/TBH comment,
+   comment-moderation, and broad admin engagement notifications as open parity
+   gaps until their matrix rows are resolved.
 10. Inspect Cache Storage and IndexedDB before and after logout and an account
    deletion request. Cache Storage must contain no API response or private
    media. Both user-scoped outboxes must be removed. Text must never exceed 50

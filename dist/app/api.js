@@ -369,6 +369,13 @@ export class ValidAPI {
         });
     }
 
+    recordStreakWarningOpen(streakWarningId) {
+        return this.request("/notification-preferences/streak-warning-open", {
+            method: "POST",
+            body: JSON.stringify({ streak_warning_id: streakWarningId }),
+        });
+    }
+
     getClassmates(userId, search = "", limit = 500) {
         const params = new URLSearchParams({ limit: String(limit) });
         if (search.trim()) params.set("search", search.trim());
@@ -452,6 +459,10 @@ export class ValidAPI {
             body: formData,
             timeoutMs: 45_000,
         });
+    }
+
+    getFeedbackHistory() {
+        return this.request("/feedback");
     }
 
     updateInformation(userId, profile) {

@@ -530,6 +530,9 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
         if (path === "/api/v1/web-push/config") {
             return fulfill({ enabled: true, vapid_public_key: "BC31fbRg792qbDNr_PaGHMhLlTjBL2VYpOkkhRS85gA1ofvBUbi0Vmixqdr3V7Exm4820s27ZpvNbcTkuTHMDKM" });
         }
+        if (path === "/api/v1/notification-preferences/streak-warning-open" && request.method() === "POST") {
+            return fulfill({ recorded: true });
+        }
         if (path === `/api/v1/users/${USER_ID}/web-push-subscriptions` && request.method() === "POST") {
             webPushAttempts += 1;
             if (webPushAttempts <= webPushFailureCount) return fulfill({ detail: "Subscription write failed" }, 500);
@@ -673,6 +676,29 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
                 is_duplicate: questionFailureCount > 0,
             });
         }
+        if (path === "/api/v1/feedback" && request.method() === "GET") {
+            return fulfill({
+                feedback: [
+                    {
+                        id: "71111111-1111-1111-1111-111111111111",
+                        user_id: USER_ID,
+                        feedback_text: "Make the active tab easier to spot.",
+                        created_at: "2026-09-03T14:00:00Z",
+                        photo_url: null,
+                        notice_type: "feedback_response",
+                        report_subject_type: null,
+                        responses: [
+                            {
+                                id: "72222222-2222-2222-2222-222222222222",
+                                feedback_id: "71111111-1111-1111-1111-111111111111",
+                                response_text: "Thanks — we improved the active navigation state.",
+                                created_at: "2026-09-04T16:00:00Z",
+                            },
+                        ],
+                    },
+                ],
+            });
+        }
         if (path === "/api/v1/feedback" && request.method() === "POST") {
             return fulfill({
                 id: "71111111-1111-1111-1111-111111111111",
@@ -737,7 +763,7 @@ test("Settings submits authenticated multipart feedback", async ({ page }) => {
     await dialog.getByRole("button", { name: "Send feedback" }).click();
 
     await expect(page.locator("#toast")).toContainText("Thanks — feedback sent");
-    const request = requests.find((candidate) => candidate.path === "/api/v1/feedback");
+    const request = requests.find((candidate) => candidate.path === "/api/v1/feedback" && candidate.method === "POST");
     expect(request).toMatchObject({ method: "POST", authorization: "Bearer session-token" });
     expect(request.contentType).toMatch(/^multipart\/form-data; boundary=/);
     expect(request.body).toContain('name="feedback_text"');
@@ -968,6 +994,77 @@ test("question approval deep link opens the exact submission history and deactiv
     expect(requests.some((request) => request.method === "GET" && request.path.endsWith("/question-submissions?limit=100"))).toBe(true);
     expect(requests.some((request) => request.method === "DELETE" && request.path.endsWith("/question-submissions/61111111-1111-1111-1111-111111111111"))).toBe(true);
     expect(requests.some((request) => request.method === "DELETE" && request.path.endsWith("/question-submissions/62222222-2222-2222-2222-222222222222"))).toBe(true);
+});
+
+test("streak-warning deep link opens Play and records the authoritative receipt", async ({ page }) => {
+    await installCredentialStub(page, "get");
+    const requests = await interceptProductionAPI(page, { feedLocked: true });
+
+    await page.goto("/app/?signin=1&tab=play&notification=streak_warning&streak_warning_id=71111111-1111-1111-1111-111111111111");
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+
+    await expect(page.getByRole("button", { name: "Play", exact: true })).toHaveAttribute("aria-current", "page");
+    await expect(page.locator("#playPanel")).toBeVisible();
+    await expect.poll(() => requests.filter((request) => request.path === "/api/v1/notification-preferences/streak-warning-open").length).toBe(1);
+    const receipt = requests.find((request) => request.path === "/api/v1/notification-preferences/streak-warning-open");
+    expect(receipt).toMatchObject({
+        method: "POST",
+        body: { streak_warning_id: "71111111-1111-1111-1111-111111111111" },
+        authorization: "Bearer session-token",
+    });
+    await expect(page).not.toHaveURL(/notification=|streak_warning_id=/);
+    await expect(page).toHaveURL(/tab=play/);
+});
+
+test("feedback-response deep link opens the exact bounded history card", async ({ page }) => {
+    await installCredentialStub(page, "get");
+    const requests = await interceptProductionAPI(page, { feedLocked: true });
+
+    await page.goto("/app/?signin=1&tab=profile&notification=feedback_response&feedback_id=71111111-1111-1111-1111-111111111111");
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+
+    await expect(page.getByRole("button", { name: "Profile", exact: true })).toHaveAttribute("aria-current", "page");
+    const dialog = page.getByRole("dialog", { name: "Feedback" });
+    await expect(dialog).toBeVisible();
+    const card = dialog.locator('[data-feedback-history="71111111-1111-1111-1111-111111111111"]');
+    await expect(card).toBeFocused();
+    await expect(card).toContainText("Make the active tab easier to spot.");
+    await expect(card).toContainText("Thanks — we improved the active navigation state.");
+    expect(requests.filter((request) => request.method === "GET" && request.path === "/api/v1/feedback")).toHaveLength(1);
+    await expect(page).not.toHaveURL(/notification=|feedback_id=/);
+    await expect(page).toHaveURL(/tab=profile/);
+});
+
+test("feedback history keeps response DOM growth bounded", async ({ page }) => {
+    await installCredentialStub(page, "get");
+    await interceptProductionAPI(page);
+    await page.route(`${API_ORIGIN}/api/v1/feedback`, async (route) => {
+        if (route.request().method() !== "GET") return route.fallback();
+        const feedback = Array.from({ length: 25 }, (_, index) => ({
+            id: `feedback-${index}`,
+            user_id: USER_ID,
+            feedback_text: `Feedback ${index}`,
+            created_at: new Date(Date.UTC(2026, 8, 5 - index)).toISOString(),
+            notice_type: "feedback_response",
+            report_subject_type: null,
+            responses: Array.from({ length: 8 }, (_unused, responseIndex) => ({
+                id: `response-${index}-${responseIndex}`,
+                feedback_id: `feedback-${index}`,
+                response_text: `Response ${responseIndex}`,
+                created_at: new Date(Date.UTC(2026, 8, 5 - index, responseIndex)).toISOString(),
+            })),
+        }));
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ feedback }) });
+    });
+
+    await page.goto("/app/?signin=1");
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: "Leave feedback" }).click();
+
+    const dialog = page.getByRole("dialog", { name: "Feedback" });
+    await expect(dialog.locator(".feedback-history-card")).toHaveCount(20);
+    await expect(dialog.locator(".feedback-team-response")).toHaveCount(100);
 });
 
 test("real adapter renders a classmate Ask Me link from the production response", async ({ page }) => {

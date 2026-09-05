@@ -167,6 +167,9 @@ const state = {
     webPushBusy: false,
     webPushRegistrationState: "off",
     webPushRegistrationError: "",
+    feedbackHistory: [],
+    feedbackHistoryGeneration: 0,
+    highlightedFeedbackId: null,
     detailReturnFocus: null,
     tabScrollPositions: { feed: 0, play: 0, chats: 0, profile: 0 },
     navigationInitialized: false,
@@ -637,15 +640,25 @@ async function handleNotificationRoute() {
     const params = new URLSearchParams(location.search);
     const notification = params.get("notification");
     if (!notification) return;
-    if (isFeedVoteLocked() && notification !== "question_submission") return;
-    switchPanel("feed");
-    if (notification === "question_submission") {
+    if (notification === "streak_warning") {
+        switchPanel("play");
+        const warningId = params.get("streak_warning_id");
+        if (warningId) await api.recordStreakWarningOpen(warningId).catch(() => null);
+    } else if (notification === "feedback_response") {
+        switchPanel("profile");
+        await openFeedbackDialog(params.get("feedback_id"));
+    } else if (isFeedVoteLocked() && notification !== "question_submission") {
+        return;
+    } else if (notification === "question_submission") {
+        switchPanel("feed");
         openQuestionDialog({ section: "history", submissionId: params.get("submission_id") });
     } else if (notification === "tbh_request") {
+        switchPanel("feed");
         await loadTbhContent();
         const requestId = params.get("tbh_request_id");
         if (state.tbhPendingRequests.some((item) => String(item.id) === String(requestId))) openTbhComposer(requestId);
     } else if (notification === "tbh_response") {
+        switchPanel("feed");
         await loadTbhContent();
         const responseId = params.get("tbh_response_id");
         let kind = state.tbhInboxItems.some((item) => String(item.id) === String(responseId))
@@ -663,6 +676,7 @@ async function handleNotificationRoute() {
         }
         if (kind) openTbhDetail(`${kind}:${responseId}`);
     } else if (notification === "feed_item") {
+        switchPanel("feed");
         const answerId = params.get("question_answer_id");
         if (!state.feedItems.some((item) => String(item.question_answer_id) === String(answerId))) {
             const item = await api.getFeedItem(api.user.id, answerId).catch(() => null);
@@ -675,6 +689,8 @@ async function handleNotificationRoute() {
     params.delete("tbh_response_id");
     params.delete("question_answer_id");
     params.delete("submission_id");
+    params.delete("streak_warning_id");
+    params.delete("feedback_id");
     history.replaceState(history.state, "", `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`);
 }
 
@@ -4837,12 +4853,65 @@ async function saveBio(event) {
     } finally { setButtonLoading(button, false); }
 }
 
-function openFeedbackDialog() {
+function feedbackHistoryDate(value) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+    });
+}
+
+function renderFeedbackHistory() {
+    const list = $("#feedbackHistoryList");
+    const status = $("#feedbackHistoryStatus");
+    const history = Array.isArray(state.feedbackHistory) ? state.feedbackHistory : [];
+    const highlighted = history.find((item) => String(item.id) === String(state.highlightedFeedbackId));
+    const visible = history.slice(0, 20);
+    if (highlighted && !visible.includes(highlighted)) visible[visible.length ? visible.length - 1 : 0] = highlighted;
+    if (!visible.length) {
+        list.replaceChildren();
+        status.textContent = "No feedback or team replies yet.";
+        return;
+    }
+    status.textContent = "";
+    list.innerHTML = visible.map((item) => {
+        const responses = Array.isArray(item.responses) ? item.responses.slice(-5) : [];
+        const isTarget = String(item.id) === String(state.highlightedFeedbackId);
+        const label = item.notice_type === "question_report_moderation"
+            ? `${item.report_subject_type === "profile" ? "Profile" : "Question"} report update`
+            : "Your feedback";
+        const responseMarkup = responses.length
+            ? responses.map((response) => `<div class="feedback-team-response"><strong>Valid team</strong><p>${escapeHTML(response.response_text || "")}</p><time datetime="${escapeHTML(response.created_at || "")}">${escapeHTML(feedbackHistoryDate(response.created_at))}</time></div>`).join("")
+            : `<p class="form-hint">No team reply yet.</p>`;
+        return `<article class="feedback-history-card ${isTarget ? "notification-target" : ""}" data-feedback-history="${escapeHTML(item.id)}" tabindex="-1"><header><strong>${escapeHTML(label)}</strong><time datetime="${escapeHTML(item.created_at || "")}">${escapeHTML(feedbackHistoryDate(item.created_at))}</time></header><p>${escapeHTML(item.feedback_text || "")}</p>${responseMarkup}</article>`;
+    }).join("");
+    if (highlighted) requestAnimationFrame(() => {
+        const target = list.querySelector(`[data-feedback-history="${CSS.escape(String(highlighted.id))}"]`);
+        target?.scrollIntoView({ block: "nearest" });
+        target?.focus({ preventScroll: true });
+    });
+}
+
+async function openFeedbackDialog(feedbackId = null) {
     const form = $("#feedbackForm");
     form.reset();
     $("#feedbackStatus").textContent = "";
+    state.highlightedFeedbackId = feedbackId;
+    const generation = ++state.feedbackHistoryGeneration;
+    $("#feedbackHistoryStatus").textContent = "Loading your feedback…";
+    $("#feedbackHistoryList").replaceChildren();
     $("#feedbackDialog").showModal();
-    requestAnimationFrame(() => $("#feedbackText").focus());
+    try {
+        const payload = await api.getFeedbackHistory();
+        if (generation !== state.feedbackHistoryGeneration) return;
+        state.feedbackHistory = Array.isArray(payload?.feedback) ? payload.feedback : [];
+        renderFeedbackHistory();
+    } catch (error) {
+        if (generation !== state.feedbackHistoryGeneration) return;
+        $("#feedbackHistoryStatus").textContent = friendlyErrorMessage(error, "Could not load your feedback history.");
+    }
+    if (!feedbackId) requestAnimationFrame(() => $("#feedbackText").focus());
 }
 
 async function submitFeedback(event) {
@@ -6479,7 +6548,7 @@ function bindEvents() {
     $("#profilePictureInput").addEventListener("change", changeProfilePicture);
     $("#addPasskeyButton").addEventListener("click", () => addBackupPasskey($("#addPasskeyButton")));
     $("#enrollPasskeyButton").addEventListener("click", () => addBackupPasskey($("#enrollPasskeyButton")));
-    $("#feedbackButton").addEventListener("click", openFeedbackDialog);
+    $("#feedbackButton").addEventListener("click", () => openFeedbackDialog());
     $("#feedbackForm").addEventListener("submit", submitFeedback);
     $("#feedbackPhoto").addEventListener("change", (event) => {
         $("#feedbackPhotoName").textContent = event.currentTarget.files[0]?.name || "No screenshot selected";

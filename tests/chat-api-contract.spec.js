@@ -86,7 +86,8 @@ test("production chat adapter preserves invitation, membership, moderation, and 
     }, { userId: USER_ID, chatId: CHAT_ID });
 
     const timezone = encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone);
-    expect(requests).toEqual([
+    const contractRequests = requests.filter((request) => request.path !== "/api/v1/auth/session");
+    expect(contractRequests).toEqual([
         { method: "POST", path: `/api/v1/users/${USER_ID}/chat-invitations/membership-id/accept?timezone=${timezone}`, body: null },
         { method: "POST", path: `/api/v1/users/${USER_ID}/chat-invitations/membership-id/decline`, body: null },
         { method: "PUT", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/notification-settings`, body: { notification_level: "muted" } },

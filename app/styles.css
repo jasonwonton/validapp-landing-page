@@ -854,6 +854,18 @@ body.play-active .play-actions { margin: 0; }
 .feedback-photo-picker strong { padding: 9px 12px; border-radius: 10px; background: var(--ink); color: var(--white); font-size: .84rem; text-align: center; }
 .feedback-photo-picker small { min-width: 0; overflow: hidden; color: var(--muted); font-size: .82rem; text-overflow: ellipsis; white-space: nowrap; }
 .feedback-photo-picker input[type="file"] { position: absolute; width: 1px; height: 1px; overflow: hidden; padding: 0; border: 0; opacity: 0; pointer-events: none; }
+.feedback-history { display: grid; gap: 10px; margin-top: 4px; padding-top: 14px; border-top: 2px solid color-mix(in srgb, var(--ink) 18%, transparent); }
+.feedback-history-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.feedback-history-heading h3 { margin: 0; font-size: 1rem; }
+.feedback-history-heading small { color: var(--muted); font-size: .74rem; }
+.feedback-history-list { display: grid; gap: 9px; max-height: min(38vh, 340px); overflow: auto; overscroll-behavior: contain; }
+.feedback-history-card { display: grid; gap: 7px; padding: 11px; border: 2px solid var(--ink); border-radius: 14px; background: var(--white); scroll-margin: 12px; }
+.feedback-history-card.notification-target { box-shadow: 0 0 0 4px color-mix(in srgb, var(--peach-pressed) 48%, transparent); }
+.feedback-history-card header { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font-size: .76rem; }
+.feedback-history-card p { margin: 0; line-height: 1.35; overflow-wrap: anywhere; }
+.feedback-team-response { display: grid; gap: 3px; padding: 9px; border-radius: 10px; background: color-mix(in srgb, var(--mint) 42%, var(--white)); }
+.feedback-team-response strong { font-size: .76rem; }
+.feedback-team-response time { color: var(--muted); font-size: .7rem; }
 .modal input:not([type="file"]):not([type="radio"]):not([type="checkbox"]), .modal select { width: 100%; min-height: 44px; padding: 9px 11px; border: 2px solid var(--ink); border-radius: 11px; background: var(--white); }
 .android-install-dialog { position: fixed; inset: 0; width: 100%; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom)); border: 0; background: var(--aqua); }
 .android-install-dialog::backdrop { background: var(--aqua); }

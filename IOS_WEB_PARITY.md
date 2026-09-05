@@ -63,6 +63,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Text/media overlays | Partial | Not yet tested | Centered accessible text overlays round-trip through the server; iOS-style positioning/editor gestures are absent. |
 | Voice messages | Partial | Not yet tested | Compatible browsers record MP4 audio locally with a five-minute ceiling; every browser retains M4A selection/capture, duration validation, private upload, playback, and recovery. Waveform editing and physical permission UX remain. |
 | Stickers | Partial | Not yet tested | Saved-sticker picker and idempotent send are automated; sticker creation remains in the iOS camera editor. |
+| Live camera filters / saved-filter gallery | Missing | Not yet tested | iOS can create, save, share, and apply server-compiled live filters. The PWA has no reliable camera-filter editor or renderer yet; its filter-ready Web Push deliberately opens Chats instead of claiming an exact web editor. |
 | Story rail, photo viewing, and view state | Equivalent | Not yet tested | Independently web-gated rail uses signed authoritative media and records a view only after reveal; four-project browser automation passes, while final-origin and physical-device proof remain. |
 | Story video viewing | Partial | Not yet tested | The same signed viewer supports controlled playback, but browser/device codec support must be proven and there is no safe universal web transcode. |
 | Story viewers, delete, and report | Equivalent | Not yet tested | Owner viewer/delete and non-owner moderation routes use the released contracts; production moderation and two-account smoke remain. |
@@ -84,11 +85,19 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Story capture push | Equivalent | Not yet tested | Native capture receipts now also enter the independent durable Web Push path with per-Story/viewer grouping and an exact `?tab=feed&story=<id>` destination; final-origin proof remains. |
 | Incoming-call Web Push | Partial | Not yet tested | With `ENABLE_WEB_CALLS=1`, the call-start transaction writes one durable browser intent per subscription with the authoritative ringing expiry, stable call collapse ID, and exact call route. It does not replace PushKit; final-origin notification/device proof remains. |
 | Closed-app incoming call | Native-only | Not yet tested | iOS uses PushKit and CallKit. The deliberate PWA alternative is an expiring visible Web Push that opens the exact call; browsers cannot guarantee immediate execution, full-screen ringing, or background media while the PWA is closed. |
-| TBH/feed push | Equivalent | Not yet tested | TBH, comment, reaction, vote, upvote, and reveal notifications with authoritative item IDs route to that exact PWA item; final-origin regression smoke remains. |
+| Vote / TBH / reaction / reveal push | Equivalent | Not yet tested | Transactional producers now add failure-isolated durable browser intents alongside APNS; vote, upvote, reaction, TBH, and reveal IDs route to the authoritative PWA item. Final-origin regression smoke remains. |
+| Poll / TBH comment push | Partial | Not yet tested | Durable notification intent and exact parent-item routing exist, but the PWA does not yet render the native comment threads, so the comment itself is not actionable on web. |
 | Question-approval push | Equivalent | Not yet tested | Approval enters the independently failure-isolated durable Web Push path without changing APNS and opens the exact authoritative submission in My Questions, even while Feed voting is locked. Four-project browser contract tests cover routing; final-origin tray proof remains. |
+| Play unlock / streak-warning push | Equivalent | Not yet tested | Both use the existing durable browser outbox when enabled and open Play. Scheduled selection now includes users with either eligible iOS tokens or active browser subscriptions, and streak-warning taps record the same authenticated authoritative open receipt as iOS. Backend and four-project adapter coverage pass; final-origin tray proof remains. |
+| Memento streak-warning push | Equivalent | Not yet tested | Scheduled selection includes web-only subscribers, and the producer adds a separately failure-isolated durable Web Push intent with the same daily fence, collapse identity, midnight expiry, and Chats destination. Final-origin delivery remains. |
+| Camera-filter-ready push | Partial | Not yet tested | Durable Web Push opens Chats, matching iOS's top-level destination, but the PWA cannot open the exact saved filter because the live-filter feature is currently missing on web. |
+| Feedback-response push | Equivalent | Not yet tested | Admin-created responses enter the independently failure-isolated Web Push path and open the exact bounded feedback thread after cold sign-in. Four-project adapter and final-origin tray proof remain. |
+| Comment-moderation push | Partial | Not yet tested | Browser delivery uses the shared durable path and safely opens the app, but the PWA lacks the native comment-access notice UI and acknowledgement journey. |
+| Aura / targeted-boost lifecycle push | Partial | Not yet tested | Ordinary and admin-created targeted boosts now enqueue browser delivery even for a web-only target, but notification clicks still use the safe generic Feed destination rather than an exact boost/aura surface. |
+| Admin / broad engagement push | Partial | Not yet tested | Streak Guardian engagement blasts and other broad campaigns are still selected from iOS token ownership. Web-only subscribers are not yet included in those campaigns, so they must not be claimed as PWA parity. |
 | Silent inbox invalidation | Native-only | Not yet tested | iOS can receive a content-available background invalidation. The PWA deliberately avoids a misleading visible notification and repairs from the authoritative inbox when foregrounded. |
 | Notification grouping | Equivalent | Not yet tested | The service worker honors server tags, and durable collapse identities now become stable browser tags instead of being discarded; Android notification-tray validation remains. |
-| Notification preferences | Partial | Not yet tested | Global browser subscription and chat level work; full iOS notification-category audit remains. |
+| Notification preferences | Equivalent | Not yet tested | Global browser subscription plus `all`, `daily_only`, and `muted` chat levels cover the meaningful iOS controls. Event-type routing is audited separately above; physical browser-permission and tray checks remain. |
 | Badge behavior | Partial | Not yet tested | In-app chat badges and progressive `setAppBadge`/`clearAppBadge` updates are automated; installed-app support varies and notification-tray/device validation remains. |
 | Safe notification URLs | Equivalent | Not yet tested | Service worker accepts only same-origin `/app/` destinations. |
 | Private media in service-worker cache | Equivalent | Not yet tested | Cache Storage is an explicit app-shell allowlist with no runtime writes; `/api/` and the 552 KB lazy LiveKit bundle are excluded. Build and browser inspection pass; final-origin verification remains. |
@@ -111,7 +120,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Accessibility semantics/focus | Partial | Not yet tested | Labels, live regions, reduced motion, and touch targets exist; screen-reader and contrast audit remain. |
 | Offline shell/installability | Equivalent | Not yet tested | Manifest/service-worker shell tests pass; installed physical-device update/reopen remains. |
 | Offline private-data isolation | Equivalent | Not yet tested | No authenticated API/media response enters Cache Storage; scoped snapshots/outbox are cleared at account exit. |
-| Predictable app updates | Partial | Not yet tested | v56 precaches the trusted runtime-style module and keeps telemetry/cache versions synchronized; waiting-worker rollback/update soak remains. |
+| Predictable app updates | Partial | Not yet tested | v57 carries the audited notification destinations and streak-open receipt while keeping telemetry/cache versions synchronized; waiting-worker rollback/update soak remains. |
 | Strict CSP runtime behavior | Equivalent | Not yet tested | Response and meta policies keep `style-src 'self'` without `unsafe-inline`; bounded same-origin CSSOM rules cover dynamic progress, overlays, viewport, crop, and drag state in all four lab projects. Final-origin header verification remains. |
 | Dark Mode | Equivalent | Not yet tested | System color scheme now drives the core shell, Chats, Mementos, forms, and dialogs; automated computed-style check plus visual/accessibility review remain. |
 | Haptics | Partial | Not yet tested | Android vibration is progressive enhancement; precise native haptic parity is unavailable. |
@@ -131,16 +140,20 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Play, skips, nomination, question submission | Equivalent | Not yet tested | Server-configured costs/limits and idempotency covered; production canary remains. |
 | School-question history, results, withdrawal, and deactivation | Equivalent | Not yet tested | The bounded 100-row My Questions view uses the released GET/DELETE contracts, server-owned result thresholds, and exact approval target. Four-project browser automation covers published results, deactivation with poll preservation, and pending withdrawal/refund; final-origin and moderation smoke remain. |
 | TBH and Anonymous Inbox | Equivalent | Not yet tested | Existing automation; exact Web Push routes remain in notification gate. |
-| Moderation/blocking | Equivalent | Not yet tested | Existing non-chat flows remain intact and chat-context block uses the same authoritative account-wide endpoint. |
+| Feedback submission, history, and team responses | Equivalent | Not yet tested | The PWA uses the existing authenticated history contract, renders at most 20 feedback threads and five responses each, and opens an exact response target without persistent private caching. Final-origin notification proof remains. |
+| Poll and TBH comment threads | Missing | Not yet tested | iOS can create, reply to, react to, report, and receive moderation notices for comments. The PWA currently has no comment-thread UI; notification clicks can only open the authoritative parent item. |
+| Moderation/blocking | Partial | Not yet tested | Chat/report/block and Ask Me safety rules use authoritative endpoints, but the missing comment-thread and comment-access-notice UI keeps broad moderation parity incomplete. |
 | Account deletion and cancellation | Equivalent | Not yet tested | Backend remains authoritative; PWA erases pending chat text and private media for that user on deletion request or logout. |
 
 ## Device and evidence ledger
 
 Current candidate evidence: `npm run build`, UI runtime checks, and performance
-budgets pass. [Hosted run 33994169552](https://github.com/jasonwonton/validapp-landing-page/actions/runs/33994169552)
-completed with **629 passed, 3 expected non-Android skips, 0 failed, and no
-retries** across isolated Pixel 7 Chromium, Desktop Chrome, Desktop Firefox, and
-Desktop WebKit jobs. The non-Chromium projects block service workers because
+budgets pass. The exact current tree completed locally with **641 passed, 3
+expected non-Android skips, 0 failed, and no retries** across Pixel 7 Chromium,
+Desktop Chrome, Desktop Firefox, and Desktop WebKit. The prior
+[hosted run 33994169552](https://github.com/jasonwonton/validapp-landing-page/actions/runs/33994169552)
+completed with **629 passed, 3 expected skips, 0 failed, and no retries**; the
+new exact-head hosted run remains a release gate. The non-Chromium projects block service workers because
 [Playwright supports service workers only in Chromium-based browsers](https://playwright.dev/docs/service-workers);
 Chromium continues to cover install, offline-shell, cache-isolation, update, and
 push-worker behavior. A branded Google Chrome smoke against the production-style
@@ -173,7 +186,7 @@ approval.
 
 ## Release decision
 
-**Current decision: NO-GO for public exposure.** The core Chats/Mementos, photo communication, compatible voice recording, Story, and open-app call implementation is a credible staging candidate, but physical-device, final-origin, SSE failure, notification destination, codec-dependent video, richer Story editing/contact sharing, and real two-account LiveKit gates are still open.
+**Current decision: NO-GO for public exposure.** The core Chats/Mementos, photo communication, compatible voice recording, Story, and open-app call implementation is a credible staging candidate, but physical-device, final-origin, SSE failure, notification destination, codec-dependent video, live camera filters, richer Story editing/contact sharing, and real two-account LiveKit gates are still open.
 
 The read-only production preflight currently passes the manifest/service worker,
 related-origin passkey, and API/CORS checks, but fails the app-shell security

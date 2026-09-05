@@ -856,6 +856,30 @@ export class DemoAPI {
             feedback_text: feedbackText,
             created_at: new Date().toISOString(),
             photo_url: null,
+            responses: [],
+        };
+    }
+
+    async getFeedbackHistory() {
+        return {
+            feedback: [
+                {
+                    id: "demo-feedback-history",
+                    user_id: this.profile.user_id,
+                    feedback_text: "Make the active tab easier to spot.",
+                    created_at: "2026-09-03T14:00:00Z",
+                    notice_type: "feedback_response",
+                    report_subject_type: null,
+                    responses: [
+                        {
+                            id: "demo-feedback-response",
+                            feedback_id: "demo-feedback-history",
+                            response_text: "Thanks — we improved the active navigation state.",
+                            created_at: "2026-09-04T16:00:00Z",
+                        },
+                    ],
+                },
+            ],
         };
     }
 
