@@ -170,6 +170,15 @@ suite passes **14 tests with 2 intentional non-Chromium service-worker skips**.
 That run verifies the emitted CSP and device policies, MIME and cache behavior,
 write/API/traversal rejection, signed-out boot, install metadata, service-worker
 registration, and the absence of API/CDN responses from Cache Storage. The
+same staging service completed a bounded 200-request, concurrency-10 load smoke
+with 0 failures (13.62 requests/second, 687 ms median and 1.151 s p95 response
+time from the available East Coast test host). Five cold Chromium contexts
+measured median 154 ms TTFB, 400 ms first-contentful paint, and 729 ms load.
+A real App Platform rollback to the preceding successful deployment preserved
+the hardened edge response, and the subsequent revert restored the exact
+reviewed head to `ACTIVE` with no pinned deployment; the full 14-check staging
+suite passed again after restoration. These are dated baselines, not capacity
+limits. The
 scoped backend chat/Memento/Story/Web Push/config safety run is **273 passed, 0
 failed**; the latest current-tree lifecycle/notification/call/config rerun is **280
 passed, 0 failed**. These are lab results, not production or physical-device
@@ -182,7 +191,7 @@ approval.
 | Desktop Firefox | Automated | Full application suite passing with service workers blocked at the Playwright boundary; real Firefox notification/install behavior remains a hands-on gate. |
 | Desktop WebKit engine | Automated | Full application suite passing with service workers blocked. This is neither branded Safari nor an installed iPhone PWA, so Safari service-worker, push, media, and install behavior remain open. |
 | Desktop Safari | Branded local smoke | Production-style local-origin demo sign-in, Chats list, direct conversation, text send, exact-chat reload/sign-in restore, Memento viewer, and prior-day history pass in branded Safari on macOS. Final-origin service worker, push, passkey, media permissions, and install behavior remain open. |
-| Unbound DigitalOcean staging origin | Automated edge smoke | The deployed header-emitting service passes 14/14 applicable checks across Pixel-class Chromium, desktop Chromium, Firefox, and WebKit; Firefox/WebKit service-worker checks are intentionally skipped. Authenticated and passkey journeys require the private final origin. |
+| Unbound DigitalOcean staging origin | Automated edge + rollback smoke | The deployed header-emitting service passes 14/14 applicable checks across Pixel-class Chromium, desktop Chromium, Firefox, and WebKit; Firefox/WebKit service-worker checks are intentionally skipped. A bounded load smoke had 0 failures, cold-browser startup medians are recorded above, and rollback/revert restored the reviewed head cleanly. Authenticated and passkey journeys require the private final origin. |
 | Desktop Edge | Not yet tested | Edge is not installed on the available macOS test host; final-origin smoke, notifications, keyboard/accessibility, and degraded alternatives remain. |
 | Physical Pixel | Not yet tested | Install, camera, push, offline/reopen, keyboard, long scroll, update, two-account realtime. |
 | Physical Samsung | Not yet tested | Repeat with Samsung Internet and Chrome plus Samsung Keyboard and aggressive backgrounding. |

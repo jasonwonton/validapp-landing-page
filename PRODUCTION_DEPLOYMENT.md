@@ -164,6 +164,13 @@ This staging suite deliberately stays signed out: demo fixtures are restricted
 to localhost, and passkeys/session cookies must be tested on the private final
 origin. A passing staging run does not authorize public routing.
 
+The September 5, 2026 staging drill also proved App Platform rollback and
+revert: the service rolled back to the preceding successful deployment,
+retained its CSP/no-cache response, then reverted to the reviewed branch head,
+returned to `ACTIVE`, and cleared the rollback pin. Repeat this drill for a
+production component before public exposure, and always verify the active
+source commit plus `pinned_deployment == null` after restoration.
+
 The web origin must apply the rules in `_headers` to `/app/*`; `npm start`
 does this directly. Do not rely only on the CSP meta tag: framing protection
 requires the actual `Content-Security-Policy` response header. Also preserve the manifest and
