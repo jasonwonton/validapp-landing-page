@@ -16,9 +16,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  browser-journeys:
+  static-release-checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -28,12 +28,36 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run test:static-origin
-      - run: npx playwright install --with-deps chromium firefox webkit
-      - run: npm run test:e2e
+
+  browser-journeys:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: android
+            browser: chromium
+          - project: desktop
+            browser: chromium
+          - project: desktop-firefox
+            browser: firefox
+          - project: desktop-webkit
+            browser: webkit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
+      - run: npm run test:e2e -- --project=${{ matrix.project }}
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-failure-artifacts
+          name: playwright-${{ matrix.project }}-failure-artifacts
           path: test-results/
           if-no-files-found: ignore
 

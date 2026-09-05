@@ -5622,7 +5622,7 @@ function switchPanel(panel, { historyMode = "push", restoreScroll = true } = {})
     });
     if (historyMode !== "none") writeNavigationState(historyMode);
     const targetScroll = restoreScroll ? state.tabScrollPositions[panel] || 0 : 0;
-    requestAnimationFrame(() => scrollTo({ top: targetScroll, behavior: "auto" }));
+    requestAnimationFrame(() => window.scrollTo(0, targetScroll));
     void activatePanelRoute(panel);
 }
 

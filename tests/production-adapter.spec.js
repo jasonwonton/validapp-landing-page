@@ -859,6 +859,7 @@ test("real adapter links signup only after Turnstile-backed SMS verification", a
 });
 
 test("signup sends existing phone identities back to sign in", async ({ page }) => {
+    await installCredentialStub(page, "get");
     const requests = await interceptProductionAPI(page, { signup: true, phoneExists: true });
     await page.goto("/app/?signin=1");
     await page.getByRole("button", { name: "Create an account" }).click();
@@ -1046,6 +1047,7 @@ test("Request a TBH uses full classmate rows with profile pictures", async ({ pa
 });
 
 test("real adapter gives rate-limited users an actionable wait time", async ({ page }) => {
+    await installCredentialStub(page, "get");
     await useProductionApiOrigin(page);
     await page.route(`${API_ORIGIN}/api/v1/auth/session`, (route) => route.fulfill({
         status: 401,
