@@ -16,6 +16,14 @@ and push-worker coverage. WebKit is not branded Safari and does not replace the
 installed-iPhone gate below. The localhost-only demo never calls production and
 cannot be enabled on a public host.
 
+Branded macOS browser smoke currently covers Chrome and Safari against the
+header-emitting production-style local origin. Chrome covers the install
+affordance in addition to Chats/Mementos navigation, text send, exact-chat URL,
+and cold reload/sign-in restoration. Safari covers demo sign-in, Chats list and
+DM navigation, text send, exact-chat cold reload/sign-in restoration, Memento
+viewing, and prior-day history. These local checks do not approve final-origin
+push, passkeys, media permissions, install behavior, or the physical iPhone PWA.
+
 For hands-on testing:
 
 ```bash

@@ -145,7 +145,10 @@ Chromium continues to cover install, offline-shell, cache-isolation, update, and
 push-worker behavior. A branded Google Chrome smoke against the production-style
 v55 local origin also passed install affordance, demo sign-in, Chats/Memento
 navigation and history, unlocked text send, exact chat URL, and cold
-reload/sign-in restoration. The
+reload/sign-in restoration. Branded Safari on macOS passed the same
+production-style local origin for demo sign-in, Chats list and DM navigation,
+an unlocked text send, exact-chat cold reload/sign-in restoration, Memento
+viewing, and prior-day Memento history. The
 header-emitting production-origin adapter passes **3 static-origin contract
 tests**, and its standalone DigitalOcean staging spec validates successfully. The
 scoped backend chat/Memento/Story/Web Push/config safety run is **273 passed, 0
@@ -159,10 +162,11 @@ approval.
 | Desktop Chrome | Automated + branded smoke | Full hosted suite passes with Chromium service-worker coverage. Branded Chrome on macOS passes the production-style local-origin smoke; final-origin notification and passkey behavior remain open. |
 | Desktop Firefox | Automated | Full application suite passing with service workers blocked at the Playwright boundary; real Firefox notification/install behavior remains a hands-on gate. |
 | Desktop WebKit engine | Automated | Full application suite passing with service workers blocked. This is neither branded Safari nor an installed iPhone PWA, so Safari service-worker, push, media, and install behavior remain open. |
+| Desktop Safari | Branded local smoke | Production-style local-origin demo sign-in, Chats list, direct conversation, text send, exact-chat reload/sign-in restore, Memento viewer, and prior-day history pass in branded Safari on macOS. Final-origin service worker, push, passkey, media permissions, and install behavior remain open. |
+| Desktop Edge | Not yet tested | Edge is not installed on the available macOS test host; final-origin smoke, notifications, keyboard/accessibility, and degraded alternatives remain. |
 | Physical Pixel | Not yet tested | Install, camera, push, offline/reopen, keyboard, long scroll, update, two-account realtime. |
 | Physical Samsung | Not yet tested | Repeat with Samsung Internet and Chrome plus Samsung Keyboard and aggressive backgrounding. |
 | iPhone installed PWA | Not yet tested | Safari install, camera, keyboard/safe areas, push, exact links, passkey, update. |
-| Desktop Edge and Safari | Not yet tested | Branded-browser final-origin smoke, notification availability, keyboard/accessibility, and degraded alternatives. |
 | Final `https://validapp.lol/app/` origin | Blocked | Current deployment fails the response-CSP framing gate; candidate headers, push subscription, and exact links still require private final-origin testing. |
 | Current App Store iOS binary | Not yet tested | Full smoke against the candidate backend before any production web flag changes. |
 
