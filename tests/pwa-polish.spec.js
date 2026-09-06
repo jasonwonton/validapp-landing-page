@@ -6,6 +6,36 @@ async function signInToDemo(page, query = "") {
     await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
 }
 
+test("initial shell parks inactive dialogs until first use", async ({ page }) => {
+    await page.goto("/app/?demo=1&signin=1");
+    const shell = await page.evaluate(() => ({
+        elements: document.querySelectorAll("*").length,
+        parked: document.querySelectorAll("dialog[data-ui-parked='true']").length,
+    }));
+    expect(shell.elements).toBeLessThan(450);
+    expect(shell.parked).toBeGreaterThanOrEqual(20);
+
+    await page.getByRole("button", { name: "Create an account" }).click();
+    await expect(page.locator("#signupDialog")).toBeVisible();
+    await expect(page.locator("#signupForm")).toBeAttached();
+    await expect(page.locator("#signupDialog")).not.toHaveAttribute("data-ui-parked", "true");
+});
+
+test("route modules load only when their tab is activated", async ({ page }) => {
+    await page.goto("/app/?demo=1&signin=1");
+    const loadedRoutes = () => page.evaluate(() => performance.getEntriesByType("resource")
+        .map((entry) => new URL(entry.name).pathname)
+        .filter((path) => /\/app\/routes\/(?:feed|play|profile)\.js$/.test(path)));
+    expect(await loadedRoutes()).toEqual([]);
+
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await expect.poll(loadedRoutes).toContain("/app/routes/feed.js");
+    expect(await loadedRoutes()).not.toContain("/app/routes/profile.js");
+
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await expect.poll(loadedRoutes).toContain("/app/routes/profile.js");
+});
+
 test("shared action buttons use the iOS button tokens", async ({ page }) => {
     await page.goto("/app/?demo=1&signin=1");
     const styleSnapshot = (locator) => locator.evaluate((element) => {
@@ -82,7 +112,7 @@ test("God Mode actions avoid duplicate icons and overflow dots are centered", as
     expect(await overflow.evaluate((element) => getComputedStyle(element, "::before").content)).toBe('"•••"');
     const revealButton = page.getByRole("button", { name: "Get God Mode to Reveal who sent this" });
     await expect(revealButton.locator("img")).toHaveCount(0);
-    expect(await revealButton.evaluate((element) => getComputedStyle(element, "::before").backgroundImage)).toContain("crown.png");
+    expect(await revealButton.evaluate((element) => getComputedStyle(element, "::before").backgroundImage)).toContain("crown.webp");
     await page.getByRole("button", { name: "Close" }).click();
 
     await page.getByRole("button", { name: "Profile", exact: true }).click();
@@ -399,27 +429,29 @@ test("school question artwork can be positioned and adjusted again", async ({ pa
     await signInToDemo(page);
     await page.getByRole("button", { name: "Profile", exact: true }).click();
     await page.getByRole("button", { name: /Submit a school question for/i }).click();
-    const question = page.getByRole("dialog", { name: "Submit a school question" });
+    const question = page.getByRole("dialog", { name: "School Questions" });
     await question.getByLabel("Artwork").setInputFiles("assets/valid_logo.png");
 
     const crop = page.getByRole("dialog", { name: "Adjust crop" });
     await expect(crop).toBeVisible();
     const cropImage = crop.getByAltText("Photo being cropped");
-    const initialTransform = await cropImage.evaluate((image) => image.style.transform);
+    const initialTransform = await cropImage.evaluate((image) => getComputedStyle(image).transform);
     await crop.getByLabel("Zoom").fill("2");
-    await expect.poll(() => cropImage.evaluate((image) => image.style.transform)).not.toBe(initialTransform);
-    const zoomedTransform = await cropImage.evaluate((image) => image.style.transform);
+    await expect.poll(() => cropImage.evaluate((image) => getComputedStyle(image).transform)).not.toBe(initialTransform);
+    const zoomedTransform = await cropImage.evaluate((image) => getComputedStyle(image).transform);
     const viewport = crop.locator("#questionCropViewport");
     const viewportBox = await viewport.boundingBox();
     await page.mouse.move(viewportBox.x + viewportBox.width / 2, viewportBox.y + viewportBox.height / 2);
     await page.mouse.down();
     await page.mouse.move(viewportBox.x + viewportBox.width / 2 + 40, viewportBox.y + viewportBox.height / 2, { steps: 3 });
     await page.mouse.up();
-    await expect.poll(() => cropImage.evaluate((image) => image.style.transform)).not.toBe(zoomedTransform);
+    await expect.poll(() => cropImage.evaluate((image) => getComputedStyle(image).transform)).not.toBe(zoomedTransform);
     await crop.getByRole("button", { name: "Use photo" }).click();
 
     const adjust = question.getByRole("button", { name: "Adjust crop" });
-    await expect(adjust).toBeVisible();
+    // Canvas encode + data-URL preview creation can exceed the default action
+    // timeout on a contended mobile runner while the UI shows "Working...".
+    await expect(adjust).toBeVisible({ timeout: 15_000 });
     await adjust.click();
     await expect(crop).toBeVisible();
     await crop.getByRole("button", { name: "Cancel crop" }).click();
@@ -431,4 +463,6 @@ test("push worker preserves separate notifications unless the server supplies a 
     expect(worker).toContain("tag,");
     expect(worker).toContain("renotify: Boolean(tag)");
     expect(worker).not.toContain('tag: payload.tag || "valid-notification"');
+    expect(worker).toContain('payload.data?.type === "incoming_call"');
+    expect(worker).toContain('title: "Open call"');
 });

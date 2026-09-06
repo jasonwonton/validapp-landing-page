@@ -1,7 +1,7 @@
 {
   "name": "Valid",
   "short_name": "Valid",
-  "description": "Answer polls, see your feed, and use your anonymous link.",
+  "description": "Answer polls, chat with friends, capture Mementos, and use your anonymous link.",
   "start_url": "./",
   "id": "/app/",
   "scope": "./",
@@ -26,6 +26,13 @@
       "short_name": "Play",
       "description": "Answer questions from your school",
       "url": "./?tab=play",
+      "icons": [{ "src": "../assets/pwa/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Chats",
+      "short_name": "Chats",
+      "description": "Open your chats and today's Mementos",
+      "url": "./?tab=chats",
       "icons": [{ "src": "../assets/pwa/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {

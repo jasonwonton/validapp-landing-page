@@ -3,23 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+    <meta name="valid-app-version" content="web-v67">
     <base href="/app/">
-    <meta name="theme-color" content="#ccf7f4">
+    <meta name="theme-color" content="#ccf7f4" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0b2528" media="(prefers-color-scheme: dark)">
     <meta name="application-name" content="Valid">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="referrer" content="no-referrer">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'self'; connect-src 'self' https://api.six7.lol https://validappcdn.com; font-src 'self'; form-action 'self'; frame-src https://challenges.cloudflare.com; img-src 'self' data: https:; manifest-src 'self'; object-src 'none'; script-src 'self' https://challenges.cloudflare.com; style-src 'self'; worker-src 'self'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'self'; connect-src 'self' https://api.six7.lol https://validappcdn.com wss://livekit.six7.lol wss://livekit-staging-150-136-43-223.sslip.io wss://livekit-prod-150-136-43-223.sslip.io; font-src 'self'; form-action 'self'; frame-src https://challenges.cloudflare.com; img-src 'self' blob: data: https:; manifest-src 'self'; media-src 'self' blob: https:; object-src 'none'; script-src 'self' https://challenges.cloudflare.com; style-src 'self'; worker-src 'self'">
     <meta name="description" content="Answer polls, see your feed, and share your anonymous Valid link from any device.">
     <title>Valid</title>
     <link rel="icon" type="image/png" href="../assets/AppIconV2.png">
     <link rel="apple-touch-icon" href="../assets/AppIconV2.png">
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="chat/styles.css">
+    <link rel="stylesheet" href="stories/styles.css">
+    <link rel="stylesheet" href="calls/styles.css">
+    <link rel="stylesheet" href="comments/styles.css">
 </head>
 <body>
     <header class="topbar">
         <a class="wordmark" href="../index.html" aria-label="Valid home">
-            <img src="../assets/valid_logo.png" alt="Valid">
+            <img src="../assets/valid_logo.png" alt="Valid" width="964" height="372" decoding="async" fetchpriority="high">
         </a>
         <button id="logoutButton" class="text-button hidden" type="button">Log out</button>
     </header>
@@ -45,6 +51,7 @@
             <section id="feedPanel" class="panel active-panel">
                 <div id="feedGateLock" class="hidden"></div>
                 <div id="feedUnlockedContent">
+                    <div id="storiesRoot"></div>
                     <section id="feedNotificationPrompt" class="feed-notification-prompt hidden" aria-label="Enable vote notifications">
                         <span class="feed-notification-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M10 21h4"/></svg></span>
                         <span><strong>Don’t miss your next vote</strong><small>Enable notifications to know when someone picks you.</small></span>
@@ -141,10 +148,14 @@
                 <div class="play-status-bar" aria-label="Play status">
                     <span class="play-streak-chip">🔥 <strong id="playStreakCount">0</strong><small id="playStreakMultiplier" class="hidden"></small></span>
                     <span id="playProgress" class="play-progress"></span>
-                    <span class="play-aura-chip"><img src="../assets/app/aura.png" alt=""><strong id="auraCount">0</strong></span>
+                    <span class="play-aura-chip"><img src="../assets/app/aura.webp" alt="" width="688" height="856" loading="lazy" decoding="async"><strong id="auraCount">0</strong></span>
                 </div>
                 <div id="playStatus" class="inline-status" role="status"></div>
                 <div id="playCard"></div>
+            </section>
+
+            <section id="chatsPanel" class="panel hidden">
+                <div id="chatsRoot"></div>
             </section>
 
             <section id="profilePanel" class="panel hidden">
@@ -173,18 +184,20 @@
                 <button id="installAppButton" class="settings-row hidden" type="button"><span class="settings-icon" aria-hidden="true">⇩</span><span><strong>Install Valid</strong><small>Add the app to your home screen</small></span><span aria-hidden="true">›</span></button>
                 <button id="profileSignOutButton" class="profile-sign-out" type="button">Sign Out</button>
             </section>
+            <div id="commentsRoot"></div>
         </section>
     </main>
 
     <nav id="bottomNav" class="bottom-nav hidden" aria-label="App navigation">
         <button class="nav-item active" data-panel="feed" type="button" aria-current="page" aria-label="Feed"><span class="nav-icon-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h11a2 2 0 0 1 2 2V19H6a2 2 0 0 1-2-2V5.5Z"/><path d="M17 8h3v9a2 2 0 0 1-2 2h-1M7 9h7M7 12h7M7 15h4"/></svg><span id="feedTabBadge" class="tab-badge hidden" aria-hidden="true"></span></span><span>Feed</span></button>
         <button class="nav-item" data-panel="play" type="button" aria-label="Play"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path class="nav-icon-fill" d="m10 8 6 4-6 4Z"/></svg><span>Play</span></button>
+        <button class="nav-item hidden" data-panel="chats" type="button" aria-label="Chats"><span class="nav-icon-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h11a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3H9l-4.5 3 .8-3.7A3 3 0 0 1 4 13.5v-8Z"/><path d="M8 9h6M8 12h4"/></svg><span id="chatsTabBadge" class="tab-badge hidden" aria-hidden="true"></span></span><span>Chats</span></button>
         <button class="nav-item" data-panel="profile" type="button" aria-label="Profile"><span class="nav-icon-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.25"/><path d="M5.5 20c.4-4.1 2.6-6.2 6.5-6.2s6.1 2.1 6.5 6.2"/><circle cx="12" cy="12" r="9.5"/></svg><span id="profileTabBadge" class="tab-badge profile-tab-badge hidden" aria-hidden="true">!</span></span><span>Profile</span></button>
     </nav>
 
     <dialog id="androidInstallDialog" class="android-install-dialog" aria-label="Install Valid on Android">
         <div class="android-install-dialog-content">
-            <img src="../assets/AppIconV2.png" alt="">
+            <img src="../assets/AppIconV2.png" alt="" width="1024" height="1024" loading="lazy" decoding="async">
             <p class="eyebrow">Valid for Android</p>
             <h2>Install Valid</h2>
             <p id="androidInstallCopy">Add Valid to your phone so it opens from your home screen like an app.</p>
@@ -204,18 +217,22 @@
         </div>
     </dialog>
 
-    <section id="questionDialog" class="detail-screen question-page hidden" role="dialog" aria-modal="true" aria-label="Submit a school question">
+    <section id="questionDialog" class="detail-screen question-page hidden" role="dialog" aria-modal="true" aria-label="School Questions">
         <div class="detail-screen-header question-page-header">
             <button id="closeQuestionPage" class="detail-back-button sheet-text-control" aria-label="Close" type="button"><span>Close</span></button>
-            <strong>Submit a school question</strong>
+            <strong>School Questions</strong>
             <span aria-hidden="true"></span>
         </div>
-        <form id="questionForm" class="question-submission-form">
+        <div class="question-section-tabs" role="tablist" aria-label="School Questions sections">
+            <button id="questionSubmitTab" class="active" type="button" role="tab" aria-selected="true" aria-controls="questionForm">Submit</button>
+            <button id="questionHistoryTab" type="button" role="tab" aria-selected="false" aria-controls="questionHistoryPanel">My Questions</button>
+        </div>
+        <form id="questionForm" class="question-submission-form" role="tabpanel" aria-labelledby="questionSubmitTab">
             <div class="question-submission-scroll">
             <p class="question-kind-note">IMPORTANT: Keep it kind, specific, and something your classmates would love to vote on. ❤️</p>
             <fieldset class="identity-picker">
                 <legend>Anonymity</legend>
-                <label><input type="radio" name="questionIdentity" value="anonymous"><img src="../assets/app/anonymous.png" alt=""><span><strong>Stay anonymous</strong><small>Your name will not be on the question</small></span></label>
+                <label><input type="radio" name="questionIdentity" value="anonymous"><img src="../assets/app/anonymous.webp" alt="" width="1024" height="1024" loading="lazy" decoding="async"><span><strong>Stay anonymous</strong><small>Your name will not be on the question</small></span></label>
                 <label><input type="radio" name="questionIdentity" value="named" checked><span id="questionIdentityAvatar" class="tiny-avatar">V</span><span><strong id="questionIdentityName">Your name</strong><small>Your name appears next to the question</small></span></label>
             </fieldset>
             <label class="question-prompt-field" for="questionText"><span>Question prompt</span><textarea id="questionText" name="question_text" minlength="3" maxlength="280" required aria-label="What should your school vote on?" placeholder="Write the exact question classmates will see."></textarea></label>
@@ -235,8 +252,8 @@
                 <span><strong>I have permission</strong><small>I confirm that I have permission from anyone featured in this question or image to post this content.</small></span>
             </label>
             <div class="question-cost-row">
-                <span><small>Cost to submit</small><strong class="question-aura-value"><img src="../assets/app/aura.png" alt=""><span id="questionAuraCost">200</span><span>aura</span></strong></span>
-                <span><small>Your aura</small><strong class="question-aura-value"><img src="../assets/app/aura.png" alt=""><span id="questionCurrentAura">0</span></strong></span>
+                <span><small>Cost to submit</small><strong class="question-aura-value"><img src="../assets/app/aura.webp" alt="" width="688" height="856" loading="lazy" decoding="async"><span id="questionAuraCost">200</span><span>aura</span></strong></span>
+                <span><small>Your aura</small><strong class="question-aura-value"><img src="../assets/app/aura.webp" alt="" width="688" height="856" loading="lazy" decoding="async"><span id="questionCurrentAura">0</span></strong></span>
             </div>
             </div>
             <div class="question-submit-dock">
@@ -244,7 +261,27 @@
                 <button id="questionSubmitButton" class="primary-button" type="submit">Submit for review</button>
             </div>
         </form>
+        <section id="questionHistoryPanel" class="question-history-panel hidden" role="tabpanel" aria-labelledby="questionHistoryTab">
+            <div class="question-history-toolbar">
+                <p>Review status, poll activity, and results for questions you submitted.</p>
+                <button id="refreshQuestionHistory" class="mini-button" type="button">Refresh</button>
+            </div>
+            <p id="questionHistoryStatus" class="status-message question-history-status" role="status"></p>
+            <div id="questionHistoryList" class="question-history-list" aria-live="polite"></div>
+        </section>
     </section>
+
+    <dialog id="questionRemovalDialog" class="modal" aria-labelledby="questionRemovalTitle">
+        <div class="question-removal-content">
+            <h2 id="questionRemovalTitle">Delete submission?</h2>
+            <p id="questionRemovalMessage"></p>
+            <p id="questionRemovalStatus" class="status-message" role="status"></p>
+            <div class="dialog-button-row">
+                <button class="secondary-button" type="button" data-close-dialog>Cancel</button>
+                <button id="confirmQuestionRemoval" class="danger-button" type="button">Delete submission</button>
+            </div>
+        </div>
+    </dialog>
 
     <dialog id="questionCropDialog" class="question-crop-dialog" aria-labelledby="questionCropTitle">
         <div class="question-crop-content">
@@ -255,7 +292,7 @@
             </header>
             <div class="question-crop-workspace">
                 <div id="questionCropViewport" class="question-crop-viewport" aria-label="Drag photo to reposition crop">
-                    <img id="questionCropImage" alt="Photo being cropped" draggable="false">
+                    <img id="questionCropImage" alt="Photo being cropped" draggable="false" decoding="async">
                     <span class="question-crop-grid" aria-hidden="true"></span>
                 </div>
                 <p>Drag to reposition. Use the slider to zoom.</p>
@@ -266,12 +303,12 @@
 
     <dialog id="questionConfirmDialog" class="modal">
         <div class="aura-confirm-content">
-            <div class="question-confirm-icon"><img src="../assets/app/pencil-clipboard.png" alt=""></div>
+            <div class="question-confirm-icon"><img src="../assets/app/pencil-clipboard.webp" alt="" width="1024" height="1024" loading="lazy" decoding="async"></div>
             <h2>Submit this poll?</h2>
             <p>Spend aura to send your question for review.</p>
             <div class="question-confirm-breakdown">
-                <span><small>Cost</small><strong class="question-aura-value"><img src="../assets/app/aura.png" alt=""><span id="questionConfirmCost">200</span> aura</strong></span>
-                <span><small>Aura left</small><strong class="question-aura-value"><img src="../assets/app/aura.png" alt=""><span id="questionConfirmRemaining">0</span> aura</strong></span>
+                <span><small>Cost</small><strong class="question-aura-value"><img src="../assets/app/aura.webp" alt="" width="688" height="856" loading="lazy" decoding="async"><span id="questionConfirmCost">200</span> aura</strong></span>
+                <span><small>Aura left</small><strong class="question-aura-value"><img src="../assets/app/aura.webp" alt="" width="688" height="856" loading="lazy" decoding="async"><span id="questionConfirmRemaining">0</span> aura</strong></span>
             </div>
             <p class="question-confirm-refund"><span aria-hidden="true">✓</span>If moderators deny the submission, we will refund your aura.</p>
             <div class="dialog-button-row question-confirm-actions">
@@ -287,7 +324,7 @@
                 <button class="signup-back-button hidden" aria-label="Back" type="button" data-signup-back>‹</button>
             </div>
             <fieldset class="signup-step signup-age-step" data-signup-step="0">
-                <img class="signup-age-logo" src="../assets/valid_logo.png" alt="Valid">
+                <img class="signup-age-logo" src="../assets/valid_logo.png" alt="Valid" width="964" height="372" loading="lazy" decoding="async">
                 <h2>How old are you?</h2>
                 <p class="form-hint signup-terms">By entering your age, you agree to our <a href="../terms.html" target="_blank">Terms</a> and <a href="../privacy-policy.html" target="_blank">Privacy Policy</a>.</p>
                 <div class="signup-age-picker">
@@ -407,27 +444,27 @@
                 <div id="profileEditHint" class="profile-editor-availability"></div>
                 <div class="profile-editor-rows">
                     <button class="profile-editor-row" type="button" data-profile-editor="username">
-                        <span class="profile-editor-row-icon" aria-hidden="true"><img src="../assets/app/profile-at.svg" alt=""></span>
+                        <span class="profile-editor-row-icon" aria-hidden="true"><img src="../assets/app/profile-at.svg" alt="" width="24" height="24" loading="lazy" decoding="async"></span>
                         <span><small>Username <em id="profileUsernameBadge"></em></small><strong id="profileUsernameValue"></strong></span>
                         <span aria-hidden="true">›</span>
                     </button>
                     <button class="profile-editor-row" type="button" data-profile-editor="name">
-                        <span class="profile-editor-row-icon" aria-hidden="true"><img src="../assets/app/profile-person-card.svg" alt=""></span>
+                        <span class="profile-editor-row-icon" aria-hidden="true"><img src="../assets/app/profile-person-card.svg" alt="" width="24" height="24" loading="lazy" decoding="async"></span>
                         <span><small>Name <em id="profileNameBadge"></em></small><strong id="profileNameValue"></strong></span>
                         <span aria-hidden="true">›</span>
                     </button>
                     <button class="profile-editor-row" type="button" data-profile-editor="school">
-                        <span class="profile-editor-row-icon" aria-hidden="true"><img src="../assets/app/profile-school.svg" alt=""></span>
+                        <span class="profile-editor-row-icon" aria-hidden="true"><img src="../assets/app/profile-school.svg" alt="" width="24" height="24" loading="lazy" decoding="async"></span>
                         <span><small>School <em id="profileSchoolBadge"></em></small><strong id="profileSchoolValue"></strong></span>
                         <span aria-hidden="true">›</span>
                     </button>
                     <button class="profile-editor-row" type="button" data-profile-editor="grade">
-                        <span class="profile-editor-row-icon" aria-hidden="true"><img src="../assets/app/profile-graduation-cap.svg" alt=""></span>
+                        <span class="profile-editor-row-icon" aria-hidden="true"><img src="../assets/app/profile-graduation-cap.svg" alt="" width="24" height="24" loading="lazy" decoding="async"></span>
                         <span><small>Grade <em id="profileGradeBadge"></em></small><strong id="profileGradeValue"></strong></span>
                         <span aria-hidden="true">›</span>
                     </button>
                     <button id="godModeUnsubscribeButton" class="profile-editor-row god-mode-unsubscribe-row hidden" type="button">
-                        <span class="profile-editor-row-icon" aria-hidden="true"><img src="../assets/app/crown.png" alt=""></span>
+                        <span class="profile-editor-row-icon" aria-hidden="true"><img src="../assets/app/crown.webp" alt="" width="1024" height="1024" loading="lazy" decoding="async"></span>
                         <span><small>God Mode <em id="godModeUnsubscribeBadge"></em></small><strong id="godModeUnsubscribeLabel">Unsubscribe from God Mode</strong></span>
                         <span aria-hidden="true">›</span>
                     </button>
@@ -517,6 +554,11 @@
             <label class="feedback-photo-field">Add a screenshot <span>(optional)</span><span class="feedback-photo-picker"><strong>Choose screenshot</strong><small id="feedbackPhotoName">No screenshot selected</small><input id="feedbackPhoto" type="file" accept="image/jpeg,image/png,image/webp"></span></label>
             <p id="feedbackStatus" class="status-message" role="status"></p>
             <button id="feedbackSubmitButton" class="primary-button" type="submit">Send feedback</button>
+            <section class="feedback-history" aria-labelledby="feedbackHistoryTitle">
+                <div class="feedback-history-heading"><h3 id="feedbackHistoryTitle">Your feedback &amp; replies</h3><small>Most recent 20</small></div>
+                <p id="feedbackHistoryStatus" class="status-message" role="status"></p>
+                <div id="feedbackHistoryList" class="feedback-history-list"></div>
+            </section>
         </form>
     </dialog>
 
@@ -539,7 +581,7 @@
             <div class="earn-god-mode-heading">
                 <span aria-hidden="true"></span>
                 <div class="earn-god-mode-title-row">
-                    <img src="../assets/app/letter_aligned.png" alt="">
+                    <img src="../assets/app/letter_aligned.webp" alt="" width="1024" height="1024" loading="lazy" decoding="async">
                     <h2 id="earnGodModeTitle">Invite Friends</h2>
                 </div>
                 <button class="icon-button" aria-label="Close" type="button" data-close-dialog>×</button>
@@ -548,7 +590,7 @@
             <div id="earnGodModeProgress"></div>
             <div class="earn-god-mode-actions">
                 <button class="earn-invite-card snapchat" type="button" data-share-god-mode-invite="snapchat">
-                    <img src="../assets/app/snapchat-logo.png" alt="">
+                    <img src="../assets/app/snapchat-logo.webp" alt="" width="2591" height="2564" loading="lazy" decoding="async">
                     <span><strong class="earn-share-label">Share on Snapchat</strong><small>Invite your friends to join</small></span>
                 </button>
                 <button class="earn-message-button" type="button" data-share-god-mode-invite="imessage">
@@ -580,7 +622,7 @@
     <dialog id="askStoryInstructionsDialog" class="modal ask-story-dialog" aria-labelledby="askStoryInstructionsTitle">
         <div class="ask-story-instructions-content">
             <div class="ask-story-instructions-heading">
-                <img src="../assets/valid_logo.png" alt="Valid">
+                <img src="../assets/valid_logo.png" alt="Valid" width="964" height="372" loading="lazy" decoding="async">
                 <div id="askStoryInstructionsPlatformIcon" class="ask-story-platform-icon" aria-hidden="true"></div>
             </div>
             <h2 id="askStoryInstructionsTitle">Add your link to the story</h2>
@@ -595,12 +637,12 @@
 
     <dialog id="auraSpendDialog" class="modal" aria-labelledby="auraSpendTitle">
         <div class="aura-spend-content">
-            <div class="aura-spend-icon"><img id="auraSpendIcon" src="../assets/app/rocket.png" alt=""></div>
+            <div class="aura-spend-icon"><img id="auraSpendIcon" src="../assets/app/rocket.webp" alt="" width="1024" height="1024" loading="lazy" decoding="async"></div>
             <h2 id="auraSpendTitle">Spend aura?</h2>
             <p id="auraSpendMessage"></p>
             <div class="aura-spend-breakdown">
-                <span>Cost <strong><img src="../assets/app/aura.png" alt=""><span id="auraSpendCost"></span></strong></span>
-                <span>Aura left <strong><img src="../assets/app/aura.png" alt=""><span id="auraSpendRemaining"></span></strong></span>
+                <span>Cost <strong><img src="../assets/app/aura.webp" alt="" width="688" height="856" loading="lazy" decoding="async"><span id="auraSpendCost"></span></strong></span>
+                <span>Aura left <strong><img src="../assets/app/aura.webp" alt="" width="688" height="856" loading="lazy" decoding="async"><span id="auraSpendRemaining"></span></strong></span>
             </div>
             <p id="auraSpendStatus" class="status-message" role="status"></p>
             <div class="dialog-button-row aura-spend-actions"><button class="secondary-button" type="button" data-close-dialog>Cancel</button><button id="confirmAuraSpend" class="primary-button" type="button">Spend aura</button></div>
@@ -657,7 +699,7 @@
         <div class="contact-onboarding-content">
             <button class="contact-onboarding-back" aria-label="Close" type="button" data-close-dialog>‹</button>
             <div class="contact-onboarding-main">
-                <img src="../assets/valid_logo.png" alt="Valid">
+                <img src="../assets/valid_logo.png" alt="Valid" width="964" height="372" loading="lazy" decoding="async">
                 <h2>Pick a Couple Friends</h2>
             </div>
             <div class="contact-onboarding-actions">

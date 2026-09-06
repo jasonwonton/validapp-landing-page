@@ -1,7 +1,25 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 
 const API_ORIGIN = "https://api.six7.lol";
 const USER_ID = "11111111-1111-1111-1111-111111111111";
+
+async function installTurnstileStub(page) {
+    await page.addInitScript(() => {
+        window.turnstile = {
+            render(_selector, options) {
+                setTimeout(() => options.callback("verified-browser-token"), 0);
+                return "widget-1";
+            },
+            getResponse() { return ""; },
+            reset() {},
+            remove() {},
+        };
+    });
+    await page.route("https://challenges.cloudflare.com/turnstile/v0/api.js?*", (route) => (
+        route.fulfill({ status: 200, contentType: "application/javascript", body: "" })
+    ));
+}
 
 async function useProductionApiOrigin(page) {
     await page.addInitScript((apiOrigin) => {
@@ -22,7 +40,10 @@ async function attachAndCropQuestionArtwork(page, questionDialog) {
 async function fillProductionSignupThroughGrade(dialog) {
     await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
     await dialog.locator('[data-signup-age="16"]').click();
+    await expect(dialog.locator("#signupAge")).toHaveValue("16");
     await dialog.getByRole("button", { name: "Continue" }).click();
+    await expect(dialog.getByLabel("ZIP code")).toBeVisible();
+    await expect(dialog.locator("#signupAge")).toHaveValue("16");
     await dialog.getByLabel("ZIP code").fill("90210");
     await dialog.getByRole("option", { name: /Westview High School/ }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
@@ -33,6 +54,8 @@ async function fillProductionSignupThroughGrade(dialog) {
 async function fillProductionSignup(dialog) {
     await fillProductionSignupThroughGrade(dialog);
     await dialog.getByLabel("Phone number").fill("4155550123");
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await dialog.getByLabel("Verification code").fill("123456");
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("First name").fill("Taylor");
     await dialog.getByRole("button", { name: "Continue" }).click();
@@ -51,6 +74,86 @@ test("local integration mode uses only the same-origin API proxy", async ({ page
         return new ValidAPI().baseURL;
     });
     expect(baseURL).toBe("http://127.0.0.1:4173/api/v1");
+});
+
+test("real adapter preserves the released poll and TBH comment contracts", async ({ page }) => {
+    await useProductionApiOrigin(page);
+    const requests = [];
+    await page.route(`${API_ORIGIN}/api/v1/**`, async (route) => {
+        const request = route.request();
+        const url = new URL(request.url());
+        requests.push({
+            method: request.method(),
+            path: `${url.pathname}${url.search}`,
+            body: request.postData() ? request.postDataJSON() : null,
+        });
+        await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+    });
+    await page.goto("/app/?signin=1");
+    requests.length = 0;
+    await page.evaluate(async ({ userId }) => {
+        const { ValidAPI } = await import("/app/api.js");
+        const api = new ValidAPI();
+        api.saveSession({ access_token: "comment-token", user: { id: userId } });
+        const pollId = 42;
+        const activityId = "21111111-1111-4111-8111-111111111111";
+        const commentId = "31111111-1111-4111-8111-111111111111";
+        const requestId = "41111111-1111-4111-8111-111111111111";
+        const cursor = { id: commentId, created_at: "2026-09-05T12:30:00Z" };
+        await api.getCommentModerationState(userId);
+        await api.acknowledgeCommentModerationNotice(userId, 9);
+        await api.listPollComments(userId, pollId, cursor, 30);
+        await api.getPollComment(userId, pollId, commentId);
+        await api.listPollCommentReplies(userId, pollId, commentId, cursor, 50);
+        await api.createPollComment(userId, pollId, "Named comment", requestId, commentId);
+        await api.setPollCommentReaction(userId, pollId, commentId, "love");
+        await api.removePollCommentReaction(userId, pollId, commentId);
+        await api.getPollCommentReactors(userId, pollId, commentId, 50, 50);
+        await api.reportPollComment(userId, pollId, commentId, "inappropriate");
+        await api.deletePollComment(userId, pollId, commentId);
+        await api.listFeedActivityComments(userId, activityId, cursor, 30);
+        await api.getFeedActivityComment(userId, activityId, commentId);
+        await api.listFeedActivityCommentReplies(userId, activityId, commentId, cursor, 50);
+        await api.createFeedActivityComment(userId, activityId, "TBH reply", requestId, commentId);
+        await api.setFeedActivityCommentReaction(userId, activityId, commentId, "fire");
+        await api.removeFeedActivityCommentReaction(userId, activityId, commentId);
+        await api.getFeedActivityCommentReactors(userId, activityId, commentId, 0, 50);
+        await api.reportFeedActivityComment(userId, activityId, commentId, "inappropriate");
+        await api.deleteFeedActivityComment(userId, activityId, commentId);
+    }, { userId: USER_ID });
+
+    expect(requests).toHaveLength(20);
+    expect(requests).toContainEqual({
+        method: "GET",
+        path: `/api/v1/users/${USER_ID}/comment-moderation/notice`,
+        body: null,
+    });
+    expect(requests).toContainEqual({
+        method: "POST",
+        path: `/api/v1/users/${USER_ID}/comment-moderation/notices/9/acknowledge`,
+        body: null,
+    });
+    expect(requests).toContainEqual({
+        method: "POST",
+        path: `/api/v1/users/${USER_ID}/feed/polls/42/comments`,
+        body: {
+            body: "Named comment",
+            client_request_id: "41111111-1111-4111-8111-111111111111",
+            parent_comment_id: "31111111-1111-4111-8111-111111111111",
+        },
+    });
+    expect(requests).toContainEqual({
+        method: "GET",
+        path: `/api/v1/users/${USER_ID}/feed/polls/42/comments/31111111-1111-4111-8111-111111111111`,
+        body: null,
+    });
+    expect(requests).toContainEqual({
+        method: "PUT",
+        path: `/api/v1/users/${USER_ID}/feed/activities/21111111-1111-4111-8111-111111111111/comments/31111111-1111-4111-8111-111111111111/reaction`,
+        body: { reaction_type: "fire" },
+    });
+    expect(requests.some((request) => request.path.includes("before_created_at=2026-09-05T12%3A30%3A00Z"))).toBe(true);
+    expect(requests.some((request) => request.path.includes("after_created_at=2026-09-05T12%3A30%3A00Z"))).toBe(true);
 });
 
 test("real adapter sends Android God Mode unsubscribe to the authenticated endpoint", async ({ page }) => {
@@ -170,6 +273,7 @@ test("real adapter sends bounded, encoded unified-search queries", async ({ page
         await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
     });
     await page.goto("/app/?signin=1");
+    urls.length = 0;
     await page.evaluate(async (userId) => {
         const { ValidAPI } = await import("/app/api.js");
         const api = new ValidAPI();
@@ -209,6 +313,7 @@ test("real adapter uses the scoped aura boost endpoints", async ({ page }) => {
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ aura_points: 100 }) });
     });
     await page.goto("/app/?signin=1");
+    requests.length = 0;
     await page.evaluate(async ({ userId, targetId }) => {
         const { ValidAPI } = await import("/app/api.js");
         const api = new ValidAPI();
@@ -422,7 +527,7 @@ async function installWebPushStub(page, { existing = true } = {}) {
 
 async function interceptProductionAPI(page, { signup = false, phoneExists = false, profileAura = 500, questionFailureCount = 0, webPushFailureCount = 0, feedLocked = false, wrappedAskTarget = false } = {}) {
     await useProductionApiOrigin(page);
-    const imagePixel = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lM5gWQAAAABJRU5ErkJggg==", "base64");
+    const imagePixel = readFileSync(new URL("../assets/pwa/icon-192.png", import.meta.url));
     await page.route("https://cdn.example/**", (route) => {
         if (route.request().url().includes("_thumb.")) return route.fulfill({ status: 404 });
         return route.fulfill({ status: 200, contentType: "image/png", body: imagePixel });
@@ -430,6 +535,40 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
     const requests = [];
     let questionAttempts = 0;
     let webPushAttempts = 0;
+    const questionSubmissions = [
+        {
+            id: "61111111-1111-1111-1111-111111111111",
+            status: "approved",
+            question_text: "Who makes everyone feel included?",
+            image_url: "https://cdn.example/question.png",
+            aura_spent: 200,
+            is_anonymous: false,
+            submitted_at: "2026-09-01T12:00:00Z",
+            reviewed_at: "2026-09-02T12:00:00Z",
+            question_id: 99,
+            question_is_active: true,
+            vote_count: 8,
+            results_visible: true,
+            results_minimum_votes: 5,
+            vote_results: [{ name: "Maya Chen", vote_count: 5 }, { name: "Noah Williams", vote_count: 3 }],
+        },
+        {
+            id: "62222222-2222-2222-2222-222222222222",
+            status: "pending",
+            question_text: "Who has the most creative study routine?",
+            image_url: null,
+            aura_spent: 200,
+            is_anonymous: true,
+            submitted_at: "2026-09-04T12:00:00Z",
+            reviewed_at: null,
+            question_id: null,
+            question_is_active: null,
+            vote_count: 0,
+            results_visible: false,
+            results_minimum_votes: 5,
+            vote_results: [],
+        },
+    ];
     await page.route(`${API_ORIGIN}/api/v1/**`, async (route) => {
         const request = route.request();
         const url = new URL(request.url());
@@ -452,6 +591,9 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
             body: payload === null ? "" : JSON.stringify(payload),
         });
 
+        if (path === "/api/v1/auth/session") {
+            return fulfill({ detail: "signed out" }, 401);
+        }
         if (path === "/api/v1/auth/passkey/authenticate/challenge") {
             return fulfill({
                 challenge: "AQIDBA==",
@@ -467,6 +609,9 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
         if (path === "/api/v1/auth/passkey/status") return fulfill({ registered: true, credentialCount: 1 });
         if (path === "/api/v1/web-push/config") {
             return fulfill({ enabled: true, vapid_public_key: "BC31fbRg792qbDNr_PaGHMhLlTjBL2VYpOkkhRS85gA1ofvBUbi0Vmixqdr3V7Exm4820s27ZpvNbcTkuTHMDKM" });
+        }
+        if (path === "/api/v1/notification-preferences/streak-warning-open" && request.method() === "POST") {
+            return fulfill({ recorded: true });
         }
         if (path === `/api/v1/users/${USER_ID}/web-push-subscriptions` && request.method() === "POST") {
             webPushAttempts += 1;
@@ -498,6 +643,28 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
                 vote_count: 6,
                 status: phoneExists ? "existing_complete_account" : "available",
                 has_profile: phoneExists,
+            });
+        }
+        if (path === "/api/v1/auth/phone/request/web") {
+            return fulfill({
+                phone_number: "4155550123",
+                channel: "sms",
+                status: "pending",
+                attempt_count: 1,
+                check_count: 0,
+                last_sent_at: new Date().toISOString(),
+                can_resend: false,
+            });
+        }
+        if (path === "/api/v1/auth/phone/confirm") {
+            return fulfill({
+                phone_number: "4155550123",
+                channel: "sms",
+                status: "approved",
+                attempt_count: 1,
+                check_count: 1,
+                last_sent_at: new Date().toISOString(),
+                is_approved: true,
             });
         }
         if (path === "/api/v1/auth/passkey/signup/complete") {
@@ -545,6 +712,7 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
             max_custom_question_length: 280,
             max_skips_per_set: 3,
             play_lock_time_seconds: 60,
+            turnstile_site_key: "public-site-key",
         });
         if (path === `/api/v1/users/${USER_ID}/question-answers`) {
             return fulfill({ aura_points_earned: 5, total_aura_points: 55, current_streak: 1, streak_multiplier: 1 });
@@ -564,7 +732,21 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
         }
         if (path === `/api/v1/users/${USER_ID}/ask-safety-notices`) return fulfill([]);
         if (path === `/api/v1/users/${USER_ID}/ask-safety-notices?include_acknowledged=true`) return fulfill([]);
-        if (path === `/api/v1/users/${USER_ID}/question-submissions`) {
+        if (path === `/api/v1/users/${USER_ID}/question-submissions?limit=100` && request.method() === "GET") {
+            return fulfill(questionSubmissions);
+        }
+        if (path.startsWith(`/api/v1/users/${USER_ID}/question-submissions/`) && request.method() === "DELETE") {
+            const submissionId = path.split("/").at(-1);
+            const question = questionSubmissions.find((item) => item.id === submissionId);
+            if (!question) return fulfill({ detail: "Question submission not found" }, 404);
+            if (question.status === "approved") {
+                question.question_is_active = false;
+                return fulfill({ id: question.id, message: "Question deactivated and removed from future school questions. Existing polls and results were kept.", aura_refunded: 0, question_removed_from_school: true });
+            }
+            questionSubmissions.splice(questionSubmissions.indexOf(question), 1);
+            return fulfill({ id: question.id, message: "Question deleted before approval and removed from review.", aura_refunded: question.aura_spent, question_removed_from_school: false });
+        }
+        if (path === `/api/v1/users/${USER_ID}/question-submissions` && request.method() === "POST") {
             questionAttempts += 1;
             if (questionAttempts <= questionFailureCount) return fulfill({ detail: "Temporary upstream failure" }, 500);
             return fulfill({
@@ -572,6 +754,29 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
                 status: "pending",
                 aura_spent: 200,
                 is_duplicate: questionFailureCount > 0,
+            });
+        }
+        if (url.pathname === "/api/v1/feedback" && request.method() === "GET") {
+            return fulfill({
+                feedback: [
+                    {
+                        id: "71111111-1111-1111-1111-111111111111",
+                        user_id: USER_ID,
+                        feedback_text: "Make the active tab easier to spot.",
+                        created_at: "2026-09-03T14:00:00Z",
+                        photo_url: null,
+                        notice_type: "feedback_response",
+                        report_subject_type: null,
+                        responses: [
+                            {
+                                id: "72222222-2222-2222-2222-222222222222",
+                                feedback_id: "71111111-1111-1111-1111-111111111111",
+                                response_text: "Thanks — we improved the active navigation state.",
+                                created_at: "2026-09-04T16:00:00Z",
+                            },
+                        ],
+                    },
+                ],
             });
         }
         if (path === "/api/v1/feedback" && request.method() === "POST") {
@@ -610,7 +815,8 @@ test("real adapter signs in, authenticates API calls, and revokes logout", async
     const profileRequest = requests.find((request) => request.path.endsWith("/profile"));
     expect(profileRequest.authorization).toBe("Bearer session-token");
 
-    await page.getByRole("button", { name: "Log out" }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: "Sign Out", exact: true }).click();
     await expect.poll(() => requests.some((request) => request.path === "/api/v1/auth/logout")).toBe(true);
     const logout = requests.find((request) => request.path === "/api/v1/auth/logout");
     expect(logout.authorization).toBe("Bearer session-token");
@@ -637,7 +843,7 @@ test("Settings submits authenticated multipart feedback", async ({ page }) => {
     await dialog.getByRole("button", { name: "Send feedback" }).click();
 
     await expect(page.locator("#toast")).toContainText("Thanks — feedback sent");
-    const request = requests.find((candidate) => candidate.path === "/api/v1/feedback");
+    const request = requests.find((candidate) => candidate.path === "/api/v1/feedback" && candidate.method === "POST");
     expect(request).toMatchObject({ method: "POST", authorization: "Bearer session-token" });
     expect(request.contentType).toMatch(/^multipart\/form-data; boundary=/);
     expect(request.body).toContain('name="feedback_text"');
@@ -693,17 +899,25 @@ test("unified search debounces rapid typing into one bounded request pair", asyn
     await page.goto("/app/?signin=1");
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
+    await expect.poll(() => requests.some((request) => request.path.endsWith("/feed?limit=20&offset=0"))).toBe(true);
+    await expect(page.locator("#feedStatus")).toHaveText("");
     requests.length = 0;
 
-    await page.getByPlaceholder("Search names, questions...").pressSequentially("Maya", { delay: 25 });
+    await page.getByPlaceholder("Search names, questions...").evaluate((input) => {
+        for (const value of ["M", "Ma", "May", "Maya"]) {
+            input.value = value;
+            input.dispatchEvent(new InputEvent("input", { bubbles: true, data: value.at(-1), inputType: "insertText" }));
+        }
+    });
     await expect.poll(() => requests.filter((request) => request.path.includes("/classmates?limit=10&search=")).length).toBe(1);
     await page.waitForTimeout(450);
     expect(requests.filter((request) => request.path.includes("/classmates?limit=10&search=")).length).toBe(1);
     expect(requests.filter((request) => request.path.includes("/feed?limit=20&offset=0&search=")).length).toBe(1);
 });
 
-test("real adapter links signup to the phone identity without an SMS request", async ({ page }) => {
+test("real adapter links signup only after Turnstile-backed SMS verification", async ({ page }) => {
     await installCredentialStub(page, "create");
+    await installTurnstileStub(page);
     const requests = await interceptProductionAPI(page, { signup: true });
 
     await page.goto("/app/?signin=1");
@@ -750,10 +964,18 @@ test("real adapter links signup to the phone identity without an SMS request", a
     const photo = requests.find((request) => request.path.endsWith("/profile-picture"));
     expect(photo.authorization).toBe("Bearer session-token");
     expect(photo.contentType).toMatch(/^multipart\/form-data; boundary=/);
-    expect(requests.some((request) => /sms|phone\/(request|confirm)/i.test(request.path))).toBe(false);
+    const verificationRequest = requests.find((request) => request.path === "/api/v1/auth/phone/request/web");
+    expect(verificationRequest.body).toEqual({
+        phone_number: "4155550123",
+        channel: "sms",
+        turnstile_token: "verified-browser-token",
+    });
+    const verificationConfirmation = requests.find((request) => request.path === "/api/v1/auth/phone/confirm");
+    expect(verificationConfirmation.body).toEqual({ phone_number: "4155550123", code: "123456" });
 });
 
 test("signup sends existing phone identities back to sign in", async ({ page }) => {
+    await installCredentialStub(page, "get");
     const requests = await interceptProductionAPI(page, { signup: true, phoneExists: true });
     await page.goto("/app/?signin=1");
     await page.getByRole("button", { name: "Create an account" }).click();
@@ -801,10 +1023,11 @@ test("real adapter submits a Play vote and multipart school question", async ({ 
     await classmateProfile.getByRole("button", { name: "Back to classmates" }).click();
     await directory.getByRole("button", { name: "Close" }).click();
     await page.getByRole("button", { name: /Submit a school question/i }).click();
-    const dialog = page.getByRole("dialog", { name: "Submit a school question" });
+    const dialog = page.getByRole("dialog", { name: "School Questions" });
     await dialog.getByLabel("What should your school vote on?").fill("Who makes everyone feel included?");
     await attachAndCropQuestionArtwork(page, dialog);
-    await dialog.getByLabel(/permission to use this image/i).check();
+    await dialog.getByText("I have permission", { exact: true }).click();
+    await expect(page.locator("#questionPermission")).toBeChecked();
     await dialog.getByRole("button", { name: "Submit for review" }).click();
     const confirmation = page.getByRole("dialog").filter({ hasText: "Submit this poll?" });
     await expect(confirmation.getByText("200 aura", { exact: true })).toBeVisible();
@@ -819,6 +1042,116 @@ test("real adapter submits a Play vote and multipart school question", async ({ 
     expect(String(submission.body)).toContain("Who makes everyone feel included?");
     expect(String(submission.body)).toContain("idempotency_key");
     expect(String(submission.body)).toContain("valid_logo-square.jpg");
+});
+
+test("question approval deep link opens the exact submission history and deactivates through the released contract", async ({ page }) => {
+    await installCredentialStub(page, "get");
+    const requests = await interceptProductionAPI(page, { feedLocked: true });
+
+    await page.goto("/app/?signin=1&notification=question_submission&submission_id=61111111-1111-1111-1111-111111111111");
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+
+    const dialog = page.getByRole("dialog", { name: "School Questions" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("tab", { name: "My Questions" })).toHaveAttribute("aria-selected", "true");
+    const card = dialog.locator('[data-question-submission="61111111-1111-1111-1111-111111111111"]');
+    await expect(card).toBeFocused();
+    await expect(card).toContainText("Published");
+    await expect(card).toContainText("8 votes");
+    await expect(card).toContainText("Maya Chen");
+    await expect(page).not.toHaveURL(/notification=|submission_id=/);
+
+    await card.getByRole("button", { name: "Deactivate question" }).click();
+    const confirmation = page.getByRole("dialog", { name: "Deactivate question?" });
+    await expect(confirmation).toContainText("Existing polls, votes, and results will stay.");
+    await confirmation.getByRole("button", { name: "Deactivate question" }).click();
+    await expect(confirmation).toBeHidden();
+    await expect(card).toContainText("Deactivated");
+    await expect(card).toContainText("Existing votes and results are kept.");
+
+    const pending = dialog.locator('[data-question-submission="62222222-2222-2222-2222-222222222222"]');
+    await pending.getByRole("button", { name: "Delete submission" }).click();
+    const deleteConfirmation = page.getByRole("dialog", { name: "Delete submission?" });
+    await expect(deleteConfirmation).toContainText("refunds the aura you spent");
+    await deleteConfirmation.getByRole("button", { name: "Delete submission" }).click();
+    await expect(deleteConfirmation).toBeHidden();
+    await expect(pending).toHaveCount(0);
+    await expect(dialog.locator("#questionHistoryStatus")).toContainText("200 aura refunded");
+
+    expect(requests.some((request) => request.method === "GET" && request.path.endsWith("/question-submissions?limit=100"))).toBe(true);
+    expect(requests.some((request) => request.method === "DELETE" && request.path.endsWith("/question-submissions/61111111-1111-1111-1111-111111111111"))).toBe(true);
+    expect(requests.some((request) => request.method === "DELETE" && request.path.endsWith("/question-submissions/62222222-2222-2222-2222-222222222222"))).toBe(true);
+});
+
+test("streak-warning deep link opens Play and records the authoritative receipt", async ({ page }) => {
+    await installCredentialStub(page, "get");
+    const requests = await interceptProductionAPI(page, { feedLocked: true });
+
+    await page.goto("/app/?signin=1&tab=play&notification=streak_warning&streak_warning_id=71111111-1111-1111-1111-111111111111");
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+
+    await expect(page.getByRole("button", { name: "Play", exact: true })).toHaveAttribute("aria-current", "page");
+    await expect(page.locator("#playPanel")).toBeVisible();
+    await expect.poll(() => requests.filter((request) => request.path === "/api/v1/notification-preferences/streak-warning-open").length).toBe(1);
+    const receipt = requests.find((request) => request.path === "/api/v1/notification-preferences/streak-warning-open");
+    expect(receipt).toMatchObject({
+        method: "POST",
+        body: { streak_warning_id: "71111111-1111-1111-1111-111111111111" },
+        authorization: "Bearer session-token",
+    });
+    await expect(page).not.toHaveURL(/notification=|streak_warning_id=/);
+    await expect(page).toHaveURL(/tab=play/);
+});
+
+test("feedback-response deep link opens the exact bounded history card", async ({ page }) => {
+    await installCredentialStub(page, "get");
+    const requests = await interceptProductionAPI(page, { feedLocked: true });
+
+    await page.goto("/app/?signin=1&tab=profile&notification=feedback_response&feedback_id=71111111-1111-1111-1111-111111111111");
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+
+    await expect(page.getByRole("button", { name: "Profile", exact: true })).toHaveAttribute("aria-current", "page");
+    const dialog = page.getByRole("dialog", { name: "Feedback" });
+    await expect(dialog).toBeVisible();
+    const card = dialog.locator('[data-feedback-history="71111111-1111-1111-1111-111111111111"]');
+    await expect(card).toBeFocused();
+    await expect(card).toContainText("Make the active tab easier to spot.");
+    await expect(card).toContainText("Thanks — we improved the active navigation state.");
+    expect(requests.filter((request) => request.method === "GET" && request.path === "/api/v1/feedback?feedback_id=71111111-1111-1111-1111-111111111111")).toHaveLength(1);
+    await expect(page).not.toHaveURL(/notification=|feedback_id=/);
+    await expect(page).toHaveURL(/tab=profile/);
+});
+
+test("feedback history keeps response DOM growth bounded", async ({ page }) => {
+    await installCredentialStub(page, "get");
+    await interceptProductionAPI(page);
+    await page.route(`${API_ORIGIN}/api/v1/feedback`, async (route) => {
+        if (route.request().method() !== "GET") return route.fallback();
+        const feedback = Array.from({ length: 25 }, (_, index) => ({
+            id: `feedback-${index}`,
+            user_id: USER_ID,
+            feedback_text: `Feedback ${index}`,
+            created_at: new Date(Date.UTC(2026, 8, 5 - index)).toISOString(),
+            notice_type: "feedback_response",
+            report_subject_type: null,
+            responses: Array.from({ length: 8 }, (_unused, responseIndex) => ({
+                id: `response-${index}-${responseIndex}`,
+                feedback_id: `feedback-${index}`,
+                response_text: `Response ${responseIndex}`,
+                created_at: new Date(Date.UTC(2026, 8, 5 - index, responseIndex)).toISOString(),
+            })),
+        }));
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ feedback }) });
+    });
+
+    await page.goto("/app/?signin=1");
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: "Leave feedback" }).click();
+
+    const dialog = page.getByRole("dialog", { name: "Feedback" });
+    await expect(dialog.locator(".feedback-history-card")).toHaveCount(20);
+    await expect(dialog.locator(".feedback-team-response")).toHaveCount(100);
 });
 
 test("real adapter renders a classmate Ask Me link from the production response", async ({ page }) => {
@@ -901,6 +1234,13 @@ test("Request a TBH uses full classmate rows with profile pictures", async ({ pa
 });
 
 test("real adapter gives rate-limited users an actionable wait time", async ({ page }) => {
+    await installCredentialStub(page, "get");
+    await useProductionApiOrigin(page);
+    await page.route(`${API_ORIGIN}/api/v1/auth/session`, (route) => route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "signed out" }),
+    }));
     await page.route(`${API_ORIGIN}/api/v1/auth/passkey/authenticate/challenge`, (route) => route.fulfill({
         status: 429,
         contentType: "application/json",
@@ -923,13 +1263,9 @@ test("question submission refuses an aura overdraft before calling the API", asy
     await page.goto("/app/?signin=1");
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await page.getByRole("button", { name: "Profile", exact: true }).click();
-    await page.getByRole("button", { name: /Submit a school question/i }).click();
-    const dialog = page.getByRole("dialog").filter({ hasText: "Submit a school question" });
-    await dialog.getByLabel("What should your school vote on?").fill("Who makes school more welcoming?");
-    await attachAndCropQuestionArtwork(page, dialog);
-    await dialog.getByLabel(/permission to use this image/i).check();
-    await dialog.getByRole("button", { name: "Submit for review" }).click();
-    await expect(dialog.locator("#questionStatus")).toHaveText("You need 200 aura to submit this question.");
+    const submit = page.getByRole("button", { name: /Submit a school question/i });
+    await expect(submit).toBeDisabled();
+    await expect(submit).toHaveAccessibleName("Submit a school question for 200 aura. Need 150 more aura");
     expect(requests.filter((request) => request.path.endsWith("/question-submissions"))).toHaveLength(0);
 });
 
@@ -940,10 +1276,11 @@ test("ambiguous question retries reuse one idempotency key and never double-char
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await page.getByRole("button", { name: "Profile", exact: true }).click();
     await page.getByRole("button", { name: /Submit a school question/i }).click();
-    const dialog = page.getByRole("dialog").filter({ hasText: "Submit a school question" });
+    const dialog = page.getByRole("dialog", { name: "School Questions" });
     await dialog.getByLabel("What should your school vote on?").fill("Who always makes people feel included?");
     await attachAndCropQuestionArtwork(page, dialog);
-    await dialog.getByLabel(/permission to use this image/i).check();
+    await dialog.getByText("I have permission", { exact: true }).click();
+    await expect(page.locator("#questionPermission")).toBeChecked();
     await dialog.getByRole("button", { name: "Submit for review" }).click();
     await page.getByRole("dialog").filter({ hasText: "Submit this poll?" })
         .getByRole("button", { name: "Spend 200 aura" }).click();
