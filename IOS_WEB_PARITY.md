@@ -151,13 +151,14 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 Current candidate evidence: `npm run build`, UI runtime checks, and performance
 budgets pass. The candidate's **764-case** lab matrix contains **759 passing
 tests and 5 intentional project-capability skips** across Pixel 7 Chromium,
-Desktop Chrome, Desktop Firefox, and Desktop WebKit. Android and desktop Chrome
-complete deterministic fresh-browser shards with retries disabled; Firefox
-completes as one full no-retry project. Every applicable WebKit case also
-passes without retries when run in fresh bounded shards; two monolithic local
+Desktop Chrome, Desktop Firefox, and Desktop WebKit. Every hosted project runs
+each spec file in its own deterministic fresh-browser process with retries
+disabled. This bounds browser-process lifetime after reproducible headless GPU
+crashes in otherwise passing monolithic Chromium runs. Every applicable WebKit
+case also passes without retries with the same isolation; two monolithic local
 macOS WebKit runs exhausted the browser worker after roughly 70 isolated
-contexts before app code ran, so the fresh hosted WebKit job remains the
-authoritative exact-commit gate. The preceding v59 feature commit's
+contexts before app code ran, so the fresh hosted jobs remain the authoritative
+exact-commit gate. The preceding v59 feature commit's
 [hosted run 34003091283](https://github.com/jasonwonton/validapp-landing-page/actions/runs/34003091283)
 passed static release checks and all four isolated browser jobs. The
 non-Chromium projects block service workers because

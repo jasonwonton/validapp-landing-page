@@ -29,6 +29,12 @@ and push-worker coverage. WebKit is not branded Safari and does not replace the
 installed-iPhone gate below. The localhost-only demo never calls production and
 cannot be enabled on a public host.
 
+Hosted CI runs each spec file in its own deterministic fresh-browser process
+with retries disabled. Keep that isolation: long-lived headless browser
+processes have produced engine-level GPU/worker crashes after otherwise passing
+contexts, while the same affected specs pass independently. A process crash is
+still a failed gate; never hide it with Playwright retries.
+
 Branded macOS browser smoke currently covers Chrome and Safari against the
 header-emitting production-style local origin. Chrome covers the install
 affordance in addition to Chats/Mementos navigation, text send, exact-chat URL,

@@ -53,14 +53,14 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx playwright install --with-deps ${{ matrix.browser }}
-      - name: Run browser journeys without retries
-        if: matrix.project != 'desktop' && matrix.project != 'android'
-        run: npm run test:e2e -- --project=${{ matrix.project }} --retries=0
-      - name: Run Chromium journeys in fresh bounded shards without retries
-        if: matrix.project == 'desktop' || matrix.project == 'android'
+      - name: Run each spec in a fresh browser process without retries
         run: |
-          npm run test:e2e -- --project=${{ matrix.project }} --shard=1/2 --retries=0
-          npm run test:e2e -- --project=${{ matrix.project }} --shard=2/2 --retries=0
+          for spec in tests/*.spec.js; do
+            if [[ "$spec" == "tests/deployed-origin.spec.js" ]]; then
+              continue
+            fi
+            npm run test:e2e -- --project=${{ matrix.project }} "$spec" --retries=0
+          done
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
