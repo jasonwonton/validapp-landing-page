@@ -37,10 +37,10 @@ still a failed gate; never hide it with Playwright retries.
 
 `tests/service-worker-update.spec.js` creates a private ephemeral instance of
 the production-style origin and exercises a real Chromium worker lifecycle. It
-holds v65 active while v66 waits for explicit user acceptance, checks that HTML
+holds v66 active while v67 waits for explicit user acceptance, checks that HTML
 and JavaScript switch as one generation, confirms only the new cache remains,
-relaunches offline, preserves a real IndexedDB pending send, rolls back to v65,
-and rolls forward to v66 again. Firefox and WebKit intentionally skip this
+relaunches offline, preserves a real IndexedDB pending send, rolls back to v66,
+and rolls forward to v67 again. Firefox and WebKit intentionally skip this
 service-worker-only case; repeat it on branded and installed browsers in the
 physical matrix rather than weakening that gate.
 

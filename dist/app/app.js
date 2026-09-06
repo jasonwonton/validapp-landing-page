@@ -650,6 +650,43 @@ async function handleNotificationRoute() {
     } else if (notification === "feedback_response") {
         switchPanel("profile");
         await openFeedbackDialog(params.get("feedback_id"));
+    } else if (notification === "targeted_by_boost") {
+        await preloadRoute("play");
+        switchPanel("play");
+        await loadPlay();
+        const message = "A secret admirer is now appearing more often in your polls.";
+        $("#playStatus").textContent = message;
+        showToast("A secret admirer is in your polls 💘");
+    } else if (["aura_gifted", "boost_expired", "target_voted"].includes(notification)) {
+        await preloadRoute("profile");
+        switchPanel("profile");
+        await loadProfilePanel({ force: true });
+        const targetUserId = params.get("target_user_id");
+        const openedTarget = notification === "target_voted" && targetUserId
+            && [...(state.classmateDirectory || []), ...(state.classmates || [])]
+                .some((classmate) => String(classmate.user_id) === String(targetUserId));
+        if (openedTarget) {
+            await openClassmateProfile(targetUserId);
+            showToast("Your boost worked — they voted for you ✨");
+        } else {
+            const boostType = params.get("boost_type") === "targeted" ? "targeted" : "global";
+            const message = notification === "aura_gifted"
+                ? `Your aura balance is up to date: ${Number(state.profile?.aura_points || 0).toLocaleString()} aura.`
+                : notification === "target_voted"
+                    ? "Your targeted boost worked. Current boost status is shown below."
+                    : `Your ${boostType} boost ended. Current boost status is shown below.`;
+            $("#profileStatus").textContent = message;
+            await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            const target = notification === "aura_gifted"
+                ? $("[data-profile-stat='aura']")
+                : $("#purchasesSection");
+            if (target) {
+                target.tabIndex = -1;
+                target.classList.add("profile-notification-target");
+                target.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+                target.focus({ preventScroll: true });
+            }
+        }
     } else if (isFeedVoteLocked() && notification !== "question_submission") {
         return;
     } else if (notification === "question_submission") {
@@ -705,6 +742,8 @@ async function handleNotificationRoute() {
     params.delete("feedback_id");
     params.delete("activity_id");
     params.delete("comment_id");
+    params.delete("boost_type");
+    params.delete("target_user_id");
     history.replaceState(history.state, "", `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`);
 }
 
@@ -844,7 +883,7 @@ function renderProfilePanel() {
             <span class="profile-information-chevron" aria-hidden="true">›</span>
         </button>
         <div class="profile-stats-grid">
-            <div class="profile-stat-card"><strong><img loading="lazy" decoding="async" class="profile-aura-icon" src="../assets/app/aura.webp" alt="">${Number(profile.aura_points || 0).toLocaleString()}</strong><span>Aura</span></div>
+            <div class="profile-stat-card" data-profile-stat="aura"><strong><img loading="lazy" decoding="async" class="profile-aura-icon" src="../assets/app/aura.webp" alt="">${Number(profile.aura_points || 0).toLocaleString()}</strong><span>Aura</span></div>
             <div class="profile-stat-card"><strong><span class="heart">♥</span>${Number(profile.vote_count || 0).toLocaleString()}</strong><span>Votes Received</span></div>
         </div>
     </article>`;

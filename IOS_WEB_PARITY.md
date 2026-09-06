@@ -94,7 +94,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Camera-filter-ready push | Partial | Not yet tested | Durable Web Push opens Chats, matching iOS's top-level destination. It does not claim an exact editor for the dormant AI-creation flow; compatible approved Featured treatments appear through the bounded photo Effect picker on its next authoritative catalog read. Final-origin tray proof remains. |
 | Feedback-response push | Equivalent | Not yet tested | Admin-created responses enter the independently failure-isolated Web Push path and open the exact bounded feedback thread after cold sign-in. Four-project adapter and final-origin tray proof remain. |
 | Comment-moderation push | Equivalent | Not yet tested | The PWA reads the same pending notice/restriction contract, presents and acknowledges the notice, and disables creation while the authoritative restriction is active. Final-origin delivery and moderation-queue smoke remain. |
-| Aura / targeted-boost lifecycle push | Partial | Not yet tested | Ordinary and admin-created targeted boosts now enqueue browser delivery even for a web-only target, but notification clicks still use the safe generic Feed destination rather than an exact boost/aura surface. |
+| Aura / targeted-boost lifecycle push | Equivalent | Not yet tested | Ordinary and admin-created events reach web-only targets and now open a refreshed authoritative surface: gifted aura and ended boosts highlight Profile balance/status, a successful targeted boost opens the exact still-authorized target profile, and a secret-admirer boost opens Play without exposing the admirer ID in browser history. Backend URL-contract and four-project cold-start routing tests pass; final-origin tray proof remains. |
 | Admin / broad engagement push | Partial | Not yet tested | Streak Guardian engagement blasts and other broad campaigns are still selected from iOS token ownership. Web-only subscribers are not yet included in those campaigns, so they must not be claimed as PWA parity. |
 | Silent inbox invalidation | Native-only | Not yet tested | iOS can receive a content-available background invalidation. The PWA deliberately avoids a misleading visible notification and repairs from the authoritative inbox when foregrounded. |
 | Notification grouping | Equivalent | Not yet tested | The service worker honors server tags, and durable collapse identities now become stable browser tags instead of being discarded; Android notification-tray validation remains. |
@@ -121,7 +121,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Accessibility semantics/focus | Partial | Not yet tested | Labels, live regions, reduced motion, and touch targets exist; screen-reader and contrast audit remain. |
 | Offline shell/installability | Equivalent | Not yet tested | Manifest/service-worker shell tests pass; installed physical-device update/reopen remains. |
 | Offline private-data isolation | Equivalent | Not yet tested | No authenticated API/media response enters Cache Storage; scoped snapshots/outbox are cleared at account exit. |
-| Predictable app updates | Equivalent | Not yet tested | Telemetry/cache versions remain synchronized. A private-origin Chromium soak holds v65 active until the user accepts the waiting v66 worker, proves matching HTML/JavaScript generations, one-cache activation, offline relaunch, and pending-send preservation, then rolls back to v65 and forward to v66 again. Physical installed-PWA update/backgrounding remains a release gate. |
+| Predictable app updates | Equivalent | Not yet tested | Telemetry/cache versions remain synchronized. A private-origin Chromium soak holds v66 active until the user accepts the waiting v67 worker, proves matching HTML/JavaScript generations, one-cache activation, offline relaunch, and pending-send preservation, then rolls back to v66 and forward to v67 again. Physical installed-PWA update/backgrounding remains a release gate. |
 | Strict CSP runtime behavior | Equivalent | Not yet tested | Response and meta policies keep `style-src 'self'` without `unsafe-inline`; bounded same-origin CSSOM rules cover dynamic progress, overlays, viewport, crop, and drag state in all four lab projects. Final-origin header verification remains. |
 | Dark Mode | Equivalent | Not yet tested | System color scheme now drives the core shell, Chats, Mementos, forms, and dialogs; automated computed-style check plus visual/accessibility review remain. |
 | Haptics | Partial | Not yet tested | Android vibration is progressive enhancement; precise native haptic parity is unavailable. |
@@ -149,7 +149,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 ## Device and evidence ledger
 
 Current candidate evidence: `npm run build`, UI runtime checks, and performance
-budgets pass. The candidate's **768-case** lab matrix contains **761 passing
+budgets pass. The candidate's **776-case** lab matrix contains **769 passing
 tests and 7 intentional project-capability skips** across Pixel 7 Chromium,
 Desktop Chrome, Desktop Firefox, and Desktop WebKit. Every hosted project runs
 each spec file in its own deterministic fresh-browser process with retries
@@ -190,7 +190,7 @@ limits. The
 scoped backend chat/Memento/Story/Web Push/config safety run is **273 passed, 0
 failed**; the latest current-tree affected notification/comment/lifecycle/call/
 config run is **316 passed, 0 failed**. These are lab results, not production or
-physical-device approval. The v66 candidate additionally proves that an
+physical-device approval. The v67 candidate additionally proves that an
 installed Chromium shell can cold-reload offline and open the previously
 unvisited Chats/media-overlay route entirely from the bounded static cache and
 that photo Effects are locally baked into the bounded JPEG before durable retry.
@@ -220,14 +220,14 @@ materializes a hidden target without growing the DOM. Four-project automation
 traverses both ends of a 500-message history and verifies the bound after every
 shift.
 The update lifecycle now runs against a private ephemeral production-style
-origin rather than a mocked registration. Chromium keeps v65 active while v66
+origin rather than a mocked registration. Chromium keeps v66 active while v67
 waits, shows the user-controlled update action, activates exactly one complete
 HTML/JavaScript/cache generation, relaunches that generation offline, preserves
-a real IndexedDB pending send, rolls back to v65, and rolls forward to v66 a
+a real IndexedDB pending send, rolls back to v66, and rolls forward to v67 a
 second time. Firefox and WebKit are intentional capability skips at this
 automation boundary; their branded/installed update behavior remains manual.
 
-The packaged v66 shell contains 39 static entries with a 666,295-byte estimated
+The packaged v67 shell contains 39 static entries with a 666,940-byte estimated
 transfer, including 17,516 bytes of fonts and 358,622 bytes of artwork; all
 remain inside the enforced startup and cache budgets.
 
