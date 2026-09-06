@@ -56,6 +56,7 @@ test("Chats lazy-loads its feature bundle and shows unread conversations and inv
     await expect.poll(chatResources).toContain("/app/routes/chats.js");
     await expect.poll(chatResources).toContain("/app/chat/index.js");
     await expect.poll(chatResources).toContain("/app/chat/appearance.js");
+    await expect.poll(chatResources).toContain("/app/chat/sticker-maker.js");
 });
 
 test("declining an invitation removes it from the authoritative chat list", async ({ page }) => {

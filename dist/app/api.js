@@ -958,6 +958,20 @@ export class ValidAPI {
         return this.request("/stickers");
     }
 
+    createSticker(file) {
+        const form = new FormData();
+        form.append("image", file, "sticker.png");
+        return this.request("/stickers", {
+            method: "POST",
+            body: form,
+            timeoutMs: 45_000,
+        });
+    }
+
+    deleteSticker(stickerId) {
+        return this.request(`/stickers/${encodeURIComponent(stickerId)}`, { method: "DELETE" });
+    }
+
     getFeaturedCameraFilters() {
         return this.request("/camera-filters/featured");
     }

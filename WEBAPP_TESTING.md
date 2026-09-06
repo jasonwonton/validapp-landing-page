@@ -165,7 +165,8 @@ Firefox, and Safari where the capability is supported:
    persistent service-worker cache storage.
 6. Send persistent and view-once photos twice, a device-decodable MP4, a live
    voice recording where the browser advertises MP4 audio, an imported M4A
-   fallback, a saved sticker, and a centered overlay. Deny microphone permission
+   fallback, a saved sticker, a newly created center-cut/manual-lasso sticker,
+   confirmed library deletion, and a centered overlay. Deny microphone permission
    once and verify the M4A alternative remains usable. Verify authoritative
    view sessions and sender receipts, safe rejection of undecodable/oversize
    media before upload, exact replies/reactions, and one resumed send after

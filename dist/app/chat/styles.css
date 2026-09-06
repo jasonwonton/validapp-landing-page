@@ -205,10 +205,29 @@
 .chat-voice-record { min-height: 46px; border: 2px solid var(--ink); border-radius: 13px; background: var(--white); font-weight: 800; }
 .chat-voice-record.recording { background: #ffe3e9; color: #9d1832; }
 .chat-sticker-library { display: grid; gap: 7px; }
+.chat-sticker-library > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .chat-sticker-library h2 { margin: 0; font-size: .8rem; }
+.chat-sticker-library > header button { min-height: 42px; padding: 6px 10px; border: 1px solid var(--ink); border-radius: 11px; background: var(--white); font-weight: 800; }
 .chat-sticker-library > div { display: flex; gap: 8px; min-height: 54px; overflow-x: auto; }
-.chat-sticker-library button { flex: 0 0 54px; width: 54px; height: 54px; padding: 3px; border: 1px solid var(--line); border-radius: 13px; background: var(--white); }
+.chat-sticker-item { flex: 0 0 62px; width: 62px; display: grid; gap: 4px; }
+.chat-sticker-item [data-send-sticker] { width: 58px; height: 58px; padding: 3px; border: 1px solid var(--line); border-radius: 13px; background: var(--white); }
+.chat-sticker-item [data-delete-sticker] { width: 58px; min-height: 44px; padding: 3px; border: 1px solid #9d1832; border-radius: 10px; background: #ffe3e9; color: #9d1832; font-size: .62rem; font-weight: 800; }
 .chat-sticker-library img { width: 100%; height: 100%; object-fit: contain; }
+.chat-sticker-maker { width: 100%; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: max(12px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); border: 0; background: #050914; color: #fff; }
+.chat-sticker-maker::backdrop { background: #050914; }
+.chat-sticker-maker-form { width: min(100%, 620px); min-height: 100%; margin: 0 auto; display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto auto; gap: 12px; }
+.chat-sticker-maker-form > header { display: grid; grid-template-columns: 70px minmax(0, 1fr) 70px; align-items: center; min-height: 46px; }
+.chat-sticker-maker-form > header strong { text-align: center; }
+.chat-sticker-maker-form > header button { min-height: 44px; border: 0; background: transparent; color: #fff; text-align: left; }
+.chat-sticker-canvas { min-height: 0; display: grid; place-items: center; overflow: hidden; border: 1px solid rgba(255,255,255,.2); border-radius: 20px; background: #050914; }
+.chat-sticker-canvas canvas { width: min(100%, 70vh, 620px); height: auto; max-height: 100%; aspect-ratio: 1; touch-action: none; }
+.chat-sticker-canvas canvas:focus-visible { outline: 4px solid var(--peach); outline-offset: -5px; }
+.chat-sticker-maker-form > p { margin: 0; color: rgba(255,255,255,.78); font-size: .8rem; line-height: 1.4; text-align: center; }
+.chat-sticker-maker-form [data-sticker-maker-status] { min-height: 1.4em; color: #fff; font-weight: 800; }
+.chat-sticker-maker-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.chat-sticker-maker-actions button { min-height: 50px; padding: 8px; border: 2px solid #fff; border-radius: 14px; background: transparent; color: #fff; font-weight: 800; }
+.chat-sticker-maker-actions .primary-button { background: var(--peach); color: var(--ink); }
+.chat-sticker-maker-actions button:disabled { opacity: .52; }
 .memento-form input[type="text"], .memento-caption, .chat-media-overlay { min-height: 46px; padding: 8px 11px; border: 2px solid var(--ink); border-radius: 12px; background: var(--white); }
 .memento-progress, .chat-media-progress { height: 8px; overflow: hidden; border-radius: 999px; background: rgba(5,9,20,.12); }
 .memento-progress span, .chat-media-progress span { display: block; width: 0; height: 100%; background: #1eb780; transition: width .15s linear; }

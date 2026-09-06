@@ -35,8 +35,16 @@ export class DemoAPI {
         this.profileAskTargetUnavailable = demoParams.get("asktarget") === "unavailable";
         this.demoStoryFailOnce = demoParams.get("storyfail") === "1";
         this.demoCommentFailOnce = demoParams.get("commentfail") === "1";
+        this.demoStickerFailOnce = demoParams.get("stickerfail") === "1";
         this.demoCallsEnabled = demoParams.get("calls") === "1";
         this.demoCalls = new Map();
+        this.stickers = [{
+            id: "sticker-demo",
+            image_url: "../assets/app/rocket.webp",
+            pixel_width: 256,
+            pixel_height: 256,
+            created_at: new Date().toISOString(),
+        }];
         this.passkeyCount = demoParams.get("passkeys") === "0" ? 0 : 1;
         this.feedVotesCast = demoParams.get("locked") === "1" ? 1 : 3;
         this.profile = {
@@ -894,7 +902,27 @@ export class DemoAPI {
     async beginChatMediaViewSession(_userId, chatId, options) { const message = this.chatMessages[chatId].find((item) => item.id === options.messageId) || this.chatMessages[chatId].find((item) => item.id === this.chatViewSessions[options.replayOfSessionId]?.message_id); if (!message || !message.view_once_available) throw new Error("This view-once message is no longer available."); const sessionId = `view-${Date.now()}`; this.chatViewSessions[sessionId] = { message_id: message.id, started: false }; return { session_id: sessionId, expires_at: new Date(Date.now() + 60_000).toISOString(), message: { ...structuredClone(message), photo_image_url: message.kind === "photo" ? "../assets/AppIconV2.png" : null, video_url: message.kind === "video" ? "../assets/demo.mp4" : null, video_thumbnail_url: message.kind === "video" ? "../assets/AppIconV2.png" : null } }; }
     async startChatMediaViewSession(_userId, chatId, sessionId) { const session = this.chatViewSessions[sessionId]; const message = this.chatMessages[chatId].find((item) => item.id === session.message_id); if (!session.started) { session.started = true; message.view_once_opened_count += 1; message.view_once_remaining_views = Math.max(0, message.view_once_remaining_views - 1); message.view_once_available = message.view_once_remaining_views > 0; } return { session_id: sessionId, started_at: new Date().toISOString(), newly_started: true, message_id: message.id }; }
     async getChatViewOnceReceipts(_userId, chatId, messageId) { const message = this.chatMessages[chatId].find((item) => item.id === messageId); return { message_id: messageId, opened_count: message.view_once_opened_count || 0, recipient_count: message.view_once_recipient_count || 1, members: [{ user_id: "classmate-2", first_name: "Noah", last_name: "Williams", opened: Number(message.view_once_opened_count || 0) > 0, opened_at: message.view_once_opened_count ? new Date().toISOString() : null, view_count: Number(message.view_once_opened_count || 0) }] }; }
-    async getStickers() { return { stickers: [{ id: "sticker-demo", image_url: "../assets/app/rocket.webp", pixel_width: 256, pixel_height: 256, created_at: new Date().toISOString() }] }; }
+    async getStickers() { return { stickers: structuredClone(this.stickers) }; }
+    async createSticker(file) {
+        if (this.demoStickerFailOnce) {
+            this.demoStickerFailOnce = false;
+            throw new Error("Could not reach Valid. Check your connection and try again.");
+        }
+        const sticker = {
+            id: `sticker-${Date.now()}`,
+            image_url: "../assets/app/rocket.webp",
+            pixel_width: 256,
+            pixel_height: 256,
+            size_bytes: file.size,
+            created_at: new Date().toISOString(),
+        };
+        this.stickers.unshift(sticker);
+        return structuredClone(sticker);
+    }
+    async deleteSticker(stickerId) {
+        this.stickers = this.stickers.filter((sticker) => sticker.id !== stickerId);
+        return null;
+    }
     async getFeaturedCameraFilters() {
         return {
             filters: [{

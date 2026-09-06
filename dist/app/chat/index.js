@@ -28,6 +28,7 @@ import {
     loadChatAppearance,
     saveChatAppearance,
 } from "./appearance.js";
+import { createStickerMaker } from "./sticker-maker.js";
 
 const REFRESH_MS = 30_000;
 const MAX_VOICE_RECORDING_MS = 300_000;
@@ -84,6 +85,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     const viewOnceSessionByMessage = new Map();
     const viewOnceRequestByMessage = new Map();
     const stickerRequestById = new Map();
+    let stickerLibraryGeneration = 0;
     let sharedMementoDraft = null;
     let viewedMessageId = null;
     let viewedMementoEntryId = null;
@@ -166,12 +168,26 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 <fieldset class="camera-effect-picker hidden" data-chat-media-effects><legend>Photo effect</legend><div data-camera-effect-options></div><small>Browser Effects bake supported color and lighting into the photo. Face/body-tracked lenses and filtered video remain available in iOS.</small></fieldset>
                 <label class="chat-audio-input-label">Voice message <input class="chat-audio-file-input" type="file" accept="audio/mp4,.m4a" capture></label>
                 <button class="chat-voice-record hidden" type="button" data-record-voice>Record voice message</button>
-                <section class="chat-sticker-library"><h2>Saved stickers</h2><div><small>Loading…</small></div></section>
+                <section class="chat-sticker-library"><header><h2>Saved stickers</h2><button type="button" data-make-sticker>Make a sticker</button></header><input class="chat-sticker-file-input visually-hidden" type="file" accept="image/*" capture="environment"><div><small>Loading…</small></div></section>
                 <label class="chat-media-option"><input type="checkbox" data-chat-view-once> View once <small>Recipients can open it twice.</small></label>
                 <label>Text overlay <input class="chat-media-overlay" type="text" maxlength="160" placeholder="Optional text — drag it in the preview"></label>
                 <div class="chat-media-progress hidden"><span></span></div>
                 <p class="chat-media-status" role="status"></p>
                 <button class="primary-button chat-media-publish" type="submit" disabled>Send</button>
+            </form>
+        </dialog>
+        <dialog class="chat-sticker-maker" data-sticker-maker-dialog aria-label="Make a sticker">
+            <form class="chat-sticker-maker-form">
+                <header><button type="button" data-close-sticker-maker>Cancel</button><strong>Make a sticker</strong><span></span></header>
+                <div class="chat-sticker-canvas">
+                    <canvas tabindex="0" role="img" aria-label="Photo with selected sticker cutout" aria-describedby="chatStickerInstructions"></canvas>
+                </div>
+                <p id="chatStickerInstructions">A center cut works with a keyboard or screen reader. On a touch screen or mouse, draw one complete loop around the person or object to refine it.</p>
+                <p data-sticker-maker-status role="status"></p>
+                <div class="chat-sticker-maker-actions">
+                    <button type="button" data-reset-sticker-cut disabled>Reset to center cut</button>
+                    <button class="primary-button" type="submit" data-save-sticker disabled>Save and send</button>
+                </div>
             </form>
         </dialog>
         <dialog class="chat-sheet" data-chat-settings-dialog aria-label="Chat settings"><div class="chat-settings-content"></div></dialog>
@@ -194,6 +210,21 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         fieldset: $("[data-chat-media-effects]"),
         api,
         onChange: (effect) => reprepareSelectedChatPhoto(effect),
+    });
+    const stickerMaker = createStickerMaker({
+        dialog: $("[data-sticker-maker-dialog]"),
+        saveSticker: (file) => api.createSticker(file),
+        onCreated: async (sticker) => {
+            await loadStickerLibrary();
+            await sendSticker(sticker.id);
+        },
+        onUnconfirmed: async () => {
+            $("[data-chat-media-dialog]").showModal();
+            await loadStickerLibrary();
+            $(".chat-media-status").textContent = "We couldn't confirm that save. Check your stickers before trying again so you don't create a duplicate.";
+        },
+        softHaptic,
+        successHaptic,
     });
     const userId = () => getUser()?.id;
     const dailyLedgerEnabled = () => getConfig()?.enable_chat_daily_ledger === true
@@ -240,6 +271,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     $("[data-memento-dialog]").addEventListener("close", resetMementoComposer);
     $(".chat-media-file-input").addEventListener("change", selectChatMedia);
     $(".chat-audio-file-input").addEventListener("change", selectChatMedia);
+    $(".chat-sticker-file-input").addEventListener("change", selectStickerSource);
     $(".chat-media-form").addEventListener("submit", publishChatMedia);
     $("[data-chat-media-dialog]").addEventListener("close", resetChatMediaComposer);
     $("[data-chat-view-once]").addEventListener("change", resetChatMediaRequestIds);
@@ -1026,17 +1058,48 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     }
 
     async function loadStickerLibrary() {
+        const generation = ++stickerLibraryGeneration;
         const container = $(".chat-sticker-library div");
         container.innerHTML = `<small>Loading…</small>`;
         try {
             const response = await api.getStickers();
+            if (generation !== stickerLibraryGeneration) return;
             const stickers = (response.stickers || []).slice(0, 50);
             container.innerHTML = stickers.map((sticker) => {
                 const url = safeMediaURL(sticker.image_url, api);
-                return url ? `<button type="button" data-send-sticker="${escapeChatHTML(sticker.id)}" aria-label="Send saved sticker"><img src="${escapeChatHTML(url)}" alt="" loading="lazy"></button>` : "";
-            }).join("") || `<small>No saved stickers yet. Create stickers in the iOS camera editor.</small>`;
+                return url ? `<span class="chat-sticker-item"><button type="button" data-send-sticker="${escapeChatHTML(sticker.id)}" aria-label="Send saved sticker"><img src="${escapeChatHTML(url)}" alt="" loading="lazy"></button><button type="button" data-delete-sticker="${escapeChatHTML(sticker.id)}" aria-label="Remove saved sticker">Remove</button></span>` : "";
+            }).join("") || `<small>No saved stickers yet. Make one from a photo.</small>`;
         } catch (error) {
+            if (generation !== stickerLibraryGeneration) return;
             container.innerHTML = `<small>${escapeChatHTML(error.message || "Could not load stickers.")}</small>`;
+        }
+    }
+
+    async function selectStickerSource(event) {
+        const input = event.currentTarget;
+        const [file] = input.files || [];
+        input.value = "";
+        if (!file) return;
+        $("[data-chat-media-dialog]").close();
+        try {
+            await stickerMaker.open(file);
+        } catch (error) {
+            $("[data-chat-media-dialog]").showModal();
+            $(".chat-media-status").textContent = error.message || "That photo could not be opened.";
+        }
+    }
+
+    async function deleteSticker(stickerId) {
+        if (!stickerId || !confirm("Remove this sticker from your saved stickers? Existing messages will stay in their chats.")) return;
+        const item = $("[data-delete-sticker=\"" + CSS.escape(stickerId) + "\"]")?.closest(".chat-sticker-item");
+        item?.querySelectorAll("button").forEach((button) => { button.disabled = true; });
+        try {
+            await api.deleteSticker(stickerId);
+            await loadStickerLibrary();
+            showToast?.("Sticker removed");
+        } catch (error) {
+            item?.querySelectorAll("button").forEach((button) => { button.disabled = false; });
+            $(".chat-media-status").textContent = error.message || "Could not remove that sticker.";
         }
     }
 
@@ -1060,6 +1123,8 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             successHaptic?.();
             void loadChats({ quiet: true });
         } catch (error) {
+            if (!$("[data-chat-media-dialog]").open) $("[data-chat-media-dialog]").showModal();
+            await loadStickerLibrary();
             $$("[data-send-sticker]").forEach((button) => { button.disabled = false; });
             $(".chat-media-status").textContent = `${error.message || "Could not send that sticker."} Tap the same sticker to retry safely.`;
         }
@@ -1870,6 +1935,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (target.matches("[data-open-memento]")) return openMementoComposer({ showExisting: target.hasAttribute("data-show-mementos") });
         if (target.matches("[data-open-chat-media]")) return openChatMediaComposer();
         if (target.matches("[data-close-chat-media]")) return $("[data-chat-media-dialog]").close();
+        if (target.matches("[data-make-sticker]")) return $(".chat-sticker-file-input").click();
         if (target.matches("[data-record-voice]")) return void toggleVoiceRecording();
         if (target.matches("[data-close-memento]")) return $("[data-memento-dialog]").close();
         if (target.matches("[data-skip-memento]")) return skipMementoForToday();
@@ -1877,6 +1943,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (target.dataset.viewMemento) return viewMemento(target.dataset.viewMemento, target.dataset.mementoOwner, target.dataset.mementoEntry || null, target.dataset.mementoSwapped || null);
         if (target.dataset.openChatMediaMessage) return openPersistentChatMedia(target.dataset.openChatMediaMessage);
         if (target.dataset.sendSticker) return sendSticker(target.dataset.sendSticker);
+        if (target.dataset.deleteSticker) return deleteSticker(target.dataset.deleteSticker);
         if (target.dataset.openViewOnce) return openViewOnceMessage(target.dataset.openViewOnce);
         if (target.dataset.viewOnceReceipts) return showViewOnceReceipts(target.dataset.viewOnceReceipts);
         if (target.matches("[data-share-viewed-memento]")) return shareViewedMemento();

@@ -232,3 +232,51 @@ test("group photo uses the released authenticated multipart endpoint", async ({ 
     expect(captured.body).toContain('name="file"; filename="chat.jpg"');
     expect(captured.body).toContain("Content-Type: image/jpeg");
 });
+
+test("sticker creation and deletion use the released authenticated library endpoints", async ({ page }) => {
+    await page.addInitScript((origin) => { window.VALID_API_BASE_URL = `${origin}/api/v1`; }, API_ORIGIN);
+    const captured = [];
+    await page.route(`${API_ORIGIN}/api/v1/stickers**`, async (route) => {
+        const request = route.request();
+        captured.push({
+            method: request.method(),
+            path: new URL(request.url()).pathname,
+            contentType: request.headers()["content-type"] || "",
+            body: request.postData() || "",
+        });
+        if (request.method() === "DELETE") return route.fulfill({ status: 204, body: "" });
+        return route.fulfill({
+            status: 201,
+            contentType: "application/json",
+            body: JSON.stringify({
+                id: "88888888-8888-4888-8888-888888888888",
+                image_url: "https://media.example/sticker.png",
+                pixel_width: 128,
+                pixel_height: 128,
+                created_at: new Date().toISOString(),
+            }),
+        });
+    });
+    await page.goto("/app/?signin=1");
+    await page.evaluate(async () => {
+        const { ValidAPI } = await import("/app/api.js");
+        const api = new ValidAPI();
+        api.saveSession({ access_token: "chat-token", user: { id: "user-id" } });
+        const png = new File([
+            new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+        ], "sticker.png", { type: "image/png" });
+        const sticker = await api.createSticker(png);
+        await api.deleteSticker(sticker.id);
+    });
+
+    expect(captured).toHaveLength(2);
+    expect(captured[0].method).toBe("POST");
+    expect(captured[0].path).toBe("/api/v1/stickers");
+    expect(captured[0].contentType).toContain("multipart/form-data; boundary=");
+    expect(captured[0].body).toContain('name="image"; filename="sticker.png"');
+    expect(captured[0].body).toContain("Content-Type: image/png");
+    expect(captured[1]).toEqual(expect.objectContaining({
+        method: "DELETE",
+        path: "/api/v1/stickers/88888888-8888-4888-8888-888888888888",
+    }));
+});
