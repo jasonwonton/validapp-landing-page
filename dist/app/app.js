@@ -570,6 +570,7 @@ function showSignedOut(message = "") {
     document.body.classList.remove("authenticated", "play-active");
     state.navigationInitialized = false;
     state.tabScrollPositions = { feed: 0, play: 0, chats: 0, profile: 0 };
+    void commentsViewPromise?.then((view) => view.clear()).catch(() => null);
     $("#authStatus").textContent = friendlyErrorMessage(message, "");
 }
 
@@ -605,6 +606,7 @@ async function showSignedIn() {
                 play_lock_time_seconds: 60,
                 full_reveal_aura_cost: DEFAULT_FULL_REVEAL_AURA_COST,
                 enable_tbh_requests: false,
+                enable_web_comments: false,
             })),
         ]);
         api.user = { ...api.user, ...currentUser };
@@ -639,6 +641,7 @@ async function showSignedIn() {
 async function handleNotificationRoute() {
     const params = new URLSearchParams(location.search);
     const notification = params.get("notification");
+    const commentId = params.get("comment_id");
     if (!notification) return;
     if (notification === "streak_warning") {
         switchPanel("play");
@@ -674,7 +677,13 @@ async function handleNotificationRoute() {
                 renderFeed();
             }
         }
-        if (kind) openTbhDetail(`${kind}:${responseId}`);
+        if (kind) await openTbhDetail(`${kind}:${responseId}`);
+        const activityId = params.get("activity_id") || [state.tbhInboxItems, state.tbhSentItems, state.schoolTbhItems]
+            .flat()
+            .find((item) => String(item.id) === String(responseId))?.activity_id;
+        if (commentId && activityId && commentsEnabled()) {
+            await openCommentsForTarget("activity", activityId, { commentId });
+        }
     } else if (notification === "feed_item") {
         switchPanel("feed");
         const answerId = params.get("question_answer_id");
@@ -682,7 +691,10 @@ async function handleNotificationRoute() {
             const item = await api.getFeedItem(api.user.id, answerId).catch(() => null);
             if (item) state.feedItems.unshift(item);
         }
-        if (state.feedItems.some((item) => String(item.question_answer_id) === String(answerId))) openFeedDetail(answerId);
+        if (state.feedItems.some((item) => String(item.question_answer_id) === String(answerId))) {
+            openFeedDetail(answerId);
+            if (commentId && commentsEnabled()) await openCommentsForTarget("poll", answerId, { commentId });
+        }
     }
     params.delete("notification");
     params.delete("tbh_request_id");
@@ -691,6 +703,8 @@ async function handleNotificationRoute() {
     params.delete("submission_id");
     params.delete("streak_warning_id");
     params.delete("feedback_id");
+    params.delete("activity_id");
+    params.delete("comment_id");
     history.replaceState(history.state, "", `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`);
 }
 
@@ -1431,7 +1445,7 @@ async function openTbhDetail(value) {
         : kind === "sent"
             ? `${name} sees your name. School sees your TBH without your name.`
             : "";
-    $("#tbhDetailBody").innerHTML = `<article class="tbh-detail-card"><div class="tbh-detail-hero">${hero}<h2 id="tbhDetailTitle">${escapeHTML(title)}</h2><p>${escapeHTML(promptForKey(item.prompt_key).title)}</p></div><blockquote>${escapeHTML(item.body)}</blockquote>${footer ? `<small>${escapeHTML(footer)}</small>` : ""}</article>`;
+    $("#tbhDetailBody").innerHTML = `<article class="tbh-detail-card"><div class="tbh-detail-hero">${hero}<h2 id="tbhDetailTitle">${escapeHTML(title)}</h2><p>${escapeHTML(promptForKey(item.prompt_key).title)}</p></div><blockquote>${escapeHTML(item.body)}</blockquote>${footer ? `<small>${escapeHTML(footer)}</small>` : ""}</article>${commentDetailButtonMarkup(item, "activity", item.activity_id, "tbh-detail-comment-button")}`;
     openDetailScreen($("#tbhDetailDialog"));
     if (kind === "received" && !item.opened_at) {
         try {
@@ -2433,6 +2447,26 @@ function tbhAuthorLine(item) {
     return classmatesInGrade >= 2 ? `from a ${emoji} ${normalized}` : `from a ${emoji} (grade hidden until more classmates join)`;
 }
 
+function commentsEnabled() {
+    return state.config?.enable_web_comments === true;
+}
+
+function commentBubbleMarkup() {
+    return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h12a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3H9l-4.5 3 .8-3.7A3 3 0 0 1 4 13.5v-8Z"/></svg>`;
+}
+
+function commentControlMarkup(item, targetType, targetId) {
+    if (!commentsEnabled() || !targetId) return "";
+    const count = Math.max(0, Number(item.comment_count || 0));
+    return `<button class="comment-count-button" type="button" data-comments-target="${escapeHTML(`${targetType}:${targetId}`)}" aria-label="Open ${count} comment${count === 1 ? "" : "s"}">${commentBubbleMarkup()}<span data-comment-count>${count}</span></button>`;
+}
+
+function commentDetailButtonMarkup(item, targetType, targetId, className) {
+    if (!commentsEnabled() || !targetId) return "";
+    const count = Math.max(0, Number(item.comment_count || 0));
+    return `<button class="secondary-button ${className}" type="button" data-comments-target="${escapeHTML(`${targetType}:${targetId}`)}">${commentBubbleMarkup()}<span>Comments</span><strong data-comment-count>${count}</strong></button>`;
+}
+
 let feedView = null;
 let feedViewPromise = null;
 let pendingFeedRender = false;
@@ -2447,11 +2481,69 @@ function prepareFeedView() {
                 avatarMarkup, displayName, escapeHTML, formatGrade, relativeTime,
                 normalizeReactionState, dominantReaction, promptForKey, tbhAuthorLine,
                 tbhRequestsEnabled, renderTabBadges, formatVoterHint, showToast,
+                commentControlMarkup,
             });
             return feedView;
         });
     }
     return feedViewPromise;
+}
+
+let commentsViewPromise = null;
+
+function allCommentTargetItems(type, targetId) {
+    const id = String(targetId);
+    if (type === "poll") {
+        return state.feedItems.filter((item) => String(item.question_answer_id) === id);
+    }
+    return [state.tbhInboxItems, state.tbhSentItems, state.schoolTbhItems]
+        .flat()
+        .filter((item) => String(item.activity_id) === id);
+}
+
+function updateCommentCount(type, targetId, delta) {
+    const items = allCommentTargetItems(type, targetId);
+    const current = Number(items[0]?.comment_count || 0);
+    const next = Math.max(0, current + Number(delta || 0));
+    items.forEach((item) => { item.comment_count = next; });
+    const selector = `[data-comments-target="${CSS.escape(`${type}:${targetId}`)}"]`;
+    $$(selector).forEach((button) => {
+        const count = button.querySelector("[data-comment-count]");
+        if (count) count.textContent = String(next);
+        button.setAttribute("aria-label", `Open ${next} comment${next === 1 ? "" : "s"}`);
+    });
+    renderFeed();
+}
+
+function prepareCommentsView() {
+    if (!commentsViewPromise) {
+        commentsViewPromise = import("./comments/index.js").then(({ createCommentsView }) => createCommentsView({
+            root: $("#commentsRoot"), api, getUser: () => api.user,
+            escapeHTML, avatarMarkup, relativeTime, openDetailScreen, closeDetailScreen, showToast,
+        }));
+    }
+    return commentsViewPromise;
+}
+
+async function openCommentsForTarget(type, targetId, { commentId = null } = {}) {
+    if (!commentsEnabled() || !targetId) return;
+    const item = allCommentTargetItems(type, targetId)[0];
+    const subject = type === "poll"
+        ? item?.question_text || "Poll discussion"
+        : item?.body || "TBH discussion";
+    const view = await prepareCommentsView();
+    await view.open({
+        type,
+        id: targetId,
+        subject,
+        onCountChange: (delta) => updateCommentCount(type, targetId, delta),
+    }, { commentId });
+}
+
+function openCommentsFromValue(value, options = {}) {
+    const separator = String(value).indexOf(":");
+    if (separator < 1) return;
+    return openCommentsForTarget(String(value).slice(0, separator), String(value).slice(separator + 1), options);
 }
 
 function renderFeed() {
@@ -2676,7 +2768,7 @@ function renderFeedDetail() {
         }).join("")}</div>` : `<div class="feed-detail-legacy-selection"><strong>Selected: ${escapeHTML(selectedName)}</strong><small>Options not available for this older vote</small></div>`}
         ${firstLetterHint}
         ${revealed}
-    </article>`;
+    </article>${commentDetailButtonMarkup(item, "poll", item.question_answer_id, "feed-detail-comment-button")}`;
     $("#blockFeedSubmitterButton").classList.toggle("hidden", !item.question_submitted_by_user_id || item.question_is_anonymous === true);
     const revealButton = $("#revealFeedSenderButton");
     const canRevealThisVote = item.item_type === "received_vote" && !item.voter_name;
@@ -6301,6 +6393,8 @@ function bindEvents() {
     });
     $("#loadMoreFeed").addEventListener("click", () => loadFeed(false));
     $("#feedList").addEventListener("click", (event) => {
+        const commentsTarget = event.target.closest("[data-comments-target]");
+        if (commentsTarget) return void openCommentsFromValue(commentsTarget.dataset.commentsTarget);
         const reactionPicker = event.target.closest("[data-reaction-picker]");
         const reactors = event.target.closest("[data-reactors]");
         if (reactionPicker) return openReactionPicker(reactionPicker.dataset.reactionPicker, reactionPicker);
@@ -6335,6 +6429,8 @@ function bindEvents() {
         }
     });
     $("#feedDetailDialog").addEventListener("click", (event) => {
+        const commentsTarget = event.target.closest("[data-comments-target]");
+        if (commentsTarget) return void openCommentsFromValue(commentsTarget.dataset.commentsTarget);
         const menuButton = event.target.closest("[data-toggle-feed-menu]");
         if (menuButton) toggleDetailActionMenu(menuButton);
         if (event.target.closest("[data-close-feed-detail]")) {
@@ -6503,6 +6599,8 @@ function bindEvents() {
     $("#tbhResponseText").addEventListener("input", updateTbhComposer);
     $("#tbhComposerForm").addEventListener("submit", submitTbhResponse);
     $("#tbhDetailDialog").addEventListener("click", (event) => {
+        const commentsTarget = event.target.closest("[data-comments-target]");
+        if (commentsTarget) return void openCommentsFromValue(commentsTarget.dataset.commentsTarget);
         if (event.target.closest("[data-close-tbh-detail]")) closeDetailScreen($("#tbhDetailDialog"));
     });
     $("#reactionPickerOptions").addEventListener("click", (event) => {

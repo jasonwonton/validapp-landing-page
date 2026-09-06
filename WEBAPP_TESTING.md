@@ -129,6 +129,8 @@ Run this at the private final origin with two real accounts and
 Enable `ENABLE_WEB_STORIES=1` only for the Story rows. Enable
 `ENABLE_WEB_CALLS=1` only for open-app call rows; it must remain independent
 from iOS `ENABLE_CALLS` and `CALLS_BACKEND_ENABLED`.
+Enable `ENABLE_WEB_COMMENTS=1` only for poll/TBH comment rows; it is an
+independent rollback switch and defaults off.
 Record browser/OS versions, start/end timestamps, account IDs, and the result of
 each row in `IOS_WEB_PARITY.md`; do not mark a row production-ready from emulator
 results.
@@ -192,9 +194,13 @@ Firefox, and Safari where the capability is supported:
    open receipt is recorded after cold sign-in. Send a feedback response and
    verify it opens the exact bounded thread without caching it. A
    camera-filter-ready push may open Chats, but must not claim an exact web
-   filter editor while that matrix row remains Missing. Record poll/TBH comment,
-   comment-moderation, and broad admin engagement notifications as open parity
-   gaps until their matrix rows are resolved.
+   filter editor while that matrix row remains Missing. With web comments
+   enabled, create a poll root/reply and TBH root/reply, react from the other
+   account, and verify each notification opens and highlights the exact
+   authorized `comment_id`; report/delete a root and reply, acknowledge a
+   moderation notice, and confirm an active restriction disables creation
+   without hiding readable history. Broad admin engagement notifications remain
+   an open parity gap until their matrix row is resolved.
 10. Inspect Cache Storage and IndexedDB before and after logout and an account
    deletion request. Cache Storage must contain no API response or private
    media. Both user-scoped outboxes must be removed. Text must never exceed 50

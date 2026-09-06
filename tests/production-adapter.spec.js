@@ -76,6 +76,86 @@ test("local integration mode uses only the same-origin API proxy", async ({ page
     expect(baseURL).toBe("http://127.0.0.1:4173/api/v1");
 });
 
+test("real adapter preserves the released poll and TBH comment contracts", async ({ page }) => {
+    await useProductionApiOrigin(page);
+    const requests = [];
+    await page.route(`${API_ORIGIN}/api/v1/**`, async (route) => {
+        const request = route.request();
+        const url = new URL(request.url());
+        requests.push({
+            method: request.method(),
+            path: `${url.pathname}${url.search}`,
+            body: request.postData() ? request.postDataJSON() : null,
+        });
+        await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+    });
+    await page.goto("/app/?signin=1");
+    requests.length = 0;
+    await page.evaluate(async ({ userId }) => {
+        const { ValidAPI } = await import("/app/api.js");
+        const api = new ValidAPI();
+        api.saveSession({ access_token: "comment-token", user: { id: userId } });
+        const pollId = 42;
+        const activityId = "21111111-1111-4111-8111-111111111111";
+        const commentId = "31111111-1111-4111-8111-111111111111";
+        const requestId = "41111111-1111-4111-8111-111111111111";
+        const cursor = { id: commentId, created_at: "2026-09-05T12:30:00Z" };
+        await api.getCommentModerationState(userId);
+        await api.acknowledgeCommentModerationNotice(userId, 9);
+        await api.listPollComments(userId, pollId, cursor, 30);
+        await api.getPollComment(userId, pollId, commentId);
+        await api.listPollCommentReplies(userId, pollId, commentId, cursor, 50);
+        await api.createPollComment(userId, pollId, "Named comment", requestId, commentId);
+        await api.setPollCommentReaction(userId, pollId, commentId, "love");
+        await api.removePollCommentReaction(userId, pollId, commentId);
+        await api.getPollCommentReactors(userId, pollId, commentId, 50, 50);
+        await api.reportPollComment(userId, pollId, commentId, "inappropriate");
+        await api.deletePollComment(userId, pollId, commentId);
+        await api.listFeedActivityComments(userId, activityId, cursor, 30);
+        await api.getFeedActivityComment(userId, activityId, commentId);
+        await api.listFeedActivityCommentReplies(userId, activityId, commentId, cursor, 50);
+        await api.createFeedActivityComment(userId, activityId, "TBH reply", requestId, commentId);
+        await api.setFeedActivityCommentReaction(userId, activityId, commentId, "fire");
+        await api.removeFeedActivityCommentReaction(userId, activityId, commentId);
+        await api.getFeedActivityCommentReactors(userId, activityId, commentId, 0, 50);
+        await api.reportFeedActivityComment(userId, activityId, commentId, "inappropriate");
+        await api.deleteFeedActivityComment(userId, activityId, commentId);
+    }, { userId: USER_ID });
+
+    expect(requests).toHaveLength(20);
+    expect(requests).toContainEqual({
+        method: "GET",
+        path: `/api/v1/users/${USER_ID}/comment-moderation/notice`,
+        body: null,
+    });
+    expect(requests).toContainEqual({
+        method: "POST",
+        path: `/api/v1/users/${USER_ID}/comment-moderation/notices/9/acknowledge`,
+        body: null,
+    });
+    expect(requests).toContainEqual({
+        method: "POST",
+        path: `/api/v1/users/${USER_ID}/feed/polls/42/comments`,
+        body: {
+            body: "Named comment",
+            client_request_id: "41111111-1111-4111-8111-111111111111",
+            parent_comment_id: "31111111-1111-4111-8111-111111111111",
+        },
+    });
+    expect(requests).toContainEqual({
+        method: "GET",
+        path: `/api/v1/users/${USER_ID}/feed/polls/42/comments/31111111-1111-4111-8111-111111111111`,
+        body: null,
+    });
+    expect(requests).toContainEqual({
+        method: "PUT",
+        path: `/api/v1/users/${USER_ID}/feed/activities/21111111-1111-4111-8111-111111111111/comments/31111111-1111-4111-8111-111111111111/reaction`,
+        body: { reaction_type: "fire" },
+    });
+    expect(requests.some((request) => request.path.includes("before_created_at=2026-09-05T12%3A30%3A00Z"))).toBe(true);
+    expect(requests.some((request) => request.path.includes("after_created_at=2026-09-05T12%3A30%3A00Z"))).toBe(true);
+});
+
 test("real adapter sends Android God Mode unsubscribe to the authenticated endpoint", async ({ page }) => {
     await useProductionApiOrigin(page);
     const requests = [];

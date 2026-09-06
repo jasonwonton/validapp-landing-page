@@ -86,13 +86,13 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Incoming-call Web Push | Partial | Not yet tested | With `ENABLE_WEB_CALLS=1`, the call-start transaction writes one durable browser intent per subscription with the authoritative ringing expiry, stable call collapse ID, and exact call route. It does not replace PushKit; final-origin notification/device proof remains. |
 | Closed-app incoming call | Native-only | Not yet tested | iOS uses PushKit and CallKit. The deliberate PWA alternative is an expiring visible Web Push that opens the exact call; browsers cannot guarantee immediate execution, full-screen ringing, or background media while the PWA is closed. |
 | Vote / TBH / reaction / reveal push | Equivalent | Not yet tested | Transactional producers now add failure-isolated durable browser intents alongside APNS; vote, upvote, reaction, TBH, and reveal IDs route to the authoritative PWA item. Final-origin regression smoke remains. |
-| Poll / TBH comment push | Partial | Not yet tested | Durable notification intent and exact parent-item routing exist, but the PWA does not yet render the native comment threads, so the comment itself is not actionable on web. |
+| Poll / TBH comment push | Equivalent | Not yet tested | Durable notification intent now carries the authoritative parent plus `comment_id`; cold-start automation resolves the exact authorized comment/reply, opens its bounded thread, highlights it, and removes routing parameters. Final-origin tray proof remains. |
 | Question-approval push | Equivalent | Not yet tested | Approval enters the independently failure-isolated durable Web Push path without changing APNS and opens the exact authoritative submission in My Questions, even while Feed voting is locked. Four-project browser contract tests cover routing; final-origin tray proof remains. |
 | Play unlock / streak-warning push | Equivalent | Not yet tested | Both use the existing durable browser outbox when enabled and open Play. Scheduled selection now includes users with either eligible iOS tokens or active browser subscriptions, and streak-warning taps record the same authenticated authoritative open receipt as iOS. Backend and four-project adapter coverage pass; final-origin tray proof remains. |
 | Memento streak-warning push | Equivalent | Not yet tested | Scheduled selection includes web-only subscribers, and the producer adds a separately failure-isolated durable Web Push intent with the same daily fence, collapse identity, midnight expiry, and Chats destination. Final-origin delivery remains. |
 | Camera-filter-ready push | Partial | Not yet tested | Durable Web Push opens Chats, matching iOS's top-level destination, but the PWA cannot open the exact saved filter because the live-filter feature is currently missing on web. |
 | Feedback-response push | Equivalent | Not yet tested | Admin-created responses enter the independently failure-isolated Web Push path and open the exact bounded feedback thread after cold sign-in. Four-project adapter and final-origin tray proof remain. |
-| Comment-moderation push | Partial | Not yet tested | Browser delivery uses the shared durable path and safely opens the app, but the PWA lacks the native comment-access notice UI and acknowledgement journey. |
+| Comment-moderation push | Equivalent | Not yet tested | The PWA reads the same pending notice/restriction contract, presents and acknowledges the notice, and disables creation while the authoritative restriction is active. Final-origin delivery and moderation-queue smoke remain. |
 | Aura / targeted-boost lifecycle push | Partial | Not yet tested | Ordinary and admin-created targeted boosts now enqueue browser delivery even for a web-only target, but notification clicks still use the safe generic Feed destination rather than an exact boost/aura surface. |
 | Admin / broad engagement push | Partial | Not yet tested | Streak Guardian engagement blasts and other broad campaigns are still selected from iOS token ownership. Web-only subscribers are not yet included in those campaigns, so they must not be claimed as PWA parity. |
 | Silent inbox invalidation | Native-only | Not yet tested | iOS can receive a content-available background invalidation. The PWA deliberately avoids a misleading visible notification and repairs from the authoritative inbox when foregrounded. |
@@ -141,18 +141,19 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | School-question history, results, withdrawal, and deactivation | Equivalent | Not yet tested | The bounded 100-row My Questions view uses the released GET/DELETE contracts, server-owned result thresholds, and exact approval target. Four-project browser automation covers published results, deactivation with poll preservation, and pending withdrawal/refund; final-origin and moderation smoke remain. |
 | TBH and Anonymous Inbox | Equivalent | Not yet tested | Existing automation; exact Web Push routes remain in notification gate. |
 | Feedback submission, history, and team responses | Equivalent | Not yet tested | The PWA uses the existing authenticated history contract, renders at most 20 feedback threads and five responses each, and opens an exact response target without persistent private caching. Final-origin notification proof remains. |
-| Poll and TBH comment threads | Missing | Not yet tested | iOS can create, reply to, react to, report, and receive moderation notices for comments. The PWA currently has no comment-thread UI; notification clicks can only open the authoritative parent item. |
-| Moderation/blocking | Partial | Not yet tested | Chat/report/block and Ask Me safety rules use authoritative endpoints, but the missing comment-thread and comment-access-notice UI keeps broad moderation parity incomplete. |
+| Poll and TBH comment threads | Equivalent | Not yet tested | Separately gated web threads use the released named-comment contracts for bounded root/reply pagination, stable-ID creation/retry, reactions and named reactors, author/subject deletion, reporting, moderation notices/restrictions, count repair, and exact comment/reply resolution. Focused browser/adapter journeys pass across Pixel-class Chromium, desktop Chromium, Firefox, and WebKit; final-origin two-account and moderation-queue proof remain. |
+| Moderation/blocking | Equivalent | Not yet tested | Chat/report/block, Ask Me safety, and poll/TBH comment report/delete/notice/restriction journeys use authoritative endpoints. Production moderation-queue and cross-client smoke remain. |
 | Account deletion and cancellation | Equivalent | Not yet tested | Backend remains authoritative; PWA erases pending chat text and private media for that user on deletion request or logout. |
 
 ## Device and evidence ledger
 
 Current candidate evidence: `npm run build`, UI runtime checks, and performance
-budgets pass. The candidate code completed locally with **641 passed, 3
+budgets pass. The candidate code completed locally with **677 passed, 3
 expected non-Android skips, 0 failed, and no retries** across Pixel 7 Chromium,
-Desktop Chrome, Desktop Firefox, and Desktop WebKit. The matching
+Desktop Chrome, Desktop Firefox, and Desktop WebKit. The preceding candidate's
 [hosted run 33997421524](https://github.com/jasonwonton/validapp-landing-page/actions/runs/33997421524)
-also passed static release checks and all four isolated browser jobs. The
+passed static release checks and all four isolated browser jobs; the current
+exact head still requires hosted CI before staging promotion. The
 non-Chromium projects block service workers because
 [Playwright supports service workers only in Chromium-based browsers](https://playwright.dev/docs/service-workers);
 Chromium continues to cover install, offline-shell, cache-isolation, update, and
@@ -180,9 +181,9 @@ reviewed head to `ACTIVE` with no pinned deployment; the full 14-check staging
 suite passed again after restoration. These are dated baselines, not capacity
 limits. The
 scoped backend chat/Memento/Story/Web Push/config safety run is **273 passed, 0
-failed**; the latest current-tree lifecycle/notification/call/config rerun is **280
-passed, 0 failed**. These are lab results, not production or physical-device
-approval.
+failed**; the latest current-tree affected notification/comment/lifecycle/call/
+config run is **316 passed, 0 failed**. These are lab results, not production or
+physical-device approval.
 
 | Target | State | Required before release |
 | --- | --- | --- |
@@ -214,11 +215,11 @@ the production component has not been switched; keep the public gate closed.
 
 Safe rollout order:
 
-1. Deploy the additive backend/config changes with `ENABLE_WEB_CHATS=0`, `ENABLE_WEB_MEMENTOS=0`, `ENABLE_WEB_STORIES=0`, and `ENABLE_WEB_CALLS=0`; leave APNS and SMS workers unchanged.
+1. Deploy the additive backend/config changes with `ENABLE_WEB_CHATS=0`, `ENABLE_WEB_MEMENTOS=0`, `ENABLE_WEB_STORIES=0`, `ENABLE_WEB_CALLS=0`, and `ENABLE_WEB_COMMENTS=0`; leave APNS and SMS workers unchanged.
 2. Smoke-test the current App Store binary and observe API, APNS, SMS, PostgreSQL, Redis, and Web Push outbox baselines.
 3. Deploy the static PWA privately at the final origin and run the automated, physical-device, two-account, offline, push, and update matrices.
 4. Enable `ENABLE_WEB_CHATS=1` for the private cohort. Keep Mementos dark until capture/upload/reciprocity checks pass.
-5. Enable `ENABLE_WEB_MEMENTOS=1`, `ENABLE_WEB_STORIES=1`, and `ENABLE_WEB_CALLS=1` independently after their capture/media/LiveKit gates pass, then expand cohort only while error, duplicate, reconnect, queue, storage, and latency thresholds remain healthy.
+5. Enable `ENABLE_WEB_MEMENTOS=1`, `ENABLE_WEB_STORIES=1`, `ENABLE_WEB_CALLS=1`, and `ENABLE_WEB_COMMENTS=1` independently after their capture/media/LiveKit/comment gates pass, then expand cohort only while error, duplicate, reconnect, queue, storage, and latency thresholds remain healthy.
 6. Roll back presentation immediately by setting the relevant web flag to `0`. Leave additive migrations applied and let durable outboxes drain; do not disable APNS or SMS processing.
 
 See [PRODUCTION_DEPLOYMENT.md](PRODUCTION_DEPLOYMENT.md) for commands and rollback order and [WEBAPP_TESTING.md](WEBAPP_TESTING.md) for the physical-device script.

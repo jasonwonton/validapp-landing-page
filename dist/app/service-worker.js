@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "valid-web-";
-const CACHE_NAME = `${CACHE_PREFIX}v57`;
+const CACHE_NAME = `${CACHE_PREFIX}v58`;
 const APP_SHELL = [
     "./",
     "./styles.css",
@@ -26,6 +26,8 @@ const APP_SHELL = [
     "./stories/index.js",
     "./stories/styles.css",
     "./calls/styles.css",
+    "./comments/index.js",
+    "./comments/styles.css",
     "./manifest.webmanifest",
     "../assets/AppIconV2.png",
     "../assets/pwa/icon-192.png",

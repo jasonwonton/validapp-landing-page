@@ -11,7 +11,7 @@ export function createFeedView(context) {
         $, $$, state, api, personalInboxFilters,
         avatarMarkup, displayName, escapeHTML, formatGrade, relativeTime,
         normalizeReactionState, dominantReaction, promptForKey, tbhAuthorLine,
-        tbhRequestsEnabled, renderTabBadges, showToast,
+        tbhRequestsEnabled, renderTabBadges, showToast, commentControlMarkup,
     } = context;
     const storiesView = state.config?.enable_stories === true && state.config?.enable_web_stories === true
         ? createStoriesView({ root: $("#storiesRoot"), api, getUser: () => api.user, escapeHTML, showToast })
@@ -42,7 +42,7 @@ export function createFeedView(context) {
             const picture = received ? item.author_profile_picture_url : item.subject_profile_picture_url;
             const title = received ? `<strong>${escapeHTML(`${firstName} ${lastName}`)}</strong> sent your TBH` : school ? `<strong>${escapeHTML(`${firstName} ${lastName}`)}</strong> got a TBH` : `<strong>${escapeHTML(`${firstName} ${lastName}`)}</strong> got your TBH`;
             const detail = school ? tbhAuthorLine(item) : promptForKey(item.prompt_key).title;
-            return { key: `tbh-${kind}:${item.id}`, timestamp: item.created_at, item, html: `<article class="feed-card tbh-row tbh-feed-row tbh-${kind}" data-tbh-detail="${escapeHTML(`${kind}:${item.id}`)}" role="button" tabindex="0" aria-label="Open TBH details">${tbhAvatarMarkup({ first_name: firstName, last_name: lastName, profile_picture_url: picture })}<div class="tbh-feed-copy"><div class="tbh-feed-title">${title}</div><div class="tbh-feed-body">${escapeHTML(item.body)}</div><div class="tbh-feed-meta"><span>${escapeHTML(detail)}</span><time>${escapeHTML(relativeTime(item.created_at))}</time></div></div>${reactionControlMarkup(item, "activity", item.activity_id)}</article>` };
+            return { key: `tbh-${kind}:${item.id}`, timestamp: item.created_at, item, html: `<article class="feed-card tbh-row tbh-feed-row tbh-${kind}" data-tbh-detail="${escapeHTML(`${kind}:${item.id}`)}" role="button" tabindex="0" aria-label="Open TBH details">${tbhAvatarMarkup({ first_name: firstName, last_name: lastName, profile_picture_url: picture })}<div class="tbh-feed-copy"><div class="tbh-feed-title">${title}</div><div class="tbh-feed-body">${escapeHTML(item.body)}</div><div class="tbh-feed-meta"><span>${escapeHTML(detail)}</span><time>${escapeHTML(relativeTime(item.created_at))}</time></div></div>${reactionControlMarkup(item, "activity", item.activity_id)}${commentControlMarkup(item, "activity", item.activity_id)}</article>` };
         });
     }
 
@@ -127,7 +127,7 @@ export function createFeedView(context) {
             normalizeReactionState(item);
             const title = state.feedType === "personal" ? `${item.is_nomination ? "👑 " : ""}<strong>You</strong> got ${item.is_nomination ? "nominated" : "voted"}` : `<strong>${escapeHTML(item.voted_for_name || item.contact_name || "A classmate")}</strong> got voted`;
             const detail = context.formatVoterHint(item);
-            return { key: `poll:${item.question_answer_id}`, timestamp: item.timestamp, item, html: `<article class="feed-card vote-feed-row" data-answer-id="${item.question_answer_id}" data-feed-detail="${item.question_answer_id}" role="button" tabindex="0" aria-label="Open poll details: ${escapeHTML(item.question_text)}">${feedAvatar(item)}<div class="feed-body"><div class="feed-meta"><span>${title}</span></div><div class="feed-question">${escapeHTML(item.question_text)}</div><div class="feed-detail-row">${detail ? `<span class="feed-answer">${escapeHTML(detail)}</span>` : "<span></span>"}<time>${escapeHTML(relativeTime(item.timestamp))}</time></div></div>${reactionControlMarkup(item, "poll", item.question_answer_id)}</article>` };
+            return { key: `poll:${item.question_answer_id}`, timestamp: item.timestamp, item, html: `<article class="feed-card vote-feed-row" data-answer-id="${item.question_answer_id}" data-feed-detail="${item.question_answer_id}" role="button" tabindex="0" aria-label="Open poll details: ${escapeHTML(item.question_text)}">${feedAvatar(item)}<div class="feed-body"><div class="feed-meta"><span>${title}</span></div><div class="feed-question">${escapeHTML(item.question_text)}</div><div class="feed-detail-row">${detail ? `<span class="feed-answer">${escapeHTML(detail)}</span>` : "<span></span>"}<time>${escapeHTML(relativeTime(item.timestamp))}</time></div></div>${reactionControlMarkup(item, "poll", item.question_answer_id)}${commentControlMarkup(item, "poll", item.question_answer_id)}</article>` };
         });
         const rows = [...anonymousRows, ...personalTbhRows, ...schoolTbhRows, ...voteRows];
         const sortedRows = rows.sort((left, right) => state.feedType === "school" && state.schoolFeedSort === "hottest" ? schoolHotScore(right) - schoolHotScore(left) : (Date.parse(right.timestamp) || 0) - (Date.parse(left.timestamp) || 0));

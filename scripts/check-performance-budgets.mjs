@@ -9,13 +9,14 @@ const appRoot = path.join(root, "app");
 const read = (file) => readFile(path.join(root, file), "utf8");
 const bytes = async (file) => (await stat(path.join(root, file))).size;
 
-const [appJS, indexHTML, serviceWorker, styles, feedRoute, storiesRoute] = await Promise.all([
+const [appJS, indexHTML, serviceWorker, styles, feedRoute, storiesRoute, commentsRoute] = await Promise.all([
     read("app/app.js"),
     read("app/index.html"),
     read("app/service-worker.js"),
     read("app/styles.css"),
     read("app/routes/feed.js"),
     read("app/stories/index.js"),
+    read("app/comments/index.js"),
 ]);
 
 const fontBytes = await bytes("assets/Jua-Latin.woff2");
@@ -56,6 +57,9 @@ assert.match(styles, /#feedList > \[data-list-key\] \{ content-visibility: auto;
 assert.match(appJS, /activateRoute\(panel, context\)/, "Panel activation must use route modules");
 assert.match(appJS, /feedItemsStore\.apply\(event\);/, "Feed must accept batched realtime events");
 assert.match(appJS, /feedRealtimeRenderFrame = requestAnimationFrame/, "Realtime feed rendering must batch to one frame");
+assert.match(commentsRoute, /const MAX_ROOTS = 100;/, "Comment root DOM state must remain bounded");
+assert.match(commentsRoute, /const MAX_REPLIES_PER_ROOT = 100;/, "Comment reply DOM state must remain bounded");
+assert.match(commentsRoute, /const MAX_REACTORS = 100;/, "Comment reactor DOM state must remain bounded");
 
 const shellSource = serviceWorker.match(/const APP_SHELL = \[([\s\S]*?)\];/)?.[1] || "";
 const shellEntries = [...shellSource.matchAll(/"([^"]+)"/g)].map((match) => match[1]);

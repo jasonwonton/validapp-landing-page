@@ -288,6 +288,66 @@ export class ValidAPI {
         return this.request(`/users/${userId}/feed/item/${questionAnswerId}`);
     }
 
+    getCommentModerationState(userId) {
+        return this.request(`/users/${userId}/comment-moderation/notice`);
+    }
+
+    acknowledgeCommentModerationNotice(userId, noticeId) {
+        return this.request(`/users/${userId}/comment-moderation/notices/${noticeId}/acknowledge`, { method: "POST" });
+    }
+
+    listPollComments(userId, questionAnswerId, before = null, limit = 30) {
+        const params = new URLSearchParams({ limit: String(limit) });
+        if (before?.created_at) params.set("before_created_at", before.created_at);
+        if (before?.id) params.set("before_id", String(before.id));
+        return this.request(`/users/${userId}/feed/polls/${questionAnswerId}/comments?${params}`);
+    }
+
+    getPollComment(userId, questionAnswerId, commentId) {
+        return this.request(`/users/${userId}/feed/polls/${questionAnswerId}/comments/${commentId}`);
+    }
+
+    listPollCommentReplies(userId, questionAnswerId, rootCommentId, after = null, limit = 50) {
+        const params = new URLSearchParams({ limit: String(limit) });
+        if (after?.created_at) params.set("after_created_at", after.created_at);
+        if (after?.id) params.set("after_id", String(after.id));
+        return this.request(`/users/${userId}/feed/polls/${questionAnswerId}/comments/${rootCommentId}/replies?${params}`);
+    }
+
+    createPollComment(userId, questionAnswerId, body, clientRequestId, parentCommentId = null) {
+        return this.request(`/users/${userId}/feed/polls/${questionAnswerId}/comments`, {
+            method: "POST",
+            body: JSON.stringify({ body, client_request_id: clientRequestId, ...(parentCommentId ? { parent_comment_id: parentCommentId } : {}) }),
+        });
+    }
+
+    setPollCommentReaction(userId, questionAnswerId, commentId, reactionType) {
+        return this.request(`/users/${userId}/feed/polls/${questionAnswerId}/comments/${commentId}/reaction`, {
+            method: "PUT",
+            body: JSON.stringify({ reaction_type: reactionType }),
+        });
+    }
+
+    removePollCommentReaction(userId, questionAnswerId, commentId) {
+        return this.request(`/users/${userId}/feed/polls/${questionAnswerId}/comments/${commentId}/reaction`, { method: "DELETE" });
+    }
+
+    getPollCommentReactors(userId, questionAnswerId, commentId, offset = 0, limit = 50) {
+        const params = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+        return this.request(`/users/${userId}/feed/polls/${questionAnswerId}/comments/${commentId}/reactors?${params}`);
+    }
+
+    reportPollComment(userId, questionAnswerId, commentId, reason = "inappropriate") {
+        return this.request(`/users/${userId}/feed/polls/${questionAnswerId}/comments/${commentId}/report`, {
+            method: "POST",
+            body: JSON.stringify({ reason }),
+        });
+    }
+
+    deletePollComment(userId, questionAnswerId, commentId) {
+        return this.request(`/users/${userId}/feed/polls/${questionAnswerId}/comments/${commentId}`, { method: "DELETE" });
+    }
+
     setFeedActivityReaction(userId, activityId, reactionType) {
         return this.request(`/users/${userId}/feed/activities/${activityId}/reaction`, {
             method: "PUT",
@@ -304,6 +364,58 @@ export class ValidAPI {
         if (reactionType) params.set("reaction_type", reactionType);
         const query = params.size ? `?${params}` : "";
         return this.request(`/users/${userId}/feed/activities/${activityId}/reactions${query}`);
+    }
+
+    listFeedActivityComments(userId, activityId, before = null, limit = 30) {
+        const params = new URLSearchParams({ limit: String(limit) });
+        if (before?.created_at) params.set("before_created_at", before.created_at);
+        if (before?.id) params.set("before_id", String(before.id));
+        return this.request(`/users/${userId}/feed/activities/${activityId}/comments?${params}`);
+    }
+
+    getFeedActivityComment(userId, activityId, commentId) {
+        return this.request(`/users/${userId}/feed/activities/${activityId}/comments/${commentId}`);
+    }
+
+    listFeedActivityCommentReplies(userId, activityId, rootCommentId, after = null, limit = 50) {
+        const params = new URLSearchParams({ limit: String(limit) });
+        if (after?.created_at) params.set("after_created_at", after.created_at);
+        if (after?.id) params.set("after_id", String(after.id));
+        return this.request(`/users/${userId}/feed/activities/${activityId}/comments/${rootCommentId}/replies?${params}`);
+    }
+
+    createFeedActivityComment(userId, activityId, body, clientRequestId, parentCommentId = null) {
+        return this.request(`/users/${userId}/feed/activities/${activityId}/comments`, {
+            method: "POST",
+            body: JSON.stringify({ body, client_request_id: clientRequestId, ...(parentCommentId ? { parent_comment_id: parentCommentId } : {}) }),
+        });
+    }
+
+    setFeedActivityCommentReaction(userId, activityId, commentId, reactionType) {
+        return this.request(`/users/${userId}/feed/activities/${activityId}/comments/${commentId}/reaction`, {
+            method: "PUT",
+            body: JSON.stringify({ reaction_type: reactionType }),
+        });
+    }
+
+    removeFeedActivityCommentReaction(userId, activityId, commentId) {
+        return this.request(`/users/${userId}/feed/activities/${activityId}/comments/${commentId}/reaction`, { method: "DELETE" });
+    }
+
+    getFeedActivityCommentReactors(userId, activityId, commentId, offset = 0, limit = 50) {
+        const params = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+        return this.request(`/users/${userId}/feed/activities/${activityId}/comments/${commentId}/reactors?${params}`);
+    }
+
+    reportFeedActivityComment(userId, activityId, commentId, reason = "inappropriate") {
+        return this.request(`/users/${userId}/feed/activities/${activityId}/comments/${commentId}/report`, {
+            method: "POST",
+            body: JSON.stringify({ reason }),
+        });
+    }
+
+    deleteFeedActivityComment(userId, activityId, commentId) {
+        return this.request(`/users/${userId}/feed/activities/${activityId}/comments/${commentId}`, { method: "DELETE" });
     }
 
     revealSender(userId, questionAnswerId) {

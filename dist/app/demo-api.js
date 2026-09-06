@@ -10,6 +10,10 @@ function ago(minutes) {
     return new Date(Date.now() - minutes * 60_000).toISOString();
 }
 
+function localLedgerDate(date = new Date()) {
+    return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+}
+
 function displayDemoName(person = {}) {
     return [person.first_name, person.last_name].filter(Boolean).join(" ").trim() || person.username || "Chat";
 }
@@ -30,6 +34,7 @@ export class DemoAPI {
         this.demoGodMode = demoParams.get("godmode") === "1";
         this.profileAskTargetUnavailable = demoParams.get("asktarget") === "unavailable";
         this.demoStoryFailOnce = demoParams.get("storyfail") === "1";
+        this.demoCommentFailOnce = demoParams.get("commentfail") === "1";
         this.demoCallsEnabled = demoParams.get("calls") === "1";
         this.demoCalls = new Map();
         this.passkeyCount = demoParams.get("passkeys") === "0" ? 0 : 1;
@@ -94,6 +99,7 @@ export class DemoAPI {
                 reaction_summary: { love: 7, funny: 5 },
                 current_user_reaction: null,
                 can_react: true,
+                comment_count: 1,
             },
             {
                 item_type: "received_vote",
@@ -116,6 +122,7 @@ export class DemoAPI {
                 reaction_summary: { legacy_agree: 7 },
                 current_user_reaction: "legacy_agree",
                 can_react: true,
+                comment_count: 0,
             },
         ];
         this.schoolFeed = [
@@ -140,6 +147,7 @@ export class DemoAPI {
                 reaction_summary: { fire: 12, love: 7 },
                 current_user_reaction: null,
                 can_react: true,
+                comment_count: 4,
             },
             {
                 item_type: "school_activity",
@@ -162,6 +170,7 @@ export class DemoAPI {
                 reaction_summary: { funny: 5 },
                 current_user_reaction: null,
                 can_react: false,
+                comment_count: 0,
             },
         ];
         this.questions = [
@@ -285,12 +294,12 @@ export class DemoAPI {
         this.tbhInbox = [{
             id: "tbh-response-1", request_id: "answered-request-1", body: "You make every group project more fun, and you always notice when someone needs help.", prompt_key: "best_quality",
             author_user_id: "classmate-2", author_first_name: "Noah", author_last_name: "Williams", author_username: "noahw", author_profile_picture_url: "../assets/app/lock.webp",
-            created_at: ago(25), opened_at: null, activity_id: "activity-tbh-1", reaction_count: 4, reaction_summary: { love: 3, fire: 1 }, current_user_reaction: null, can_react: true,
+            created_at: ago(25), opened_at: null, activity_id: "activity-tbh-1", reaction_count: 4, reaction_summary: { love: 3, fire: 1 }, current_user_reaction: null, can_react: true, comment_count: 3,
         }];
         this.tbhSent = [{
             id: "tbh-response-2", request_id: "answered-request-2", body: "Your energy is calm until the music starts, then you become the whole party.", prompt_key: "your_vibe",
             subject_user_id: "classmate-4", subject_first_name: "Eli", subject_last_name: "Brooks", subject_profile_picture_url: "../assets/AppIconV2.png",
-            created_at: ago(70), activity_id: "activity-tbh-2", reaction_count: 2, reaction_summary: { funny: 2 }, current_user_reaction: "funny", can_react: true,
+            created_at: ago(70), activity_id: "activity-tbh-2", reaction_count: 2, reaction_summary: { funny: 2 }, current_user_reaction: "funny", can_react: true, comment_count: 0,
         }];
         this.tbhSchool = [
             { ...this.tbhInbox[0], subject_user_id: "demo-user", subject_first_name: "Jules", subject_last_name: "Rivera", subject_profile_picture_url: "../assets/AppIconV2.png", author_gender: "male", author_grade: "Sophomore" },
@@ -300,7 +309,36 @@ export class DemoAPI {
             "9001": [{ user_id: "classmate-1", first_name: "Maya", last_name: "Chen", profile_picture_url: "../assets/app/anonymous.webp", reaction_type: "love", reacted_at: ago(4) }],
             "activity-tbh-1": [{ user_id: "classmate-4", first_name: "Eli", last_name: "Brooks", profile_picture_url: "../assets/AppIconV2.png", reaction_type: "fire", reacted_at: ago(8) }],
         };
+        this.commentModerationState = {
+            notice: demoParams.get("commentnotice") === "1" ? {
+                id: 71,
+                type: "warning",
+                title: "Comment removed",
+                message: "One of your comments was reported and hidden.",
+                mark_number: 1,
+                threshold: 3,
+                action: "warning",
+                created_at: new Date().toISOString(),
+            } : null,
+            restriction: demoParams.get("commentrestricted") === "1"
+                ? { is_restricted: true, expires_at: new Date(Date.now() + 86_400_000).toISOString() }
+                : { is_restricted: false, expires_at: null },
+        };
+        this.commentThreads = {
+            "poll:9003": [
+                { id: "11111111-1111-4111-8111-111111111111", question_answer_id: 9003, author_user_id: "classmate-1", root_comment_id: null, parent_comment_id: null, body: "This one is so accurate.", status: "active", visible_reply_count: 2, reaction_count: 2, reaction_summary: { love: 1, fire: 1 }, current_user_reaction: null, mutation_version: 1, first_name: "Maya", last_name: "Chen", profile_picture_url: "../assets/app/anonymous.webp", viewer_can_delete: false, moderation_notice: null, created_at: ago(16), updated_at: ago(16) },
+                { id: "11111111-1111-4111-8111-111111111112", question_answer_id: 9003, author_user_id: "demo-user", root_comment_id: "11111111-1111-4111-8111-111111111111", parent_comment_id: "11111111-1111-4111-8111-111111111111", body: "Right? Maya knows everyone.", status: "active", visible_reply_count: 0, reaction_count: 0, reaction_summary: {}, current_user_reaction: null, mutation_version: 0, first_name: "Jules", last_name: "Rivera", profile_picture_url: "../assets/AppIconV2.png", viewer_can_delete: true, moderation_notice: null, created_at: ago(14), updated_at: ago(14) },
+                { id: "11111111-1111-4111-8111-111111111113", question_answer_id: 9003, author_user_id: "classmate-2", root_comment_id: "11111111-1111-4111-8111-111111111111", parent_comment_id: "11111111-1111-4111-8111-111111111112", body: "The playlist proves it 🔥", status: "active", visible_reply_count: 0, reaction_count: 1, reaction_summary: { fire: 1 }, current_user_reaction: "fire", mutation_version: 1, first_name: "Noah", last_name: "Williams", profile_picture_url: "../assets/app/lock.webp", viewer_can_delete: false, moderation_notice: null, created_at: ago(12), updated_at: ago(12) },
+                { id: "11111111-1111-4111-8111-111111111114", question_answer_id: 9003, author_user_id: "demo-user", root_comment_id: null, parent_comment_id: null, body: "The whole school voted correctly.", status: "active", visible_reply_count: 0, reaction_count: 0, reaction_summary: {}, current_user_reaction: null, mutation_version: 0, first_name: "Jules", last_name: "Rivera", profile_picture_url: "../assets/AppIconV2.png", viewer_can_delete: true, moderation_notice: null, created_at: ago(8), updated_at: ago(8) },
+            ],
+            "activity:activity-tbh-1": [
+                { id: "22222222-2222-4222-8222-222222222221", activity_id: "activity-tbh-1", author_user_id: "classmate-4", root_comment_id: null, parent_comment_id: null, body: "This is genuinely sweet.", status: "active", visible_reply_count: 1, reaction_count: 1, reaction_summary: { love: 1 }, current_user_reaction: null, mutation_version: 1, first_name: "Eli", last_name: "Brooks", profile_picture_url: "../assets/AppIconV2.png", viewer_can_delete: false, moderation_notice: null, created_at: ago(20), updated_at: ago(20) },
+                { id: "22222222-2222-4222-8222-222222222222", activity_id: "activity-tbh-1", author_user_id: "demo-user", root_comment_id: "22222222-2222-4222-8222-222222222221", parent_comment_id: "22222222-2222-4222-8222-222222222221", body: "Noah always notices the good stuff.", status: "active", visible_reply_count: 0, reaction_count: 0, reaction_summary: {}, current_user_reaction: null, mutation_version: 0, first_name: "Jules", last_name: "Rivera", profile_picture_url: "../assets/AppIconV2.png", viewer_can_delete: true, moderation_notice: null, created_at: ago(18), updated_at: ago(18) },
+                { id: "22222222-2222-4222-8222-222222222223", activity_id: "activity-tbh-1", author_user_id: "classmate-1", root_comment_id: null, parent_comment_id: null, body: "Best kind of TBH.", status: "active", visible_reply_count: 0, reaction_count: 0, reaction_summary: {}, current_user_reaction: null, mutation_version: 0, first_name: "Maya", last_name: "Chen", profile_picture_url: "../assets/app/anonymous.webp", viewer_can_delete: false, moderation_notice: null, created_at: ago(10), updated_at: ago(10) },
+            ],
+        };
         const now = new Date().toISOString();
+        const ledgerDate = localLedgerDate();
         this.chats = [
             {
                 id: "chat-friends", display_name: "Weekend Crew", name: "Weekend Crew", status: "active",
@@ -345,12 +383,12 @@ export class DemoAPI {
             "chat-friends": [
                 { id: "msg-1", chat_id: "chat-friends", room_sequence: 1, sender_user_id: "classmate-1", sender_first_name: "Maya", kind: "text", body: "What are we doing Friday?", status: "active", viewer_is_sender: false, reaction_count: 1, reaction_summary: { love: 1 }, current_user_reaction: null, created_at: ago(55), updated_at: ago(55) },
                 { id: "msg-2", chat_id: "chat-friends", room_sequence: 2, sender_user_id: "demo-user", sender_first_name: "Jules", kind: "text", body: "Game, then food?", status: "active", viewer_is_sender: true, reaction_count: 2, reaction_summary: { fire: 2 }, current_user_reaction: "fire", created_at: ago(35), updated_at: ago(35) },
-                { id: "msg-3", chat_id: "chat-friends", room_sequence: 3, sender_user_id: "classmate-3", sender_first_name: "Ava", kind: "memento", body: "Bus ride energy", memento_image_url: "../assets/app/anonymous.webp", memento_ledger_date: now.slice(0, 10), status: "active", viewer_is_sender: false, reaction_count: 0, reaction_summary: {}, created_at: ago(12), updated_at: ago(12) },
+                { id: "msg-3", chat_id: "chat-friends", room_sequence: 3, sender_user_id: "classmate-3", sender_first_name: "Ava", kind: "memento", body: "Bus ride energy", memento_image_url: "../assets/app/anonymous.webp", memento_ledger_date: ledgerDate, status: "active", viewer_is_sender: false, reaction_count: 0, reaction_summary: {}, created_at: ago(12), updated_at: ago(12) },
                 { id: "msg-4", chat_id: "chat-friends", room_sequence: 4, sender_user_id: "classmate-1", sender_first_name: "Maya", kind: "text", body: "Meet at the game?", status: "active", viewer_is_sender: false, reaction_count: 0, reaction_summary: {}, created_at: ago(4), updated_at: ago(4) },
             ],
             "chat-noah": [
                 { id: "msg-n1", chat_id: "chat-noah", room_sequence: 1, sender_user_id: "classmate-2", sender_first_name: "Noah", kind: "text", body: "Did you see that presentation?", status: "active", viewer_is_sender: false, reaction_count: 0, reaction_summary: {}, created_at: ago(100), updated_at: ago(100) },
-                { id: "msg-n2", chat_id: "chat-noah", room_sequence: 2, sender_user_id: "demo-user", sender_first_name: "Jules", kind: "memento", body: "Sent a Memento", daily_entry_id: "entry-jules", memento_image_url: "../assets/app/pencil-clipboard.webp", memento_ledger_date: now.slice(0, 10), status: "active", viewer_is_sender: true, reaction_count: 1, reaction_summary: { funny: 1 }, created_at: ago(80), updated_at: ago(80) },
+                { id: "msg-n2", chat_id: "chat-noah", room_sequence: 2, sender_user_id: "demo-user", sender_first_name: "Jules", kind: "memento", body: "Sent a Memento", daily_entry_id: "entry-jules", memento_image_url: "../assets/app/pencil-clipboard.webp", memento_ledger_date: ledgerDate, status: "active", viewer_is_sender: true, reaction_count: 1, reaction_summary: { funny: 1 }, created_at: ago(80), updated_at: ago(80) },
                 { id: "msg-n3", chat_id: "chat-noah", room_sequence: 3, sender_user_id: "demo-user", sender_first_name: "Jules", kind: "text", body: "That was hilarious 😂", status: "active", viewer_is_sender: true, reaction_count: 0, reaction_summary: {}, created_at: ago(70), updated_at: ago(70) },
                 { id: "msg-n4", chat_id: "chat-noah", room_sequence: 4, sender_user_id: "classmate-2", sender_first_name: "Noah", kind: "photo", body: null, photo_image_url: null, view_once: true, view_once_available: true, view_once_consumed: false, view_once_remaining_views: 2, view_once_opened_count: 0, view_once_recipient_count: 1, media_text_overlay: { text: "Game night", x: 0.5, y: 0.5 }, status: "active", viewer_is_sender: false, reaction_count: 0, reaction_summary: {}, created_at: ago(60), updated_at: ago(60) },
                 { id: "msg-n5", chat_id: "chat-noah", room_sequence: 5, sender_user_id: "demo-user", sender_first_name: "Jules", kind: "photo", body: null, photo_image_url: null, view_once: true, view_once_available: false, view_once_consumed: false, view_once_remaining_views: 0, view_once_opened_count: 1, view_once_recipient_count: 1, status: "active", viewer_is_sender: true, reaction_count: 0, reaction_summary: {}, created_at: ago(50), updated_at: ago(50) },
@@ -359,12 +397,12 @@ export class DemoAPI {
         this.chatMediaAssets = {};
         this.chatViewSessions = {};
         this.dailyRows = {
-            "chat-friends": { chat_id: "chat-friends", ledger_date: now.slice(0, 10), viewer_has_posted_today: false, viewer_has_shared: false, viewer_is_eligible: true, view_gate_locked: true, posted_count: 2, eligible_count: 4, entries: [
+            "chat-friends": { chat_id: "chat-friends", ledger_date: ledgerDate, viewer_has_posted_today: false, viewer_has_shared: false, viewer_is_eligible: true, view_gate_locked: true, posted_count: 2, eligible_count: 4, entries: [
                 { user_id: "classmate-1", first_name: "Maya", last_name: "Chen", has_posted: true, entry_id: "entry-maya", caption: "After practice", image_url: "../assets/app/anonymous.webp", published_at: ago(14) },
                 { user_id: "classmate-3", first_name: "Ava", last_name: "Patel", has_posted: true, entry_id: "entry-ava", caption: "Bus ride", image_url: "../assets/app/pencil-clipboard.webp", published_at: ago(12) },
                 { user_id: "demo-user", first_name: "Jules", last_name: "Rivera", has_posted: false },
             ] },
-            "chat-noah": { chat_id: "chat-noah", ledger_date: now.slice(0, 10), viewer_has_posted_today: true, viewer_has_shared: true, viewer_is_eligible: true, view_gate_locked: false, posted_count: 2, eligible_count: 2, entries: [
+            "chat-noah": { chat_id: "chat-noah", ledger_date: ledgerDate, viewer_has_posted_today: true, viewer_has_shared: true, viewer_is_eligible: true, view_gate_locked: false, posted_count: 2, eligible_count: 2, entries: [
                 { user_id: "demo-user", first_name: "Jules", last_name: "Rivera", has_posted: true, entry_id: "entry-jules", caption: "Today", image_url: "../assets/app/pencil-clipboard.webp", published_at: ago(80) },
                 { user_id: "classmate-2", first_name: "Noah", last_name: "Williams", has_posted: true, entry_id: "entry-noah", caption: "Lunch", image_url: "../assets/app/lock.webp", published_at: ago(75) },
             ] },
@@ -539,6 +577,152 @@ export class DemoAPI {
     async removeFeedActivityReaction(_userId, activityId) { return this.mutateReaction(activityId, null, true); }
     async getFeedActivityReactors(_userId, activityId) { return structuredClone(this.reactors[String(activityId)] || []); }
 
+    commentThread(type, targetId) {
+        const key = `${type}:${targetId}`;
+        if (!this.commentThreads[key]) this.commentThreads[key] = [];
+        return this.commentThreads[key];
+    }
+
+    commentTargetItem(type, targetId) {
+        return type === "poll"
+            ? [...this.personalFeed, ...this.schoolFeed].find((item) => String(item.question_answer_id) === String(targetId))
+            : [...this.tbhInbox, ...this.tbhSent, ...this.tbhSchool].find((item) => String(item.activity_id) === String(targetId));
+    }
+
+    async getCommentModerationState() { return structuredClone(this.commentModerationState); }
+    async acknowledgeCommentModerationNotice(_userId, noticeId) {
+        if (Number(this.commentModerationState.notice?.id) === Number(noticeId)) this.commentModerationState.notice = null;
+        return { acknowledged: true };
+    }
+
+    listDemoComments(type, targetId, before = null, limit = 30) {
+        const roots = this.commentThread(type, targetId)
+            .filter((comment) => !comment.root_comment_id && comment.status === "active")
+            .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at));
+        const start = before ? Math.max(0, roots.findIndex((comment) => String(comment.id) === String(before.id)) + 1) : 0;
+        return structuredClone(roots.slice(start, start + limit));
+    }
+
+    getDemoComment(type, targetId, commentId) {
+        const comment = this.commentThread(type, targetId).find((candidate) => String(candidate.id) === String(commentId) && candidate.status === "active");
+        if (!comment) throw new Error("Comment not found");
+        return structuredClone(comment);
+    }
+
+    listDemoReplies(type, targetId, rootId, after = null, limit = 50) {
+        const replies = this.commentThread(type, targetId)
+            .filter((comment) => String(comment.root_comment_id) === String(rootId) && comment.status === "active")
+            .sort((left, right) => Date.parse(left.created_at) - Date.parse(right.created_at));
+        const start = after ? Math.max(0, replies.findIndex((comment) => String(comment.id) === String(after.id)) + 1) : 0;
+        return structuredClone(replies.slice(start, start + limit));
+    }
+
+    createDemoComment(type, targetId, body, clientRequestId, parentCommentId = null) {
+        const thread = this.commentThread(type, targetId);
+        const existing = thread.find((comment) => String(comment.id) === String(clientRequestId));
+        if (existing) return structuredClone(existing);
+        if (this.commentModerationState.restriction?.is_restricted) throw new Error("Commenting has been disabled for this account");
+        const parent = parentCommentId ? thread.find((comment) => String(comment.id) === String(parentCommentId)) : null;
+        const rootId = parent ? (parent.root_comment_id || parent.id) : null;
+        const comment = {
+            id: clientRequestId,
+            ...(type === "poll" ? { question_answer_id: Number(targetId) } : { activity_id: targetId }),
+            author_user_id: "demo-user",
+            root_comment_id: rootId,
+            parent_comment_id: parentCommentId,
+            body: String(body).trim().split(/\s+/).join(" "),
+            status: "active",
+            visible_reply_count: 0,
+            reaction_count: 0,
+            reaction_summary: {},
+            current_user_reaction: null,
+            mutation_version: 0,
+            first_name: "Jules",
+            last_name: "Rivera",
+            profile_picture_url: "../assets/AppIconV2.png",
+            viewer_can_delete: true,
+            moderation_notice: null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        };
+        thread.push(comment);
+        if (rootId) {
+            const root = thread.find((candidate) => String(candidate.id) === String(rootId));
+            if (root) root.visible_reply_count = Number(root.visible_reply_count || 0) + 1;
+        }
+        const item = this.commentTargetItem(type, targetId);
+        if (item) item.comment_count = Number(item.comment_count || 0) + 1;
+        if (this.demoCommentFailOnce) {
+            this.demoCommentFailOnce = false;
+            throw new Error("The response was lost after the server saved this comment.");
+        }
+        return structuredClone(comment);
+    }
+
+    mutateDemoCommentReaction(type, targetId, commentId, reactionType) {
+        const comment = this.commentThread(type, targetId).find((candidate) => String(candidate.id) === String(commentId));
+        if (!comment) throw new Error("Comment not found");
+        const previous = comment.current_user_reaction;
+        if (previous) {
+            comment.reaction_summary[previous] = Math.max(0, Number(comment.reaction_summary[previous] || 0) - 1);
+            if (!comment.reaction_summary[previous]) delete comment.reaction_summary[previous];
+            comment.reaction_count = Math.max(0, Number(comment.reaction_count || 0) - 1);
+        }
+        if (reactionType) {
+            comment.reaction_summary[reactionType] = Number(comment.reaction_summary[reactionType] || 0) + 1;
+            comment.reaction_count = Number(comment.reaction_count || 0) + 1;
+        }
+        comment.current_user_reaction = reactionType;
+        comment.mutation_version = Number(comment.mutation_version || 0) + 1;
+        return structuredClone(comment);
+    }
+
+    getDemoCommentReactors(type, targetId, commentId, offset = 0, limit = 50) {
+        const comment = this.getDemoComment(type, targetId, commentId);
+        const rows = Object.entries(comment.reaction_summary || {}).flatMap(([reaction, count]) => Array.from({ length: count }, (_, index) => ({
+            user_id: `${commentId}-${reaction}-${index}`,
+            first_name: index ? "Noah" : "Maya",
+            last_name: index ? "Williams" : "Chen",
+            profile_picture_url: index ? "../assets/app/lock.webp" : "../assets/app/anonymous.webp",
+            reaction_type: reaction,
+            reacted_at: ago(index + 1),
+        })));
+        return structuredClone(rows.slice(offset, offset + limit));
+    }
+
+    hideDemoComment(type, targetId, commentId, status) {
+        const thread = this.commentThread(type, targetId);
+        const comment = thread.find((candidate) => String(candidate.id) === String(commentId));
+        if (!comment || comment.status !== "active") return { comment_id: commentId, status, changed: false };
+        const rootId = comment.root_comment_id || comment.id;
+        const hidden = comment.root_comment_id
+            ? thread.filter((candidate) => String(candidate.id) === String(comment.id) && candidate.status === "active")
+            : thread.filter((candidate) => (String(candidate.id) === String(rootId) || String(candidate.root_comment_id) === String(rootId)) && candidate.status === "active");
+        hidden.forEach((candidate) => { candidate.status = status; candidate.body = null; });
+        const item = this.commentTargetItem(type, targetId);
+        if (item) item.comment_count = Math.max(0, Number(item.comment_count || 0) - hidden.length);
+        return { comment_id: commentId, status, changed: true };
+    }
+
+    async listPollComments(_userId, targetId, before, limit) { return this.listDemoComments("poll", targetId, before, limit); }
+    async getPollComment(_userId, targetId, commentId) { return this.getDemoComment("poll", targetId, commentId); }
+    async listPollCommentReplies(_userId, targetId, rootId, after, limit) { return this.listDemoReplies("poll", targetId, rootId, after, limit); }
+    async createPollComment(_userId, targetId, body, requestId, parentId) { return this.createDemoComment("poll", targetId, body, requestId, parentId); }
+    async setPollCommentReaction(_userId, targetId, commentId, reaction) { return this.mutateDemoCommentReaction("poll", targetId, commentId, reaction); }
+    async removePollCommentReaction(_userId, targetId, commentId) { return this.mutateDemoCommentReaction("poll", targetId, commentId, null); }
+    async getPollCommentReactors(_userId, targetId, commentId, offset, limit) { return this.getDemoCommentReactors("poll", targetId, commentId, offset, limit); }
+    async reportPollComment(_userId, targetId, commentId) { return this.hideDemoComment("poll", targetId, commentId, "reported_hidden"); }
+    async deletePollComment(_userId, targetId, commentId) { return this.hideDemoComment("poll", targetId, commentId, "author_deleted"); }
+    async listFeedActivityComments(_userId, targetId, before, limit) { return this.listDemoComments("activity", targetId, before, limit); }
+    async getFeedActivityComment(_userId, targetId, commentId) { return this.getDemoComment("activity", targetId, commentId); }
+    async listFeedActivityCommentReplies(_userId, targetId, rootId, after, limit) { return this.listDemoReplies("activity", targetId, rootId, after, limit); }
+    async createFeedActivityComment(_userId, targetId, body, requestId, parentId) { return this.createDemoComment("activity", targetId, body, requestId, parentId); }
+    async setFeedActivityCommentReaction(_userId, targetId, commentId, reaction) { return this.mutateDemoCommentReaction("activity", targetId, commentId, reaction); }
+    async removeFeedActivityCommentReaction(_userId, targetId, commentId) { return this.mutateDemoCommentReaction("activity", targetId, commentId, null); }
+    async getFeedActivityCommentReactors(_userId, targetId, commentId, offset, limit) { return this.getDemoCommentReactors("activity", targetId, commentId, offset, limit); }
+    async reportFeedActivityComment(_userId, targetId, commentId) { return this.hideDemoComment("activity", targetId, commentId, "reported_hidden"); }
+    async deleteFeedActivityComment(_userId, targetId, commentId) { return this.hideDemoComment("activity", targetId, commentId, "author_deleted"); }
+
     async revealSender(_userId, answerId) {
         const item = this.personalFeed.find((candidate) => candidate.question_answer_id === answerId);
         if (!this.demoGodMode || !item) throw new Error("God Mode subscription required for reveals.");
@@ -606,6 +790,7 @@ export class DemoAPI {
             enable_web_stories: new URLSearchParams(location.search).get("stories") === "1",
             enable_calls: this.demoCallsEnabled,
             enable_web_calls: this.demoCallsEnabled,
+            enable_web_comments: new URLSearchParams(location.search).get("comments") !== "0",
         };
     }
 
@@ -677,7 +862,7 @@ export class DemoAPI {
         this.chats.unshift(chat);
         this.chatMembers[id] = [{ membership_id: `m-${id}-me`, user_id: "demo-user", role: "owner", status: "accepted", first_name: "Jules", last_name: "Rivera" }, ...members.map((person, index) => ({ membership_id: `m-${id}-${index}`, role: "member", status: "accepted", ...person }))];
         this.chatMessages[id] = [];
-        this.dailyRows[id] = { chat_id: id, ledger_date: new Date().toISOString().slice(0, 10), viewer_has_posted_today: false, viewer_has_shared: false, viewer_is_eligible: true, view_gate_locked: true, posted_count: 0, eligible_count: members.length + 1, entries: [] };
+        this.dailyRows[id] = { chat_id: id, ledger_date: localLedgerDate(), viewer_has_posted_today: false, viewer_has_shared: false, viewer_is_eligible: true, view_gate_locked: true, posted_count: 0, eligible_count: members.length + 1, entries: [] };
         return structuredClone(chat);
     }
     async acceptChatInvitation(_userId, membershipId) { const chat = this.chats.find((item) => item.membership_id === membershipId); chat.membership_status = "accepted"; chat.status = "active"; this.chatMembers[chat.id] ||= []; this.chatMessages[chat.id] ||= []; return structuredClone(chat); }
@@ -746,7 +931,7 @@ export class DemoAPI {
             chat.today_memento_count = row.posted_count;
             await this.sendChatMessage(null, chatId, { daily_entry_id: entryId, body: caption || "Sent a Memento", client_request_id: crypto.randomUUID() });
         }
-        return { entry_id: entryId, ledger_date: new Date().toISOString().slice(0, 10), shared_chat_ids: [...chatIds], aura_points_earned: 10, total_aura_points: this.profile.aura_points + 10, published_at: new Date().toISOString() };
+        return { entry_id: entryId, ledger_date: localLedgerDate(), shared_chat_ids: [...chatIds], aura_points_earned: 10, total_aura_points: this.profile.aura_points + 10, published_at: new Date().toISOString() };
     }
 
     async getClassmates() {

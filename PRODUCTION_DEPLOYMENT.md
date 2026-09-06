@@ -29,6 +29,7 @@ ENABLE_WEB_CHATS=0
 ENABLE_WEB_MEMENTOS=0
 ENABLE_WEB_STORIES=0
 ENABLE_WEB_CALLS=0
+ENABLE_WEB_COMMENTS=0
 ```
 
 Leave `TRUST_PROXY_HEADERS=false` unless every production request passes through
@@ -79,8 +80,8 @@ testers to a preview domain. Run the production preflight and real-device
 checklist there, then remove only the access rule when the release is approved.
 The static deployment and backend revision must remain independently
 rollbackable throughout this check.
-Keep `ENABLE_WEB_CHATS`, `ENABLE_WEB_MEMENTOS`, `ENABLE_WEB_STORIES`, and
-`ENABLE_WEB_CALLS` set to
+Keep `ENABLE_WEB_CHATS`, `ENABLE_WEB_MEMENTOS`, `ENABLE_WEB_STORIES`,
+`ENABLE_WEB_CALLS`, and `ENABLE_WEB_COMMENTS` set to
 `0` in production until their separate release gates pass.
 
 Keep Web Push in `shadow` for the backend/current-iOS canary. Shadow mode keeps
@@ -211,7 +212,7 @@ do not advertise Android signups yet.
 
 The native and web presentation switches are independent. Deploy backend support
 and the static candidate with `ENABLE_WEB_CHATS=0`, `ENABLE_WEB_MEMENTOS=0`,
-`ENABLE_WEB_STORIES=0`, and `ENABLE_WEB_CALLS=0`. After the current App Store binary, final-origin, and
+`ENABLE_WEB_STORIES=0`, `ENABLE_WEB_CALLS=0`, and `ENABLE_WEB_COMMENTS=0`. After the current App Store binary, final-origin, and
 physical-device gates in `WEBAPP_TESTING.md` pass, enable web Chats for the
 private cohort first. Observe at least one representative peak window before
 enabling web Mementos or Stories through their separate switches.
@@ -219,6 +220,13 @@ enabling web Mementos or Stories through their separate switches.
 Enable web calls only after a two-account staging LiveKit run on every supported
 device, including permission denial, camera-capacity, reconnect, close-tab,
 Bluetooth/audio route, and expiring incoming-notification checks.
+
+Enable web comments only after two-account final-origin tests prove named root
+and reply creation, stable request-ID retry after an unknown response, reactions,
+reactor identity, report/delete behavior, moderation notice acknowledgement,
+active restrictions, count reconciliation, and exact poll/TBH notification
+routing. Disable only `ENABLE_WEB_COMMENTS` to roll the surface back; the iOS
+comment contracts and durable notification producers remain unchanged.
 
 For a school-question approval notification, verify the browser route contains
 `notification=question_submission&submission_id=<id>`, opens My Questions, and

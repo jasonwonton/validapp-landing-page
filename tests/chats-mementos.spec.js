@@ -9,6 +9,39 @@ async function signInToDemo(page, suffix = "") {
     await expect(page.getByRole("button", { name: "Chats", exact: true })).toBeVisible();
 }
 
+test.describe("Memento calendar boundaries", () => {
+    test.use({ timezoneId: "America/New_York" });
+
+    test("the demo ledger follows the device calendar across UTC midnight", async ({ page }) => {
+        await page.addInitScript((fixedNow) => {
+            const NativeDate = Date;
+            class FixedDate extends NativeDate {
+                constructor(...args) {
+                    super(...(args.length ? args : [fixedNow]));
+                }
+
+                static now() {
+                    return fixedNow;
+                }
+            }
+            Object.defineProperty(globalThis, "Date", { value: FixedDate, configurable: true });
+        }, Date.parse("2030-01-02T02:30:00Z"));
+        await signInToDemo(page);
+        await page.getByRole("button", { name: "Chats", exact: true }).click();
+        await page.getByRole("button", { name: /Weekend Crew/ }).click();
+        await expect(page.locator(".chat-daily-row > button")).toContainText("Take today's Memento");
+        await page.locator(".chat-daily-row > button").click();
+        await expect(page.getByRole("dialog", { name: "Create a Memento" })).toBeVisible();
+        const createdLedgerDate = await page.evaluate(async () => {
+            const { DemoAPI } = await import("/app/demo-api.js");
+            const demo = new DemoAPI();
+            const chat = await demo.createChat("demo-user", ["classmate-1"], null);
+            return (await demo.getChatDailyRow("demo-user", chat.id)).ledger_date;
+        });
+        expect(createdLedgerDate).toBe("2030-01-01");
+    });
+});
+
 test("Chats lazy-loads its feature bundle and shows unread conversations and invitations", async ({ page }) => {
     await page.goto("/app/?demo=1&signin=1");
     const chatResources = () => page.evaluate(() => performance.getEntriesByType("resource")

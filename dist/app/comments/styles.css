@@ -1,0 +1,51 @@
+.comments-screen { --comments-surface: #fff; --comments-raised: #f3fbfa; --comments-text: #001f21; --comments-muted: #476264; --comments-quiet: #6d8182; --comments-border: rgba(0, 63, 66, .16); --comments-primary: #006d70; --comments-danger: #b42318; background: var(--comments-surface); z-index: 45; }
+.comments-header { position: sticky; top: 0; z-index: 2; }
+.comments-layout { display: flex; flex-direction: column; min-height: calc(100dvh - 58px); max-width: 720px; margin: 0 auto; padding: 0 16px 132px; }
+.comments-context { border-bottom: 1px solid var(--comments-border); color: var(--comments-muted); font-size: .9rem; line-height: 1.35; padding: 12px 4px; }
+.comments-context p { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.comment-moderation-notice { align-items: center; background: color-mix(in srgb, var(--comments-danger) 10%, var(--comments-surface)); border: 1px solid color-mix(in srgb, var(--comments-danger) 32%, transparent); border-radius: 16px; display: flex; gap: 12px; justify-content: space-between; margin: 12px 0 0; padding: 12px; }
+.comment-moderation-notice strong, .comment-moderation-notice p { display: block; margin: 0; }
+.comment-moderation-notice p { color: var(--comments-muted); font-size: .85rem; margin-top: 3px; }
+.comment-moderation-notice button { background: none; border: 0; color: var(--comments-primary); font: inherit; font-weight: 700; min-height: 44px; padding: 0 8px; }
+.comments-list { display: flex; flex-direction: column; gap: 3px; padding: 8px 0; }
+.comment-thread { border-bottom: 1px solid var(--comments-border); padding: 4px 0 9px; }
+.comment-row { display: grid; gap: 10px; grid-template-columns: 38px minmax(0, 1fr); padding: 9px 2px; scroll-margin: 90px; }
+.comment-row.highlighted { animation: comment-highlight 2.5s ease-out; border-radius: 14px; }
+.comment-replies { border-left: 2px solid var(--comments-border); margin-left: 19px; padding-left: 14px; }
+.comment-reply { grid-template-columns: 32px minmax(0, 1fr); }
+.comment-avatar { height: 38px; width: 38px; }
+.comment-reply .comment-avatar { height: 32px; width: 32px; }
+.comment-content { min-width: 0; }
+.comment-heading { align-items: baseline; display: flex; gap: 8px; }
+.comment-heading strong { color: var(--comments-text); font-size: .93rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.comment-heading time { color: var(--comments-quiet); font-size: .75rem; }
+.comment-content > p { color: var(--comments-text); line-height: 1.4; margin: 3px 0 5px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.comment-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.comment-actions > button, .comment-load-replies { background: none; border: 0; color: var(--comments-muted); font: inherit; font-size: .78rem; font-weight: 700; min-height: 32px; padding: 0; }
+.comment-actions > button.selected { color: var(--comments-primary); }
+.comment-reaction-summary { align-items: center; display: inline-flex; gap: 4px; }
+.comment-reaction-summary strong { font-size: .75rem; }
+.comment-reaction-picker { background: var(--comments-raised); border: 1px solid var(--comments-border); border-radius: 22px; display: inline-flex; gap: 1px; margin-top: 4px; padding: 3px; }
+.comment-reaction-picker button { background: none; border: 0; border-radius: 18px; font-size: 1.16rem; height: 36px; width: 36px; }
+.comment-reaction-picker button[aria-pressed="true"] { background: color-mix(in srgb, var(--comments-primary) 18%, transparent); }
+.comment-load-replies { margin-left: 64px; }
+.comments-empty { color: var(--comments-muted); padding: 42px 18px; text-align: center; }
+.comments-empty strong { color: var(--comments-text); display: block; }
+.comments-empty p { margin: 5px 0 0; }
+.comments-screen .comment-composer { background: color-mix(in srgb, var(--comments-surface) 94%, transparent); border-top: 1px solid var(--comments-border); bottom: 0; left: 0; min-height: 0; padding: 8px max(16px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); position: fixed; right: 0; z-index: 3; }
+.comment-composer-row { align-items: flex-end; display: flex; gap: 8px; margin: 0 auto; max-width: 688px; }
+.comment-composer textarea { background: var(--comments-raised); border: 1px solid var(--comments-border); border-radius: 18px; color: var(--comments-text); flex: 1; font: inherit; line-height: 1.35; max-height: 112px; min-height: 44px; padding: 11px 14px; resize: vertical; }
+.comment-composer .primary-button { margin: 0; min-height: 44px; padding: 0 16px; width: auto; }
+.comment-composer-meta { color: var(--comments-quiet); display: flex; font-size: .73rem; justify-content: space-between; margin: 4px auto 0; max-width: 688px; padding: 0 4px; }
+.comment-reply-context { align-items: center; color: var(--comments-muted); display: flex; font-size: .8rem; justify-content: space-between; margin: 0 auto 5px; max-width: 688px; }
+.comment-reply-context button { background: none; border: 0; color: var(--comments-muted); font-size: 1.25rem; min-height: 32px; min-width: 32px; }
+.comment-reactors-dialog { max-height: min(70dvh, 640px); }
+.comment-reactors-list { max-height: 52dvh; overflow: auto; padding: 8px 18px; }
+.comment-reactor-row { align-items: center; display: grid; gap: 10px; grid-template-columns: 42px minmax(0, 1fr) auto; min-height: 54px; }
+.comment-reactor-row > span:last-child { font-size: 1.15rem; }
+@keyframes comment-highlight { 0%, 35% { background: color-mix(in srgb, var(--comments-primary) 24%, transparent); } 100% { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .comment-row.highlighted { animation: none; outline: 2px solid var(--comments-primary); } }
+@media (prefers-color-scheme: dark) {
+    .comments-screen { --comments-surface: #0b2528; --comments-raised: #12363a; --comments-text: #f5ffff; --comments-muted: #b8d2d3; --comments-quiet: #8eaaac; --comments-border: rgba(218, 255, 252, .17); --comments-primary: #74e2dc; --comments-danger: #ff8b82; }
+    .comment-composer { background: color-mix(in srgb, var(--comments-surface) 94%, transparent); }
+}

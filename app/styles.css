@@ -1356,6 +1356,10 @@ body.detail-screen-open { overflow: hidden; }
 .feed-card { position: relative; grid-template-columns: 60px minmax(0, 1fr); align-items: center; gap: 12px; padding: 12px; overflow: visible; }
 .feed-card .feed-body, .tbh-feed-copy { min-width: 0; padding-right: 78px; }
 .feed-card .reaction-control { position: absolute; top: 12px; right: 12px; }
+.comment-count-button { align-items: center; background: rgba(255,255,255,.78); border: 1px solid rgba(0,0,0,.22); border-radius: 999px; bottom: 10px; color: var(--dark-teal); display: inline-flex; font: inherit; font-size: .76rem; gap: 4px; min-height: 32px; padding: 5px 9px; position: absolute; right: 12px; }
+.comment-count-button svg { fill: none; height: 15px; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; width: 15px; }
+.feed-detail-comment-button, .tbh-detail-comment-button { align-items: center; display: inline-flex; gap: 7px; justify-content: center; }
+.feed-detail-comment-button svg, .tbh-detail-comment-button svg { fill: none; height: 18px; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; width: 18px; }
 .feed-meta { margin: 0 0 4px; font-size: 14px; line-height: 1.15; }
 .feed-question { margin: 0 0 5px; font-size: 16px; line-height: 1.2; }
 .feed-detail-row, .tbh-feed-meta { display: block; color: var(--dark-teal); font-size: 13px; line-height: 1.2; }
@@ -1531,6 +1535,7 @@ body.detail-screen-open { overflow: hidden; }
     .passkey-face-icon,
     .school-feed-controls button,
     .reaction-control,
+    .comment-count-button,
     .reaction-picker-options button { background: rgba(21,55,58,.92); }
     input, textarea, select, dialog { color: var(--ink); }
     .reaction-control.selected,
