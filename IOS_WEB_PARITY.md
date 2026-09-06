@@ -121,7 +121,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Accessibility semantics/focus | Partial | Not yet tested | Labels, live regions, reduced motion, and touch targets exist; screen-reader and contrast audit remain. |
 | Offline shell/installability | Equivalent | Not yet tested | Manifest/service-worker shell tests pass; installed physical-device update/reopen remains. |
 | Offline private-data isolation | Equivalent | Not yet tested | No authenticated API/media response enters Cache Storage; scoped snapshots/outbox are cleared at account exit. |
-| Predictable app updates | Partial | Not yet tested | v66 adds bounded long-conversation rendering while preserving memory-only reusable stickers, private chat appearance, durable draft-first Memento resharing, the exact-one-chat contract, bounded recovery, audited notification destinations, comments, positioned overlays, and dual-image capture; telemetry/cache versions remain synchronized. Waiting-worker rollback/update soak remains. |
+| Predictable app updates | Equivalent | Not yet tested | Telemetry/cache versions remain synchronized. A private-origin Chromium soak holds v65 active until the user accepts the waiting v66 worker, proves matching HTML/JavaScript generations, one-cache activation, offline relaunch, and pending-send preservation, then rolls back to v65 and forward to v66 again. Physical installed-PWA update/backgrounding remains a release gate. |
 | Strict CSP runtime behavior | Equivalent | Not yet tested | Response and meta policies keep `style-src 'self'` without `unsafe-inline`; bounded same-origin CSSOM rules cover dynamic progress, overlays, viewport, crop, and drag state in all four lab projects. Final-origin header verification remains. |
 | Dark Mode | Equivalent | Not yet tested | System color scheme now drives the core shell, Chats, Mementos, forms, and dialogs; automated computed-style check plus visual/accessibility review remain. |
 | Haptics | Partial | Not yet tested | Android vibration is progressive enhancement; precise native haptic parity is unavailable. |
@@ -149,8 +149,8 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 ## Device and evidence ledger
 
 Current candidate evidence: `npm run build`, UI runtime checks, and performance
-budgets pass. The candidate's **764-case** lab matrix contains **759 passing
-tests and 5 intentional project-capability skips** across Pixel 7 Chromium,
+budgets pass. The candidate's **768-case** lab matrix contains **761 passing
+tests and 7 intentional project-capability skips** across Pixel 7 Chromium,
 Desktop Chrome, Desktop Firefox, and Desktop WebKit. Every hosted project runs
 each spec file in its own deterministic fresh-browser process with retries
 disabled. This bounds browser-process lifetime after reproducible headless GPU
@@ -219,6 +219,13 @@ metadata describes each rendered message, and reply or exact-link navigation
 materializes a hidden target without growing the DOM. Four-project automation
 traverses both ends of a 500-message history and verifies the bound after every
 shift.
+The update lifecycle now runs against a private ephemeral production-style
+origin rather than a mocked registration. Chromium keeps v65 active while v66
+waits, shows the user-controlled update action, activates exactly one complete
+HTML/JavaScript/cache generation, relaunches that generation offline, preserves
+a real IndexedDB pending send, rolls back to v65, and rolls forward to v66 a
+second time. Firefox and WebKit are intentional capability skips at this
+automation boundary; their branded/installed update behavior remains manual.
 
 The packaged v66 shell contains 39 static entries with a 666,295-byte estimated
 transfer, including 17,516 bytes of fonts and 358,622 bytes of artwork; all
@@ -226,8 +233,8 @@ remain inside the enforced startup and cache budgets.
 
 | Target | State | Required before release |
 | --- | --- | --- |
-| Pixel 7 Chromium emulation | Automated | Passing Chats/Mementos, Stories, voice-recording fallback, contract, outbox, dark-mode, adapter, runtime, and performance suites. Emulation is not a physical-device substitute. |
-| Desktop Chrome | Automated + branded smoke | Full hosted suite passes with Chromium service-worker coverage. Branded Chrome on macOS passes the production-style local-origin smoke; final-origin notification and passkey behavior remain open. |
+| Pixel 7 Chromium emulation | Automated | Passing Chats/Mementos, Stories, voice-recording fallback, contract, outbox, dark-mode, update/rollback, adapter, runtime, and performance suites. Emulation is not a physical-device substitute. |
+| Desktop Chrome | Automated + branded smoke | Full hosted suite passes with Chromium service-worker and repeat update/rollback coverage. Branded Chrome on macOS passes the production-style local-origin smoke; final-origin notification and passkey behavior remain open. |
 | Desktop Firefox | Automated | Full application suite passing with service workers blocked at the Playwright boundary; real Firefox notification/install behavior remains a hands-on gate. |
 | Desktop WebKit engine | Automated | Full application suite passing with service workers blocked. This is neither branded Safari nor an installed iPhone PWA, so Safari service-worker, push, media, and install behavior remain open. |
 | Desktop Safari | Branded local smoke | Production-style local-origin demo sign-in, Chats list, direct conversation, text send, exact-chat reload/sign-in restore, Memento viewer, and prior-day history pass in branded Safari on macOS. Final-origin service worker, push, passkey, media permissions, and install behavior remain open. |

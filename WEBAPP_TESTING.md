@@ -35,6 +35,15 @@ processes have produced engine-level GPU/worker crashes after otherwise passing
 contexts, while the same affected specs pass independently. A process crash is
 still a failed gate; never hide it with Playwright retries.
 
+`tests/service-worker-update.spec.js` creates a private ephemeral instance of
+the production-style origin and exercises a real Chromium worker lifecycle. It
+holds v65 active while v66 waits for explicit user acceptance, checks that HTML
+and JavaScript switch as one generation, confirms only the new cache remains,
+relaunches offline, preserves a real IndexedDB pending send, rolls back to v65,
+and rolls forward to v66 again. Firefox and WebKit intentionally skip this
+service-worker-only case; repeat it on branded and installed browsers in the
+physical matrix rather than weakening that gate.
+
 Branded macOS browser smoke currently covers Chrome and Safari against the
 header-emitting production-style local origin. Chrome covers the install
 affordance in addition to Chats/Mementos navigation, text send, exact-chat URL,
