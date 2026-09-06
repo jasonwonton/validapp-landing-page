@@ -119,6 +119,8 @@ test("production adapter matches rich media, view-once, and chat search contract
             ? { query: "weekend", chats: { items: [], next_cursor: null }, messages: { items: [], next_cursor: null } }
             : url.pathname.endsWith("/stickers")
             ? { stickers: [] }
+            : url.pathname.endsWith("/camera-filters/featured")
+            ? { filters: [] }
             : { media_asset_id: "33333333-3333-3333-3333-333333333333", state: "ready" };
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(payload) });
     });
@@ -142,6 +144,7 @@ test("production adapter matches rich media, view-once, and chat search contract
         await api.startChatMediaViewSession(userId, chatId, "77777777-7777-7777-7777-777777777777");
         await api.getChatViewOnceReceipts(userId, chatId, "44444444-4444-4444-4444-444444444444");
         await api.getStickers();
+        await api.getFeaturedCameraFilters();
         await api.sendChatMessage(userId, chatId, { sticker_id: "88888888-8888-8888-8888-888888888888", client_request_id: "99999999-9999-9999-9999-999999999999" });
     }, { userId: USER_ID, chatId: CHAT_ID });
 
@@ -153,6 +156,7 @@ test("production adapter matches rich media, view-once, and chat search contract
         { method: "POST", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/view-once-sessions/77777777-7777-7777-7777-777777777777/started`, body: null },
         { method: "GET", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/messages/44444444-4444-4444-4444-444444444444/view-once-receipts`, body: null },
         { method: "GET", path: "/api/v1/stickers", body: null },
+        { method: "GET", path: "/api/v1/camera-filters/featured", body: null },
         { method: "POST", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/messages`, body: { sticker_id: "88888888-8888-8888-8888-888888888888", client_request_id: "99999999-9999-9999-9999-999999999999", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } },
     ]);
 });

@@ -19,6 +19,7 @@ import {
     removeChatTextOutbox,
 } from "./outbox.js";
 import { createCallsController } from "../calls/index.js";
+import { createCameraEffectPicker } from "../camera-effects.js";
 import { createMediaOverlayPositioner } from "../media-overlay-positioner.js";
 import { setRuntimeStyles } from "../runtime-style.js";
 
@@ -41,10 +42,14 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     let lastListLoad = 0;
     let activation = null;
     let selectedMementoFile = null;
+    let selectedMementoSourceFile = null;
     let selectedMementoPreview = null;
+    let mementoPreparationGeneration = 0;
     let mementoRequestId = null;
     let selectedChatMedia = null;
+    let selectedChatMediaSourceFile = null;
     let selectedChatMediaPreview = null;
+    let chatMediaPreparationGeneration = 0;
     let chatMediaUploadRequestId = null;
     let chatMediaSendRequestId = null;
     let voiceRecorder = null;
@@ -106,6 +111,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 <header><button type="button" data-close-memento>Cancel</button><strong>Today's Memento</strong><span></span></header>
                 <div class="memento-preview"><span aria-hidden="true">📸</span><p>Capture one real moment from today.</p></div>
                 <input class="memento-file-input" type="file" accept="image/*" capture="environment">
+                <fieldset class="camera-effect-picker hidden" data-memento-effects><legend>Photo effect</legend><div data-camera-effect-options></div><small>Browser Effects bake supported color and lighting into the photo. Face/body-tracked lenses and filtered video remain available in iOS.</small></fieldset>
                 <label>Caption <input class="memento-caption" maxlength="120" placeholder="What are you up to?"></label>
                 <fieldset class="memento-audience"><legend>Share with</legend><div></div></fieldset>
                 <div class="memento-progress hidden"><span></span></div>
@@ -119,6 +125,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 <header><button type="button" data-close-chat-media>Cancel</button><strong>Photo or video</strong><span></span></header>
                 <div class="chat-media-preview"><span aria-hidden="true">＋</span><p>Choose a photo, an MP4 video, or an M4A voice recording.</p></div>
                 <input class="chat-media-file-input" type="file" accept="image/*,video/mp4">
+                <fieldset class="camera-effect-picker hidden" data-chat-media-effects><legend>Photo effect</legend><div data-camera-effect-options></div><small>Browser Effects bake supported color and lighting into the photo. Face/body-tracked lenses and filtered video remain available in iOS.</small></fieldset>
                 <label class="chat-audio-input-label">Voice message <input class="chat-audio-file-input" type="file" accept="audio/mp4,.m4a" capture></label>
                 <button class="chat-voice-record hidden" type="button" data-record-voice>Record voice message</button>
                 <section class="chat-sticker-library"><h2>Saved stickers</h2><div><small>Loading…</small></div></section>
@@ -139,6 +146,16 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     const chatMediaOverlay = createMediaOverlayPositioner({
         preview: $(".chat-media-preview"),
         input: $(".chat-media-overlay"),
+    });
+    const mementoEffectPicker = createCameraEffectPicker({
+        fieldset: $("[data-memento-effects]"),
+        api,
+        onChange: (effect) => reprepareMemento(effect),
+    });
+    const chatMediaEffectPicker = createCameraEffectPicker({
+        fieldset: $("[data-chat-media-effects]"),
+        api,
+        onChange: (effect) => reprepareSelectedChatPhoto(effect),
     });
     const userId = () => getUser()?.id;
     const dailyLedgerEnabled = () => getConfig()?.enable_chat_daily_ledger === true
@@ -745,6 +762,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         renderMementoAudience();
         $(".memento-skip").classList.toggle("hidden", row?.view_gate_locked !== true);
         $("[data-memento-dialog]").showModal();
+        void mementoEffectPicker.load();
     }
 
     function renderMementoAudience() {
@@ -772,19 +790,37 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     async function selectMemento(event) {
         const file = event.target.files?.[0];
         if (!file) return;
+        selectedMementoSourceFile = file;
+        mementoEffectPicker.setMediaKind("photo");
+        await prepareSelectedMemento(file, mementoEffectPicker.value());
+    }
+
+    async function reprepareMemento(effect) {
+        if (!selectedMementoSourceFile) return;
+        await prepareSelectedMemento(selectedMementoSourceFile, effect);
+    }
+
+    async function prepareSelectedMemento(file, photoEffect) {
+        const generation = ++mementoPreparationGeneration;
         $(".memento-status").textContent = "Preparing photo…";
         $(".memento-publish").disabled = true;
+        mementoEffectPicker.setDisabled(true);
         mementoRequestId = null;
         try {
-            selectedMementoFile = await prepareMementoImage(file);
+            const prepared = await prepareMementoImage(file, { photoEffect });
+            if (generation !== mementoPreparationGeneration) return;
+            selectedMementoFile = prepared;
             if (selectedMementoPreview) URL.revokeObjectURL(selectedMementoPreview);
             selectedMementoPreview = URL.createObjectURL(selectedMementoFile);
             $(".memento-preview").innerHTML = `<img src="${escapeChatHTML(selectedMementoPreview)}" alt="Memento preview">`;
             $(".memento-status").textContent = "Ready to share";
             $(".memento-publish").disabled = false;
         } catch (error) {
+            if (generation !== mementoPreparationGeneration) return;
             selectedMementoFile = null;
             $(".memento-status").textContent = error.message || "Could not prepare that photo.";
+        } finally {
+            if (generation === mementoPreparationGeneration) mementoEffectPicker.setDisabled(false);
         }
     }
 
@@ -801,6 +837,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         button.textContent = "Sharing…";
         $(".memento-file-input").disabled = true;
         $(".memento-caption").disabled = true;
+        mementoEffectPicker.setDisabled(true);
         $$(".memento-audience input").forEach((input) => { input.disabled = true; });
         $(".memento-skip").disabled = true;
         $(".memento-progress").classList.remove("hidden");
@@ -839,14 +876,18 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         } finally {
             button.textContent = "Share to this chat";
             button.disabled = !selectedMementoFile;
+            mementoEffectPicker.setDisabled(false);
         }
     }
 
     function resetMementoComposer() {
+        mementoPreparationGeneration += 1;
         selectedMementoFile = null;
+        selectedMementoSourceFile = null;
         mementoRequestId = null;
         if (selectedMementoPreview) URL.revokeObjectURL(selectedMementoPreview);
         selectedMementoPreview = null;
+        mementoEffectPicker.reset();
         $(".memento-file-input").value = "";
         $(".memento-file-input").disabled = false;
         $(".memento-caption").value = "";
@@ -865,6 +906,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         recordButton.classList.toggle("hidden", !compatibleAudioRecordingType());
         $("[data-chat-media-dialog]").showModal();
         void loadStickerLibrary();
+        void chatMediaEffectPicker.load();
     }
 
     async function loadStickerLibrary() {
@@ -912,13 +954,29 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         chatMediaSendRequestId = null;
     }
 
-    async function prepareSelectedChatMedia(file, { durationMsHint = null } = {}) {
+    async function prepareSelectedChatMedia(file, { durationMsHint = null, photoEffect = null, retainSource = false } = {}) {
         if (!file) return;
+        const isPhotoSource = file.type.startsWith("image/");
+        if (!retainSource) {
+            selectedChatMediaSourceFile = isPhotoSource ? file : null;
+            if (!isPhotoSource) chatMediaEffectPicker.reset();
+            $(".chat-media-overlay").value = "";
+            chatMediaOverlay.reset();
+        }
+        const generation = ++chatMediaPreparationGeneration;
         $(".chat-media-status").textContent = "Preparing media…";
         $(".chat-media-publish").disabled = true;
+        $(".chat-media-overlay").disabled = true;
+        chatMediaOverlay.setDisabled(true);
+        chatMediaEffectPicker.setDisabled(true);
         resetChatMediaRequestIds();
         try {
-            selectedChatMedia = await prepareChatMedia(file, { durationMsHint });
+            const prepared = await prepareChatMedia(file, {
+                durationMsHint,
+                photoEffect: isPhotoSource ? (photoEffect || chatMediaEffectPicker.value()) : null,
+            });
+            if (generation !== chatMediaPreparationGeneration) return;
+            selectedChatMedia = prepared;
             if (selectedChatMediaPreview) URL.revokeObjectURL(selectedChatMediaPreview);
             selectedChatMediaPreview = URL.createObjectURL(selectedChatMedia.file);
             $(".chat-media-preview").innerHTML = selectedChatMedia.kind === "audio"
@@ -927,18 +985,29 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 ? `<video src="${escapeChatHTML(selectedChatMediaPreview)}" muted playsinline controls aria-label="Video preview"></video>`
                 : `<img src="${escapeChatHTML(selectedChatMediaPreview)}" alt="Photo preview">`;
             const isAudio = selectedChatMedia.kind === "audio";
+            chatMediaEffectPicker.setMediaKind(selectedChatMedia.kind);
             $("[data-chat-view-once]").checked = false;
             $("[data-chat-view-once]").disabled = isAudio;
-            $(".chat-media-overlay").value = "";
-            $(".chat-media-overlay").disabled = isAudio;
-            chatMediaOverlay.reset();
             chatMediaOverlay.mount();
             $(".chat-media-status").textContent = isAudio ? "Voice message ready to send" : selectedChatMedia.kind === "video" ? "Video ready to send" : "Photo ready to send";
             $(".chat-media-publish").disabled = false;
         } catch (error) {
+            if (generation !== chatMediaPreparationGeneration) return;
             selectedChatMedia = null;
             $(".chat-media-status").textContent = error.message || "Could not prepare that media.";
+        } finally {
+            if (generation === chatMediaPreparationGeneration) {
+                const disableOverlay = selectedChatMedia?.kind === "audio";
+                $(".chat-media-overlay").disabled = disableOverlay;
+                chatMediaOverlay.setDisabled(disableOverlay);
+                chatMediaEffectPicker.setDisabled(false);
+            }
         }
+    }
+
+    async function reprepareSelectedChatPhoto(effect) {
+        if (!selectedChatMediaSourceFile) return;
+        await prepareSelectedChatMedia(selectedChatMediaSourceFile, { photoEffect: effect, retainSource: true });
     }
 
     async function selectChatMedia(event) {
@@ -1049,6 +1118,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         $("[data-chat-view-once]").disabled = true;
         $(".chat-media-overlay").disabled = true;
         chatMediaOverlay.setDisabled(true);
+        chatMediaEffectPicker.setDisabled(true);
         $(".chat-media-progress").classList.remove("hidden");
         $(".chat-media-status").textContent = "Starting secure upload…";
         let recoverySaved = false;
@@ -1096,16 +1166,20 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         } finally {
             button.textContent = "Send";
             button.disabled = !selectedChatMedia;
+            chatMediaEffectPicker.setDisabled(false);
         }
     }
 
     function resetChatMediaComposer() {
+        chatMediaPreparationGeneration += 1;
         stopVoiceRecorder({ discard: true });
         if (!voiceRecorder) clearVoiceRecordingState();
         selectedChatMedia = null;
+        selectedChatMediaSourceFile = null;
         if (selectedChatMediaPreview) URL.revokeObjectURL(selectedChatMediaPreview);
         selectedChatMediaPreview = null;
         chatMediaOverlay.reset();
+        chatMediaEffectPicker.reset();
         resetChatMediaRequestIds();
         $(".chat-media-file-input").value = "";
         $(".chat-media-file-input").disabled = false;

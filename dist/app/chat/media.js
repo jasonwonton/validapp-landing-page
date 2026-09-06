@@ -1,17 +1,19 @@
+import { drawImageWithCameraEffect } from "../camera-effects.js";
+
 const MAX_SOURCE_BYTES = 20 * 1024 * 1024;
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
-export async function prepareMementoImage(file) {
+export async function prepareMementoImage(file, { photoEffect = null } = {}) {
     if (!file || !file.type.startsWith("image/")) throw new Error("Choose a photo to make your Memento.");
     if (file.size > MAX_SOURCE_BYTES) throw new Error("That photo is too large. Choose one under 20 MB.");
-    return prepareJPEG(file, "memento.jpg");
+    return prepareJPEG(file, "memento.jpg", photoEffect);
 }
 
-export async function prepareChatMedia(file, { durationMsHint = null } = {}) {
+export async function prepareChatMedia(file, { durationMsHint = null, photoEffect = null } = {}) {
     if (!file) throw new Error("Choose a photo, MP4 video, or M4A voice recording.");
     if (file.type.startsWith("image/")) {
         if (file.size > MAX_SOURCE_BYTES) throw new Error("That photo is too large. Choose one under 20 MB.");
-        return { kind: "photo", file: await prepareJPEG(file, "chat-photo.jpg"), thumbnail: null, durationMs: null };
+        return { kind: "photo", file: await prepareJPEG(file, "chat-photo.jpg", photoEffect), thumbnail: null, durationMs: null };
     }
     if (file.type === "audio/mp4" || /\.m4a$/i.test(file.name || "")) {
         if (file.size > 4 * 1024 * 1024) throw new Error("Voice messages can be up to 4 MB.");
@@ -44,7 +46,7 @@ async function audioDuration(file) {
     }
 }
 
-async function prepareJPEG(file, filename) {
+async function prepareJPEG(file, filename, photoEffect = null) {
     const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
     try {
         const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
@@ -56,7 +58,7 @@ async function prepareJPEG(file, filename) {
         const context = canvas.getContext("2d", { alpha: false });
         context.fillStyle = "#fff";
         context.fillRect(0, 0, width, height);
-        context.drawImage(bitmap, 0, 0, width, height);
+        drawImageWithCameraEffect(context, bitmap, width, height, photoEffect || undefined);
         let quality = 0.84;
         let blob = await canvasBlob(canvas, quality);
         while (blob.size > MAX_UPLOAD_BYTES && quality > 0.46) {

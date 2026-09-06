@@ -894,6 +894,29 @@ export class DemoAPI {
     async startChatMediaViewSession(_userId, chatId, sessionId) { const session = this.chatViewSessions[sessionId]; const message = this.chatMessages[chatId].find((item) => item.id === session.message_id); if (!session.started) { session.started = true; message.view_once_opened_count += 1; message.view_once_remaining_views = Math.max(0, message.view_once_remaining_views - 1); message.view_once_available = message.view_once_remaining_views > 0; } return { session_id: sessionId, started_at: new Date().toISOString(), newly_started: true, message_id: message.id }; }
     async getChatViewOnceReceipts(_userId, chatId, messageId) { const message = this.chatMessages[chatId].find((item) => item.id === messageId); return { message_id: messageId, opened_count: message.view_once_opened_count || 0, recipient_count: message.view_once_recipient_count || 1, members: [{ user_id: "classmate-2", first_name: "Noah", last_name: "Williams", opened: Number(message.view_once_opened_count || 0) > 0, opened_at: message.view_once_opened_count ? new Date().toISOString() : null, view_count: Number(message.view_once_opened_count || 0) }] }; }
     async getStickers() { return { stickers: [{ id: "sticker-demo", image_url: "../assets/app/rocket.webp", pixel_width: 256, pixel_height: 256, created_at: new Date().toISOString() }] }; }
+    async getFeaturedCameraFilters() {
+        return {
+            filters: [{
+                id: "filter-featured-sunset",
+                name: "Sunset",
+                recipe: {
+                    schema_version: 6,
+                    render_mode: "live_recipe",
+                    saturation: 1.12,
+                    contrast: 1.06,
+                    brightness: 0.015,
+                    wash_opacity: 0.08,
+                    vignette_intensity: 0.08,
+                    background_style: "original",
+                    background_color: "#F29D56",
+                    background_secondary_color: "#EF5275",
+                    shadow_color: "#F29D56",
+                    highlight_color: "#EF5275",
+                },
+                presentation: { minimum_renderer_version: 3 },
+            }],
+        };
+    }
     async setChatMessageReaction(_userId, chatId, messageId, reaction) { const message = this.chatMessages[chatId].find((item) => item.id === messageId); const previous = message.current_user_reaction; if (previous) message.reaction_summary[previous] = Math.max(0, Number(message.reaction_summary[previous] || 0) - 1); if (reaction) message.reaction_summary[reaction] = Number(message.reaction_summary[reaction] || 0) + 1; message.current_user_reaction = reaction; message.reaction_count = Object.values(message.reaction_summary).reduce((sum, count) => sum + count, 0); return structuredClone(message); }
     async getChatMessageReactors(_userId, chatId, messageId) { const message = this.chatMessages[chatId].find((item) => item.id === messageId); const reactions = Object.entries(message?.reaction_summary || {}).flatMap(([reaction_type, count]) => Array.from({ length: Number(count || 0) }, (_, index) => ({ user_id: `reactor-${reaction_type}-${index}`, first_name: index ? "Ava" : "Maya", last_name: index ? "Patel" : "Chen", reaction_type, reacted_at: new Date().toISOString() }))); return reactions; }
     async unsendChatMessage(_userId, chatId, messageId) { const message = this.chatMessages[chatId].find((item) => item.id === messageId); Object.assign(message, { kind: "tombstone", body: null, status: "deleted_by_author", updated_at: new Date().toISOString() }); return structuredClone(message); }

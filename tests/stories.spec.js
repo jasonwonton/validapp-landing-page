@@ -89,6 +89,8 @@ test("a failed Story publish resumes once after reload with its saved request id
     await page.getByRole("button", { name: "Add Story" }).click();
     const composer = page.getByRole("dialog", { name: "Create Story" });
     await composer.locator(".story-file-input").setInputFiles("assets/AppIconV2.png");
+    await composer.getByRole("button", { name: "Warm photo effect" }).click();
+    await expect(composer.getByText("Photo ready to post", { exact: true })).toBeVisible();
     await composer.getByLabel("Text overlay").fill("Recover me");
     const overlayHandle = composer.locator("[data-media-overlay-position]");
     await overlayHandle.press("Shift+ArrowLeft");
@@ -98,8 +100,18 @@ test("a failed Story publish resumes once after reload with its saved request id
     await expect.poll(() => page.evaluate(async () => {
         const { listChatMediaOutbox } = await import("/app/chat/outbox.js");
         const record = (await listChatMediaOutbox("demo-user")).find((item) => item.kind === "story");
-        return record?.overlay;
-    })).toEqual({ text: "Recover me", x: 0.4, y: 0.6 });
+        return record ? {
+            overlay: record.overlay,
+            fileType: record.file.type,
+            fileName: record.file.name,
+            hasEffectMetadata: Object.hasOwn(record, "photo_effect"),
+        } : null;
+    })).toEqual({
+        overlay: { text: "Recover me", x: 0.4, y: 0.6 },
+        fileType: "image/jpeg",
+        fileName: "chat-photo.jpg",
+        hasEffectMetadata: false,
+    });
     await expect.poll(() => page.evaluate(() => localStorage.getItem("valid:demo-story-failed-once"))).toBe("1");
     await page.reload();
     await page.getByRole("button", { name: /^sign in$/i }).click();

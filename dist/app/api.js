@@ -958,6 +958,10 @@ export class ValidAPI {
         return this.request("/stickers");
     }
 
+    getFeaturedCameraFilters() {
+        return this.request("/camera-filters/featured");
+    }
+
     setChatMessageReaction(userId, chatId, messageId, reactionType) {
         return this.request(`/users/${userId}/chats/${chatId}/messages/${messageId}/reaction`, {
             method: "PUT",

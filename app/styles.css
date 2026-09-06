@@ -59,6 +59,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .media-overlay-positioner { position: absolute; z-index: 4; max-width: 82%; min-height: 44px; padding: 7px 11px; border: 1px dashed rgba(255,255,255,.82); border-radius: 10px; background: rgba(5,9,20,.46); color: #fff; font-size: clamp(.9rem, 4vw, 1.35rem); font-weight: 800; line-height: 1.15; overflow-wrap: anywhere; text-align: center; text-shadow: 0 1px 3px rgba(0,0,0,.85); touch-action: none; cursor: move; transform: translate(-50%, -50%); }
 .media-overlay-positioner:disabled { opacity: .72; cursor: default; }
 .hidden { display: none !important; }
+
+.camera-effect-picker { min-width: 0; display: grid; gap: 7px; margin: 0; padding: 0; border: 0; }
+.camera-effect-picker legend { padding: 0; font-size: .8rem; }
+.camera-effect-picker > div { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 5px; scrollbar-width: none; scroll-snap-type: x proximity; }
+.camera-effect-picker > div::-webkit-scrollbar { display: none; }
+.camera-effect-picker button { flex: 0 0 62px; min-height: 72px; display: grid; justify-items: center; align-content: center; gap: 3px; padding: 5px 3px; border: 1px solid var(--line); border-radius: 14px; background: var(--white); color: var(--ink); scroll-snap-align: start; }
+.camera-effect-picker button > span { width: 38px; height: 38px; display: grid; place-items: center; border: 2px solid rgba(5,9,20,.2); border-radius: 50%; background: linear-gradient(135deg, var(--aqua), var(--peach)); font-size: 1rem; font-weight: 900; }
+.camera-effect-picker button small { width: 56px; overflow: hidden; font-size: .64rem; text-overflow: ellipsis; white-space: nowrap; }
+.camera-effect-picker button.selected { border-color: var(--ink); box-shadow: 0 0 0 2px var(--peach); }
+.camera-effect-picker button:disabled { opacity: .58; }
+.camera-effect-picker > small { color: var(--muted); font-size: .68rem; line-height: 1.35; }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden !important; clip: rect(0 0 0 0) !important; clip-path: inset(50%) !important; white-space: nowrap !important; }
 
 .panel:not(.hidden) { animation: panel-in .22s cubic-bezier(.2, .8, .2, 1); }

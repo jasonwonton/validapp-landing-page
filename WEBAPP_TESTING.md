@@ -157,15 +157,20 @@ Firefox, and Safari where the capability is supported:
    cancel permissions, lose connectivity during upload, refresh, close the tab,
    and reopen. Verify one publish with the original request ID, local date/DST
    history, reciprocity, cross-device unlock, and that locked message bodies
-   never enter the DOM. Record the deliberate single-image web alternative to
-   iOS's front/rear composite.
+   never enter the DOM. Apply an offline photo Effect and one compatible
+   server-managed Featured treatment; verify the selected pixels—not the source
+   file—enter the bounded JPEG upload. Record the deliberate single-image web
+   alternative to iOS's front/rear composite.
 6. Send persistent and view-once photos twice, a device-decodable MP4, a live
    voice recording where the browser advertises MP4 audio, an imported M4A
    fallback, a saved sticker, and a centered overlay. Deny microphone permission
    once and verify the M4A alternative remains usable. Verify authoritative
    view sessions and sender receipts, safe rejection of undecodable/oversize
    media before upload, exact replies/reactions, and one resumed send after
-   refresh. Search for a message and open its exact result; change a group photo.
+   refresh. Apply an offline Effect and a compatible Featured treatment to a
+   photo and verify the preview matches the received pixels. Confirm the picker
+   stays bounded and explains that tracked lenses/video remain in iOS. Search
+   for a message and open its exact result; change a group photo.
 7. With Stories enabled, open photo and video Stories and confirm a view is sent
    only after media reveals. As an owner inspect viewers and delete; as another
    account report. Publish a photo and device-compatible MP4, interrupt and
@@ -173,7 +178,8 @@ Firefox, and Safari where the capability is supported:
    classmates, and open the exact Story link after cold sign-in. Confirm shared
    Story cards still obey chat reciprocity. Verify signed Story URLs are never
    prefetched or present in Cache Storage; record registered-contact sharing and
-   richer overlay editing as current web gaps.
+   richer overlay editing as current web gaps. Apply a photo Effect before one
+   publish and confirm retry stores only the already-baked bounded JPEG.
 8. With calls enabled, place and receive one voice and one video call between
    web and the current iOS build. Deny each permission before a start/accept;
    verify no stranded ringing call. Exercise accept, decline, mute, camera slot
@@ -194,7 +200,8 @@ Firefox, and Safari where the capability is supported:
    open receipt is recorded after cold sign-in. Send a feedback response and
    verify it opens the exact bounded thread without caching it. A
    camera-filter-ready push may open Chats, but must not claim an exact web
-   filter editor while that matrix row remains Missing. With web comments
+   editor for the dormant AI-creation flow; compatible approved treatments may
+   appear only through a later authenticated Featured catalog read. With web comments
    enabled, create a poll root/reply and TBH root/reply, react from the other
    account, and verify each notification opens and highlights the exact
    authorized `comment_id`; report/delete a root and reply, acknowledge a
