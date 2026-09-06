@@ -60,14 +60,14 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | View-once replay rules and receipts | Equivalent | Not yet tested | Session start occurs only after successful reveal, the server owns the two-open allowance, and sender receipts use the authoritative endpoint. Final-origin two-device proof remains. |
 | Screenshot detection | Native-only | Not yet tested | Web cannot reliably detect screenshots. It truthfully exposes capture receipts recorded by native clients and can receive their exact Story-capture push. |
 | Screen-recording detection | Native-only | Not yet tested | Same deliberate alternative for native-recorded capture receipts; no false browser security claim. |
-| Text/media overlays | Partial | Not yet tested | Centered accessible text overlays round-trip through the server; iOS-style positioning/editor gestures are absent. |
+| Text/media overlays | Equivalent | Not yet tested | Chat and Story overlays round-trip bounded server coordinates, support clamped pointer/touch dragging plus keyboard positioning and Home-to-center, and preserve exact text/position through durable retry. Four-project send, render, and recovery journeys pass; physical touch and screen-reader review remain. |
 | Voice messages | Partial | Not yet tested | Compatible browsers record MP4 audio locally with a five-minute ceiling; every browser retains M4A selection/capture, duration validation, private upload, playback, and recovery. Waveform editing and physical permission UX remain. |
 | Stickers | Partial | Not yet tested | Saved-sticker picker and idempotent send are automated; sticker creation remains in the iOS camera editor. |
 | Live camera filters / saved-filter gallery | Missing | Not yet tested | iOS can create, save, share, and apply server-compiled live filters. The PWA has no reliable camera-filter editor or renderer yet; its filter-ready Web Push deliberately opens Chats instead of claiming an exact web editor. |
 | Story rail, photo viewing, and view state | Equivalent | Not yet tested | Independently web-gated rail uses signed authoritative media and records a view only after reveal; four-project browser automation passes, while final-origin and physical-device proof remain. |
 | Story video viewing | Partial | Not yet tested | The same signed viewer supports controlled playback, but browser/device codec support must be proven and there is no safe universal web transcode. |
 | Story viewers, delete, and report | Equivalent | Not yet tested | Owner viewer/delete and non-owner moderation routes use the released contracts; production moderation and two-account smoke remain. |
-| Story creation/editor/publishing | Partial | Not yet tested | Photo/codec-compatible MP4 preparation, private upload/finalize, caption, centered overlay, stable publish IDs, and bounded reopen recovery are implemented. Multi-clip capture and gesture positioning remain iOS-only today. |
+| Story creation/editor/publishing | Partial | Not yet tested | Photo/codec-compatible MP4 preparation, private upload/finalize, caption, draggable/keyboard-positioned overlay, stable publish IDs, and bounded reopen recovery are implemented. Multi-clip capture remains iOS-only today. |
 | Story reply/share | Partial | Not yet tested | Text replies and up-to-10 classmate shares create or reuse authoritative chats with stable request IDs; iOS additionally offers registered-contact sharing for the Story owner, and physical two-account smoke remains. |
 | Conversation/inbox search | Equivalent | Not yet tested | Explicit bounded server search opens exact chats/messages; automation passes. |
 | Media recovery after refresh/network loss | Equivalent | Not yet tested | User-scoped IndexedDB retains at most 3 uploads/user and 10 globally for 24 hours, attempts at most 4 times, and reuses upload/send IDs. Mementos expire at the local day boundary rather than posting on the wrong day. Reopen delivery is automated; physical loss/recovery remains. |
@@ -120,7 +120,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Accessibility semantics/focus | Partial | Not yet tested | Labels, live regions, reduced motion, and touch targets exist; screen-reader and contrast audit remain. |
 | Offline shell/installability | Equivalent | Not yet tested | Manifest/service-worker shell tests pass; installed physical-device update/reopen remains. |
 | Offline private-data isolation | Equivalent | Not yet tested | No authenticated API/media response enters Cache Storage; scoped snapshots/outbox are cleared at account exit. |
-| Predictable app updates | Partial | Not yet tested | v58 carries the audited notification destinations, streak-open receipt, and gated poll/TBH comments while keeping telemetry/cache versions synchronized; waiting-worker rollback/update soak remains. |
+| Predictable app updates | Partial | Not yet tested | v59 carries the audited notification destinations, streak-open receipt, gated poll/TBH comments, and positioned media overlays while keeping telemetry/cache versions synchronized; waiting-worker rollback/update soak remains. |
 | Strict CSP runtime behavior | Equivalent | Not yet tested | Response and meta policies keep `style-src 'self'` without `unsafe-inline`; bounded same-origin CSSOM rules cover dynamic progress, overlays, viewport, crop, and drag state in all four lab projects. Final-origin header verification remains. |
 | Dark Mode | Equivalent | Not yet tested | System color scheme now drives the core shell, Chats, Mementos, forms, and dialogs; automated computed-style check plus visual/accessibility review remain. |
 | Haptics | Partial | Not yet tested | Android vibration is progressive enhancement; precise native haptic parity is unavailable. |
@@ -148,9 +148,10 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 ## Device and evidence ledger
 
 Current candidate evidence: `npm run build`, UI runtime checks, and performance
-budgets pass. The candidate code completed locally with **677 passed, 3
-expected non-Android skips, 0 failed, and no retries** across Pixel 7 Chromium,
-Desktop Chrome, Desktop Firefox, and Desktop WebKit. The feature commit's
+budgets pass. The candidate code completed locally with **679 passed, 5
+intentional project-capability skips, 0 failed, and no retries** across Pixel 7
+Chromium, Desktop Chrome, Desktop Firefox, and Desktop WebKit. The preceding
+v58 feature commit's
 [hosted run 34001340467](https://github.com/jasonwonton/validapp-landing-page/actions/runs/34001340467)
 passed static release checks and all four isolated browser jobs. The
 non-Chromium projects block service workers because
@@ -182,7 +183,9 @@ limits. The
 scoped backend chat/Memento/Story/Web Push/config safety run is **273 passed, 0
 failed**; the latest current-tree affected notification/comment/lifecycle/call/
 config run is **316 passed, 0 failed**. These are lab results, not production or
-physical-device approval.
+physical-device approval. The v59 candidate additionally proves that an
+installed Chromium shell can cold-reload offline and open the previously
+unvisited Chats/media-overlay route entirely from the bounded static cache.
 
 | Target | State | Required before release |
 | --- | --- | --- |
@@ -201,7 +204,7 @@ physical-device approval.
 
 ## Release decision
 
-**Current decision: NO-GO for public exposure.** The core Chats/Mementos, photo communication, compatible voice recording, Story, and open-app call implementation is a credible staging candidate, but physical-device, final-origin, SSE failure, notification destination, codec-dependent video, live camera filters, richer Story editing/contact sharing, and real two-account LiveKit gates are still open.
+**Current decision: NO-GO for public exposure.** The core Chats/Mementos, photo communication, compatible voice recording, Story, and open-app call implementation is a credible staging candidate, but physical-device, final-origin, SSE failure, notification destination, codec-dependent video, live camera filters, multi-clip Story/contact sharing, and real two-account LiveKit gates are still open.
 
 The read-only production preflight currently passes the manifest/service worker,
 related-origin passkey, and API/CORS checks, but fails the app-shell security

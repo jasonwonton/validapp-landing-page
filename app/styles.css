@@ -56,6 +56,8 @@ button, a { touch-action: manipulation; }
 button:not(:disabled), a, [role="button"] { -webkit-tap-highlight-color: transparent; }
 [role="button"]:active { transform: scale(.985); }
 button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid rgba(0, 63, 66, .42); outline-offset: 3px; }
+.media-overlay-positioner { position: absolute; z-index: 4; max-width: 82%; min-height: 44px; padding: 7px 11px; border: 1px dashed rgba(255,255,255,.82); border-radius: 10px; background: rgba(5,9,20,.46); color: #fff; font-size: clamp(.9rem, 4vw, 1.35rem); font-weight: 800; line-height: 1.15; overflow-wrap: anywhere; text-align: center; text-shadow: 0 1px 3px rgba(0,0,0,.85); touch-action: none; cursor: move; transform: translate(-50%, -50%); }
+.media-overlay-positioner:disabled { opacity: .72; cursor: default; }
 .hidden { display: none !important; }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden !important; clip: rect(0 0 0 0) !important; clip-path: inset(50%) !important; white-space: nowrap !important; }
 

@@ -152,7 +152,7 @@
 .chat-reactors-list { display: grid; gap: 2px; }
 .chat-reactors-list > div { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 4px; border-bottom: 1px solid rgba(5,9,20,.12); }
 .chat-reactors-list b { font-size: 1.25rem; }
-.memento-preview, .chat-media-preview { aspect-ratio: 4 / 5; display: grid; align-content: center; justify-items: center; gap: 10px; overflow: hidden; border: 3px solid var(--ink); border-radius: 22px; background: #e6ffff; text-align: center; }
+.memento-preview, .chat-media-preview { position: relative; aspect-ratio: 4 / 5; display: grid; align-content: center; justify-items: center; gap: 10px; overflow: hidden; border: 3px solid var(--ink); border-radius: 22px; background: #e6ffff; text-align: center; }
 .memento-preview span { font-size: 4rem; }
 .memento-preview p { margin: 0; color: var(--muted); }
 .memento-preview img { width: 100%; height: 100%; object-fit: cover; }

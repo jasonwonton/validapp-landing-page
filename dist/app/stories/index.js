@@ -8,6 +8,7 @@ import {
     removeChatMediaOutbox,
 } from "../chat/outbox.js";
 import { setRuntimeStyles } from "../runtime-style.js";
+import { createMediaOverlayPositioner } from "../media-overlay-positioner.js";
 
 const REFRESH_MS = 30_000;
 const MAX_RECORDED_VIEWS = 200;
@@ -69,7 +70,7 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
                 <div class="story-composer-preview"><span aria-hidden="true">＋</span><p>Choose a photo or an MP4 video.</p></div>
                 <input class="story-file-input" type="file" accept="image/*,video/mp4" capture="environment">
                 <label>Caption <input class="story-caption" type="text" maxlength="120" placeholder="Optional caption"></label>
-                <label>Text overlay <input class="story-overlay" type="text" maxlength="160" placeholder="Optional centered text"></label>
+                <label>Text overlay <input class="story-overlay" type="text" maxlength="160" placeholder="Optional text — drag it in the preview"></label>
                 <div class="story-upload-progress hidden"><span></span></div>
                 <p class="story-composer-status" role="status"></p>
                 <button class="primary-button story-publish" type="submit" disabled>Post Story</button>
@@ -86,6 +87,10 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
         </dialog>`;
 
     const $ = (selector) => root.querySelector(selector);
+    const storyOverlay = createMediaOverlayPositioner({
+        preview: $(".story-composer-preview"),
+        input: $(".story-overlay"),
+    });
     root.addEventListener("click", handleClick);
     $(".story-file-input").addEventListener("change", selectStoryMedia);
     $(".story-composer form").addEventListener("submit", publishSelectedStory);
@@ -304,6 +309,8 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
             $(".story-composer-preview").innerHTML = selectedStoryMedia.kind === "video"
                 ? `<video src="${escapeHTML(selectedStoryPreview)}" muted playsinline controls aria-label="Story video preview"></video>`
                 : `<img src="${escapeHTML(selectedStoryPreview)}" alt="Story photo preview" decoding="async">`;
+            storyOverlay.reset();
+            storyOverlay.mount();
             $(".story-composer-status").textContent = `${selectedStoryMedia.kind === "video" ? "Video" : "Photo"} ready to post`;
             $(".story-publish").disabled = false;
         } catch (error) {
@@ -342,6 +349,7 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
         const button = $(".story-publish");
         storyUploadRequestId ||= crypto.randomUUID();
         storyPublishRequestId ||= crypto.randomUUID();
+        const overlayPosition = storyOverlay.value();
         const record = {
             id: `${getUser().id}:story:${storyUploadRequestId}`,
             user_id: getUser().id,
@@ -351,12 +359,13 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
             content_type: selectedStoryMedia.file.type,
             duration_ms: selectedStoryMedia.durationMs,
             caption: $(".story-caption").value.trim() || null,
-            overlay: $(".story-overlay").value.trim() ? { text: $(".story-overlay").value.trim(), x: 0.5, y: 0.5 } : null,
+            overlay: $(".story-overlay").value.trim() ? { text: $(".story-overlay").value.trim(), ...overlayPosition } : null,
             upload_request_id: storyUploadRequestId,
             publish_request_id: storyPublishRequestId,
         };
         button.disabled = true;
         button.textContent = "Posting…";
+        storyOverlay.setDisabled(true);
         $(".story-upload-progress").classList.remove("hidden");
         let saved = false;
         try {
@@ -427,6 +436,7 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
         selectedStoryMedia = null;
         if (selectedStoryPreview) URL.revokeObjectURL(selectedStoryPreview);
         selectedStoryPreview = null;
+        storyOverlay.reset();
         storyUploadRequestId = null;
         storyPublishRequestId = null;
         $(".story-file-input").value = "";

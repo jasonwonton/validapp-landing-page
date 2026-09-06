@@ -58,9 +58,29 @@ test("Story composer prepares and publishes a photo through the feature-gated su
     await expect(composer.getByText("Photo ready to post")).toBeVisible();
     await composer.getByLabel("Caption").fill("After practice");
     await composer.getByLabel("Text overlay").fill("finally ✨");
+    const overlayHandle = composer.locator("[data-media-overlay-position]");
+    await expect(overlayHandle).toHaveAccessibleName(/50% from left, 50% from top/);
+    await overlayHandle.press("ArrowLeft");
+    await overlayHandle.press("Shift+ArrowUp");
+    await expect(overlayHandle).toHaveAccessibleName(/48% from left, 40% from top/);
     await composer.getByRole("button", { name: "Post Story" }).click();
     await expect(composer).toBeHidden();
     await expect(page.getByText("Story posted", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Your Story", exact: true }).click();
+    const viewer = page.getByRole("dialog", { name: "Story viewer" });
+    await viewer.getByRole("button", { name: "Next Story" }).click();
+    const renderedOverlay = viewer.locator(".story-text-overlay");
+    await expect(renderedOverlay).toHaveText("finally ✨");
+    const renderedPosition = await renderedOverlay.evaluate((node) => {
+        const media = node.parentElement.getBoundingClientRect();
+        const overlay = node.getBoundingClientRect();
+        return {
+            x: (overlay.left + overlay.width / 2 - media.left) / media.width,
+            y: (overlay.top + overlay.height / 2 - media.top) / media.height,
+        };
+    });
+    expect(renderedPosition.x).toBeCloseTo(0.48, 2);
+    expect(renderedPosition.y).toBeCloseTo(0.4, 2);
 });
 
 test("a failed Story publish resumes once after reload with its saved request identity", async ({ page }) => {
@@ -69,8 +89,17 @@ test("a failed Story publish resumes once after reload with its saved request id
     await page.getByRole("button", { name: "Add Story" }).click();
     const composer = page.getByRole("dialog", { name: "Create Story" });
     await composer.locator(".story-file-input").setInputFiles("assets/AppIconV2.png");
+    await composer.getByLabel("Text overlay").fill("Recover me");
+    const overlayHandle = composer.locator("[data-media-overlay-position]");
+    await overlayHandle.press("Shift+ArrowLeft");
+    await overlayHandle.press("Shift+ArrowDown");
     await composer.getByRole("button", { name: "Post Story" }).click();
     await expect(composer.getByText(/Temporary Story outage.*saved on this device/)).toBeVisible();
+    await expect.poll(() => page.evaluate(async () => {
+        const { listChatMediaOutbox } = await import("/app/chat/outbox.js");
+        const record = (await listChatMediaOutbox("demo-user")).find((item) => item.kind === "story");
+        return record?.overlay;
+    })).toEqual({ text: "Recover me", x: 0.4, y: 0.6 });
     await expect.poll(() => page.evaluate(() => localStorage.getItem("valid:demo-story-failed-once"))).toBe("1");
     await page.reload();
     await page.getByRole("button", { name: /^sign in$/i }).click();

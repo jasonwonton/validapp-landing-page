@@ -19,6 +19,7 @@ import {
     removeChatTextOutbox,
 } from "./outbox.js";
 import { createCallsController } from "../calls/index.js";
+import { createMediaOverlayPositioner } from "../media-overlay-positioner.js";
 import { setRuntimeStyles } from "../runtime-style.js";
 
 const REFRESH_MS = 30_000;
@@ -122,7 +123,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 <button class="chat-voice-record hidden" type="button" data-record-voice>Record voice message</button>
                 <section class="chat-sticker-library"><h2>Saved stickers</h2><div><small>Loading…</small></div></section>
                 <label class="chat-media-option"><input type="checkbox" data-chat-view-once> View once <small>Recipients can open it twice.</small></label>
-                <label>Text overlay <input class="chat-media-overlay" type="text" maxlength="160" placeholder="Optional centered text"></label>
+                <label>Text overlay <input class="chat-media-overlay" type="text" maxlength="160" placeholder="Optional text — drag it in the preview"></label>
                 <div class="chat-media-progress hidden"><span></span></div>
                 <p class="chat-media-status" role="status"></p>
                 <button class="primary-button chat-media-publish" type="submit" disabled>Send</button>
@@ -135,6 +136,10 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
 
     const $ = (selector) => root.querySelector(selector);
     const $$ = (selector) => [...root.querySelectorAll(selector)];
+    const chatMediaOverlay = createMediaOverlayPositioner({
+        preview: $(".chat-media-preview"),
+        input: $(".chat-media-overlay"),
+    });
     const userId = () => getUser()?.id;
     const dailyLedgerEnabled = () => getConfig()?.enable_chat_daily_ledger === true
         && getConfig()?.enable_web_mementos === true;
@@ -926,6 +931,8 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             $("[data-chat-view-once]").disabled = isAudio;
             $(".chat-media-overlay").value = "";
             $(".chat-media-overlay").disabled = isAudio;
+            chatMediaOverlay.reset();
+            chatMediaOverlay.mount();
             $(".chat-media-status").textContent = isAudio ? "Voice message ready to send" : selectedChatMedia.kind === "video" ? "Video ready to send" : "Photo ready to send";
             $(".chat-media-publish").disabled = false;
         } catch (error) {
@@ -1032,6 +1039,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         const button = $(".chat-media-publish");
         const viewOnce = selectedChatMedia.kind !== "audio" && $("[data-chat-view-once]").checked;
         const overlayText = selectedChatMedia.kind === "audio" ? "" : $(".chat-media-overlay").value.trim();
+        const overlayPosition = chatMediaOverlay.value();
         chatMediaUploadRequestId ||= crypto.randomUUID();
         chatMediaSendRequestId ||= crypto.randomUUID();
         button.disabled = true;
@@ -1040,6 +1048,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         $(".chat-audio-file-input").disabled = true;
         $("[data-chat-view-once]").disabled = true;
         $(".chat-media-overlay").disabled = true;
+        chatMediaOverlay.setDisabled(true);
         $(".chat-media-progress").classList.remove("hidden");
         $(".chat-media-status").textContent = "Starting secure upload…";
         let recoverySaved = false;
@@ -1054,7 +1063,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 content_type: selectedChatMedia.file.type,
                 duration_ms: selectedChatMedia.durationMs,
                 view_once: viewOnce,
-                overlay: overlayText ? { text: overlayText, x: 0.5, y: 0.5 } : null,
+                overlay: overlayText ? { text: overlayText, ...overlayPosition } : null,
                 reply_to_message_id: store.state.replyToMessageId || null,
                 upload_request_id: chatMediaUploadRequestId,
                 send_request_id: chatMediaSendRequestId,
@@ -1096,6 +1105,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         selectedChatMedia = null;
         if (selectedChatMediaPreview) URL.revokeObjectURL(selectedChatMediaPreview);
         selectedChatMediaPreview = null;
+        chatMediaOverlay.reset();
         resetChatMediaRequestIds();
         $(".chat-media-file-input").value = "";
         $(".chat-media-file-input").disabled = false;

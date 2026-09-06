@@ -212,6 +212,27 @@ test("android shell surfaces connectivity and install affordances", async ({ pag
     await expect(page.getByRole("button", { name: "Install Valid" })).toBeHidden();
 });
 
+test("installed Chromium shell opens a previously unvisited Chats overlay journey offline", async ({ page, context, browserName }) => {
+    test.skip(browserName !== "chromium", "Service workers are intentionally blocked in this project");
+    await page.goto("/app/");
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.reload();
+    await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
+    await page.goto("/app/?demo=1&signin=1");
+    await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
+    await context.setOffline(true);
+    await page.reload();
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await page.getByRole("button", { name: "Chats", exact: true }).click();
+    await page.getByRole("button", { name: /Noah Williams/ }).click();
+    await page.getByRole("button", { name: "Send media or a sticker" }).click();
+    const dialog = page.getByRole("dialog", { name: "Send media" });
+    await dialog.locator(".chat-media-file-input").setInputFiles("assets/AppIconV2.png");
+    await dialog.getByLabel("Text overlay").fill("Offline draft");
+    await expect(dialog.locator("[data-media-overlay-position]")).toHaveAccessibleName(/50% from left, 50% from top/);
+    await context.setOffline(false);
+});
+
 test("Android landing handoff requires native installation before signup", async ({ page }) => {
     await page.addInitScript(() => {
         Object.defineProperty(navigator, "userAgent", {
