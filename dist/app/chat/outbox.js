@@ -200,8 +200,10 @@ async function prune(now = Date.now()) {
     if (ids.size) await withStore("readwrite", (store) => Promise.all([...ids].map((id) => requestResult(store.delete(id)))));
 }
 
-export async function putChatTextOutbox({ userId, chatId, clientRequestId, body, replyToMessageId = null }) {
-    if (!userId || !chatId || !clientRequestId || !String(body || "").trim()) return null;
+export async function putChatTextOutbox({ userId, chatId, clientRequestId, body, replyToMessageId = null, dailyEntryId = null }) {
+    const normalizedBody = String(body || "").trim().slice(0, 2000);
+    const normalizedDailyEntryId = dailyEntryId ? String(dailyEntryId) : null;
+    if (!userId || !chatId || !clientRequestId || (!normalizedBody && !normalizedDailyEntryId)) return null;
     const id = recordId(userId, clientRequestId);
     const previous = await withStore("readonly", (store) => requestResult(store.get(id))).catch(() => null);
     const now = Date.now();
@@ -212,8 +214,9 @@ export async function putChatTextOutbox({ userId, chatId, clientRequestId, body,
         user_id: String(userId),
         chat_id: String(chatId),
         client_request_id: String(clientRequestId),
-        body: String(body).trim().slice(0, 2000),
+        body: normalizedBody,
         reply_to_message_id: replyToMessageId ? String(replyToMessageId) : null,
+        daily_entry_id: normalizedDailyEntryId,
         created_at: createdAt,
         attempts: Number(previous?.attempts || 0),
         next_attempt_at: Number(previous?.next_attempt_at || 0),

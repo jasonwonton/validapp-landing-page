@@ -47,7 +47,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Skip Memento for today | Equivalent | Not yet tested | Uses the same authoritative daily-row skip endpoint and unlocks without fabricating a post. |
 | Seven-day Memento history | Equivalent | Not yet tested | Date rail and historical rows are automated indirectly; timezone/DST physical tests remain. |
 | Chat-scoped Memento audience | Equivalent | Not yet tested | iOS and the authoritative `DailyEntryPublishRequest` permit exactly one active chat per Memento. The PWA labels that destination, sends one `chat_id`, and rejects accidental multi-chat payloads before network I/O; contract and browser coverage pass. |
-| Reshare an existing Memento | Partial | Not yet tested | Gallery Share sends the authoritative daily entry with a stable request ID; iOS additionally supports holding it as a composer draft with optional text. |
+| Reshare an existing Memento | Equivalent | Not yet tested | Gallery Share stages the authoritative entry as a removable thumbnail draft, supports optional text and reply context, and sends through the bounded outbox with one stable request ID. Reload recovery persists only the entry ID and text, never a signed/private image URL; four-project UI, contract, and recovery coverage passes. Physical interruption testing remains. |
 | Reply/react from Memento gallery | Equivalent | Not yet tested | Gallery resolves the authoritative chat message before creating a reply or reaction; automation passes. |
 
 ## Rich communication
@@ -121,7 +121,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Accessibility semantics/focus | Partial | Not yet tested | Labels, live regions, reduced motion, and touch targets exist; screen-reader and contrast audit remain. |
 | Offline shell/installability | Equivalent | Not yet tested | Manifest/service-worker shell tests pass; installed physical-device update/reopen remains. |
 | Offline private-data isolation | Equivalent | Not yet tested | No authenticated API/media response enters Cache Storage; scoped snapshots/outbox are cleared at account exit. |
-| Predictable app updates | Partial | Not yet tested | v62 adds the dual-view Memento browser alternative while preserving the exact-one-chat contract, bounded recovery, audited notification destinations, comments, and positioned overlays; telemetry/cache versions remain synchronized. Waiting-worker rollback/update soak remains. |
+| Predictable app updates | Partial | Not yet tested | v63 adds durable draft-first Memento resharing while preserving the exact-one-chat contract, bounded recovery, audited notification destinations, comments, positioned overlays, and dual-view capture; telemetry/cache versions remain synchronized. Waiting-worker rollback/update soak remains. |
 | Strict CSP runtime behavior | Equivalent | Not yet tested | Response and meta policies keep `style-src 'self'` without `unsafe-inline`; bounded same-origin CSSOM rules cover dynamic progress, overlays, viewport, crop, and drag state in all four lab projects. Final-origin header verification remains. |
 | Dark Mode | Equivalent | Not yet tested | System color scheme now drives the core shell, Chats, Mementos, forms, and dialogs; automated computed-style check plus visual/accessibility review remain. |
 | Haptics | Partial | Not yet tested | Android vibration is progressive enhancement; precise native haptic parity is unavailable. |
@@ -149,7 +149,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 ## Device and evidence ledger
 
 Current candidate evidence: `npm run build`, UI runtime checks, and performance
-budgets pass. The candidate's **708-case** lab matrix contains **703 passing
+budgets pass. The candidate's **712-case** lab matrix contains **707 passing
 tests and 5 intentional project-capability skips** across Pixel 7 Chromium,
 Desktop Chrome, Desktop Firefox, and Desktop WebKit. Android, Chrome, and
 Firefox completed as full no-retry projects. Every applicable WebKit case also
@@ -188,7 +188,7 @@ limits. The
 scoped backend chat/Memento/Story/Web Push/config safety run is **273 passed, 0
 failed**; the latest current-tree affected notification/comment/lifecycle/call/
 config run is **316 passed, 0 failed**. These are lab results, not production or
-physical-device approval. The v62 candidate additionally proves that an
+physical-device approval. The v63 candidate additionally proves that an
 installed Chromium shell can cold-reload offline and open the previously
 unvisited Chats/media-overlay route entirely from the bounded static cache and
 that photo Effects are locally baked into the bounded JPEG before durable retry.
@@ -197,6 +197,10 @@ the composer visibly scopes each publish to the active chat. Sequential rear and
 front sources produce two swappable 1080×1440 composites; contract automation
 proves both upload before one finalize/publish, and reload coverage proves the
 bounded private outbox hydrates the secondary JPEG.
+Existing Mementos now enter the same draft-first composer model as iOS: the
+thumbnail is removable, text and reply context are optional, and the eventual
+message persists the authoritative entry ID plus one stable request ID across
+reload. Signed/private preview URLs remain memory-only.
 
 | Target | State | Required before release |
 | --- | --- | --- |

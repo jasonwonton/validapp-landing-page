@@ -25,7 +25,8 @@ async function mountRecoveryChat(page, shouldFail) {
                 return {
                     id: "server-message", chat_id: chatId, room_sequence: 1,
                     sender_user_id: user.id, sender_first_name: user.first_name,
-                    viewer_is_sender: true, kind: "text", body: payload.body,
+                    viewer_is_sender: true, kind: payload.daily_entry_id ? "memento" : "text", body: payload.body,
+                    daily_entry_id: payload.daily_entry_id || null,
                     client_request_id: payload.client_request_id, status: "active",
                     created_at: new Date().toISOString(),
                 };
@@ -83,3 +84,30 @@ test("a failed chat text resumes after reload with the same idempotency key", as
     expect(recovered.requests[0].client_request_id).toBe(failed.requests[0].client_request_id);
 });
 
+test("a staged Memento share resumes once with its text and authoritative entry ID", async ({ page }) => {
+    await page.goto("/app/?signin=1");
+    await page.evaluate(async () => {
+        const outbox = await import("/app/chat/outbox.js");
+        await outbox.clearChatTextOutbox("recovery-user");
+        await outbox.putChatTextOutbox({
+            userId: "recovery-user",
+            chatId: "recovery-chat",
+            clientRequestId: "stable-memento-reshare",
+            body: "Recovered memory",
+            dailyEntryId: "entry-authoritative",
+        });
+    });
+
+    await page.reload();
+    const recovered = await mountRecoveryChat(page, false);
+    expect(recovered.sentText).toContain("Memento");
+    expect(recovered.sentText).toContain("Recovered memory");
+    expect(recovered.records).toHaveLength(0);
+    expect(recovered.requests).toEqual([{
+        chatId: "recovery-chat",
+        body: "Recovered memory",
+        daily_entry_id: "entry-authoritative",
+        reply_to_message_id: null,
+        client_request_id: "stable-memento-reshare",
+    }]);
+});

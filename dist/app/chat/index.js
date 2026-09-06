@@ -78,9 +78,10 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     const viewOnceSessionByMessage = new Map();
     const viewOnceRequestByMessage = new Map();
     const stickerRequestById = new Map();
-    const mementoShareRequestByEntry = new Map();
+    let sharedMementoDraft = null;
     let viewedMessageId = null;
     let viewedMementoEntryId = null;
+    let viewedMementoOwner = null;
     let viewedMementoPrimaryURL = null;
     let viewedMementoSwappedURL = null;
     let viewedMementoShowsSwapped = false;
@@ -121,6 +122,11 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 <div class="chat-typing hidden" aria-live="polite">Someone is typing…</div>
                 <div class="chat-reply-draft hidden"><span></span><button type="button" data-cancel-reply aria-label="Cancel reply">×</button></div>
                 <form class="chat-composer">
+                    <div class="chat-memento-draft hidden">
+                        <img alt="" decoding="async">
+                        <span><strong></strong><small>Add an optional message</small></span>
+                        <button type="button" data-remove-memento-draft aria-label="Remove Memento">×</button>
+                    </div>
                     <button class="chat-camera-button" type="button" data-open-memento aria-label="Take today's Memento">📷</button>
                     <button class="chat-attachment-button" type="button" data-open-chat-media aria-label="Send media or a sticker">＋</button>
                     <textarea rows="1" maxlength="2000" placeholder="Message" aria-label="Message"></textarea>
@@ -322,6 +328,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     async function openChat(chatId, { updateHistory = true, force = false } = {}) {
         const chat = store.state.chats.find((item) => item.id === String(chatId));
         if (chat?.membership_status === "invited") return;
+        if (store.state.activeChatId && store.state.activeChatId !== String(chatId)) clearSharedMementoDraft();
         const generation = ++roomGeneration;
         store.state.activeChatId = String(chatId);
         store.state.loadingRoom = true;
@@ -495,8 +502,9 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 room_sequence: sequence,
                 sender_user_id: userId(),
                 sender_first_name: getUser()?.first_name,
-                kind: "text",
+                kind: record.daily_entry_id ? "memento" : "text",
                 body: record.body,
+                daily_entry_id: record.daily_entry_id || null,
                 reply_to_message_id: record.reply_to_message_id,
                 status: "active",
                 viewer_is_sender: true,
@@ -631,8 +639,11 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         const existing = retryRequestId
             ? store.messages(pendingChatId).find((message) => message.client_request_id === retryRequestId)
             : null;
-        const body = retryRequestId ? (persisted?.body || existing?.body) : textarea.value.trim();
-        if (!body || !pendingChatId) return;
+        const body = retryRequestId ? String(persisted?.body ?? existing?.body ?? "").trim() : textarea.value.trim();
+        const dailyEntryId = retryRequestId
+            ? (persisted?.daily_entry_id || existing?.daily_entry_id || null)
+            : sharedMementoDraft?.entryId || null;
+        if ((!body && !dailyEntryId) || !pendingChatId) return;
         const chatId = pendingChatId;
         const clientRequestId = retryRequestId || crypto.randomUUID();
         const replyToMessageId = retryRequestId
@@ -640,14 +651,17 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             : store.state.replyToMessageId;
         await putChatTextOutbox({
             userId: userId(), chatId, clientRequestId,
-            body, replyToMessageId,
+            body, replyToMessageId, dailyEntryId,
         }).catch(() => null);
         const latest = Math.max(0, ...store.messages(chatId).map((message) => message.room_sequence));
         const optimistic = normalizeMessage({
             id: `pending:${clientRequestId}`, client_request_id: clientRequestId,
             chat_id: chatId, room_sequence: latest + 0.5,
             sender_user_id: userId(), sender_first_name: getUser()?.first_name,
-            kind: "text", body, reply_to_message_id: replyToMessageId,
+            kind: dailyEntryId ? "memento" : "text", body,
+            daily_entry_id: dailyEntryId,
+            memento_image_url: !retryRequestId && sharedMementoDraft?.entryId === dailyEntryId ? sharedMementoDraft.imageURL : null,
+            reply_to_message_id: replyToMessageId,
             status: "active", viewer_is_sender: true, created_at: new Date().toISOString(),
             delivery_state: "sending",
         });
@@ -655,13 +669,17 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (!automatic && !retryRequestId && store.state.activeChatId === chatId) {
             textarea.value = "";
             store.state.replyToMessageId = null;
+            clearSharedMementoDraft();
             stopTyping();
         }
         if (!automatic) softHaptic?.();
         if (store.state.activeChatId === chatId) renderMessages(!automatic);
         try {
             const message = await api.sendChatMessage(userId(), chatId, {
-                body, reply_to_message_id: replyToMessageId, client_request_id: clientRequestId,
+                ...(body ? { body } : {}),
+                ...(dailyEntryId ? { daily_entry_id: dailyEntryId } : {}),
+                reply_to_message_id: replyToMessageId,
+                client_request_id: clientRequestId,
             });
             await removeChatTextOutbox(userId(), clientRequestId).catch(() => null);
             store.updateMessage(chatId, { ...message, delivery_state: "sent" });
@@ -1329,6 +1347,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
 
     function viewMemento(url, owner, entryId = null, swappedURL = null) {
         viewedMementoEntryId = entryId ? String(entryId) : null;
+        viewedMementoOwner = owner || "Student";
         viewedMessageId = entryId ? store.messages().find((message) => String(message.daily_entry_id || "") === String(entryId))?.id || null : null;
         viewedMementoPrimaryURL = url;
         viewedMementoSwappedURL = swappedURL && swappedURL !== url ? swappedURL : null;
@@ -1387,6 +1406,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         dialog.querySelector(".chat-viewer-overlay").textContent = "";
         viewedMessageId = null;
         viewedMementoEntryId = null;
+        viewedMementoOwner = null;
         viewedMementoPrimaryURL = null;
         viewedMementoSwappedURL = null;
         viewedMementoShowsSwapped = false;
@@ -1413,33 +1433,17 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         await reactToMessage(messageId, "love");
     }
 
-    async function shareViewedMemento() {
+    function shareViewedMemento() {
         if (!viewedMementoEntryId || !store.state.activeChatId) return;
-        const entryId = viewedMementoEntryId;
-        const key = `${store.state.activeChatId}:${entryId}`;
-        const clientRequestId = mementoShareRequestByEntry.get(key) || crypto.randomUUID();
-        mementoShareRequestByEntry.set(key, clientRequestId);
-        if (mementoShareRequestByEntry.size > 20) mementoShareRequestByEntry.delete(mementoShareRequestByEntry.keys().next().value);
-        const button = $("[data-share-viewed-memento]");
-        button.disabled = true;
-        try {
-            const message = await api.sendChatMessage(userId(), store.state.activeChatId, {
-                daily_entry_id: entryId,
-                reply_to_message_id: store.state.replyToMessageId || null,
-                client_request_id: clientRequestId,
-            });
-            mementoShareRequestByEntry.delete(key);
-            store.updateMessage(store.state.activeChatId, message);
-            store.state.replyToMessageId = null;
-            closeMediaViewer();
-            renderMessages(true);
-            successHaptic?.();
-            showToast?.("Memento shared");
-            void loadChats({ quiet: true });
-        } catch (error) {
-            button.disabled = false;
-            showToast?.(`${error.message || "Could not share that Memento."} Tap Share to retry safely.`);
-        }
+        sharedMementoDraft = {
+            entryId: viewedMementoEntryId,
+            imageURL: viewedMementoPrimaryURL,
+            owner: viewedMementoOwner || "Student",
+        };
+        closeMediaViewer();
+        renderSharedMementoDraft();
+        $(".chat-composer textarea").focus({ preventScroll: true });
+        showToast?.("Memento added to message");
     }
 
     function openPersistentChatMedia(messageId) {
@@ -1681,6 +1685,24 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (message) draft.querySelector("span").textContent = `Replying to ${message.sender_first_name || "message"}: ${message.kind === "memento" ? "Memento" : message.body || "Media"}`;
     }
 
+    function renderSharedMementoDraft() {
+        const draft = $(".chat-memento-draft");
+        draft.classList.toggle("hidden", !sharedMementoDraft);
+        if (!sharedMementoDraft) {
+            draft.querySelector("img").removeAttribute("src");
+            draft.querySelector("strong").textContent = "";
+            return;
+        }
+        draft.querySelector("img").src = sharedMementoDraft.imageURL;
+        draft.querySelector("img").alt = `${sharedMementoDraft.owner}'s Memento`;
+        draft.querySelector("strong").textContent = `Sharing ${sharedMementoDraft.owner}'s Memento`;
+    }
+
+    function clearSharedMementoDraft() {
+        sharedMementoDraft = null;
+        renderSharedMementoDraft();
+    }
+
     function handleTypingInput() {
         if (!typingSent && store.state.activeChatId) {
             typingSent = true;
@@ -1773,6 +1795,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
 
     function showChatList() {
         stopTyping();
+        clearSharedMementoDraft();
         roomGeneration += 1;
         store.state.activeChatId = null;
         store.state.detail = null;
@@ -1866,6 +1889,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             return;
         }
         if (target.matches("[data-cancel-reply]")) { store.state.replyToMessageId = null; return renderReplyDraft(); }
+        if (target.matches("[data-remove-memento-draft]")) return clearSharedMementoDraft();
         if (target.dataset.messageMenu) return toggleMessageActions(target.dataset.messageMenu);
         if (target.dataset.replyMessage) { closeMessageActions(); store.state.replyToMessageId = target.dataset.replyMessage; renderReplyDraft(); return $(".chat-composer textarea").focus(); }
         if (target.dataset.reactMessage) return reactToMessage(target.dataset.reactMessage, target.dataset.reaction);

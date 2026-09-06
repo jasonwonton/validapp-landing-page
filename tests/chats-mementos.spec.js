@@ -133,8 +133,27 @@ test("Memento gallery can reply, react, and safely reshare its authoritative ent
     const before = await page.locator(".memento-label").count();
     await page.getByRole("button", { name: /Jules Rivera's Memento/ }).click();
     await viewer.getByRole("button", { name: "Share", exact: true }).click();
-    await expect(page.getByText("Memento shared", { exact: true })).toBeVisible();
+    const draft = page.locator(".chat-memento-draft");
+    await expect(page.getByText("Memento added to message", { exact: true })).toBeVisible();
+    await expect(draft).toContainText("Sharing Jules Rivera's Memento");
+    await expect(draft).toContainText("Add an optional message");
+    await expect(draft.getByRole("img", { name: "Jules Rivera's Memento" })).toHaveAttribute("src", /pencil-clipboard\.webp$/);
+    await page.getByRole("button", { name: "Send message" }).click();
+    await expect(draft).toBeHidden();
     await expect(page.locator(".memento-label")).toHaveCount(before + 1);
+    const sharedAsReply = page.locator(".chat-message.mine").filter({ has: page.locator(".memento-label") }).last();
+    await expect(sharedAsReply).toHaveClass(/sent/);
+    await expect(sharedAsReply.locator(".chat-reply-preview")).toContainText("Memento");
+
+    await page.getByRole("button", { name: /Jules Rivera's Memento/ }).click();
+    await viewer.getByRole("button", { name: "Share", exact: true }).click();
+    await page.getByRole("textbox", { name: "Message" }).fill("Still thinking about this");
+    await page.getByRole("button", { name: "Send message" }).click();
+    await expect(draft).toBeHidden();
+    await expect(page.locator(".memento-label")).toHaveCount(before + 2);
+    const shared = page.locator(".chat-message.mine").filter({ hasText: "Still thinking about this" });
+    await expect(shared).toHaveCount(1);
+    await expect(shared).toHaveClass(/sent/);
 });
 
 test("chat sends reconcile optimistic identity and support replies and reactions", async ({ page }) => {

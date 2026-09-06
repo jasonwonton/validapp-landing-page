@@ -74,7 +74,8 @@ test("production chat adapter matches the released iOS chat and Memento contract
         await api.getChats(userId);
         await api.getChatMessages(userId, chatId, { afterSequence: 8 });
         await api.sendChatMessage(userId, chatId, { body: "Hi", client_request_id: "55555555-5555-5555-5555-555555555555" });
-        await api.sendChatMessage(userId, chatId, { daily_entry_id: "77777777-7777-7777-7777-777777777777", client_request_id: "88888888-8888-8888-8888-888888888888" });
+        await api.sendChatMessage(userId, chatId, { body: "Throwback", daily_entry_id: "77777777-7777-7777-7777-777777777777", client_request_id: "88888888-8888-8888-8888-888888888888" });
+        await api.sendChatMessage(userId, chatId, { daily_entry_id: "77777777-7777-7777-7777-777777777777", client_request_id: "12121212-1212-1212-1212-121212121212" });
         await api.sendChatMessage(userId, chatId, { body: "Great Story", story_id: "99999999-9999-9999-9999-999999999999", story_share_context: "reply", client_request_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" });
         await api.getChatMessageReactors(userId, chatId, "44444444-4444-4444-4444-444444444444");
         await api.markChatRead(userId, chatId, 9);
@@ -96,7 +97,8 @@ test("production chat adapter matches the released iOS chat and Memento contract
         { method: "GET", path: `/api/v1/users/${USER_ID}/chats?limit=50&offset=0&timezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, body: null },
         { method: "GET", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/messages?limit=50&timezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}&after_sequence=8`, body: null },
         { method: "POST", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/messages`, body: { body: "Hi", client_request_id: "55555555-5555-5555-5555-555555555555", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } },
-        { method: "POST", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/messages`, body: { daily_entry_id: "77777777-7777-7777-7777-777777777777", client_request_id: "88888888-8888-8888-8888-888888888888", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } },
+        { method: "POST", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/messages`, body: { body: "Throwback", daily_entry_id: "77777777-7777-7777-7777-777777777777", client_request_id: "88888888-8888-8888-8888-888888888888", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } },
+        { method: "POST", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/messages`, body: { daily_entry_id: "77777777-7777-7777-7777-777777777777", client_request_id: "12121212-1212-1212-1212-121212121212", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } },
         { method: "POST", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/messages`, body: { body: "Great Story", story_id: "99999999-9999-9999-9999-999999999999", story_share_context: "reply", client_request_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } },
         { method: "GET", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/messages/44444444-4444-4444-4444-444444444444/reactors`, body: null },
         { method: "POST", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/read`, body: { through_sequence: 9, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } },

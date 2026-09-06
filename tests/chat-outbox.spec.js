@@ -23,6 +23,13 @@ test("chat text outbox is user-scoped, bounded, and preserves idempotent retry d
             clientRequestId: "request-b",
             body: "Private to B",
         });
+        await outbox.putChatTextOutbox({
+            userId: userB,
+            chatId: "chat-two",
+            clientRequestId: "memento-b",
+            body: "",
+            dailyEntryId: "entry-authoritative",
+        });
         const beforeAttempt = await outbox.listChatTextOutbox(userA);
         const attempted = await outbox.markChatTextOutboxAttempt(userA, "request-54", 1_000);
         await outbox.removeChatTextOutbox(userA, "request-53");
@@ -56,8 +63,13 @@ test("chat text outbox is user-scoped, bounded, and preserves idempotent retry d
     });
     expect(result.attempted).toMatchObject({ attempts: 1, next_attempt_at: 3_000 });
     expect(result.afterRemoveCount).toBe(49);
-    expect(result.userBRecords).toHaveLength(1);
+    expect(result.userBRecords).toHaveLength(2);
     expect(result.userBRecords[0].body).toBe("Private to B");
+    expect(result.userBRecords[1]).toMatchObject({
+        body: "",
+        daily_entry_id: "entry-authoritative",
+        client_request_id: "memento-b",
+    });
     expect(result.retryable).toEqual([true, true, false]);
 });
 
