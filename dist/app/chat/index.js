@@ -113,7 +113,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 <input class="memento-file-input" type="file" accept="image/*" capture="environment">
                 <fieldset class="camera-effect-picker hidden" data-memento-effects><legend>Photo effect</legend><div data-camera-effect-options></div><small>Browser Effects bake supported color and lighting into the photo. Face/body-tracked lenses and filtered video remain available in iOS.</small></fieldset>
                 <label>Caption <input class="memento-caption" maxlength="120" placeholder="What are you up to?"></label>
-                <fieldset class="memento-audience"><legend>Share with</legend><div></div></fieldset>
+                <p class="memento-audience"><strong>Sharing with</strong> <span></span></p>
                 <div class="memento-progress hidden"><span></span></div>
                 <p class="memento-status" role="status"></p>
                 <button class="primary-button memento-publish" type="submit" disabled>Share to this chat</button>
@@ -766,7 +766,8 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     }
 
     function renderMementoAudience() {
-        $(".memento-audience div").innerHTML = store.state.chats.filter((chat) => chat.membership_status === "accepted").map((chat) => `<label><input type="checkbox" value="${escapeChatHTML(chat.id)}" ${chat.id === store.state.activeChatId ? "checked" : ""}> <span>${escapeChatHTML(chat.display_name)}</span></label>`).join("");
+        const activeChat = store.state.chats.find((chat) => String(chat.id) === String(store.state.activeChatId));
+        $(".memento-audience span").textContent = activeChat?.display_name || store.state.detail?.display_name || "this chat";
     }
 
     async function skipMementoForToday() {
@@ -827,18 +828,13 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     async function publishMemento(event) {
         event.preventDefault();
         if (!selectedMementoFile || !store.state.activeChatId) return;
-        const chatIds = $$(".memento-audience input:checked").map((input) => input.value);
-        if (!chatIds.length) {
-            $(".memento-status").textContent = "Choose at least one chat for this Memento.";
-            return;
-        }
+        const chatIds = [String(store.state.activeChatId)];
         const button = $(".memento-publish");
         button.disabled = true;
         button.textContent = "Sharing…";
         $(".memento-file-input").disabled = true;
         $(".memento-caption").disabled = true;
         mementoEffectPicker.setDisabled(true);
-        $$(".memento-audience input").forEach((input) => { input.disabled = true; });
         $(".memento-skip").disabled = true;
         $(".memento-progress").classList.remove("hidden");
         let recoverySaved = false;
@@ -849,6 +845,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 user_id: userId(),
                 kind: "memento",
                 file: selectedMementoFile,
+                chat_id: chatIds[0],
                 chat_ids: chatIds,
                 caption: $(".memento-caption").value.trim() || null,
                 ledger_date: localLedgerDate(),
@@ -860,8 +857,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             await removeChatMediaOutbox(record.id);
             $("[data-memento-dialog]").close();
             successHaptic?.();
-            const sharedCount = Number(result.shared_chat_ids?.length || chatIds.length);
-            showToast?.(`Memento shared${sharedCount > 1 ? ` to ${sharedCount} chats` : ""}${result.aura_points_earned ? ` · +${result.aura_points_earned} Aura` : ""}`);
+            showToast?.(`Memento shared${result.aura_points_earned ? ` · +${result.aura_points_earned} Aura` : ""}`);
             await openChat(store.state.activeChatId, { updateHistory: false, force: true });
         } catch (error) {
             if (recoverySaved && chatTextSendIsRetryable(error)) {
@@ -892,7 +888,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         $(".memento-file-input").disabled = false;
         $(".memento-caption").value = "";
         $(".memento-caption").disabled = false;
-        $(".memento-audience div").innerHTML = "";
+        $(".memento-audience span").textContent = "";
         $(".memento-skip").disabled = false;
         $(".memento-preview").innerHTML = `<span aria-hidden="true">📸</span><p>Capture one real moment from today.</p>`;
         $(".memento-status").textContent = "";

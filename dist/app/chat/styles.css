@@ -160,10 +160,9 @@
 .chat-media-preview audio { width: min(90%, 360px); }
 .memento-file-input, .chat-media-file-input { width: 100%; padding: 10px; border: 2px dashed var(--ink); border-radius: 13px; background: var(--white); }
 .memento-form > label, .chat-media-form > label { display: grid; gap: 5px; font-size: .8rem; }
-.memento-audience { display: grid; gap: 6px; margin: 0; padding: 10px; border: 1px solid var(--line); border-radius: 13px; }
-.memento-audience legend { padding: 0 4px; color: var(--muted); font-size: .76rem; }
-.memento-audience > div { display: flex; gap: 7px; overflow-x: auto; }
-.memento-audience label { flex: 0 0 auto; min-height: 38px; display: flex; align-items: center; gap: 6px; padding: 5px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--white); font-size: .75rem; }
+.memento-audience { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0; padding: 10px; border: 1px solid var(--line); border-radius: 13px; font-size: .8rem; }
+.memento-audience strong { color: var(--muted); }
+.memento-audience span { min-width: 0; overflow-wrap: anywhere; text-align: right; font-weight: 800; }
 .chat-media-form > .chat-media-option { grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 8px; }
 .chat-audio-input-label input { width: 100%; padding: 9px; border: 2px dashed var(--ink); border-radius: 13px; background: var(--white); }
 .chat-media-option small { grid-column: 2; color: var(--muted); }

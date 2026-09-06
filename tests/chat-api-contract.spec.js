@@ -27,7 +27,7 @@ test("production chat adapter matches the released iOS chat and Memento contract
     });
     await page.goto("/app/?signin=1");
     requests.length = 0;
-    await page.evaluate(async ({ userId, chatId }) => {
+    const invalidAudience = await page.evaluate(async ({ userId, chatId }) => {
         const { ValidAPI } = await import("/app/api.js");
         const api = new ValidAPI();
         api.saveSession({ access_token: "chat-token", user: { id: userId } });
@@ -41,9 +41,17 @@ test("production chat adapter matches the released iOS chat and Memento contract
         await api.getChatDailyRow(userId, chatId);
         await api.skipChatMemento(userId, chatId);
         await api.createDailyHighlightUpload(userId, 12345, "66666666-6666-6666-6666-666666666666");
+        await api.publishDailyHighlight(userId, "33333333-3333-3333-3333-333333333333", [chatId], "Today", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        try {
+            await api.publishDailyHighlight(userId, "33333333-3333-3333-3333-333333333333", [chatId, "99999999-9999-9999-9999-999999999999"], "Too broad");
+            return null;
+        } catch (error) {
+            return { message: error.message, status: error.status };
+        }
     }, { userId: USER_ID, chatId: CHAT_ID });
 
     const contractRequests = requests.filter((request) => request.path !== "/api/v1/auth/session");
+    expect(invalidAudience).toEqual({ message: "A Memento must be shared to exactly one chat.", status: 400 });
     expect(contractRequests.map(({ method, path, body }) => ({ method, path, body }))).toEqual([
         { method: "GET", path: `/api/v1/users/${USER_ID}/chats?limit=50&offset=0&timezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, body: null },
         { method: "GET", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/messages?limit=50&timezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}&after_sequence=8`, body: null },
@@ -55,6 +63,7 @@ test("production chat adapter matches the released iOS chat and Memento contract
         { method: "GET", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/daily-row?timezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, body: null },
         { method: "POST", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/daily-row/skip`, body: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } },
         { method: "POST", path: `/api/v1/users/${USER_ID}/daily-highlight-uploads?delivery=proxy`, body: { content_type: "image/jpeg", size_bytes: 12345, client_request_id: "66666666-6666-6666-6666-666666666666" } },
+        { method: "POST", path: `/api/v1/users/${USER_ID}/daily-entries`, body: { media_asset_id: "33333333-3333-3333-3333-333333333333", caption: "Today", chat_ids: [CHAT_ID], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, client_request_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" } },
     ]);
     expect(contractRequests.every((request) => request.authorization === "Bearer chat-token")).toBe(true);
 });

@@ -46,7 +46,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Memento reciprocity gate | Equivalent | Not yet tested | Locked message bodies stay out of the DOM; unlock journey passes in all four lab projects. |
 | Skip Memento for today | Equivalent | Not yet tested | Uses the same authoritative daily-row skip endpoint and unlocks without fabricating a post. |
 | Seven-day Memento history | Equivalent | Not yet tested | Date rail and historical rows are automated indirectly; timezone/DST physical tests remain. |
-| Multi-chat Memento audience | Equivalent | Not yet tested | Accepted-chat picker publishes one authoritative daily entry to all selected chats; automated coverage passes. |
+| Chat-scoped Memento audience | Equivalent | Not yet tested | iOS and the authoritative `DailyEntryPublishRequest` permit exactly one active chat per Memento. The PWA labels that destination, sends one `chat_id`, and rejects accidental multi-chat payloads before network I/O; contract and browser coverage pass. |
 | Reshare an existing Memento | Partial | Not yet tested | Gallery Share sends the authoritative daily entry with a stable request ID; iOS additionally supports holding it as a composer draft with optional text. |
 | Reply/react from Memento gallery | Equivalent | Not yet tested | Gallery resolves the authoritative chat message before creating a reply or reaction; automation passes. |
 
@@ -121,7 +121,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Accessibility semantics/focus | Partial | Not yet tested | Labels, live regions, reduced motion, and touch targets exist; screen-reader and contrast audit remain. |
 | Offline shell/installability | Equivalent | Not yet tested | Manifest/service-worker shell tests pass; installed physical-device update/reopen remains. |
 | Offline private-data isolation | Equivalent | Not yet tested | No authenticated API/media response enters Cache Storage; scoped snapshots/outbox are cleared at account exit. |
-| Predictable app updates | Partial | Not yet tested | v60 adds bounded photo Effects and their static renderer to the explicit shell while retaining the audited notification destinations, comments, and positioned overlays; telemetry/cache versions remain synchronized. Waiting-worker rollback/update soak remains. |
+| Predictable app updates | Partial | Not yet tested | v61 preserves bounded photo Effects and aligns Memento audience selection with the authoritative exact-one-chat contract while retaining the audited notification destinations, comments, and positioned overlays; telemetry/cache versions remain synchronized. Waiting-worker rollback/update soak remains. |
 | Strict CSP runtime behavior | Equivalent | Not yet tested | Response and meta policies keep `style-src 'self'` without `unsafe-inline`; bounded same-origin CSSOM rules cover dynamic progress, overlays, viewport, crop, and drag state in all four lab projects. Final-origin header verification remains. |
 | Dark Mode | Equivalent | Not yet tested | System color scheme now drives the core shell, Chats, Mementos, forms, and dialogs; automated computed-style check plus visual/accessibility review remain. |
 | Haptics | Partial | Not yet tested | Android vibration is progressive enhancement; precise native haptic parity is unavailable. |
@@ -188,10 +188,12 @@ limits. The
 scoped backend chat/Memento/Story/Web Push/config safety run is **273 passed, 0
 failed**; the latest current-tree affected notification/comment/lifecycle/call/
 config run is **316 passed, 0 failed**. These are lab results, not production or
-physical-device approval. The v60 candidate additionally proves that an
+physical-device approval. The v61 candidate additionally proves that an
 installed Chromium shell can cold-reload offline and open the previously
 unvisited Chats/media-overlay route entirely from the bounded static cache and
 that photo Effects are locally baked into the bounded JPEG before durable retry.
+It also rejects an invalid multi-chat Memento audience before network I/O while
+the composer visibly scopes each publish to the active chat.
 
 | Target | State | Required before release |
 | --- | --- | --- |

@@ -940,20 +940,20 @@ export class DemoAPI {
     async putDirectUpload() {}
     async finalizeDailyHighlightUpload(_userId, mediaId) { return { media_asset_id: mediaId, state: "ready" }; }
     async publishDailyHighlight(_userId, _mediaId, chatIds, caption) {
+        if (!Array.isArray(chatIds) || chatIds.length !== 1 || !chatIds[0]) throw new Error("A Memento must be shared to exactly one chat.");
         const entryId = `entry-${Date.now()}`;
-        for (const chatId of chatIds) {
-            const row = this.dailyRows[chatId];
-            if (!row) continue;
-            row.viewer_has_posted_today = true;
-            row.viewer_has_shared = true;
-            row.view_gate_locked = false;
-            row.posted_count += 1;
-            row.entries.push({ user_id: "demo-user", first_name: "Jules", last_name: "Rivera", has_posted: true, entry_id: entryId, caption, image_url: "../assets/AppIconV2.png", published_at: new Date().toISOString() });
-            const chat = this.chats.find((item) => item.id === chatId);
-            chat.has_posted_today_memento = true;
-            chat.today_memento_count = row.posted_count;
-            await this.sendChatMessage(null, chatId, { daily_entry_id: entryId, body: caption || "Sent a Memento", client_request_id: crypto.randomUUID() });
-        }
+        const chatId = chatIds[0];
+        const row = this.dailyRows[chatId];
+        if (!row) throw new Error("That chat is unavailable.");
+        row.viewer_has_posted_today = true;
+        row.viewer_has_shared = true;
+        row.view_gate_locked = false;
+        row.posted_count += 1;
+        row.entries.push({ user_id: "demo-user", first_name: "Jules", last_name: "Rivera", has_posted: true, entry_id: entryId, caption, image_url: "../assets/AppIconV2.png", published_at: new Date().toISOString() });
+        const chat = this.chats.find((item) => item.id === chatId);
+        chat.has_posted_today_memento = true;
+        chat.today_memento_count = row.posted_count;
+        await this.sendChatMessage(null, chatId, { daily_entry_id: entryId, body: caption || "Sent a Memento", client_request_id: crypto.randomUUID() });
         return { entry_id: entryId, ledger_date: localLedgerDate(), shared_chat_ids: [...chatIds], aura_points_earned: 10, total_aura_points: this.profile.aura_points + 10, published_at: new Date().toISOString() };
     }
 

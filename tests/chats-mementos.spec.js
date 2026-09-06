@@ -101,16 +101,17 @@ test("Memento reciprocity offers the same skip-for-today alternative as iOS", as
     await expect(page.locator(".chat-composer")).toBeVisible();
 });
 
-test("one Memento can be shared to multiple accepted chats", async ({ page }) => {
+test("a Memento stays scoped to the active chat like the released iOS contract", async ({ page }) => {
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Weekend Crew/ }).click();
     await page.locator(".chat-daily-row > button").click();
     const composer = page.getByRole("dialog", { name: "Create a Memento" });
+    await expect(composer.locator(".memento-audience")).toHaveText("Sharing with Weekend Crew");
+    await expect(composer.getByRole("checkbox")).toHaveCount(0);
     await composer.locator('input[type="file"]').setInputFiles("assets/AppIconV2.png");
-    await composer.getByRole("checkbox", { name: "Noah Williams" }).check();
     await composer.getByRole("button", { name: "Share to this chat" }).click();
-    await expect(page.getByText(/Memento shared to 2 chats/)).toBeVisible();
+    await expect(page.getByText("Memento shared · +10 Aura", { exact: true })).toBeVisible();
 });
 
 test("Memento gallery can reply, react, and safely reshare its authoritative entry", async ({ page }) => {

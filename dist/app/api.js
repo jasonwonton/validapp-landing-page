@@ -1100,12 +1100,16 @@ export class ValidAPI {
     }
 
     publishDailyHighlight(userId, mediaAssetId, chatIds, caption = null, clientRequestId = crypto.randomUUID()) {
+        if (!Array.isArray(chatIds) || chatIds.length !== 1 || !chatIds[0]) {
+            throw new APIError("A Memento must be shared to exactly one chat.", 400);
+        }
+        const scopedChatIds = [chatIds[0]];
         return this.request(`/users/${userId}/daily-entries`, {
             method: "POST",
             body: JSON.stringify({
                 media_asset_id: mediaAssetId,
                 caption: caption?.trim() || null,
-                chat_ids: chatIds,
+                chat_ids: scopedChatIds,
                 timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
                 client_request_id: clientRequestId,
             }),

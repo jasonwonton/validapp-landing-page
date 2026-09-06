@@ -156,8 +156,8 @@ Firefox, and Safari where the capability is supported:
 5. Capture a Memento with the front and rear camera, choose an existing photo,
    cancel permissions, lose connectivity during upload, refresh, close the tab,
    and reopen. Verify one publish with the original request ID, local date/DST
-   history, reciprocity, cross-device unlock, and that locked message bodies
-   never enter the DOM. Apply an offline photo Effect and one compatible
+   history, reciprocity, cross-device unlock, active-chat-only audience, and
+   that locked message bodies never enter the DOM. Apply an offline photo Effect and one compatible
    server-managed Featured treatment; verify the selected pixels—not the source
    file—enter the bounded JPEG upload. Record the deliberate single-image web
    alternative to iOS's front/rear composite.
