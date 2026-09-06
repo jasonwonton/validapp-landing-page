@@ -151,8 +151,9 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 Current candidate evidence: `npm run build`, UI runtime checks, and performance
 budgets pass. The candidate's **764-case** lab matrix contains **759 passing
 tests and 5 intentional project-capability skips** across Pixel 7 Chromium,
-Desktop Chrome, Desktop Firefox, and Desktop WebKit. Android, Chrome, and
-Firefox completed as full no-retry projects. Every applicable WebKit case also
+Desktop Chrome, Desktop Firefox, and Desktop WebKit. Android and desktop Chrome
+complete deterministic fresh-browser shards with retries disabled; Firefox
+completes as one full no-retry project. Every applicable WebKit case also
 passes without retries when run in fresh bounded shards; two monolithic local
 macOS WebKit runs exhausted the browser worker after roughly 70 isolated
 contexts before app code ran, so the fresh hosted WebKit job remains the

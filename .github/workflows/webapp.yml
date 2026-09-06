@@ -54,13 +54,13 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps ${{ matrix.browser }}
       - name: Run browser journeys without retries
-        if: matrix.project != 'desktop'
+        if: matrix.project != 'desktop' && matrix.project != 'android'
         run: npm run test:e2e -- --project=${{ matrix.project }} --retries=0
-      - name: Run desktop journeys in fresh bounded shards without retries
-        if: matrix.project == 'desktop'
+      - name: Run Chromium journeys in fresh bounded shards without retries
+        if: matrix.project == 'desktop' || matrix.project == 'android'
         run: |
-          npm run test:e2e -- --project=desktop --shard=1/2 --retries=0
-          npm run test:e2e -- --project=desktop --shard=2/2 --retries=0
+          npm run test:e2e -- --project=${{ matrix.project }} --shard=1/2 --retries=0
+          npm run test:e2e -- --project=${{ matrix.project }} --shard=2/2 --retries=0
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
