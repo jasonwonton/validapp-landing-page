@@ -4,6 +4,46 @@ const API_ORIGIN = "https://api.six7.lol";
 const USER_ID = "11111111-1111-1111-1111-111111111111";
 const CHAT_ID = "22222222-2222-2222-2222-222222222222";
 
+test("dual-view Memento delivery uploads both composites before one finalize and publish", async ({ page }) => {
+    await page.goto("/app/");
+    const result = await page.evaluate(async ({ userId, chatId }) => {
+        const { deliverMementoRecord } = await import("/app/chat/index.js");
+        const calls = [];
+        const progress = [];
+        const api = {
+            async createDailyHighlightUpload(...args) {
+                calls.push(["create", ...args]);
+                return { media_asset_id: "media-dual", upload_url: "https://uploads.example/primary", secondary_upload_url: "https://uploads.example/secondary", upload_method: "PUT", required_headers: { "x-upload-token": "same-session" }, already_finalized: false };
+            },
+            async putDirectUpload(file, session, options) {
+                calls.push(["upload", file.name, file.size, session.upload_url, session.upload_method, session.required_headers]);
+                options.onProgress(0.5);
+                options.onProgress(1);
+            },
+            async finalizeDailyHighlightUpload(...args) { calls.push(["finalize", ...args]); },
+            async publishDailyHighlight(...args) { calls.push(["publish", ...args]); return { entry_id: "entry-dual" }; },
+        };
+        const published = await deliverMementoRecord(api, userId, {
+            file: new File(["primary"], "memento.jpg", { type: "image/jpeg" }),
+            secondary: new File(["secondary"], "memento-swapped.jpg", { type: "image/jpeg" }),
+            request_id: "stable-request-id",
+            chat_ids: [chatId],
+            caption: "Both views",
+        }, { onProgress: (value) => progress.push(value) });
+        return { calls, progress, published };
+    }, { userId: USER_ID, chatId: CHAT_ID });
+
+    expect(result.calls).toEqual([
+        ["create", USER_ID, 7, "stable-request-id", 9],
+        ["upload", "memento.jpg", 7, "https://uploads.example/primary", "PUT", { "x-upload-token": "same-session" }],
+        ["upload", "memento-swapped.jpg", 9, "https://uploads.example/secondary", "PUT", { "x-upload-token": "same-session" }],
+        ["finalize", USER_ID, "media-dual"],
+        ["publish", USER_ID, "media-dual", [CHAT_ID], "Both views", "stable-request-id"],
+    ]);
+    expect(result.progress).toEqual([0.24, 0.48, 0.72, 0.96, 1]);
+    expect(result.published).toEqual({ entry_id: "entry-dual" });
+});
+
 test("production chat adapter matches the released iOS chat and Memento contracts", async ({ page }) => {
     await page.addInitScript((origin) => { window.VALID_API_BASE_URL = `${origin}/api/v1`; }, API_ORIGIN);
     const requests = [];
@@ -40,7 +80,7 @@ test("production chat adapter matches the released iOS chat and Memento contract
         await api.markChatRead(userId, chatId, 9);
         await api.getChatDailyRow(userId, chatId);
         await api.skipChatMemento(userId, chatId);
-        await api.createDailyHighlightUpload(userId, 12345, "66666666-6666-6666-6666-666666666666");
+        await api.createDailyHighlightUpload(userId, 12345, "66666666-6666-6666-6666-666666666666", 54321);
         await api.publishDailyHighlight(userId, "33333333-3333-3333-3333-333333333333", [chatId], "Today", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
         try {
             await api.publishDailyHighlight(userId, "33333333-3333-3333-3333-333333333333", [chatId, "99999999-9999-9999-9999-999999999999"], "Too broad");
@@ -62,7 +102,7 @@ test("production chat adapter matches the released iOS chat and Memento contract
         { method: "POST", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/read`, body: { through_sequence: 9, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } },
         { method: "GET", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/daily-row?timezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, body: null },
         { method: "POST", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/daily-row/skip`, body: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } },
-        { method: "POST", path: `/api/v1/users/${USER_ID}/daily-highlight-uploads?delivery=proxy`, body: { content_type: "image/jpeg", size_bytes: 12345, client_request_id: "66666666-6666-6666-6666-666666666666" } },
+        { method: "POST", path: `/api/v1/users/${USER_ID}/daily-highlight-uploads?delivery=proxy`, body: { content_type: "image/jpeg", size_bytes: 12345, client_request_id: "66666666-6666-6666-6666-666666666666", secondary_size_bytes: 54321 } },
         { method: "POST", path: `/api/v1/users/${USER_ID}/daily-entries`, body: { media_asset_id: "33333333-3333-3333-3333-333333333333", caption: "Today", chat_ids: [CHAT_ID], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, client_request_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" } },
     ]);
     expect(contractRequests.every((request) => request.authorization === "Bearer chat-token")).toBe(true);

@@ -1,5 +1,5 @@
 import { reconcileKeyedElements } from "../keyed-list.js";
-import { prepareChatMedia, prepareMementoImage } from "./media.js";
+import { prepareChatMedia, prepareMementoImages } from "./media.js";
 import {
     CHAT_REACTIONS, chatNeedsMemento, chatPreview, displayMember, escapeChatHTML,
     messageTime, normalizeMessage, relativeChatTime, safeMediaURL,
@@ -26,6 +26,22 @@ import { setRuntimeStyles } from "../runtime-style.js";
 const REFRESH_MS = 30_000;
 const MAX_VOICE_RECORDING_MS = 300_000;
 
+export async function deliverMementoRecord(api, userId, record, { onProgress } = {}) {
+    const session = await api.createDailyHighlightUpload(userId, record.file.size, record.request_id, record.secondary?.size ?? null);
+    await api.putDirectUpload(record.file, session, { onProgress: (progress) => onProgress?.(record.secondary ? progress * 0.48 : progress * 0.96) });
+    if (record.secondary && !session.already_finalized) {
+        if (!session.secondary_upload_url) throw new Error("The second Memento upload session was invalid.");
+        await api.putDirectUpload(record.secondary, {
+            upload_url: session.secondary_upload_url,
+            upload_method: session.upload_method,
+            required_headers: session.required_headers,
+        }, { onProgress: (progress) => onProgress?.(0.48 + progress * 0.48) });
+    }
+    await api.finalizeDailyHighlightUpload(userId, session.media_asset_id);
+    onProgress?.(1);
+    return api.publishDailyHighlight(userId, session.media_asset_id, record.chat_ids, record.caption, record.request_id);
+}
+
 function compatibleAudioRecordingType() {
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") return "";
     return ["audio/mp4;codecs=mp4a.40.2", "audio/mp4"]
@@ -42,8 +58,11 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     let lastListLoad = 0;
     let activation = null;
     let selectedMementoFile = null;
+    let selectedMementoSecondaryFile = null;
     let selectedMementoSourceFile = null;
+    let selectedMementoSecondarySourceFile = null;
     let selectedMementoPreview = null;
+    let mementoFrontIsPrimary = false;
     let mementoPreparationGeneration = 0;
     let mementoRequestId = null;
     let selectedChatMedia = null;
@@ -62,6 +81,9 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     const mementoShareRequestByEntry = new Map();
     let viewedMessageId = null;
     let viewedMementoEntryId = null;
+    let viewedMementoPrimaryURL = null;
+    let viewedMementoSwappedURL = null;
+    let viewedMementoShowsSwapped = false;
     let typingTimer = null;
     let typingSent = false;
     let roomGeneration = 0;
@@ -110,7 +132,11 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             <form class="memento-form">
                 <header><button type="button" data-close-memento>Cancel</button><strong>Today's Memento</strong><span></span></header>
                 <div class="memento-preview"><span aria-hidden="true">📸</span><p>Capture one real moment from today.</p></div>
-                <input class="memento-file-input" type="file" accept="image/*" capture="environment">
+                <div class="memento-capture-inputs">
+                    <label><span>First view · rear camera</span><input class="memento-file-input" type="file" accept="image/*" capture="environment"></label>
+                    <label><span>Second view · front camera</span><input class="memento-secondary-file-input" type="file" accept="image/*" capture="user"></label>
+                </div>
+                <small class="memento-capture-hint">Add both views for the iOS-style swappable Memento. Browsers capture them one after the other; one view remains a safe fallback.</small>
                 <fieldset class="camera-effect-picker hidden" data-memento-effects><legend>Photo effect</legend><div data-camera-effect-options></div><small>Browser Effects bake supported color and lighting into the photo. Face/body-tracked lenses and filtered video remain available in iOS.</small></fieldset>
                 <label>Caption <input class="memento-caption" maxlength="120" placeholder="What are you up to?"></label>
                 <p class="memento-audience"><strong>Sharing with</strong> <span></span></p>
@@ -139,7 +165,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         <dialog class="chat-sheet" data-chat-settings-dialog aria-label="Chat settings"><div class="chat-settings-content"></div></dialog>
         <dialog class="chat-sheet" data-chat-reactors-dialog aria-label="Message reactions"><div class="chat-reactors-content"></div></dialog>
         <dialog class="chat-sheet" data-chat-readers-dialog aria-label="Read receipts"><div class="chat-readers-content"></div></dialog>
-        <dialog class="chat-media-viewer" data-chat-media-viewer aria-label="Chat media"><button type="button" data-close-media aria-label="Close">×</button><img alt="" hidden><video playsinline controls hidden></video><div class="chat-viewer-overlay" hidden></div><p></p><div class="chat-viewer-actions"><button type="button" data-share-viewed-memento hidden>Share</button><button type="button" data-reply-viewed-media hidden>Reply</button><button type="button" data-react-viewed-media hidden>❤️ React</button></div></dialog>`;
+        <dialog class="chat-media-viewer" data-chat-media-viewer aria-label="Chat media"><button type="button" data-close-media aria-label="Close">×</button><img alt="" hidden><video playsinline controls hidden></video><div class="chat-viewer-overlay" hidden></div><p></p><div class="chat-viewer-actions"><button type="button" data-swap-viewed-memento aria-label="Swap front and back photos" hidden>⇄ Swap views</button><button type="button" data-share-viewed-memento hidden>Share</button><button type="button" data-reply-viewed-media hidden>Reply</button><button type="button" data-react-viewed-media hidden>❤️ React</button></div></dialog>`;
 
     const $ = (selector) => root.querySelector(selector);
     const $$ = (selector) => [...root.querySelectorAll(selector)];
@@ -173,6 +199,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     $(".chat-person-search input").addEventListener("input", renderPeople);
     $(".chat-people-list").addEventListener("change", updateCreateState);
     $(".memento-file-input").addEventListener("change", selectMemento);
+    $(".memento-secondary-file-input").addEventListener("change", selectMementoSecondary);
     $(".memento-form").addEventListener("submit", publishMemento);
     $("[data-memento-dialog]").addEventListener("close", resetMementoComposer);
     $(".chat-media-file-input").addEventListener("change", selectChatMedia);
@@ -384,8 +411,9 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         const completion = eligible ? Math.min(100, Math.round((posted / eligible) * 100)) : 0;
         container.innerHTML = `<div class="chat-memento-week" aria-label="Memento dates">${dateButtons}</div><button type="button" data-open-memento ${!isToday || row.viewer_is_eligible === false || row.viewer_has_posted_today ? "data-show-mementos" : ""}><span class="chat-daily-icon">📸</span><span><strong>${isToday ? (row.viewer_has_posted_today ? "Today's Mementos" : "Take today's Memento") : `${dateLabel}'s Mementos`}</strong><small>${posted} of ${eligible} captured${row.view_gate_locked ? " · add yours to reveal" : ""}</small><span class="chat-daily-progress" aria-hidden="true"><i></i></span></span><b>›</b></button><div class="chat-memento-strip">${entries.map((entry) => {
             const src = safeMediaURL(entry.image_url, api);
+            const swapped = safeMediaURL(entry.swapped_image_url, api);
             const name = escapeChatHTML(entry.first_name || "Student");
-            return src ? `<button type="button" data-view-memento="${escapeChatHTML(src)}" data-memento-owner="${escapeChatHTML(displayMember(entry))}" data-memento-entry="${escapeChatHTML(entry.entry_id || "")}"><img src="${escapeChatHTML(src)}" alt="${escapeChatHTML(displayMember(entry))}'s Memento" loading="lazy" decoding="async"><span>${name}</span></button>` : `<span class="chat-memento-missing"><i aria-hidden="true">${entry.has_posted ? "🔒" : "⌛"}</i><span>${name}</span><small>${entry.has_posted ? "Locked" : "Waiting"}</small></span>`;
+            return src ? `<button type="button" data-view-memento="${escapeChatHTML(src)}" ${swapped ? `data-memento-swapped="${escapeChatHTML(swapped)}"` : ""} data-memento-owner="${escapeChatHTML(displayMember(entry))}" data-memento-entry="${escapeChatHTML(entry.entry_id || "")}"><img src="${escapeChatHTML(src)}" alt="${escapeChatHTML(displayMember(entry))}'s Memento" loading="lazy" decoding="async"><span>${name}</span></button>` : `<span class="chat-memento-missing"><i aria-hidden="true">${entry.has_posted ? "🔒" : "⌛"}</i><span>${name}</span><small>${entry.has_posted ? "Locked" : "Waiting"}</small></span>`;
         }).join("")}</div>`;
         setRuntimeStyles($(".chat-daily-progress i"), { width: `${completion}%` });
         const locked = row.view_gate_locked === true;
@@ -428,9 +456,10 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         const endsSequence = !sharesSequence(next);
         const replyMarkup = reply ? `<button type="button" class="chat-reply-preview" data-scroll-message="${escapeChatHTML(reply.id)}"><strong>${escapeChatHTML(reply.sender_first_name || "Message")}</strong><span>${escapeChatHTML(reply.kind === "memento" ? "Memento" : reply.kind === "story" ? "Story" : reply.body || "Media")}</span></button>` : "";
         const mediaURL = safeMediaURL(message.kind === "memento" ? message.memento_image_url : message.kind === "story" ? message.story_thumbnail_url || message.story_media_url : message.sticker_image_url || message.photo_image_url || message.video_thumbnail_url, api);
+        const mementoSwappedURL = message.kind === "memento" ? safeMediaURL(message.memento_swapped_image_url, api) : null;
         const overlay = message.kind === "story" ? { text: message.story_text_overlay, x: message.story_text_overlay_x, y: message.story_text_overlay_y } : message.media_text_overlay;
         const mediaOverlay = overlay?.text ? `<span class="chat-media-text" data-overlay-x="${Number(overlay.x || 0.5)}" data-overlay-y="${Number(overlay.y || 0.5)}">${escapeChatHTML(overlay.text)}</span>` : "";
-        const persistentMedia = mediaURL ? `<button class="chat-message-media ${message.kind === "sticker" ? "sticker" : ""}" type="button" ${message.kind === "memento" ? `data-view-memento="${escapeChatHTML(mediaURL)}" data-memento-owner="${escapeChatHTML(message.sender_first_name || "Memento")}" data-memento-entry="${escapeChatHTML(message.daily_entry_id || "")}"` : `data-open-chat-media-message="${escapeChatHTML(message.id)}"`}><img src="${escapeChatHTML(mediaURL)}" alt="${message.kind === "memento" ? "Memento" : message.kind === "video" ? "Video thumbnail" : message.kind === "sticker" ? "Sticker" : "Photo"}" loading="lazy" decoding="async">${mediaOverlay}${message.kind === "video" ? `<span class="chat-video-play" aria-hidden="true">▶</span>` : ""}</button>` : "";
+        const persistentMedia = mediaURL ? `<button class="chat-message-media ${message.kind === "sticker" ? "sticker" : ""}" type="button" ${message.kind === "memento" ? `data-view-memento="${escapeChatHTML(mediaURL)}" ${mementoSwappedURL ? `data-memento-swapped="${escapeChatHTML(mementoSwappedURL)}"` : ""} data-memento-owner="${escapeChatHTML(message.sender_first_name || "Memento")}" data-memento-entry="${escapeChatHTML(message.daily_entry_id || "")}"` : `data-open-chat-media-message="${escapeChatHTML(message.id)}"`}><img src="${escapeChatHTML(mediaURL)}" alt="${message.kind === "memento" ? "Memento" : message.kind === "video" ? "Video thumbnail" : message.kind === "sticker" ? "Sticker" : "Photo"}" loading="lazy" decoding="async">${mediaOverlay}${message.kind === "video" ? `<span class="chat-video-play" aria-hidden="true">▶</span>` : ""}</button>` : "";
         const audioURL = safeMediaURL(message.audio_url, api);
         const audioMedia = message.kind === "audio" ? (audioURL ? `<div class="chat-audio-message"><strong>Voice message</strong><audio src="${escapeChatHTML(audioURL)}" controls preload="metadata" aria-label="Voice message"></audio><small>${Math.max(1, Math.round(Number(message.audio_duration_ms || 0) / 1000))}s</small></div>` : `<div class="chat-audio-message unavailable">Voice message unavailable</div>`) : "";
         const viewOnceMedia = message.view_once ? (mine
@@ -522,10 +551,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
 
     async function deliverMediaRecord(record, { onProgress } = {}) {
         if (record.kind === "memento") {
-            const session = await api.createDailyHighlightUpload(userId(), record.file.size, record.request_id);
-            await api.putDirectUpload(record.file, session, { onProgress });
-            await api.finalizeDailyHighlightUpload(userId(), session.media_asset_id);
-            return api.publishDailyHighlight(userId(), session.media_asset_id, record.chat_ids, record.caption, record.request_id);
+            return deliverMementoRecord(api, userId(), record, { onProgress });
         }
         if (record.kind !== "chat_media") throw new Error("This saved upload is not supported.");
         const session = await api.createChatMediaUpload(userId(), {
@@ -755,7 +781,12 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         const row = store.state.displayedDailyRow || store.state.dailyRow;
         if (showExisting || row?.viewer_has_posted_today || row?.viewer_is_eligible === false) {
             const first = (row?.entries || []).find((entry) => entry.image_url);
-            if (first) return viewMemento(safeMediaURL(first.image_url, api), displayMember(first));
+            if (first) return viewMemento(
+                safeMediaURL(first.image_url, api),
+                displayMember(first),
+                first.entry_id || null,
+                safeMediaURL(first.swapped_image_url, api),
+            );
             return showToast?.(row?.viewer_is_eligible === false ? "You can start posting Mementos tomorrow." : "No Mementos are available yet.");
         }
         if (!store.state.activeChatId) return;
@@ -792,8 +823,22 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         const file = event.target.files?.[0];
         if (!file) return;
         selectedMementoSourceFile = file;
+        mementoFrontIsPrimary = false;
         mementoEffectPicker.setMediaKind("photo");
         await prepareSelectedMemento(file, mementoEffectPicker.value());
+    }
+
+    async function selectMementoSecondary(event) {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        selectedMementoSecondarySourceFile = file;
+        mementoFrontIsPrimary = false;
+        if (!selectedMementoSourceFile) {
+            $(".memento-status").textContent = "Add the first view, then Six7 will prepare both together.";
+            return;
+        }
+        mementoEffectPicker.setMediaKind("photo");
+        await prepareSelectedMemento(selectedMementoSourceFile, mementoEffectPicker.value());
     }
 
     async function reprepareMemento(effect) {
@@ -808,21 +853,40 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         mementoEffectPicker.setDisabled(true);
         mementoRequestId = null;
         try {
-            const prepared = await prepareMementoImage(file, { photoEffect });
+            const prepared = await prepareMementoImages(file, selectedMementoSecondarySourceFile, { photoEffect });
             if (generation !== mementoPreparationGeneration) return;
-            selectedMementoFile = prepared;
-            if (selectedMementoPreview) URL.revokeObjectURL(selectedMementoPreview);
-            selectedMementoPreview = URL.createObjectURL(selectedMementoFile);
-            $(".memento-preview").innerHTML = `<img src="${escapeChatHTML(selectedMementoPreview)}" alt="Memento preview">`;
-            $(".memento-status").textContent = "Ready to share";
+            selectedMementoFile = mementoFrontIsPrimary && prepared.swapped ? prepared.swapped : prepared.primary;
+            selectedMementoSecondaryFile = mementoFrontIsPrimary && prepared.swapped ? prepared.primary : prepared.swapped;
+            renderSelectedMementoPreview();
+            $(".memento-status").textContent = prepared.swapped
+                ? `${mementoFrontIsPrimary ? "Front" : "Rear"} view is primary · tap the inset to swap`
+                : "Ready to share · add the second view for a swappable Memento";
             $(".memento-publish").disabled = false;
         } catch (error) {
             if (generation !== mementoPreparationGeneration) return;
             selectedMementoFile = null;
+            selectedMementoSecondaryFile = null;
             $(".memento-status").textContent = error.message || "Could not prepare that photo.";
         } finally {
             if (generation === mementoPreparationGeneration) mementoEffectPicker.setDisabled(false);
         }
+    }
+
+    function renderSelectedMementoPreview() {
+        if (selectedMementoPreview) URL.revokeObjectURL(selectedMementoPreview);
+        selectedMementoPreview = selectedMementoFile ? URL.createObjectURL(selectedMementoFile) : null;
+        $(".memento-preview").innerHTML = selectedMementoPreview
+            ? `<img src="${escapeChatHTML(selectedMementoPreview)}" alt="Memento preview">${selectedMementoSecondaryFile ? '<button class="memento-preview-swap" type="button" data-swap-memento-capture aria-label="Swap front and back photos"></button>' : ""}`
+            : `<span aria-hidden="true">📸</span><p>Capture one real moment from today.</p>`;
+    }
+
+    function swapSelectedMementoViews() {
+        if (!selectedMementoFile || !selectedMementoSecondaryFile) return;
+        [selectedMementoFile, selectedMementoSecondaryFile] = [selectedMementoSecondaryFile, selectedMementoFile];
+        mementoFrontIsPrimary = !mementoFrontIsPrimary;
+        mementoRequestId = null;
+        renderSelectedMementoPreview();
+        $(".memento-status").textContent = `${mementoFrontIsPrimary ? "Front" : "Rear"} view is primary · tap the inset to swap`;
     }
 
     async function publishMemento(event) {
@@ -833,6 +897,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         button.disabled = true;
         button.textContent = "Sharing…";
         $(".memento-file-input").disabled = true;
+        $(".memento-secondary-file-input").disabled = true;
         $(".memento-caption").disabled = true;
         mementoEffectPicker.setDisabled(true);
         $(".memento-skip").disabled = true;
@@ -845,6 +910,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 user_id: userId(),
                 kind: "memento",
                 file: selectedMementoFile,
+                secondary: selectedMementoSecondaryFile,
                 chat_id: chatIds[0],
                 chat_ids: chatIds,
                 caption: $(".memento-caption").value.trim() || null,
@@ -879,13 +945,18 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     function resetMementoComposer() {
         mementoPreparationGeneration += 1;
         selectedMementoFile = null;
+        selectedMementoSecondaryFile = null;
         selectedMementoSourceFile = null;
+        selectedMementoSecondarySourceFile = null;
+        mementoFrontIsPrimary = false;
         mementoRequestId = null;
         if (selectedMementoPreview) URL.revokeObjectURL(selectedMementoPreview);
         selectedMementoPreview = null;
         mementoEffectPicker.reset();
         $(".memento-file-input").value = "";
         $(".memento-file-input").disabled = false;
+        $(".memento-secondary-file-input").value = "";
+        $(".memento-secondary-file-input").disabled = false;
         $(".memento-caption").value = "";
         $(".memento-caption").disabled = false;
         $(".memento-audience span").textContent = "";
@@ -1233,6 +1304,9 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         image.removeAttribute("src");
         video.removeAttribute("src");
         target.src = url;
+        image.alt = kind === "video" ? "" : label;
+        if (kind === "video") video.setAttribute("aria-label", label);
+        else video.removeAttribute("aria-label");
         dialog.querySelector("p").textContent = label;
         const overlayNode = dialog.querySelector(".chat-viewer-overlay");
         overlayNode.hidden = !overlay?.text;
@@ -1253,13 +1327,46 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         ]);
     }
 
-    function viewMemento(url, owner, entryId = null) {
+    function viewMemento(url, owner, entryId = null, swappedURL = null) {
         viewedMementoEntryId = entryId ? String(entryId) : null;
         viewedMessageId = entryId ? store.messages().find((message) => String(message.daily_entry_id || "") === String(entryId))?.id || null : null;
+        viewedMementoPrimaryURL = url;
+        viewedMementoSwappedURL = swappedURL && swappedURL !== url ? swappedURL : null;
+        viewedMementoShowsSwapped = false;
+        const swapButton = $("[data-swap-viewed-memento]");
+        swapButton.hidden = !viewedMementoSwappedURL;
+        swapButton.disabled = false;
+        swapButton.textContent = "⇄ Alternate view";
+        swapButton.setAttribute("aria-label", "Show alternate Memento view");
         $("[data-share-viewed-memento]").hidden = !viewedMementoEntryId;
         $("[data-reply-viewed-media]").hidden = !viewedMessageId;
         $("[data-react-viewed-media]").hidden = !viewedMessageId;
         void showMediaViewer(url, { label: `${owner || "Memento"} · preserved in this chat` }).catch((error) => showToast?.(error.message));
+    }
+
+    async function swapViewedMemento() {
+        if (!viewedMementoPrimaryURL || !viewedMementoSwappedURL) return;
+        const image = $("[data-chat-media-viewer] img");
+        const button = $("[data-swap-viewed-memento]");
+        const previousURL = image.getAttribute("src");
+        const nextShowsSwapped = !viewedMementoShowsSwapped;
+        const nextURL = nextShowsSwapped ? viewedMementoSwappedURL : viewedMementoPrimaryURL;
+        button.disabled = true;
+        image.src = nextURL;
+        try {
+            await Promise.race([
+                image.decode(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error("That Memento view took too long to open.")), 10_000)),
+            ]);
+            viewedMementoShowsSwapped = nextShowsSwapped;
+            button.textContent = viewedMementoShowsSwapped ? "⇄ Primary view" : "⇄ Alternate view";
+            button.setAttribute("aria-label", viewedMementoShowsSwapped ? "Show primary Memento view" : "Show alternate Memento view");
+        } catch (error) {
+            if (previousURL) image.src = previousURL;
+            showToast?.(error.message || "That Memento view could not be opened.");
+        } finally {
+            button.disabled = false;
+        }
     }
 
     function closeMediaViewer() {
@@ -1273,10 +1380,17 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         video.pause();
         video.removeAttribute("src");
         video.load();
-        dialog.querySelector("img").removeAttribute("src");
+        const image = dialog.querySelector("img");
+        image.removeAttribute("src");
+        image.alt = "";
+        video.removeAttribute("aria-label");
         dialog.querySelector(".chat-viewer-overlay").textContent = "";
         viewedMessageId = null;
         viewedMementoEntryId = null;
+        viewedMementoPrimaryURL = null;
+        viewedMementoSwappedURL = null;
+        viewedMementoShowsSwapped = false;
+        $("[data-swap-viewed-memento]").hidden = true;
         $("[data-share-viewed-memento]").hidden = true;
         $("[data-reply-viewed-media]").hidden = true;
         $("[data-react-viewed-media]").hidden = true;
@@ -1702,12 +1816,14 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (target.matches("[data-record-voice]")) return void toggleVoiceRecording();
         if (target.matches("[data-close-memento]")) return $("[data-memento-dialog]").close();
         if (target.matches("[data-skip-memento]")) return skipMementoForToday();
-        if (target.dataset.viewMemento) return viewMemento(target.dataset.viewMemento, target.dataset.mementoOwner, target.dataset.mementoEntry || null);
+        if (target.matches("[data-swap-memento-capture]")) return swapSelectedMementoViews();
+        if (target.dataset.viewMemento) return viewMemento(target.dataset.viewMemento, target.dataset.mementoOwner, target.dataset.mementoEntry || null, target.dataset.mementoSwapped || null);
         if (target.dataset.openChatMediaMessage) return openPersistentChatMedia(target.dataset.openChatMediaMessage);
         if (target.dataset.sendSticker) return sendSticker(target.dataset.sendSticker);
         if (target.dataset.openViewOnce) return openViewOnceMessage(target.dataset.openViewOnce);
         if (target.dataset.viewOnceReceipts) return showViewOnceReceipts(target.dataset.viewOnceReceipts);
         if (target.matches("[data-share-viewed-memento]")) return shareViewedMemento();
+        if (target.matches("[data-swap-viewed-memento]")) return void swapViewedMemento();
         if (target.matches("[data-reply-viewed-media]")) return replyToViewedMedia();
         if (target.matches("[data-react-viewed-media]")) return reactToViewedMedia();
         if (target.matches("[data-close-media]")) return closeMediaViewer();

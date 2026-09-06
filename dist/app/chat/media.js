@@ -4,9 +4,35 @@ const MAX_SOURCE_BYTES = 20 * 1024 * 1024;
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
 export async function prepareMementoImage(file, { photoEffect = null } = {}) {
+    validateMementoSource(file);
+    return prepareJPEG(file, "memento.jpg", photoEffect);
+}
+
+export async function prepareMementoImages(primaryFile, secondaryFile = null, { photoEffect = null } = {}) {
+    validateMementoSource(primaryFile);
+    if (!secondaryFile) {
+        return { primary: await prepareJPEG(primaryFile, "memento.jpg", photoEffect), swapped: null };
+    }
+    validateMementoSource(secondaryFile);
+    const [primaryBitmap, secondaryBitmap] = await Promise.all([
+        createImageBitmap(primaryFile, { imageOrientation: "from-image" }),
+        createImageBitmap(secondaryFile, { imageOrientation: "from-image" }),
+    ]);
+    try {
+        const [primary, swapped] = await Promise.all([
+            prepareMementoComposite(primaryBitmap, secondaryBitmap, "memento.jpg", photoEffect),
+            prepareMementoComposite(secondaryBitmap, primaryBitmap, "memento-swapped.jpg", photoEffect),
+        ]);
+        return { primary, swapped };
+    } finally {
+        primaryBitmap.close();
+        secondaryBitmap.close();
+    }
+}
+
+function validateMementoSource(file) {
     if (!file || !file.type.startsWith("image/")) throw new Error("Choose a photo to make your Memento.");
     if (file.size > MAX_SOURCE_BYTES) throw new Error("That photo is too large. Choose one under 20 MB.");
-    return prepareJPEG(file, "memento.jpg", photoEffect);
 }
 
 export async function prepareChatMedia(file, { durationMsHint = null, photoEffect = null } = {}) {
@@ -59,17 +85,83 @@ async function prepareJPEG(file, filename, photoEffect = null) {
         context.fillStyle = "#fff";
         context.fillRect(0, 0, width, height);
         drawImageWithCameraEffect(context, bitmap, width, height, photoEffect || undefined);
-        let quality = 0.84;
-        let blob = await canvasBlob(canvas, quality);
-        while (blob.size > MAX_UPLOAD_BYTES && quality > 0.46) {
-            quality -= 0.1;
-            blob = await canvasBlob(canvas, quality);
-        }
-        if (blob.size > MAX_UPLOAD_BYTES) throw new Error("That photo could not be made small enough to upload.");
-        return new File([blob], filename, { type: "image/jpeg", lastModified: Date.now() });
+        return encodeJPEG(canvas, filename);
     } finally {
         bitmap.close();
     }
+}
+
+async function prepareMementoComposite(primary, inset, filename, photoEffect) {
+    const width = 1080;
+    const height = 1440;
+    const composite = document.createElement("canvas");
+    composite.width = width;
+    composite.height = height;
+    const context = composite.getContext("2d", { alpha: false });
+    context.fillStyle = "#000";
+    context.fillRect(0, 0, width, height);
+    drawAspectFill(context, primary, { x: 0, y: 0, width, height });
+
+    const insetRect = { x: 684, y: 40, width: 356, height: 475 };
+    context.save();
+    roundedRectangle(context, insetRect, 34);
+    context.clip();
+    drawAspectFill(context, inset, insetRect);
+    context.restore();
+    context.save();
+    roundedRectangle(context, insetRect, 34);
+    context.strokeStyle = "#fff";
+    context.lineWidth = 11;
+    context.stroke();
+    context.restore();
+
+    const treated = document.createElement("canvas");
+    treated.width = width;
+    treated.height = height;
+    const treatedContext = treated.getContext("2d", { alpha: false });
+    treatedContext.fillStyle = "#000";
+    treatedContext.fillRect(0, 0, width, height);
+    drawImageWithCameraEffect(treatedContext, composite, width, height, photoEffect || undefined);
+    return encodeJPEG(treated, filename);
+}
+
+function drawAspectFill(context, image, rect) {
+    const sourceWidth = Number(image.width || 0);
+    const sourceHeight = Number(image.height || 0);
+    if (!sourceWidth || !sourceHeight) throw new Error("That photo could not be read.");
+    const scale = Math.max(rect.width / sourceWidth, rect.height / sourceHeight);
+    const cropWidth = rect.width / scale;
+    const cropHeight = rect.height / scale;
+    const sourceX = (sourceWidth - cropWidth) / 2;
+    const sourceY = (sourceHeight - cropHeight) / 2;
+    context.drawImage(image, sourceX, sourceY, cropWidth, cropHeight, rect.x, rect.y, rect.width, rect.height);
+}
+
+function roundedRectangle(context, rect, radius) {
+    const right = rect.x + rect.width;
+    const bottom = rect.y + rect.height;
+    context.beginPath();
+    context.moveTo(rect.x + radius, rect.y);
+    context.lineTo(right - radius, rect.y);
+    context.quadraticCurveTo(right, rect.y, right, rect.y + radius);
+    context.lineTo(right, bottom - radius);
+    context.quadraticCurveTo(right, bottom, right - radius, bottom);
+    context.lineTo(rect.x + radius, bottom);
+    context.quadraticCurveTo(rect.x, bottom, rect.x, bottom - radius);
+    context.lineTo(rect.x, rect.y + radius);
+    context.quadraticCurveTo(rect.x, rect.y, rect.x + radius, rect.y);
+    context.closePath();
+}
+
+async function encodeJPEG(canvas, filename) {
+    let quality = 0.84;
+    let blob = await canvasBlob(canvas, quality);
+    while (blob.size > MAX_UPLOAD_BYTES && quality > 0.46) {
+        quality -= 0.1;
+        blob = await canvasBlob(canvas, quality);
+    }
+    if (blob.size > MAX_UPLOAD_BYTES) throw new Error("That photo could not be made small enough to upload.");
+    return new File([blob], filename, { type: "image/jpeg", lastModified: Date.now() });
 }
 
 async function videoMetadata(file) {

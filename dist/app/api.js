@@ -1060,14 +1060,16 @@ export class ValidAPI {
         });
     }
 
-    createDailyHighlightUpload(userId, sizeBytes, clientRequestId = crypto.randomUUID()) {
+    createDailyHighlightUpload(userId, sizeBytes, clientRequestId = crypto.randomUUID(), secondarySizeBytes = null) {
+        const body = {
+            content_type: "image/jpeg",
+            size_bytes: sizeBytes,
+            client_request_id: clientRequestId,
+        };
+        if (secondarySizeBytes !== null && secondarySizeBytes !== undefined) body.secondary_size_bytes = secondarySizeBytes;
         return this.request(`/users/${userId}/daily-highlight-uploads?delivery=proxy`, {
             method: "POST",
-            body: JSON.stringify({
-                content_type: "image/jpeg",
-                size_bytes: sizeBytes,
-                client_request_id: clientRequestId,
-            }),
+            body: JSON.stringify(body),
         });
     }
 

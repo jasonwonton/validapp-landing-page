@@ -77,7 +77,7 @@ test("Memento reciprocity keeps locked messages out of the DOM and unlocks after
 
     await page.locator(".chat-daily-row > button").click();
     const composer = page.getByRole("dialog", { name: "Create a Memento" });
-    await composer.locator('input[type="file"]').setInputFiles("assets/AppIconV2.png");
+    await composer.locator(".memento-file-input").setInputFiles("assets/AppIconV2.png");
     await expect(composer.getByRole("button", { name: "Share to this chat" })).toBeEnabled();
     await composer.getByRole("button", { name: "Share to this chat" }).click();
 
@@ -109,7 +109,7 @@ test("a Memento stays scoped to the active chat like the released iOS contract",
     const composer = page.getByRole("dialog", { name: "Create a Memento" });
     await expect(composer.locator(".memento-audience")).toHaveText("Sharing with Weekend Crew");
     await expect(composer.getByRole("checkbox")).toHaveCount(0);
-    await composer.locator('input[type="file"]').setInputFiles("assets/AppIconV2.png");
+    await composer.locator(".memento-file-input").setInputFiles("assets/AppIconV2.png");
     await composer.getByRole("button", { name: "Share to this chat" }).click();
     await expect(page.getByText("Memento shared · +10 Aura", { exact: true })).toBeVisible();
 });
@@ -120,6 +120,11 @@ test("Memento gallery can reply, react, and safely reshare its authoritative ent
     await page.getByRole("button", { name: /Noah Williams/ }).click();
     await page.getByRole("button", { name: /Jules Rivera's Memento/ }).click();
     const viewer = page.getByRole("dialog", { name: "Chat media" });
+    const image = viewer.getByRole("img", { name: /Jules.*preserved in this chat/ });
+    await expect(image).toHaveAttribute("src", /pencil-clipboard\.webp$/);
+    await viewer.getByRole("button", { name: "Show alternate Memento view" }).click();
+    await expect(image).toHaveAttribute("src", /anonymous\.webp$/);
+    await expect(viewer.getByRole("button", { name: "Show primary Memento view" })).toBeVisible();
     await viewer.getByRole("button", { name: "Reply" }).click();
     await expect(page.locator(".chat-reply-draft")).toContainText("Memento");
     await page.getByRole("button", { name: /Jules Rivera's Memento/ }).click();

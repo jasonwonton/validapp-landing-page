@@ -116,6 +116,7 @@ function hydrateMediaRecord(record) {
     const {
         file: legacyFile,
         thumbnail: legacyThumbnail,
+        secondary: legacySecondary,
         file_bytes: fileBytes,
         file_type: fileType,
         file_name: fileName,
@@ -124,6 +125,10 @@ function hydrateMediaRecord(record) {
         thumbnail_type: thumbnailType,
         thumbnail_name: thumbnailName,
         thumbnail_last_modified: thumbnailLastModified,
+        secondary_bytes: secondaryBytes,
+        secondary_type: secondaryType,
+        secondary_name: secondaryName,
+        secondary_last_modified: secondaryLastModified,
         ...metadata
     } = record;
     const restore = (legacy, bytes, type, name, lastModified) => {
@@ -139,6 +144,7 @@ function hydrateMediaRecord(record) {
         ...metadata,
         file: restore(legacyFile, fileBytes, fileType, fileName, fileLastModified),
         thumbnail: restore(legacyThumbnail, thumbnailBytes, thumbnailType, thumbnailName, thumbnailLastModified),
+        secondary: restore(legacySecondary, secondaryBytes, secondaryType, secondaryName, secondaryLastModified),
     };
 }
 
@@ -255,10 +261,11 @@ export async function putChatMediaOutbox(record) {
     const now = Date.now();
     const createdAt = Number(previous?.created_at || record.created_at || Math.max(now, latestMediaCreatedAt + 1));
     latestMediaCreatedAt = Math.max(latestMediaCreatedAt, createdAt);
-    const { file, thumbnail, ...metadata } = record;
-    const [serializedFile, serializedThumbnail] = await Promise.all([
+    const { file, thumbnail, secondary, ...metadata } = record;
+    const [serializedFile, serializedThumbnail, serializedSecondary] = await Promise.all([
         serializeMediaValue(file),
         serializeMediaValue(thumbnail),
+        serializeMediaValue(secondary),
     ]);
     const saved = {
         ...metadata,
@@ -272,6 +279,10 @@ export async function putChatMediaOutbox(record) {
         thumbnail_type: serializedThumbnail?.type || null,
         thumbnail_name: serializedThumbnail?.name || null,
         thumbnail_last_modified: serializedThumbnail?.last_modified || 0,
+        secondary_bytes: serializedSecondary?.bytes || null,
+        secondary_type: serializedSecondary?.type || null,
+        secondary_name: serializedSecondary?.name || null,
+        secondary_last_modified: serializedSecondary?.last_modified || 0,
         created_at: createdAt,
         attempts: Number(record.attempts ?? previous?.attempts ?? 0),
         next_attempt_at: Number(record.next_attempt_at ?? previous?.next_attempt_at ?? 0),

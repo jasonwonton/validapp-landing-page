@@ -152,13 +152,20 @@
 .chat-reactors-list { display: grid; gap: 2px; }
 .chat-reactors-list > div { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 4px; border-bottom: 1px solid rgba(5,9,20,.12); }
 .chat-reactors-list b { font-size: 1.25rem; }
-.memento-preview, .chat-media-preview { position: relative; aspect-ratio: 4 / 5; display: grid; align-content: center; justify-items: center; gap: 10px; overflow: hidden; border: 3px solid var(--ink); border-radius: 22px; background: #e6ffff; text-align: center; }
+.memento-preview, .chat-media-preview { position: relative; display: grid; align-content: center; justify-items: center; gap: 10px; overflow: hidden; border: 3px solid var(--ink); border-radius: 22px; background: #e6ffff; text-align: center; }
+.memento-preview { aspect-ratio: 3 / 4; }
+.chat-media-preview { aspect-ratio: 4 / 5; }
 .memento-preview span { font-size: 4rem; }
 .memento-preview p { margin: 0; color: var(--muted); }
 .memento-preview img { width: 100%; height: 100%; object-fit: cover; }
+.memento-preview .memento-preview-swap { position: absolute; top: 2.8%; right: 3.7%; width: 33%; height: 33%; padding: 0; border: 0; border-radius: 10%; background: transparent; cursor: pointer; }
+.memento-preview .memento-preview-swap:focus-visible { outline: 4px solid #fff; outline-offset: -5px; box-shadow: 0 0 0 2px var(--ink); }
 .chat-media-preview img, .chat-media-preview video { width: 100%; height: 100%; object-fit: contain; background: #050914; }
 .chat-media-preview audio { width: min(90%, 360px); }
-.memento-file-input, .chat-media-file-input { width: 100%; padding: 10px; border: 2px dashed var(--ink); border-radius: 13px; background: var(--white); }
+.memento-capture-inputs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.memento-capture-inputs label { min-width: 0; display: grid; gap: 5px; color: var(--muted); font-size: .72rem; font-weight: 800; }
+.memento-file-input, .memento-secondary-file-input, .chat-media-file-input { width: 100%; min-width: 0; padding: 10px; border: 2px dashed var(--ink); border-radius: 13px; background: var(--white); color: inherit; }
+.memento-capture-hint { margin: -4px 2px 0; color: var(--muted); line-height: 1.35; }
 .memento-form > label, .chat-media-form > label { display: grid; gap: 5px; font-size: .8rem; }
 .memento-audience { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0; padding: 10px; border: 1px solid var(--line); border-radius: 13px; font-size: .8rem; }
 .memento-audience strong { color: var(--muted); }
@@ -183,7 +190,8 @@
 .chat-media-viewer img, .chat-media-viewer video { width: 100%; height: calc(100% - 52px); object-fit: contain; }
 .chat-viewer-overlay { max-width: min(80vw, 560px); font-size: clamp(1rem, 4vw, 1.6rem); }
 .chat-media-viewer p { margin: 10px 0 0; text-align: center; }
-.chat-viewer-actions { position: absolute; z-index: 3; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); display: flex; gap: 8px; transform: translateX(-50%); }
+.chat-viewer-actions { position: absolute; z-index: 3; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); width: max-content; max-width: calc(100% - 24px); display: flex; gap: 8px; padding: 2px; overflow-x: auto; transform: translateX(-50%); scrollbar-width: none; }
+.chat-viewer-actions::-webkit-scrollbar { display: none; }
 .chat-viewer-actions button { position: static; width: auto; height: 42px; padding: 0 14px; border-radius: 999px; font-size: .82rem; white-space: nowrap; }
 .chat-settings-content section { display: grid; gap: 8px; padding: 11px; border: 2px solid var(--ink); border-radius: 15px; background: var(--white); }
 .chat-settings-content h3 { margin: 0 0 4px; }
@@ -229,6 +237,8 @@
     .chat-composer textarea,
     .chat-search-form label,
     .chat-search-results button,
+    .memento-file-input,
+    .memento-secondary-file-input,
     .chat-media-file-input,
     .chat-audio-input-label input,
     .chat-voice-record,

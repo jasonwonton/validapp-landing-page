@@ -153,14 +153,16 @@ Firefox, and Safari where the capability is supported:
    Confirm the pending bubble returns and the server stores one message with the
    original `client_request_id`. Repeat through `503`, `429`, and a permanent
    `400`; verify bounded backoff and no automatic permanent-error retry.
-5. Capture a Memento with the front and rear camera, choose an existing photo,
-   cancel permissions, lose connectivity during upload, refresh, close the tab,
-   and reopen. Verify one publish with the original request ID, local date/DST
-   history, reciprocity, cross-device unlock, active-chat-only audience, and
-   that locked message bodies never enter the DOM. Apply an offline photo Effect and one compatible
+5. Capture a Memento sequentially with the rear and front camera, swap the inset
+   in the composer and full-screen viewer, then repeat with one existing photo
+   to verify the single-view fallback. Cancel permissions, lose connectivity
+   during each upload, refresh, close the tab, and reopen. Verify one publish
+   with the original request ID, local date/DST history, reciprocity,
+   cross-device unlock, active-chat-only audience, and that locked message
+   bodies never enter the DOM. Apply an offline photo Effect and one compatible
    server-managed Featured treatment; verify the selected pixels—not the source
-   file—enter the bounded JPEG upload. Record the deliberate single-image web
-   alternative to iOS's front/rear composite.
+   files—enter both bounded 1080×1440 JPEG uploads and neither response enters
+   persistent service-worker cache storage.
 6. Send persistent and view-once photos twice, a device-decodable MP4, a live
    voice recording where the browser advertises MP4 audio, an imported M4A
    fallback, a saved sticker, and a centered overlay. Deny microphone permission

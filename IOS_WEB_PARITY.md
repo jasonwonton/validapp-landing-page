@@ -1,6 +1,6 @@
 # Six7 iOS → PWA parity and release matrix
 
-Last audited: September 5, 2026
+Last audited: September 6, 2026
 Authorities: the current Swift client and the Six7 backend contracts. The backend remains authoritative for identity, membership history, moderation, reciprocity, idempotency, notification eligibility, and media lifecycle.
 
 ## Status contract
@@ -41,8 +41,8 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Exact call deep link | Equivalent | Not yet tested | Expiring Web Push and foreground call events route to `?tab=chats&chat=<id>&call=<id>`; the cold-start contract is automated and final-origin tray proof remains. |
 | Pending text after refresh/reopen | Equivalent | Not yet tested | User-scoped IndexedDB outbox is capped at 50/user and 200/global, expires at 7 days, retries at most 8 times with bounded backoff, and reuses the same request ID. Physical killed-tab recovery remains. |
 | Pending text after logout/deletion request | Equivalent | Not yet tested | Both text and media outboxes are erased for that user; automated coverage passes and final-origin verification remains. |
-| Daily Memento capture and JPEG preparation | Partial | Not yet tested | Browser camera/file input, bounded JPEG preparation, and locally baked photo Effects work, but the web flow captures one image rather than iOS's front/rear composite. Pixel, Samsung, and iPhone camera UX remain. |
-| Memento upload/finalize/publish | Equivalent | Not yet tested | Uses the same private backend lifecycle and one stable request ID; bounded origin-scoped IndexedDB recovery resumes on the next Chats open. Physical interruption testing remains. |
+| Daily Memento capture and JPEG preparation | Equivalent | Not yet tested | The deliberate browser alternative captures rear and front views sequentially, builds the same two swappable 1080×1440 composites with inset framing, and retains a safe single-view fallback. Locally baked photo Effects remain bounded; physical Pixel, Samsung, and iPhone camera UX remains. |
+| Memento upload/finalize/publish | Equivalent | Not yet tested | Both private composites use one authoritative upload session, one finalize, exactly one active-chat publish, and the same stable request ID. The dual-image IndexedDB record is bounded and resumes on the next Chats open; physical interruption testing remains. |
 | Memento reciprocity gate | Equivalent | Not yet tested | Locked message bodies stay out of the DOM; unlock journey passes in all four lab projects. |
 | Skip Memento for today | Equivalent | Not yet tested | Uses the same authoritative daily-row skip endpoint and unlocks without fabricating a post. |
 | Seven-day Memento history | Equivalent | Not yet tested | Date rail and historical rows are automated indirectly; timezone/DST physical tests remain. |
@@ -71,7 +71,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Story creation/editor/publishing | Partial | Not yet tested | Photo Effects, codec-compatible MP4 preparation, private upload/finalize, caption, draggable/keyboard-positioned overlay, stable publish IDs, and bounded reopen recovery are implemented. Multi-clip capture remains iOS-only today. |
 | Story reply/share | Partial | Not yet tested | Text replies and up-to-10 classmate shares create or reuse authoritative chats with stable request IDs; iOS additionally offers registered-contact sharing for the Story owner, and physical two-account smoke remains. |
 | Conversation/inbox search | Equivalent | Not yet tested | Explicit bounded server search opens exact chats/messages; automation passes. |
-| Media recovery after refresh/network loss | Equivalent | Not yet tested | User-scoped IndexedDB retains at most 3 uploads/user and 10 globally for 24 hours, attempts at most 4 times, and reuses upload/send IDs. Mementos expire at the local day boundary rather than posting on the wrong day. Reopen delivery is automated; physical loss/recovery remains. |
+| Media recovery after refresh/network loss | Equivalent | Not yet tested | User-scoped IndexedDB retains at most 3 uploads/user and 10 globally for 24 hours, attempts at most 4 times, and reuses upload/send IDs. A dual-view Memento record remains bounded to two ≤8 MB JPEGs and hydrates both after reload; Mementos expire at the local day boundary rather than posting on the wrong day. Reopen delivery is automated; physical loss/recovery remains. |
 | Voice/video calls | Partial | Not yet tested | A separately gated, lazy LiveKit client supports open-app start, incoming accept/decline, microphone/video publication, authoritative camera slots, mute/camera controls, participant media, reconnect status, and end/leave. Mocked four-project browser flows and released HTTP contracts pass; two-account LiveKit, device permissions, Bluetooth/audio route, participant moderation, rotation, backgrounding, and network handoff remain. Reliable closed-app/lock-screen ringing is native-only. |
 | Group photo / appearance controls | Partial | Not yet tested | Owners can prepare and replace the authoritative group photo; richer iOS appearance controls remain absent. |
 
@@ -117,11 +117,11 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Long-list DOM bounds | Partial | Not yet tested | `content-visibility`, page limits, and a hard 500-message in-memory/DOM window exist; full virtualization and large-account soak remain. |
 | Responsive touch interactions | Equivalent | Not yet tested | Pixel emulation passes; physical low/midrange Android gate remains. |
 | Keyboard-safe layouts | Partial | Not yet tested | Visual Viewport handling exists; Samsung Keyboard, Gboard, and iPhone PWA checks remain. |
-| Camera/composer polish | Partial | Not yet tested | Capture, preview, bounded offline/Featured photo Effects, compression, progress, compatible live MP4 voice recording with M4A fallback, photo/video selection, view-once, overlay, reply, and reactions work; physical camera/microphone/keyboard and richer editing remain. |
+| Camera/composer polish | Partial | Not yet tested | Sequential front/rear Memento capture and swapping, single-view fallback, preview, bounded offline/Featured photo Effects, compression, progress, compatible live MP4 voice recording with M4A fallback, photo/video selection, view-once, overlay, reply, and reactions work; physical camera/microphone/keyboard and richer editing remain. |
 | Accessibility semantics/focus | Partial | Not yet tested | Labels, live regions, reduced motion, and touch targets exist; screen-reader and contrast audit remain. |
 | Offline shell/installability | Equivalent | Not yet tested | Manifest/service-worker shell tests pass; installed physical-device update/reopen remains. |
 | Offline private-data isolation | Equivalent | Not yet tested | No authenticated API/media response enters Cache Storage; scoped snapshots/outbox are cleared at account exit. |
-| Predictable app updates | Partial | Not yet tested | v61 preserves bounded photo Effects and aligns Memento audience selection with the authoritative exact-one-chat contract while retaining the audited notification destinations, comments, and positioned overlays; telemetry/cache versions remain synchronized. Waiting-worker rollback/update soak remains. |
+| Predictable app updates | Partial | Not yet tested | v62 adds the dual-view Memento browser alternative while preserving the exact-one-chat contract, bounded recovery, audited notification destinations, comments, and positioned overlays; telemetry/cache versions remain synchronized. Waiting-worker rollback/update soak remains. |
 | Strict CSP runtime behavior | Equivalent | Not yet tested | Response and meta policies keep `style-src 'self'` without `unsafe-inline`; bounded same-origin CSSOM rules cover dynamic progress, overlays, viewport, crop, and drag state in all four lab projects. Final-origin header verification remains. |
 | Dark Mode | Equivalent | Not yet tested | System color scheme now drives the core shell, Chats, Mementos, forms, and dialogs; automated computed-style check plus visual/accessibility review remain. |
 | Haptics | Partial | Not yet tested | Android vibration is progressive enhancement; precise native haptic parity is unavailable. |
@@ -149,7 +149,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 ## Device and evidence ledger
 
 Current candidate evidence: `npm run build`, UI runtime checks, and performance
-budgets pass. The candidate's **700-case** lab matrix contains **695 passing
+budgets pass. The candidate's **708-case** lab matrix contains **703 passing
 tests and 5 intentional project-capability skips** across Pixel 7 Chromium,
 Desktop Chrome, Desktop Firefox, and Desktop WebKit. Android, Chrome, and
 Firefox completed as full no-retry projects. Every applicable WebKit case also
@@ -188,12 +188,15 @@ limits. The
 scoped backend chat/Memento/Story/Web Push/config safety run is **273 passed, 0
 failed**; the latest current-tree affected notification/comment/lifecycle/call/
 config run is **316 passed, 0 failed**. These are lab results, not production or
-physical-device approval. The v61 candidate additionally proves that an
+physical-device approval. The v62 candidate additionally proves that an
 installed Chromium shell can cold-reload offline and open the previously
 unvisited Chats/media-overlay route entirely from the bounded static cache and
 that photo Effects are locally baked into the bounded JPEG before durable retry.
 It also rejects an invalid multi-chat Memento audience before network I/O while
-the composer visibly scopes each publish to the active chat.
+the composer visibly scopes each publish to the active chat. Sequential rear and
+front sources produce two swappable 1080×1440 composites; contract automation
+proves both upload before one finalize/publish, and reload coverage proves the
+bounded private outbox hydrates the secondary JPEG.
 
 | Target | State | Required before release |
 | --- | --- | --- |

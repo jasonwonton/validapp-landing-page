@@ -388,23 +388,24 @@ export class DemoAPI {
             ],
             "chat-noah": [
                 { id: "msg-n1", chat_id: "chat-noah", room_sequence: 1, sender_user_id: "classmate-2", sender_first_name: "Noah", kind: "text", body: "Did you see that presentation?", status: "active", viewer_is_sender: false, reaction_count: 0, reaction_summary: {}, created_at: ago(100), updated_at: ago(100) },
-                { id: "msg-n2", chat_id: "chat-noah", room_sequence: 2, sender_user_id: "demo-user", sender_first_name: "Jules", kind: "memento", body: "Sent a Memento", daily_entry_id: "entry-jules", memento_image_url: "../assets/app/pencil-clipboard.webp", memento_ledger_date: ledgerDate, status: "active", viewer_is_sender: true, reaction_count: 1, reaction_summary: { funny: 1 }, created_at: ago(80), updated_at: ago(80) },
+                { id: "msg-n2", chat_id: "chat-noah", room_sequence: 2, sender_user_id: "demo-user", sender_first_name: "Jules", kind: "memento", body: "Sent a Memento", daily_entry_id: "entry-jules", memento_image_url: "../assets/app/pencil-clipboard.webp", memento_swapped_image_url: "../assets/app/anonymous.webp", memento_ledger_date: ledgerDate, status: "active", viewer_is_sender: true, reaction_count: 1, reaction_summary: { funny: 1 }, created_at: ago(80), updated_at: ago(80) },
                 { id: "msg-n3", chat_id: "chat-noah", room_sequence: 3, sender_user_id: "demo-user", sender_first_name: "Jules", kind: "text", body: "That was hilarious 😂", status: "active", viewer_is_sender: true, reaction_count: 0, reaction_summary: {}, created_at: ago(70), updated_at: ago(70) },
                 { id: "msg-n4", chat_id: "chat-noah", room_sequence: 4, sender_user_id: "classmate-2", sender_first_name: "Noah", kind: "photo", body: null, photo_image_url: null, view_once: true, view_once_available: true, view_once_consumed: false, view_once_remaining_views: 2, view_once_opened_count: 0, view_once_recipient_count: 1, media_text_overlay: { text: "Game night", x: 0.5, y: 0.5 }, status: "active", viewer_is_sender: false, reaction_count: 0, reaction_summary: {}, created_at: ago(60), updated_at: ago(60) },
                 { id: "msg-n5", chat_id: "chat-noah", room_sequence: 5, sender_user_id: "demo-user", sender_first_name: "Jules", kind: "photo", body: null, photo_image_url: null, view_once: true, view_once_available: false, view_once_consumed: false, view_once_remaining_views: 0, view_once_opened_count: 1, view_once_recipient_count: 1, status: "active", viewer_is_sender: true, reaction_count: 0, reaction_summary: {}, created_at: ago(50), updated_at: ago(50) },
             ],
         };
         this.chatMediaAssets = {};
+        this.dailyMediaAssets = {};
         this.chatViewSessions = {};
         this.dailyRows = {
             "chat-friends": { chat_id: "chat-friends", ledger_date: ledgerDate, viewer_has_posted_today: false, viewer_has_shared: false, viewer_is_eligible: true, view_gate_locked: true, posted_count: 2, eligible_count: 4, entries: [
-                { user_id: "classmate-1", first_name: "Maya", last_name: "Chen", has_posted: true, entry_id: "entry-maya", caption: "After practice", image_url: "../assets/app/anonymous.webp", published_at: ago(14) },
-                { user_id: "classmate-3", first_name: "Ava", last_name: "Patel", has_posted: true, entry_id: "entry-ava", caption: "Bus ride", image_url: "../assets/app/pencil-clipboard.webp", published_at: ago(12) },
+                { user_id: "classmate-1", first_name: "Maya", last_name: "Chen", has_posted: true, entry_id: "entry-maya", caption: "After practice", image_url: "../assets/app/anonymous.webp", swapped_image_url: "../assets/app/lock.webp", published_at: ago(14) },
+                { user_id: "classmate-3", first_name: "Ava", last_name: "Patel", has_posted: true, entry_id: "entry-ava", caption: "Bus ride", image_url: "../assets/app/pencil-clipboard.webp", swapped_image_url: "../assets/app/anonymous.webp", published_at: ago(12) },
                 { user_id: "demo-user", first_name: "Jules", last_name: "Rivera", has_posted: false },
             ] },
             "chat-noah": { chat_id: "chat-noah", ledger_date: ledgerDate, viewer_has_posted_today: true, viewer_has_shared: true, viewer_is_eligible: true, view_gate_locked: false, posted_count: 2, eligible_count: 2, entries: [
-                { user_id: "demo-user", first_name: "Jules", last_name: "Rivera", has_posted: true, entry_id: "entry-jules", caption: "Today", image_url: "../assets/app/pencil-clipboard.webp", published_at: ago(80) },
-                { user_id: "classmate-2", first_name: "Noah", last_name: "Williams", has_posted: true, entry_id: "entry-noah", caption: "Lunch", image_url: "../assets/app/lock.webp", published_at: ago(75) },
+                { user_id: "demo-user", first_name: "Jules", last_name: "Rivera", has_posted: true, entry_id: "entry-jules", caption: "Today", image_url: "../assets/app/pencil-clipboard.webp", swapped_image_url: "../assets/app/anonymous.webp", published_at: ago(80) },
+                { user_id: "classmate-2", first_name: "Noah", last_name: "Williams", has_posted: true, entry_id: "entry-noah", caption: "Lunch", image_url: "../assets/app/lock.webp", swapped_image_url: "../assets/AppIconV2.png", published_at: ago(75) },
             ] },
         };
     }
@@ -936,10 +937,10 @@ export class DemoAPI {
         return row;
     }
     async skipChatMemento(_userId, chatId) { const row = this.dailyRows[chatId]; row.viewer_has_skipped_today = true; row.view_gate_locked = false; const chat = this.chats.find((item) => item.id === chatId); chat.has_skipped_today_memento = true; return { chat_id: chatId, ledger_date: row.ledger_date, created: true }; }
-    async createDailyHighlightUpload() { return { media_asset_id: `media-${Date.now()}`, upload_url: "", upload_method: "PUT", required_headers: {}, already_finalized: true }; }
+    async createDailyHighlightUpload(_userId, _sizeBytes, _clientRequestId, secondarySizeBytes = null) { const id = `media-${Date.now()}`; this.dailyMediaAssets[id] = { hasSecondary: Number(secondarySizeBytes || 0) > 0 }; return { media_asset_id: id, upload_url: "", secondary_upload_url: this.dailyMediaAssets[id].hasSecondary ? "" : null, upload_method: "PUT", required_headers: {}, already_finalized: true }; }
     async putDirectUpload() {}
     async finalizeDailyHighlightUpload(_userId, mediaId) { return { media_asset_id: mediaId, state: "ready" }; }
-    async publishDailyHighlight(_userId, _mediaId, chatIds, caption) {
+    async publishDailyHighlight(_userId, mediaId, chatIds, caption) {
         if (!Array.isArray(chatIds) || chatIds.length !== 1 || !chatIds[0]) throw new Error("A Memento must be shared to exactly one chat.");
         const entryId = `entry-${Date.now()}`;
         const chatId = chatIds[0];
@@ -949,11 +950,14 @@ export class DemoAPI {
         row.viewer_has_shared = true;
         row.view_gate_locked = false;
         row.posted_count += 1;
-        row.entries.push({ user_id: "demo-user", first_name: "Jules", last_name: "Rivera", has_posted: true, entry_id: entryId, caption, image_url: "../assets/AppIconV2.png", published_at: new Date().toISOString() });
+        const swappedImageURL = this.dailyMediaAssets[mediaId]?.hasSecondary ? "../assets/app/anonymous.webp" : null;
+        row.entries.push({ user_id: "demo-user", first_name: "Jules", last_name: "Rivera", has_posted: true, entry_id: entryId, caption, image_url: "../assets/AppIconV2.png", swapped_image_url: swappedImageURL, published_at: new Date().toISOString() });
         const chat = this.chats.find((item) => item.id === chatId);
         chat.has_posted_today_memento = true;
         chat.today_memento_count = row.posted_count;
-        await this.sendChatMessage(null, chatId, { daily_entry_id: entryId, body: caption || "Sent a Memento", client_request_id: crypto.randomUUID() });
+        const message = await this.sendChatMessage(null, chatId, { daily_entry_id: entryId, body: caption || "Sent a Memento", client_request_id: crypto.randomUUID() });
+        const savedMessage = this.chatMessages[chatId].find((item) => item.id === message.id);
+        Object.assign(savedMessage, { memento_image_url: "../assets/AppIconV2.png", memento_swapped_image_url: swappedImageURL, memento_ledger_date: localLedgerDate() });
         return { entry_id: entryId, ledger_date: localLedgerDate(), shared_chat_ids: [...chatIds], aura_points_earned: 10, total_aura_points: this.profile.aura_points + 10, published_at: new Date().toISOString() };
     }
 

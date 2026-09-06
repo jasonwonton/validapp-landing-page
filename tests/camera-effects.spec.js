@@ -64,7 +64,7 @@ test("chat photos expose bounded local and Featured Effects and bake the selecti
     await expect(page.getByText("Photo sent", { exact: true })).toBeVisible();
 });
 
-test("Memento photo Effects preserve the authoritative publish flow", async ({ page }) => {
+test("a single-view Memento remains a safe fallback and preserves the authoritative publish flow", async ({ page }) => {
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Weekend Crew/ }).click();
@@ -73,10 +73,38 @@ test("Memento photo Effects preserve the authoritative publish flow", async ({ p
     await dialog.locator(".memento-file-input").setInputFiles("assets/AppIconV2.png");
     const preview = dialog.getByRole("img", { name: "Memento preview" });
     const original = await previewDigest(preview);
+    await expect(dialog.getByRole("button", { name: "Swap front and back photos" })).toHaveCount(0);
     const effects = dialog.getByRole("group", { name: "Photo effect" });
     await effects.getByRole("button", { name: "Cool photo effect" }).click();
-    await expect(dialog.getByText("Ready to share", { exact: true })).toBeVisible();
+    await expect(dialog.getByText(/Ready to share · add the second view/)).toBeVisible();
     expect((await previewDigest(preview)).digest).not.toBe(original.digest);
+    await dialog.getByRole("button", { name: "Share to this chat" }).click();
+    await expect(page.getByText(/Memento shared · \+10 Aura/)).toBeVisible();
+});
+
+test("sequential rear and front photos produce swappable 1080 by 1440 Memento composites", async ({ page }) => {
+    await signInToDemo(page);
+    await page.getByRole("button", { name: "Chats", exact: true }).click();
+    await page.getByRole("button", { name: /Weekend Crew/ }).click();
+    await page.locator(".chat-daily-row > button").click();
+    const dialog = page.getByRole("dialog", { name: "Create a Memento" });
+    await dialog.locator(".memento-file-input").setInputFiles("assets/AppIconV2.png");
+    await dialog.locator(".memento-secondary-file-input").setInputFiles("assets/app/anonymous.webp");
+    await expect(dialog.getByText(/Rear view is primary/)).toBeVisible();
+
+    const preview = dialog.getByRole("img", { name: "Memento preview" });
+    const rearPrimary = await previewDigest(preview);
+    expect(rearPrimary).toMatchObject({ width: 1080, height: 1440 });
+    await dialog.getByRole("button", { name: "Swap front and back photos" }).click();
+    await expect(dialog.getByText(/Front view is primary/)).toBeVisible();
+    const frontPrimary = await previewDigest(preview);
+    expect(frontPrimary).toMatchObject({ width: 1080, height: 1440 });
+    expect(frontPrimary.digest).not.toBe(rearPrimary.digest);
+
+    const effects = dialog.getByRole("group", { name: "Photo effect" });
+    await effects.getByRole("button", { name: "Warm photo effect" }).click();
+    await expect(dialog.getByText(/Front view is primary/)).toBeVisible();
+    expect((await previewDigest(preview)).digest).not.toBe(frontPrimary.digest);
     await dialog.getByRole("button", { name: "Share to this chat" }).click();
     await expect(page.getByText(/Memento shared · \+10 Aura/)).toBeVisible();
 });

@@ -85,6 +85,7 @@ test("private media recovery is bounded, survives refresh, and clears all user c
             user_id: "media-user-b",
             kind: "memento",
             file: new File(["private-b"], "private-b.jpg", { type: "image/jpeg" }),
+            secondary: new File(["private-b-swapped"], "private-b-swapped.jpg", { type: "image/jpeg" }),
             chat_ids: ["chat-b"],
             request_id: "upload-b",
         });
@@ -116,6 +117,7 @@ test("private media recovery is bounded, survives refresh, and clears all user c
             userACount: userA.length,
             userBCount: userB.length,
             file: { size: userA[0].file.size, type: userA[0].file.type },
+            secondary: { size: userB[0].secondary.size, type: userB[0].secondary.type, name: userB[0].secondary.name },
             attempted,
             privateCacheEntries: cacheURLs.filter((url) => url.includes("/api/") || url.startsWith("blob:")),
             afterClear,
@@ -125,6 +127,7 @@ test("private media recovery is bounded, survives refresh, and clears all user c
     expect(result.userACount).toBe(3);
     expect(result.userBCount).toBe(1);
     expect(result.file).toEqual({ size: 9, type: "image/jpeg" });
+    expect(result.secondary).toEqual({ size: 17, type: "image/jpeg", name: "private-b-swapped.jpg" });
     expect(result.attempted).toMatchObject({ attempts: 1, next_attempt_at: 14_000 });
     expect(result.privateCacheEntries).toEqual([]);
     expect(result.afterClear).toEqual({ media: [], text: [] });
