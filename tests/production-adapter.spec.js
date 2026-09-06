@@ -899,9 +899,16 @@ test("unified search debounces rapid typing into one bounded request pair", asyn
     await page.goto("/app/?signin=1");
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
+    await expect.poll(() => requests.some((request) => request.path.endsWith("/feed?limit=20&offset=0"))).toBe(true);
+    await expect(page.locator("#feedStatus")).toHaveText("");
     requests.length = 0;
 
-    await page.getByPlaceholder("Search names, questions...").pressSequentially("Maya", { delay: 25 });
+    await page.getByPlaceholder("Search names, questions...").evaluate((input) => {
+        for (const value of ["M", "Ma", "May", "Maya"]) {
+            input.value = value;
+            input.dispatchEvent(new InputEvent("input", { bubbles: true, data: value.at(-1), inputType: "insertText" }));
+        }
+    });
     await expect.poll(() => requests.filter((request) => request.path.includes("/classmates?limit=10&search=")).length).toBe(1);
     await page.waitForTimeout(450);
     expect(requests.filter((request) => request.path.includes("/classmates?limit=10&search=")).length).toBe(1);

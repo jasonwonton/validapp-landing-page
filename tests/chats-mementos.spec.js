@@ -55,6 +55,7 @@ test("Chats lazy-loads its feature bundle and shows unread conversations and inv
     await expect(page.locator("#chatsTabBadge")).toHaveText("2");
     await expect.poll(chatResources).toContain("/app/routes/chats.js");
     await expect.poll(chatResources).toContain("/app/chat/index.js");
+    await expect.poll(chatResources).toContain("/app/chat/appearance.js");
 });
 
 test("declining an invitation removes it from the authoritative chat list", async ({ page }) => {
@@ -262,6 +263,106 @@ test("group owners can prepare and replace the authoritative group photo", async
     await expect(page.getByText("Group photo updated", { exact: true })).toBeVisible();
 });
 
+test("chat appearance matches iOS and stays private to the user and conversation", async ({ page }) => {
+    await signInToDemo(page);
+    await page.getByRole("button", { name: "Chats", exact: true }).click();
+    await page.getByRole("button", { name: /Noah Williams/ }).click();
+    await page.getByRole("button", { name: "Chat settings" }).click();
+
+    const settings = page.getByRole("dialog", { name: "Chat settings" });
+    const font = settings.getByRole("combobox", { name: "Chat font" });
+    const writes = [];
+    page.on("request", (request) => {
+        if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method())) writes.push(request.url());
+    });
+    await expect(font.locator("option")).toHaveText(["Six7", "System", "Rounded", "Serif", "Mono"]);
+    await expect(settings.getByRole("group", { name: "Chat color" }).getByRole("button")).toHaveCount(6);
+    await font.selectOption("serif");
+    await settings.getByRole("button", { name: "Purple chat color" }).click();
+    await expect(settings.getByRole("button", { name: "Purple chat color" })).toHaveAttribute("aria-pressed", "true");
+    await expect(settings.getByText("Only you see these choices.")).toBeVisible();
+
+    const appearance = await page.evaluate(() => {
+        const room = document.querySelector(".chat-room-screen");
+        const bubble = document.querySelector(".chat-message.mine .chat-bubble");
+        const preview = document.querySelector(".chat-appearance-preview");
+        const persisted = JSON.parse(localStorage.getItem("valid:chat-appearance:v1"));
+        return {
+            font: room.dataset.chatFont,
+            color: room.dataset.chatColor,
+            bubbleColor: getComputedStyle(bubble).backgroundColor,
+            bubbleFont: getComputedStyle(bubble).fontFamily,
+            previewColor: getComputedStyle(preview).backgroundColor,
+            persisted,
+        };
+    });
+    expect(appearance.font).toBe("serif");
+    expect(appearance.color).toBe("purple");
+    expect(appearance.bubbleColor).toBe("rgb(122, 61, 184)");
+    expect(appearance.previewColor).toBe(appearance.bubbleColor);
+    expect(appearance.bubbleFont).toContain("Georgia");
+    expect(appearance.persisted.entries).toEqual([expect.objectContaining({
+        user_id: "demo-user",
+        chat_id: "chat-noah",
+        font: "serif",
+        color: "purple",
+    })]);
+    expect(JSON.stringify(appearance.persisted)).not.toContain("That was hilarious");
+    expect(writes).toEqual([]);
+
+    await settings.getByRole("button", { name: "Done" }).click();
+    await page.reload();
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await expect(page.locator(".chat-room-title")).toContainText("Noah Williams");
+    await expect(page.locator(".chat-room-screen")).toHaveAttribute("data-chat-font", "serif");
+    await expect(page.locator(".chat-room-screen")).toHaveAttribute("data-chat-color", "purple");
+
+    await page.getByRole("button", { name: "Back to chats" }).click();
+    await page.getByRole("button", { name: /Weekend Crew/ }).click();
+    await expect(page.locator(".chat-room-screen")).toHaveAttribute("data-chat-font", "six7");
+    await expect(page.locator(".chat-room-screen")).toHaveAttribute("data-chat-color", "teal");
+});
+
+test("chat appearance storage rejects invalid values and remains globally bounded", async ({ page }) => {
+    await page.goto("/app/");
+    const result = await page.evaluate(async () => {
+        const appearance = await import("/app/chat/appearance.js");
+        localStorage.removeItem(appearance.CHAT_APPEARANCE_STORAGE_KEY);
+        for (let index = 0; index < 105; index += 1) {
+            appearance.saveChatAppearance("user-a", `chat-a-${index}`, { font: "rounded", color: "blue" });
+        }
+        for (let index = 0; index < 105; index += 1) {
+            appearance.saveChatAppearance("user-b", `chat-b-${index}`, { font: "monospaced", color: "green" });
+        }
+        const stored = JSON.parse(localStorage.getItem(appearance.CHAT_APPEARANCE_STORAGE_KEY));
+        const deniedStorage = {
+            getItem() { throw new Error("denied"); },
+            setItem() { throw new Error("denied"); },
+        };
+        return {
+            total: stored.entries.length,
+            userA: stored.entries.filter((entry) => entry.user_id === "user-a").length,
+            userB: stored.entries.filter((entry) => entry.user_id === "user-b").length,
+            newestA: appearance.loadChatAppearance("user-a", "chat-a-104"),
+            evictedA: appearance.loadChatAppearance("user-a", "chat-a-0"),
+            otherUser: appearance.loadChatAppearance("user-c", "chat-a-104"),
+            invalid: appearance.saveChatAppearance("user-c", "chat-c", { font: "invalid", color: "invalid" }),
+            denied: appearance.saveChatAppearance("user-d", "chat-d", { font: "serif", color: "pink" }, deniedStorage),
+        };
+    });
+
+    expect(result).toEqual({
+        total: 200,
+        userA: 100,
+        userB: 100,
+        newestA: { font: "rounded", color: "blue" },
+        evictedA: { font: "six7", color: "teal" },
+        otherUser: { font: "six7", color: "teal" },
+        invalid: { font: "six7", color: "teal" },
+        denied: { font: "serif", color: "pink" },
+    });
+});
+
 test("chat settings expose the authoritative account-wide block action", async ({ page }) => {
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
@@ -319,6 +420,15 @@ test("Chats and Mementos honor the system dark color scheme", async ({ page }) =
     expect(colors.page).toBe("rgb(11, 37, 40)");
     expect(colors.card).not.toBe("rgb(255, 255, 255)");
     expect(colors.composer).not.toBe("rgb(255, 255, 255)");
+
+    await page.getByRole("button", { name: "Chat settings" }).click();
+    const settings = page.getByRole("dialog", { name: "Chat settings" });
+    await settings.getByRole("button", { name: "Pink chat color" }).click();
+    const selected = await page.locator(".chat-message.mine .chat-bubble").first().evaluate((bubble) => ({
+        background: getComputedStyle(bubble).backgroundColor,
+        color: getComputedStyle(bubble).color,
+    }));
+    expect(selected).toEqual({ background: "rgb(158, 40, 95)", color: "rgb(237, 243, 243)" });
 });
 
 test("explicit chat search opens the exact authoritative message", async ({ page }) => {

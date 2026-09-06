@@ -22,6 +22,12 @@ import { createCallsController } from "../calls/index.js";
 import { createCameraEffectPicker } from "../camera-effects.js";
 import { createMediaOverlayPositioner } from "../media-overlay-positioner.js";
 import { setRuntimeStyles } from "../runtime-style.js";
+import {
+    CHAT_COLOR_STYLES,
+    CHAT_FONT_STYLES,
+    loadChatAppearance,
+    saveChatAppearance,
+} from "./appearance.js";
 
 const REFRESH_MS = 30_000;
 const MAX_VOICE_RECORDING_MS = 300_000;
@@ -193,6 +199,30 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     const dailyLedgerEnabled = () => getConfig()?.enable_chat_daily_ledger === true
         && getConfig()?.enable_web_mementos === true;
 
+    function currentChatAppearance() {
+        return loadChatAppearance(userId(), store.state.activeChatId);
+    }
+
+    function applyChatAppearance(appearance = currentChatAppearance()) {
+        const room = $(".chat-room-screen");
+        const settings = $("[data-chat-settings-dialog]");
+        room.dataset.chatFont = appearance.font;
+        room.dataset.chatColor = appearance.color;
+        settings.dataset.chatFont = appearance.font;
+        settings.dataset.chatColor = appearance.color;
+    }
+
+    function updateChatAppearance(change) {
+        if (!userId() || !store.state.activeChatId) return;
+        const appearance = saveChatAppearance(userId(), store.state.activeChatId, {
+            ...currentChatAppearance(),
+            ...change,
+        });
+        applyChatAppearance(appearance);
+        renderSettings();
+        softHaptic?.();
+    }
+
     root.addEventListener("click", handleClick);
     root.addEventListener("dblclick", handleMessageDoubleClick);
     root.addEventListener("pointerdown", beginMessageActionHold);
@@ -331,6 +361,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (store.state.activeChatId && store.state.activeChatId !== String(chatId)) clearSharedMementoDraft();
         const generation = ++roomGeneration;
         store.state.activeChatId = String(chatId);
+        applyChatAppearance();
         store.state.loadingRoom = true;
         store.state.typingUserIds.clear();
         showScreen("room");
@@ -1524,13 +1555,16 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (!detail) return;
         const chat = detail.chat;
         const canManage = ["owner", "admin"].includes(chat.role);
+        const appearance = currentChatAppearance();
+        applyChatAppearance(appearance);
         $(".chat-settings-content").innerHTML = `<header><button type="button" data-close-settings>Done</button><strong>${escapeChatHTML(chat.display_name)}</strong><span></span></header>${canManage && (chat.name || chat.accepted_count > 2) ? `<label class="chat-name-setting">Group name<span><input maxlength="40" value="${escapeChatHTML(chat.name || chat.display_name)}"><button type="button" data-save-chat-name>Save</button></span></label><label class="chat-photo-setting">Group photo<input type="file" accept="image/*" aria-label="Choose group photo"></label>` : ""}<section><h3>People</h3>${(detail.members || []).map((member) => {
             const isSelf = String(member.user_id) === String(userId());
             const remove = canManage && !isSelf && member.role !== "owner" ? `<button type="button" data-remove-chat-member="${escapeChatHTML(member.user_id)}" aria-label="Remove ${escapeChatHTML(displayMember(member))}">Remove</button>` : "";
             const block = !isSelf ? `<button type="button" data-block-chat-member="${escapeChatHTML(member.user_id)}" aria-label="Block ${escapeChatHTML(displayMember(member))}">Block</button>` : "";
             return `<div class="chat-settings-member"><span>${escapeChatHTML(displayMember(member))}</span><small>${escapeChatHTML(member.role === "owner" ? "Owner" : member.status === "invited" ? "Invited" : "Member")}</small>${remove || block ? `<span class="chat-member-actions">${remove}${block}</span>` : ""}</div>`;
-        }).join("")}${canManage ? `<button class="chat-add-people" type="button" data-add-current-chat>＋ Add people</button>` : ""}</section><label class="chat-notification-setting">Notifications<select>${[["all", "All messages"], ["daily_only", "Mementos only"], ["muted", "Muted"]].map(([value, label]) => `<option value="${value}" ${chat.notification_level === value ? "selected" : ""}>${label}</option>`).join("")}</select></label><button class="chat-danger-action" type="button" data-report-current-chat>Report chat</button><button class="chat-danger-action" type="button" data-leave-current-chat>Leave chat</button>`;
+        }).join("")}${canManage ? `<button class="chat-add-people" type="button" data-add-current-chat>＋ Add people</button>` : ""}</section><section class="chat-appearance-setting"><h3>Appearance</h3><label>Chat font<select aria-label="Chat font">${CHAT_FONT_STYLES.map(({ value, label }) => `<option value="${value}" ${appearance.font === value ? "selected" : ""}>${label}</option>`).join("")}</select></label><div class="chat-color-options" role="group" aria-label="Chat color">${CHAT_COLOR_STYLES.map(({ value, label }) => `<button type="button" data-chat-appearance-color="${value}" aria-label="${label} chat color" aria-pressed="${appearance.color === value}" class="${appearance.color === value ? "selected" : ""}"><span></span></button>`).join("")}</div><p class="chat-appearance-preview">This is how your chat will look.</p><small>Only you see these choices. They stay on this device and are never sent to the chat.</small></section><label class="chat-notification-setting">Notifications<select>${[["all", "All messages"], ["daily_only", "Mementos only"], ["muted", "Muted"]].map(([value, label]) => `<option value="${value}" ${chat.notification_level === value ? "selected" : ""}>${label}</option>`).join("")}</select></label><button class="chat-danger-action" type="button" data-report-current-chat>Report chat</button><button class="chat-danger-action" type="button" data-leave-current-chat>Leave chat</button>`;
         $(".chat-notification-setting select").addEventListener("change", updateNotificationLevel, { once: true });
+        $(".chat-appearance-setting select").addEventListener("change", (event) => updateChatAppearance({ font: event.target.value }));
         $(".chat-photo-setting input")?.addEventListener("change", updateChatPhoto);
     }
 
@@ -1851,6 +1885,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (target.matches("[data-react-viewed-media]")) return reactToViewedMedia();
         if (target.matches("[data-close-media]")) return closeMediaViewer();
         if (target.matches("[data-chat-settings]")) { renderSettings(); return $("[data-chat-settings-dialog]").showModal(); }
+        if (target.dataset.chatAppearanceColor) return updateChatAppearance({ color: target.dataset.chatAppearanceColor });
         if (target.matches("[data-close-settings]")) return $("[data-chat-settings-dialog]").close();
         if (target.matches("[data-close-reactors]")) return $("[data-chat-reactors-dialog]").close();
         if (target.matches("[data-close-readers]")) return $("[data-chat-readers-dialog]").close();

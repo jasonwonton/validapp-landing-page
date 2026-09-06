@@ -73,7 +73,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Conversation/inbox search | Equivalent | Not yet tested | Explicit bounded server search opens exact chats/messages; automation passes. |
 | Media recovery after refresh/network loss | Equivalent | Not yet tested | User-scoped IndexedDB retains at most 3 uploads/user and 10 globally for 24 hours, attempts at most 4 times, and reuses upload/send IDs. A dual-view Memento record remains bounded to two ≤8 MB JPEGs and hydrates both after reload; Mementos expire at the local day boundary rather than posting on the wrong day. Reopen delivery is automated; physical loss/recovery remains. |
 | Voice/video calls | Partial | Not yet tested | A separately gated, lazy LiveKit client supports open-app start, incoming accept/decline, microphone/video publication, authoritative camera slots, mute/camera controls, participant media, reconnect status, and end/leave. Mocked four-project browser flows and released HTTP contracts pass; two-account LiveKit, device permissions, Bluetooth/audio route, participant moderation, rotation, backgrounding, and network handoff remain. Reliable closed-app/lock-screen ringing is native-only. |
-| Group photo / appearance controls | Partial | Not yet tested | Owners can prepare and replace the authoritative group photo; richer iOS appearance controls remain absent. |
+| Group photo / appearance controls | Equivalent | Not yet tested | Owners can prepare and replace the authoritative group photo. Every member also gets the same five local font choices and six outgoing-bubble colors as iOS, scoped by user and chat, with no server write. Preferences tolerate unavailable storage and are recency-bounded to 100 chats per user and 200 globally; four-project light/dark, accessibility, isolation, reload, invalid-value, and bound checks pass. Physical visual review remains. |
 
 ## Notifications and background behavior
 
@@ -121,7 +121,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Accessibility semantics/focus | Partial | Not yet tested | Labels, live regions, reduced motion, and touch targets exist; screen-reader and contrast audit remain. |
 | Offline shell/installability | Equivalent | Not yet tested | Manifest/service-worker shell tests pass; installed physical-device update/reopen remains. |
 | Offline private-data isolation | Equivalent | Not yet tested | No authenticated API/media response enters Cache Storage; scoped snapshots/outbox are cleared at account exit. |
-| Predictable app updates | Partial | Not yet tested | v63 adds durable draft-first Memento resharing while preserving the exact-one-chat contract, bounded recovery, audited notification destinations, comments, positioned overlays, and dual-view capture; telemetry/cache versions remain synchronized. Waiting-worker rollback/update soak remains. |
+| Predictable app updates | Partial | Not yet tested | v64 adds private, bounded chat appearance parity while preserving durable draft-first Memento resharing, the exact-one-chat contract, bounded recovery, audited notification destinations, comments, positioned overlays, and dual-image capture; telemetry/cache versions remain synchronized. Waiting-worker rollback/update soak remains. |
 | Strict CSP runtime behavior | Equivalent | Not yet tested | Response and meta policies keep `style-src 'self'` without `unsafe-inline`; bounded same-origin CSSOM rules cover dynamic progress, overlays, viewport, crop, and drag state in all four lab projects. Final-origin header verification remains. |
 | Dark Mode | Equivalent | Not yet tested | System color scheme now drives the core shell, Chats, Mementos, forms, and dialogs; automated computed-style check plus visual/accessibility review remain. |
 | Haptics | Partial | Not yet tested | Android vibration is progressive enhancement; precise native haptic parity is unavailable. |
@@ -149,7 +149,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 ## Device and evidence ledger
 
 Current candidate evidence: `npm run build`, UI runtime checks, and performance
-budgets pass. The candidate's **712-case** lab matrix contains **707 passing
+budgets pass. The candidate's **720-case** lab matrix contains **715 passing
 tests and 5 intentional project-capability skips** across Pixel 7 Chromium,
 Desktop Chrome, Desktop Firefox, and Desktop WebKit. Android, Chrome, and
 Firefox completed as full no-retry projects. Every applicable WebKit case also
@@ -188,7 +188,7 @@ limits. The
 scoped backend chat/Memento/Story/Web Push/config safety run is **273 passed, 0
 failed**; the latest current-tree affected notification/comment/lifecycle/call/
 config run is **316 passed, 0 failed**. These are lab results, not production or
-physical-device approval. The v63 candidate additionally proves that an
+physical-device approval. The v64 candidate additionally proves that an
 installed Chromium shell can cold-reload offline and open the previously
 unvisited Chats/media-overlay route entirely from the bounded static cache and
 that photo Effects are locally baked into the bounded JPEG before durable retry.
@@ -201,6 +201,14 @@ Existing Mementos now enter the same draft-first composer model as iOS: the
 thumbnail is removable, text and reply context are optional, and the eventual
 message persists the authoritative entry ID plus one stable request ID across
 reload. Signed/private preview URLs remain memory-only.
+Chat appearance now matches iOS's device-local privacy model: five fonts and six
+light/dark outgoing colors apply immediately, persist only under the signed-in
+user plus chat key, never call the backend, and retain at most 100 chats per user
+and 200 across the browser profile.
+
+The packaged v64 shell contains 37 static entries with a 659,667-byte estimated
+transfer, including 17,516 bytes of fonts and 358,622 bytes of artwork; all
+remain inside the enforced startup and cache budgets.
 
 | Target | State | Required before release |
 | --- | --- | --- |
