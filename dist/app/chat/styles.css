@@ -94,6 +94,9 @@
 .chat-timeline { min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; gap: 3px; overflow-x: visible; overflow-y: auto; overscroll-behavior: contain; padding: 10px 2px 76px; scrollbar-width: none; }
 .chat-timeline::before { content: ""; margin-top: auto; }
 .chat-timeline::-webkit-scrollbar { display: none; }
+.chat-message-window-control { align-self: center; min-width: min(82%, 290px); margin: 7px auto; }
+.chat-message-window-control button { width: 100%; min-height: 44px; display: grid; justify-items: center; gap: 2px; padding: 7px 14px; border: 1px solid rgba(5,9,20,.2); border-radius: 16px; background: rgba(255,255,255,.78); color: var(--ink); }
+.chat-message-window-control small { color: var(--muted); font-size: .68rem; }
 .chat-timeline.chat-content-locked { min-height: 36vh; opacity: .42; filter: blur(5px); pointer-events: none; user-select: none; }
 .chat-room-empty { margin: auto; padding: 30px; color: var(--muted); text-align: center; }
 .chat-room-empty p { margin: 7px 0 0; }

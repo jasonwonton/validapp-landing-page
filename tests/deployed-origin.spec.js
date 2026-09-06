@@ -74,10 +74,11 @@ test("Chromium installs the service worker without persistent private responses"
         return { scope: registration.scope, cacheNames, cachedURLs };
     });
     expect(result.scope).toBe(new URL("/app/", test.info().project.use.baseURL).href);
-    expect(result.cacheNames).toEqual(["valid-web-v65"]);
+    expect(result.cacheNames).toEqual(["valid-web-v66"]);
     expect(result.cachedURLs.length).toBeGreaterThan(0);
     expect(result.cachedURLs).toContain(new URL("/app/media-overlay-positioner.js", test.info().project.use.baseURL).href);
     expect(result.cachedURLs).toContain(new URL("/app/camera-effects.js", test.info().project.use.baseURL).href);
+    expect(result.cachedURLs).toContain(new URL("/app/chat/message-window.js", test.info().project.use.baseURL).href);
     expect(result.cachedURLs).toContain(new URL("/app/chat/appearance.js", test.info().project.use.baseURL).href);
     expect(result.cachedURLs).toContain(new URL("/app/chat/sticker-maker.js", test.info().project.use.baseURL).href);
     expect(result.cachedURLs.every((url) => new URL(url).origin === new URL(test.info().project.use.baseURL).origin)).toBe(true);

@@ -220,7 +220,10 @@ Firefox, and Safari where the capability is supported:
    light/dark mode, use Gboard/Samsung Keyboard/iOS keyboard, increase text size,
    enable a screen reader, background aggressively, and accept a waiting service
    worker update. Focus, scroll position, composer visibility, and draft safety
-   must remain predictable.
+   must remain predictable. For a conversation with at least 500 loaded messages,
+   confirm that only 120 message nodes are present, each earlier/newer shift keeps
+   the overlapping anchor visible, both ends remain reachable, and tapping a reply
+   or exact message link reveals its target without growing the DOM.
 
 During the canary, compare APNS throughput/latency, SMS queue depth/age,
 PostgreSQL connections and query latency, Redis connections, SSE active/capacity

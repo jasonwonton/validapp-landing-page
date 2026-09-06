@@ -114,14 +114,14 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | --- | --- | --- | --- |
 | Cold startup / route splitting | Equivalent | Not yet tested | Lab DCL improved from 5.65 s to 1.93 s; final-origin RUM p75 is required. |
 | Stable keyed feed/chat rows | Equivalent | Not yet tested | Runtime/performance checks enforce identity-preserving reconciliation; overflow-safe bottom alignment prevents long chats from rendering behind the Memento rail. |
-| Long-list DOM bounds | Partial | Not yet tested | `content-visibility`, page limits, and a hard 500-message in-memory/DOM window exist; full virtualization and large-account soak remain. |
+| Long-list DOM bounds | Equivalent | Not yet tested | The authoritative store remains capped at 500 messages while accessible overlapping windows render at most 120 message nodes. Earlier/newer controls preserve an overlap anchor, expose absolute list positions, and reveal hidden reply or exact deep-link targets. A 500-message traversal/DOM soak passes in all four browser projects; physical low-memory long-scroll remains a release gate. |
 | Responsive touch interactions | Equivalent | Not yet tested | Pixel emulation passes; physical low/midrange Android gate remains. |
 | Keyboard-safe layouts | Partial | Not yet tested | Visual Viewport handling exists; Samsung Keyboard, Gboard, and iPhone PWA checks remain. |
 | Camera/composer polish | Partial | Not yet tested | Sequential front/rear Memento capture and swapping, single-view fallback, preview, bounded offline/Featured photo Effects, compression, progress, compatible live MP4 voice recording with M4A fallback, photo/video selection, view-once, overlay, reply, and reactions work; physical camera/microphone/keyboard and richer editing remain. |
 | Accessibility semantics/focus | Partial | Not yet tested | Labels, live regions, reduced motion, and touch targets exist; screen-reader and contrast audit remain. |
 | Offline shell/installability | Equivalent | Not yet tested | Manifest/service-worker shell tests pass; installed physical-device update/reopen remains. |
 | Offline private-data isolation | Equivalent | Not yet tested | No authenticated API/media response enters Cache Storage; scoped snapshots/outbox are cleared at account exit. |
-| Predictable app updates | Partial | Not yet tested | v65 adds memory-only reusable-sticker creation and deletion while preserving private chat appearance, durable draft-first Memento resharing, the exact-one-chat contract, bounded recovery, audited notification destinations, comments, positioned overlays, and dual-image capture; telemetry/cache versions remain synchronized. Waiting-worker rollback/update soak remains. |
+| Predictable app updates | Partial | Not yet tested | v66 adds bounded long-conversation rendering while preserving memory-only reusable stickers, private chat appearance, durable draft-first Memento resharing, the exact-one-chat contract, bounded recovery, audited notification destinations, comments, positioned overlays, and dual-image capture; telemetry/cache versions remain synchronized. Waiting-worker rollback/update soak remains. |
 | Strict CSP runtime behavior | Equivalent | Not yet tested | Response and meta policies keep `style-src 'self'` without `unsafe-inline`; bounded same-origin CSSOM rules cover dynamic progress, overlays, viewport, crop, and drag state in all four lab projects. Final-origin header verification remains. |
 | Dark Mode | Equivalent | Not yet tested | System color scheme now drives the core shell, Chats, Mementos, forms, and dialogs; automated computed-style check plus visual/accessibility review remain. |
 | Haptics | Partial | Not yet tested | Android vibration is progressive enhancement; precise native haptic parity is unavailable. |
@@ -149,7 +149,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 ## Device and evidence ledger
 
 Current candidate evidence: `npm run build`, UI runtime checks, and performance
-budgets pass. The candidate's **744-case** lab matrix contains **739 passing
+budgets pass. The candidate's **764-case** lab matrix contains **759 passing
 tests and 5 intentional project-capability skips** across Pixel 7 Chromium,
 Desktop Chrome, Desktop Firefox, and Desktop WebKit. Android, Chrome, and
 Firefox completed as full no-retry projects. Every applicable WebKit case also
@@ -188,7 +188,7 @@ limits. The
 scoped backend chat/Memento/Story/Web Push/config safety run is **273 passed, 0
 failed**; the latest current-tree affected notification/comment/lifecycle/call/
 config run is **316 passed, 0 failed**. These are lab results, not production or
-physical-device approval. The v65 candidate additionally proves that an
+physical-device approval. The v66 candidate additionally proves that an
 installed Chromium shell can cold-reload offline and open the previously
 unvisited Chats/media-overlay route entirely from the bounded static cache and
 that photo Effects are locally baked into the bounded JPEG before durable retry.
@@ -210,8 +210,15 @@ browser produces a transparent, outlined PNG from an accessible center cut or
 bounded manual lasso, holds source and output only in memory, never retries an
 ambiguous create, sends the confirmed server ID through the existing idempotent
 chat path, and preserves old messages when a saved sticker is removed.
+Long conversations retain the full bounded 500-message client window while
+rendering no more than 120 message nodes at once. Overlapping earlier/newer
+controls preserve the prior anchor, absolute `aria-posinset`/`aria-setsize`
+metadata describes each rendered message, and reply or exact-link navigation
+materializes a hidden target without growing the DOM. Four-project automation
+traverses both ends of a 500-message history and verifies the bound after every
+shift.
 
-The packaged v65 shell contains 38 static entries with a 664,439-byte estimated
+The packaged v66 shell contains 39 static entries with a 666,295-byte estimated
 transfer, including 17,516 bytes of fonts and 358,622 bytes of artwork; all
 remain inside the enforced startup and cache budgets.
 

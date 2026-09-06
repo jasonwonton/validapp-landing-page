@@ -29,6 +29,7 @@ import {
     saveChatAppearance,
 } from "./appearance.js";
 import { createStickerMaker } from "./sticker-maker.js";
+import { createMessageWindow } from "./message-window.js";
 
 const REFRESH_MS = 30_000;
 const MAX_VOICE_RECORDING_MS = 300_000;
@@ -61,6 +62,7 @@ function localLedgerDate(date = new Date()) {
 
 export function createChatsView({ root, api, getUser, getConfig, softHaptic, successHaptic, showToast, onUnreadChange }) {
     const store = createChatStore();
+    const messageWindow = createMessageWindow();
     const calls = createCallsController({ api, getUser, getConfig, showToast });
     let lastListLoad = 0;
     let activation = null;
@@ -126,7 +128,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 <div class="chat-daily-row"></div>
                 <div class="chat-room-status" role="status"></div>
                 <button class="chat-load-earlier hidden" type="button" data-load-earlier>Load earlier messages</button>
-                <div class="chat-timeline" aria-live="polite" aria-label="Messages"></div>
+                <div class="chat-timeline" role="list" aria-live="polite" aria-label="Messages"></div>
                 <div class="chat-typing hidden" aria-live="polite">Someone is typing…</div>
                 <div class="chat-reply-draft hidden"><span></span><button type="button" data-cancel-reply aria-label="Cancel reply">×</button></div>
                 <form class="chat-composer">
@@ -491,7 +493,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         $(".chat-composer").classList.toggle("hidden", locked);
     }
 
-    function renderMessages(scrollToBottom = false) {
+    function renderMessages(scrollToBottom = false, { focusMessageId = null, focusAlignment = "center" } = {}) {
         const timeline = $(".chat-timeline");
         if (store.state.dailyRow?.view_gate_locked === true) {
             timeline.classList.add("chat-content-locked");
@@ -502,10 +504,28 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         timeline.classList.remove("chat-content-locked");
         const items = store.messages();
         const byId = new Map(items.map((message) => [message.id, message]));
-        reconcileKeyedElements(timeline, items.map((message, index) => ({
-            key: message.id,
-            html: messageMarkup(message, byId.get(String(message.reply_to_message_id)), items[index - 1], items[index + 1]),
-        })));
+        const visible = messageWindow.range(store.state.activeChatId, items, {
+            toEnd: scrollToBottom,
+            focusId: focusMessageId,
+            focusAlignment,
+        });
+        const entries = [];
+        if (visible.hiddenBefore) entries.push({
+            key: "window:earlier",
+            html: `<div class="chat-message-window-control" role="presentation" data-list-key="window:earlier"><button type="button" data-show-older-messages><strong>Show earlier messages</strong><small>${visible.hiddenBefore} earlier in this loaded conversation</small></button></div>`,
+        });
+        visible.items.forEach((message, visibleIndex) => {
+            const index = visible.start + visibleIndex;
+            entries.push({
+                key: message.id,
+                html: messageMarkup(message, byId.get(String(message.reply_to_message_id)), items[index - 1], items[index + 1], index, visible.total),
+            });
+        });
+        if (visible.hiddenAfter) entries.push({
+            key: "window:newer",
+            html: `<div class="chat-message-window-control" role="presentation" data-list-key="window:newer"><button type="button" data-show-newer-messages><strong>Show newer messages</strong><small>${visible.hiddenAfter} newer in this loaded conversation</small></button></div>`,
+        });
+        reconcileKeyedElements(timeline, entries);
         $$(".chat-media-text[data-overlay-x]").forEach((overlay) => setRuntimeStyles(overlay, {
             left: `${Number(overlay.dataset.overlayX) * 100}%`,
             top: `${Number(overlay.dataset.overlayY) * 100}%`,
@@ -517,9 +537,10 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (scrollToBottom) requestAnimationFrame(() => timeline.scrollTo({ top: timeline.scrollHeight, behavior: "auto" }));
     }
 
-    function messageMarkup(message, reply, previous, next) {
-        if (message.kind === "system") return `<article class="chat-system-message" data-list-key="${escapeChatHTML(message.id)}"><span>${escapeChatHTML(message.body || "Chat updated")}</span></article>`;
-        if (message.kind === "tombstone" || message.status !== "active") return `<article class="chat-system-message" data-list-key="${escapeChatHTML(message.id)}"><span>Message removed</span></article>`;
+    function messageMarkup(message, reply, previous, next, index = 0, total = 1) {
+        const position = `role="listitem" aria-posinset="${index + 1}" aria-setsize="${total}"`;
+        if (message.kind === "system") return `<article class="chat-system-message" ${position} data-list-key="${escapeChatHTML(message.id)}"><span>${escapeChatHTML(message.body || "Chat updated")}</span></article>`;
+        if (message.kind === "tombstone" || message.status !== "active") return `<article class="chat-system-message" ${position} data-list-key="${escapeChatHTML(message.id)}"><span>Message removed</span></article>`;
         const mine = message.viewer_is_sender || String(message.sender_user_id) === String(userId());
         const sharesSequence = (other) => other && other.kind !== "system" && other.status === "active" && String(other.sender_user_id) === String(message.sender_user_id) && Math.abs(new Date(other.created_at) - new Date(message.created_at)) <= 5 * 60 * 1000;
         const startsSequence = !sharesSequence(previous);
@@ -543,7 +564,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         const acceptedOthers = (store.state.detail?.members || []).filter((member) => member.status === "accepted" && String(member.user_id) !== String(userId()));
         const receipt = readers.length ? `<button type="button" class="chat-read-receipt" data-view-readers="${escapeChatHTML(message.id)}">${acceptedOthers.length > 1 ? `Read by ${readers.length}` : "Read"}</button>` : "";
         const viewReceipt = mine && message.view_once ? `<button type="button" class="chat-read-receipt" data-view-once-receipts="${escapeChatHTML(message.id)}">View receipts</button>` : "";
-        return `<article class="chat-message ${mine ? "mine" : "theirs"} ${startsSequence ? "starts-sequence" : ""} ${endsSequence ? "ends-sequence" : ""} ${message.delivery_state || ""}" data-list-key="${escapeChatHTML(message.id)}" data-message-id="${escapeChatHTML(message.id)}"><div class="chat-message-meta">${!mine && startsSequence ? `<strong>${escapeChatHTML(message.sender_first_name || "Student")}</strong>` : ""}</div><div class="chat-bubble" data-message-bubble="${escapeChatHTML(message.id)}">${replyMarkup}${media}${message.kind === "memento" ? `<small class="memento-label">✦ Memento</small>` : message.kind === "story" ? `<small class="memento-label">✦ ${message.story_share_context === "reply" ? "Story reply" : "Shared Story"}</small>` : ""}${body}<time>${escapeChatHTML(message.delivery_state === "sending" ? "Sending…" : message.delivery_state === "failed" ? "Not sent" : messageTime(message.created_at))}</time><button class="chat-message-menu-button" type="button" data-message-menu="${escapeChatHTML(message.id)}" aria-label="Message actions" aria-expanded="false">•••</button></div>${message.delivery_state === "failed" ? `<button class="chat-retry" type="button" data-retry-message="${escapeChatHTML(message.client_request_id)}">Retry</button>` : ""}<div class="chat-message-actions"><div class="chat-reaction-picker">${CHAT_REACTIONS.map(([type, emoji]) => `<button type="button" aria-label="React ${type}" data-react-message="${escapeChatHTML(message.id)}" data-reaction="${type}" class="${message.current_user_reaction === type ? "active" : ""}">${emoji}</button>`).join("")}</div><div class="chat-action-list"><button type="button" data-reply-message="${escapeChatHTML(message.id)}">↩ Reply</button>${message.body ? `<button type="button" data-copy-message="${escapeChatHTML(message.id)}">⧉ Copy</button>` : ""}<button type="button" data-delete-message="${escapeChatHTML(message.id)}">Hide for me</button>${mine && message.delivery_state === "sent" ? `<button class="danger" type="button" data-unsend-message="${escapeChatHTML(message.id)}">Unsend</button>` : ""}</div></div>${reactions ? `<button type="button" class="chat-reaction-summary" data-view-reactions="${escapeChatHTML(message.id)}" aria-label="View reactions">${reactions}</button>` : ""}${viewReceipt || receipt}</article>`;
+        return `<article class="chat-message ${mine ? "mine" : "theirs"} ${startsSequence ? "starts-sequence" : ""} ${endsSequence ? "ends-sequence" : ""} ${message.delivery_state || ""}" ${position} data-list-key="${escapeChatHTML(message.id)}" data-message-id="${escapeChatHTML(message.id)}"><div class="chat-message-meta">${!mine && startsSequence ? `<strong>${escapeChatHTML(message.sender_first_name || "Student")}</strong>` : ""}</div><div class="chat-bubble" data-message-bubble="${escapeChatHTML(message.id)}">${replyMarkup}${media}${message.kind === "memento" ? `<small class="memento-label">✦ Memento</small>` : message.kind === "story" ? `<small class="memento-label">✦ ${message.story_share_context === "reply" ? "Story reply" : "Shared Story"}</small>` : ""}${body}<time>${escapeChatHTML(message.delivery_state === "sending" ? "Sending…" : message.delivery_state === "failed" ? "Not sent" : messageTime(message.created_at))}</time><button class="chat-message-menu-button" type="button" data-message-menu="${escapeChatHTML(message.id)}" aria-label="Message actions" aria-expanded="false">•••</button></div>${message.delivery_state === "failed" ? `<button class="chat-retry" type="button" data-retry-message="${escapeChatHTML(message.client_request_id)}">Retry</button>` : ""}<div class="chat-message-actions"><div class="chat-reaction-picker">${CHAT_REACTIONS.map(([type, emoji]) => `<button type="button" aria-label="React ${type}" data-react-message="${escapeChatHTML(message.id)}" data-reaction="${type}" class="${message.current_user_reaction === type ? "active" : ""}">${emoji}</button>`).join("")}</div><div class="chat-action-list"><button type="button" data-reply-message="${escapeChatHTML(message.id)}">↩ Reply</button>${message.body ? `<button type="button" data-copy-message="${escapeChatHTML(message.id)}">⧉ Copy</button>` : ""}<button type="button" data-delete-message="${escapeChatHTML(message.id)}">Hide for me</button>${mine && message.delivery_state === "sent" ? `<button class="danger" type="button" data-unsend-message="${escapeChatHTML(message.id)}">Unsend</button>` : ""}</div></div>${reactions ? `<button type="button" class="chat-reaction-summary" data-view-reactions="${escapeChatHTML(message.id)}" aria-label="View reactions">${reactions}</button>` : ""}${viewReceipt || receipt}</article>`;
     }
 
     function readReceiptMembers(message) {
@@ -770,10 +791,12 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     async function loadEarlier() {
         const page = store.state.messagePageByChat.get(String(store.state.activeChatId));
         if (!page?.next_before_sequence) return;
+        const anchorId = $(".chat-timeline [data-message-id]")?.dataset.messageId || null;
         const response = await api.getChatMessages(userId(), store.state.activeChatId, { limit: 50, beforeSequence: page.next_before_sequence });
         store.mergeMessages(store.state.activeChatId, response.items || [], { prepend: true });
         store.state.messagePageByChat.set(String(store.state.activeChatId), response);
-        renderMessages(false);
+        renderMessages(false, { focusMessageId: anchorId, focusAlignment: "center" });
+        if (anchorId) requestAnimationFrame(() => scrollMessageWithinTimeline($(`[data-message-id="${CSS.escape(anchorId)}"]`)));
     }
 
     async function openCreateChat({ addToCurrent = false } = {}) {
@@ -1745,6 +1768,27 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         timeline.scrollTo({ top: timeline.scrollTop + delta, behavior });
     }
 
+    function revealMessageWithinTimeline(messageId, behavior = "auto") {
+        if (!messageId || !store.messages().some((message) => String(message.id) === String(messageId))) return;
+        let message = $(`[data-message-id="${CSS.escape(String(messageId))}"]`);
+        if (!message) {
+            renderMessages(false, { focusMessageId: String(messageId) });
+            message = $(`[data-message-id="${CSS.escape(String(messageId))}"]`);
+        }
+        requestAnimationFrame(() => scrollMessageWithinTimeline(message, behavior));
+    }
+
+    function shiftMessageWindow(direction) {
+        const timeline = $(".chat-timeline");
+        const rendered = [...timeline.querySelectorAll("[data-message-id]")];
+        const anchorId = (direction === "older" ? rendered[0] : rendered.at(-1))?.dataset.messageId || null;
+        const items = store.messages();
+        if (direction === "older") messageWindow.previous(store.state.activeChatId, items);
+        else messageWindow.next(store.state.activeChatId, items);
+        renderMessages(false);
+        if (anchorId) requestAnimationFrame(() => scrollMessageWithinTimeline($(`[data-message-id="${CSS.escape(anchorId)}"]`)));
+    }
+
     function toggleMessageActions(messageId, forceOpen = null) {
         const message = $(`[data-message-id="${CSS.escape(messageId)}"]`);
         if (!message) return;
@@ -1886,6 +1930,8 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (String(params.get("chat") || "") !== String(chatId)) return;
         const messageId = params.get("message");
         if (!messageId) return;
+        if (!store.messages().some((message) => String(message.id) === String(messageId))) return;
+        renderMessages(false, { focusMessageId: messageId });
         const message = $(`[data-message-id="${CSS.escape(messageId)}"]`);
         if (!message) return;
         message.classList.add("deep-linked");
@@ -1929,6 +1975,8 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (target.dataset.acceptChat) return acceptInvitation(target.dataset.acceptChat);
         if (target.dataset.declineChat) return declineInvitation(target.dataset.declineChat);
         if (target.matches("[data-load-earlier]")) return loadEarlier();
+        if (target.matches("[data-show-older-messages]")) return shiftMessageWindow("older");
+        if (target.matches("[data-show-newer-messages]")) return shiftMessageWindow("newer");
         if (target.dataset.startCall) return calls.start(target.dataset.startCall, store.state.detail?.chat);
         if (target.dataset.mementoDay) return loadMementoDay(target.dataset.mementoDay);
         if (target.dataset.mementoDate) return loadMementoDate(target.dataset.mementoDate);
@@ -2001,7 +2049,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (target.dataset.deleteMessage) return deleteMessageForMe(target.dataset.deleteMessage);
         if (target.dataset.unsendMessage) return unsendMessage(target.dataset.unsendMessage);
         if (target.dataset.retryMessage) return sendMessage(null, target.dataset.retryMessage);
-        if (target.dataset.scrollMessage) return scrollMessageWithinTimeline($(`[data-message-id="${CSS.escape(target.dataset.scrollMessage)}"]`), "smooth");
+        if (target.dataset.scrollMessage) return revealMessageWithinTimeline(target.dataset.scrollMessage, "smooth");
         if (target.matches("[data-report-current-chat]")) {
             const reason = prompt("Tell us why you're reporting this chat:");
             if (reason?.trim().length >= 3) await api.reportChat(userId(), store.state.activeChatId, reason.trim()).then(() => showToast?.("Report submitted")).catch((error) => showToast?.(error.message));
