@@ -28,6 +28,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run test:static-origin
+      - run: npm run test:staging
 
   browser-journeys:
     runs-on: ubuntu-latest

@@ -1,0 +1,96 @@
+import assert from 'node:assert/strict';
+import { request, createServer } from 'node:http';
+import { before, after, test } from 'node:test';
+import { createStagingOrigin } from '../serve-staging.mjs';
+
+const secret = 'ab'.repeat(32), stage = 'https://staging.validapp.lol';
+let server, backend, cookie, calls = [], fail = false;
+before(async () => {
+    backend = createServer((req, res) => {
+        calls.push({ path: req.url, headers: req.headers });
+        req.resume();
+        if (fail) return req.socket.destroy();
+        if (req.url === '/api/v1/events') {
+            res.writeHead(200, { 'content-type': 'text/event-stream' });
+            res.write('data: ready\n\n');
+            return;
+        }
+        res.writeHead(200, { 'content-type': 'application/json', 'set-cookie': [
+            '__Host-valid_web_session=test-session; Secure; HttpOnly; Path=/; SameSite=Lax',
+            'unrelated=never-forward', '__Host-valid_web_session=bad; Domain=six7.lol',
+        ] });
+        res.end(JSON.stringify({ enable_chats: true, enable_chat_daily_ledger: true, enable_calls: true, enable_web_calls: true }));
+    });
+    await new Promise(r => backend.listen(0, '127.0.0.1', r));
+    server = await createStagingOrigin({ secret, upstreamRequest(options, callback) {
+        assert.equal(options.hostname, 'api.six7.lol');
+        assert.equal(options.port, 443);
+        return request({ ...options, hostname: '127.0.0.1', port: backend.address().port }, callback);
+    } });
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+});
+after(async () => {
+    server.closeAllConnections(); backend.closeAllConnections();
+    await Promise.all([new Promise(r => server.close(r)), new Promise(r => backend.close(r))]);
+});
+function send(path, { method = 'GET', headers = {}, body } = {}) {
+    return new Promise((resolve, reject) => {
+        const req = request({ hostname: '127.0.0.1', port: server.address().port, path, method,
+            headers: { host: 'staging.validapp.lol', ...(cookie ? { cookie } : {}), ...headers } }, res => {
+            let body = ''; res.on('data', chunk => body += chunk); res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body }));
+        });
+        req.on('error', error => reject(new Error(`${method} ${path}: ${error.message}`))); req.end(body);
+    });
+}
+test('private entry is host-bound, signed, HttpOnly, and no-store', async () => {
+    assert.equal((await send('/healthz', { headers: { host: 'health.internal' } })).status, 200);
+    assert.equal((await send('/app/')).status, 403);
+    assert.equal((await send(`/preview/${secret}`, { headers: { host: 'evil.test' } })).status, 421);
+    assert.equal((await send('/preview/incorrect')).status, 403);
+    const entry = await send(`/preview/${secret}`);
+    assert.equal(entry.status, 303); assert.equal(entry.headers['cache-control'], 'no-store');
+    assert.equal(entry.headers.location, '/app/?signin=1');
+    assert.match(entry.headers['set-cookie'][0], /HttpOnly; Secure; SameSite=Lax/);
+    cookie = entry.headers['set-cookie'][0].split(';')[0];
+    assert.equal((await send('/app/')).status, 200);
+    assert.equal((await send('/app/', { headers: { cookie: cookie + 'tampered' } })).status, 403);
+});
+test('only intended API, cookies and exact origins reach backend', async () => {
+    const prior = calls.length;
+    for (const path of ['/api/v1/../secret', '/api/v1/%2fsecret', '/api/v2/config']) assert.equal((await send(path)).status, 400);
+    assert.equal((await send('/api/v1/message', { method: 'POST' })).status, 403);
+    assert.equal((await send('/api/v1/message', { method: 'POST', headers: { origin: 'https://evil.test' } })).status, 403);
+    assert.equal((await send('/api/v1/auth/passkey/signup/options', { method: 'POST', headers: { origin: stage } })).status, 403);
+    assert.equal((await send('/api/v1/upload', { method: 'POST', headers: { origin: stage, 'content-length': '12582913' } })).status, 413);
+    assert.equal(calls.length, prior);
+    const response = await send('/api/v1/message?exact=1', { method: 'POST', headers: { origin: stage, cookie: `${cookie}; __Host-valid_web_session=real; unrelated=secret` }, body: '{}' });
+    assert.equal(response.status, 200);
+    assert.equal(calls.at(-1).path, '/api/v1/message?exact=1');
+    assert.equal(calls.at(-1).headers.origin, stage);
+    assert.equal(calls.at(-1).headers.cookie, '__Host-valid_web_session=real');
+    assert.equal(response.headers['set-cookie'].length, 1);
+    assert.equal(response.headers['cache-control'], 'no-store');
+});
+test('private config gates do not enable unvalidated Stories, calls or comments', async () => {
+    const response = await send('/api/v1/config');
+    const config = JSON.parse(response.body);
+    assert.equal(config.enable_web_chats, true); assert.equal(config.enable_web_mementos, true);
+    assert.equal(config.enable_calls, true); assert.equal(config.enable_web_calls, false);
+    assert.equal(config.enable_web_stories, false); assert.equal(config.enable_web_comments, false);
+});
+test('SSE streams immediately and client close aborts upstream', async () => {
+    await new Promise((resolve, reject) => {
+        const req = request({ hostname: '127.0.0.1', port: server.address().port, path: '/api/v1/events', headers: { host: 'staging.validapp.lol', cookie } }, res => {
+            assert.equal(res.headers['content-type'], 'text/event-stream');
+            res.once('data', chunk => { assert.match(chunk.toString(), /data: ready/); req.destroy(); resolve(); });
+        });
+        req.on('error', reject); req.end();
+    });
+});
+test('ambiguous upstream failure never retries a write', async () => {
+    fail = true;
+    const prior = calls.length;
+    assert.equal((await send('/api/v1/message', { method: 'POST', headers: { origin: stage }, body: '{}' })).status, 502);
+    assert.equal(calls.length, prior + 1);
+    fail = false;
+});
