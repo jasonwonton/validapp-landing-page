@@ -228,6 +228,7 @@ test("installed Chromium shell opens a previously unvisited Chats overlay journe
     await page.getByRole("button", { name: "Send photo or video" }).click();
     const dialog = page.getByRole("dialog", { name: "Send media" });
     await dialog.locator(".chat-media-file-input").setInputFiles("assets/AppIconV2.png");
+    await dialog.getByText('Edit photo', { exact: true }).click();
     await dialog.getByLabel("Text overlay").fill("Offline draft");
     await expect(dialog.locator("[data-media-overlay-position]")).toHaveAccessibleName(/50% from left, 50% from top/);
     await context.setOffline(false);

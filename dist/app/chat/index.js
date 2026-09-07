@@ -1,7 +1,7 @@
 import { reconcileKeyedElements } from "../keyed-list.js";
 import { prepareChatMedia, prepareMementoImages } from "./media.js";
 import {
-    CHAT_REACTIONS, chatNeedsMemento, chatPreview, displayMember, escapeChatHTML,
+    CHAT_REACTIONS, chatAttentionPriority, chatNeedsMemento, chatPreview, displayMember, escapeChatHTML,
     messageTime, normalizeMessage, relativeChatTime, safeMediaURL,
 } from "./models.js";
 import { MAX_MESSAGES_PER_CHAT, createChatStore } from "./store.js";
@@ -63,7 +63,11 @@ function localLedgerDate(date = new Date()) {
 }
 
 export function createChatsView({ root, api, getUser, getConfig, softHaptic, successHaptic, showToast, onUnreadChange }) {
-    const store = createChatStore();
+    const attentionPriority = chat => chatAttentionPriority(chat, {
+        dailyLedgerEnabled: dailyLedgerEnabled(),
+        callsEnabled: getConfig()?.enable_calls === true && getConfig()?.enable_web_calls === true,
+    });
+    const store = createChatStore({ attentionPriority });
     const messageWindow = createMessageWindow();
     const calls = createCallsController({ api, getUser, getConfig, showToast });
     let lastListLoad = 0;
@@ -80,6 +84,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     let selectedChatMediaSourceFile = null;
     let selectedChatMediaPreview = null;
     let chatMediaPreparationGeneration = 0;
+    let chatMediaPublishing = false;
     let chatMediaUploadRequestId = null;
     let chatMediaSendRequestId = null;
     let voiceRecorder = null;
@@ -141,7 +146,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                         <span><strong></strong><small>Add an optional message</small></span>
                         <button type="button" data-remove-memento-draft aria-label="Remove Memento">×</button>
                     </div>
-                    <button class="chat-camera-button" type="button" data-open-chat-media aria-label="Send photo or video">${uiIcon('camera')}</button>
+                    <button class="chat-camera-button" type="button" data-open-chat-media aria-label="Send photo or video">${uiIcon('camera-filled')}</button>
                     <button class="chat-attachment-button" type="button" data-open-stickers aria-label="Send a sticker"><span class="native-sticker-icon" aria-hidden="true"></span></button>
                     <textarea rows="1" maxlength="2000" placeholder="Message" aria-label="Message"></textarea>
                     <button class="chat-send-button" type="submit" aria-label="Send message">${uiIcon('send')}</button>
@@ -170,19 +175,24 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 <button class="memento-skip hidden" type="button" data-skip-memento>Skip for today</button>
             </form>
         </dialog>
-        <dialog class="chat-sheet" data-chat-media-dialog aria-label="Send media">
+        <dialog class="chat-sheet chat-camera-sheet" data-chat-media-dialog aria-label="Send media">
             <form class="chat-media-form">
-                <header><button type="button" data-close-chat-media>Cancel</button><strong>Photo or video</strong><span></span></header>
+                <header><button type="button" data-close-chat-media>Cancel</button><strong>Photo or video</strong><button type="button" data-chat-photo-library aria-label="Photo library">${uiIcon('photo')}</button></header>
+                <section class="live-camera" data-chat-camera hidden aria-label="Message camera"></section>
+                <section class="chat-media-editor">
                 <div class="chat-media-preview"><span aria-hidden="true">${uiIcon("plus")}</span><p>Choose a photo, an MP4 video, or an M4A voice recording.</p></div>
-                <input class="chat-media-file-input" type="file" accept="image/*,video/mp4">
+                <details class="chat-media-edit-options"><summary>Edit photo</summary>
                 <fieldset class="camera-effect-picker hidden" data-chat-media-effects><legend>Photo effect</legend><div data-camera-effect-options></div><small>Browser Effects bake supported color and lighting into the photo. Face/body-tracked lenses and filtered video remain available in iOS.</small></fieldset>
-                <label class="chat-audio-input-label">Voice message <input class="chat-audio-file-input" type="file" accept="audio/mp4,.m4a" capture></label>
-                <button class="chat-voice-record hidden" type="button" data-record-voice>Record voice message</button>
-                <label class="chat-media-option"><input type="checkbox" data-chat-view-once> View once <small>Recipients can open it twice.</small></label>
                 <label>Text overlay <input class="chat-media-overlay" type="text" maxlength="160" placeholder="Optional text — drag it in the preview"></label>
+                </details>
+                <label class="chat-media-option"><input type="checkbox" data-chat-view-once> View once <small>Recipients can open it twice.</small></label>
                 <div class="chat-media-progress hidden"><span></span></div>
                 <p class="chat-media-status" role="status"></p>
-                <button class="primary-button chat-media-publish" type="submit" disabled>Send</button>
+                <div class="chat-media-review-actions"><button type="button" data-retake-chat-photo>${uiIcon('flip')} Retake</button><button class="primary-button chat-media-publish" type="submit" disabled>Send</button></div>
+                </section>
+                <div class="chat-media-sources"><button class="chat-voice-record hidden" type="button" data-record-voice>Record voice message</button><button type="button" data-chat-audio-library>Choose voice recording</button></div>
+                <input class="chat-media-file-input" type="file" accept="image/*,video/mp4" hidden aria-label="Photo or video file">
+                <input class="chat-audio-file-input" type="file" accept="audio/mp4,.m4a" hidden aria-label="Voice recording file">
             </form>
         </dialog>
         <dialog class="chat-sheet chat-stickers-sheet" data-sticker-library-dialog aria-label="Send a sticker"><section class="chat-stickers-content"><header><button type="button" data-close-stickers>Close</button><strong>Send a Sticker</strong><button type="button" data-edit-stickers aria-pressed="false">Edit</button></header><p>Tap a sticker to send it.</p><p class="chat-sticker-status" role="status"></p><section class="chat-sticker-library"><header><h2>My Stickers</h2><button type="button" data-make-sticker>${uiIcon('plus')} Make a sticker</button></header><input class="chat-sticker-file-input visually-hidden" type="file" accept="image/*" capture="environment"><div><small>Loading…</small></div></section></section></dialog>
@@ -232,6 +242,26 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             $('.memento-file-input').focus();
         },
     });
+    // Initialize on first use so opening a chat never requests camera permission.
+    let chatCamera = null;
+    function showChatMediaReview() {
+        chatCamera?.close();
+        $('[data-chat-media-dialog]').classList.remove('is-capturing');
+    }
+    function startChatCamera() {
+        if (chatMediaPublishing) return;
+        resetChatMediaComposer();
+        chatCamera ||= createLiveCamera({
+            container: $('[data-chat-camera]'), singlePhoto: true,
+            onCapture: async ([file]) => { showChatMediaReview(); await prepareSelectedChatMedia(file); },
+            onFallback: () => { showChatMediaReview(); $('.chat-media-file-input').click(); },
+        });
+        $('[data-chat-media-dialog]').classList.add('is-capturing');
+        chatCamera.open();
+    }
+    $('[data-retake-chat-photo]').addEventListener('click', startChatCamera);
+    $('[data-chat-photo-library]').addEventListener('click', () => { showChatMediaReview(); $('.chat-media-file-input').click(); });
+    $('[data-chat-audio-library]').addEventListener('click', () => { showChatMediaReview(); $('.chat-audio-file-input').click(); });
     function startMementoCamera() {
         if (mementoPublishing) return;
         resetMementoComposer();
@@ -421,10 +451,10 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         const photo = safeMediaURL(chat.chat_photo_url || chat.pair_profile_picture_url || chat.member_previews?.[0]?.profile_picture_url, api);
         const avatar = photo ? `<img src="${escapeChatHTML(photo)}" alt="" loading="lazy" decoding="async">` : `<span>${escapeChatHTML(chat.display_name.slice(0, 1).toUpperCase())}</span>`;
         if (chat.membership_status === "invited") {
-            return `<article class="chat-row invitation" data-list-key="${escapeChatHTML(chat.id)}"><button class="chat-row-main" type="button" data-open-chat="${escapeChatHTML(chat.id)}"><span class="chat-avatar">${avatar}</span><span class="chat-row-copy"><strong>${escapeChatHTML(chat.display_name)}</strong><small>${escapeChatHTML(chatPreview(chat))}</small></span></button><div class="chat-invite-actions"><button type="button" data-decline-chat="${escapeChatHTML(chat.membership_id)}">Decline</button><button type="button" data-accept-chat="${escapeChatHTML(chat.membership_id)}">Accept</button></div></article>`;
+            return `<article class="chat-row invitation attention" data-list-key="${escapeChatHTML(chat.id)}"><button class="chat-row-main" type="button" data-open-chat="${escapeChatHTML(chat.id)}"><span class="chat-avatar">${avatar}</span><span class="chat-row-copy"><strong>${escapeChatHTML(chat.display_name)}</strong><small>${escapeChatHTML(chatPreview(chat))}</small></span></button><div class="chat-invite-actions"><button type="button" data-decline-chat="${escapeChatHTML(chat.membership_id)}">Decline</button><button type="button" data-accept-chat="${escapeChatHTML(chat.membership_id)}">Accept</button></div></article>`;
         }
         const needsMemento = chatNeedsMemento(chat, dailyLedgerEnabled());
-        return `<article class="chat-row ${chat.unread_count || needsMemento ? "attention" : ""}" data-list-key="${escapeChatHTML(chat.id)}"><button class="chat-row-main" type="button" data-open-chat="${escapeChatHTML(chat.id)}"><span class="chat-avatar">${avatar}</span><span class="chat-row-copy"><span><strong>${escapeChatHTML(chat.display_name)}</strong>${streakMarkup(chat)}<time>${escapeChatHTML(relativeChatTime(chat.last_message_at || chat.updated_at))}</time></span><small>${escapeChatHTML(needsMemento ? "Take today's Memento" : chatPreview(chat))}</small></span>${chat.unread_count ? `<b class="chat-unread">${Math.min(chat.unread_count, 99)}</b>` : ""}</button></article>`;
+        return `<article class="chat-row ${attentionPriority(chat) > 0 ? "attention" : ""}" data-list-key="${escapeChatHTML(chat.id)}"><button class="chat-row-main" type="button" data-open-chat="${escapeChatHTML(chat.id)}"><span class="chat-avatar">${avatar}</span><span class="chat-row-copy"><span><strong>${escapeChatHTML(chat.display_name)}</strong>${streakMarkup(chat)}<time>${escapeChatHTML(relativeChatTime(chat.last_message_at || chat.updated_at))}</time></span><small>${escapeChatHTML(needsMemento ? "Take today's Memento" : chatPreview(chat))}</small></span>${chat.regular_unread_count && !needsMemento ? `<b class="chat-unread">${Math.min(chat.regular_unread_count, 99)}</b>` : ""}</button></article>`;
     }
 
     async function openChat(chatId, { updateHistory = true, force = false } = {}) {
@@ -513,7 +543,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         const row = store.state.dailyRow;
         const enabled = dailyLedgerEnabled() && row;
         const offerCapture = enabled && !row.viewer_has_shared && row.viewer_is_eligible !== false;
-        $('.chat-daily-row').innerHTML = offerCapture ? `<button type="button" data-open-memento><span class="chat-daily-icon">${uiIcon('camera')}</span><span><strong>${row.view_gate_locked ? "Take today's Memento" : "Take Memento"}</strong></span></button>` : '';
+        $('.chat-daily-row').innerHTML = offerCapture ? `<button type="button" data-open-memento aria-label="Take today's Memento"><span class="chat-daily-icon">${uiIcon('camera-filled')}</span><span><strong>Take Memento</strong></span></button>` : '';
         $('.chat-daily-row').classList.toggle('hidden', !offerCapture);
         $('.chat-composer').classList.toggle('hidden', chatAccessUnavailable());
         renderMementoToolbar();
@@ -1172,10 +1202,11 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     }
 
     function openChatMediaComposer() {
-        if (!store.state.activeChatId || chatAccessUnavailable()) return;
+        if (!store.state.activeChatId || chatAccessUnavailable() || chatMediaPublishing) return;
         const recordButton = $("[data-record-voice]");
         recordButton.classList.toggle("hidden", !compatibleAudioRecordingType());
         $("[data-chat-media-dialog]").showModal();
+        startChatCamera();
         void chatMediaEffectPicker.load();
     }
 
@@ -1284,7 +1315,8 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     }
 
     async function prepareSelectedChatMedia(file, { durationMsHint = null, photoEffect = null, retainSource = false } = {}) {
-        if (!file) return;
+        if (!file || chatMediaPublishing) return;
+        showChatMediaReview();
         const isPhotoSource = file.type.startsWith("image/");
         if (!retainSource) {
             selectedChatMediaSourceFile = isPhotoSource ? file : null;
@@ -1372,6 +1404,8 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     }
 
     async function toggleVoiceRecording() {
+        if (chatMediaPublishing) return;
+        showChatMediaReview();
         if (voiceRecorder) {
             stopVoiceRecorder();
             return;
@@ -1431,7 +1465,8 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
 
     async function publishChatMedia(event) {
         event.preventDefault();
-        if (!selectedChatMedia || !store.state.activeChatId) return;
+        if (!selectedChatMedia || !store.state.activeChatId || chatMediaPublishing || chatAccessUnavailable()) return;
+        chatMediaPublishing = true;
         const chatId = store.state.activeChatId;
         const mediaKind = selectedChatMedia.kind;
         const button = $(".chat-media-publish");
@@ -1442,6 +1477,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         chatMediaSendRequestId ||= crypto.randomUUID();
         button.disabled = true;
         button.textContent = "Sending…";
+        root.querySelectorAll('[data-retake-chat-photo], [data-chat-photo-library], [data-chat-audio-library], [data-record-voice]').forEach(control => { control.disabled = true; });
         $(".chat-media-file-input").disabled = true;
         $(".chat-audio-file-input").disabled = true;
         $("[data-chat-view-once]").disabled = true;
@@ -1493,6 +1529,8 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                     : "This media could not be saved for a safe retry. Free some device storage and try again.";
             }
         } finally {
+            chatMediaPublishing = false;
+            root.querySelectorAll('[data-retake-chat-photo], [data-chat-photo-library], [data-chat-audio-library], [data-record-voice]').forEach(control => { control.disabled = false; });
             button.textContent = "Send";
             button.disabled = !selectedChatMedia;
             chatMediaEffectPicker.setDisabled(false);
@@ -1500,6 +1538,9 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     }
 
     function resetChatMediaComposer() {
+        chatCamera?.close();
+        $('[data-chat-media-dialog]').classList.remove('is-capturing');
+        $('.chat-media-edit-options').open = false;
         chatMediaPreparationGeneration += 1;
         stopVoiceRecorder({ discard: true });
         if (!voiceRecorder) clearVoiceRecordingState();
@@ -2212,5 +2253,5 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         }
     }
 
-    return { activate, refresh, openChat, store, beforeSessionEnd: async () => { mementoCamera.close(); return calls.beforeSessionEnd(); } };
+    return { activate, refresh, openChat, store, beforeSessionEnd: async () => { mementoCamera.close(); chatCamera?.close(); $('[data-chat-media-dialog]').close(); return calls.beforeSessionEnd(); } };
 }

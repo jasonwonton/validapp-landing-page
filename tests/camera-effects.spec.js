@@ -34,6 +34,7 @@ test("chat photos expose bounded local and Featured Effects and bake the selecti
     await page.getByRole("button", { name: "Send photo or video" }).click();
     const dialog = page.getByRole("dialog", { name: "Send media" });
     await dialog.locator(".chat-media-file-input").setInputFiles("assets/AppIconV2.png");
+    await dialog.getByText('Edit photo', { exact: true }).click();
     const effects = dialog.getByRole("group", { name: "Photo effect" });
     await expect(effects).toBeVisible();
     await expect(effects.getByRole("button")).toHaveCount(6);

@@ -88,7 +88,8 @@ test('missing vibration and denied preference storage never block the app', asyn
         };
     });
     await profile(page);
-    await expect(page.getByRole('switch', { name: /Haptic feedback/ })).toBeDisabled();
+    await expect(page.locator('#hapticsPreferences')).toBeHidden();
+    await expect(page.getByRole('switch', { name: /Haptic feedback/ })).toHaveCount(0);
     await expect(page.locator('#hapticsHint')).toContainText('unavailable');
     await page.locator('#appearanceSelect').selectOption('dark');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');

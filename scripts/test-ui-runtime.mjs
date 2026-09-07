@@ -2,6 +2,27 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createRealtimeList } from "../app/realtime-list.js";
 import { MAX_MESSAGES_PER_CHAT, createChatStore } from "../app/chat/store.js";
+import { chatAttentionPriority, chatNeedsMemento } from '../app/chat/models.js';
+
+const inbox = createChatStore({ attentionPriority: chat => chatAttentionPriority(chat, { dailyLedgerEnabled: true, callsEnabled: true }) });
+const summary = (id, extra = {}) => ({ id, membership_status: 'accepted', accepted_count: 2, has_posted_today_memento: true, last_room_sequence: 1, updated_at: '2026-09-07T00:00:00Z', ...extra });
+const initial = [summary('normal'), summary('memento', { has_posted_today_memento: false }), summary('unread', { unread_count: 1 }), summary('invite', { membership_status: 'invited' }), summary('media', { unopened_view_once_count: 1, next_view_once_room_sequence: 4 }), summary('call', { unacknowledged_missed_call_id: 'call-1' })];
+const ids = () => inbox.state.chats.map(chat => chat.id);
+inbox.replaceChats(initial);
+assert.deepEqual(ids(), ['call', 'unread', 'invite', 'media', 'memento', 'normal']);
+inbox.replaceChats([...initial].reverse());
+assert.deepEqual(ids(), ['call', 'unread', 'invite', 'media', 'memento', 'normal'], 'A refresh cannot reshuffle a stable inbox');
+inbox.upsertChat(summary('media', { unopened_view_once_count: 1, next_view_once_room_sequence: 4, last_room_sequence: 2, last_message_at: '2026-09-07T01:00:00Z' }));
+assert.deepEqual(ids(), ['call', 'media', 'unread', 'invite', 'memento', 'normal'], 'New activity moves within the native priority tier');
+inbox.upsertChat(summary('unread'));
+assert.deepEqual(ids(), ['call', 'media', 'invite', 'memento', 'normal', 'unread'], 'Reading a chat resolves conversation attention');
+inbox.replaceChats([summary('gone', { membership_status: 'left' })]);
+assert.deepEqual(ids(), [], 'Removed membership and its activity history must not remain visible');
+const skipped = summary('skip', { has_posted_today_memento: false, has_skipped_today_memento: true });
+assert.equal(chatNeedsMemento(skipped, true), false, 'Skip grants access, not a posted Memento');
+assert.equal(chatAttentionPriority(skipped, { dailyLedgerEnabled: true }), 1);
+assert.equal(chatAttentionPriority(initial.at(-1), { callsEnabled: false }), 0, 'Disabled web calls do not claim attention');
+assert.equal(chatAttentionPriority(summary('read', { unread_count: 3, regular_unread_count: 0 })), 0, 'Memento unread counts are not regular conversation unread');
 
 const scheduled = [];
 const list = createRealtimeList({

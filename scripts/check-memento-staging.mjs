@@ -22,8 +22,8 @@ try {
     const page = await browser.newPage({ viewport: { width: 393, height: 852 } });
     await page.goto(invitation);
     const version = await page.locator('meta[name="valid-app-version"]').getAttribute('content');
-    assert.equal(version, process.env.STAGING_EXPECTED_VERSION || 'web-v75');
-    for (const file of ['app/chat/index.js', 'app/live-camera.js', 'app/chat/styles.css', 'app/api.js']) {
+    assert.equal(version, process.env.STAGING_EXPECTED_VERSION || 'web-v76');
+    for (const file of ['app/chat/index.js', 'app/chat/store.js', 'app/chat/models.js', 'app/live-camera.js', 'app/chat/styles.css', 'app/styles.css', 'app/preferences.js', 'app/ui-icons.js', 'app/api.js']) {
         const response = await page.request.get(new URL(`/${file}`, invitation).href);
         assert.equal(response.status(), 200);
         const hash = data => createHash('sha256').update(data).digest('hex');
@@ -93,8 +93,26 @@ try {
         root.querySelector('[data-close-memento-gallery]').click();
         root.querySelector('[data-open-stickers]').click();
         const stickersOpened = root.querySelector('[data-sticker-library-dialog]').open;
-        return { inlineHidden, header, galleryOpened, dates, stickersOpened };
+        root.querySelector('[data-close-stickers]').click();
+        root.querySelector('[data-open-chat-media]').click();
+        const camera = root.querySelector('[data-chat-camera]');
+        const waitFor = async condition => {
+            const deadline = Date.now() + 15000;
+            while (!condition()) {
+                if (Date.now() > deadline) throw new Error('Chat camera timed out');
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+        };
+        await waitFor(() => !camera.querySelector('[data-camera-shutter]').disabled);
+        const tracks = camera.querySelector('video').srcObject.getTracks();
+        camera.querySelector('[data-camera-shutter]').click();
+        await waitFor(() => !root.querySelector('.chat-media-publish').disabled);
+        const cameraReviewed = Boolean(root.querySelector('.chat-media-preview img')) && camera.hidden;
+        const cameraStopped = tracks.every(track => track.readyState === 'ended');
+        root.querySelector('[data-close-chat-media]').click();
+        await view.beforeSessionEnd();
+        return { inlineHidden, header, galleryOpened, dates, stickersOpened, cameraReviewed, cameraStopped };
     });
-    assert.deepEqual(hierarchy, { inlineHidden: true, header: '1/23', galleryOpened: true, dates: 7, stickersOpened: true });
-    console.log('PASS: deployed posted-chat hierarchy, authoritative streak display, history and standalone stickers (synthetic adapter; no account writes)');
+    assert.deepEqual(hierarchy, { inlineHidden: true, header: '1/23', galleryOpened: true, dates: 7, stickersOpened: true, cameraReviewed: true, cameraStopped: true });
+    console.log('PASS: deployed chat hierarchy, streak, history, stickers and single-photo camera/review with stopped tracks (synthetic adapter; no account writes)');
 } finally { await browser.close(); }

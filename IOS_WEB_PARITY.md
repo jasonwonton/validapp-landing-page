@@ -1,6 +1,10 @@
 # Six7 iOS → PWA parity and release matrix
 
 Last audited: September 7, 2026
+Latest frontend follow-up: [chat camera / inbox / profile audit](CHAT_CAMERA_PROFILE_AUDIT_2026-09-07.md)
+tracks camera-first message capture, native inbox priorities and tint, peach
+Memento/sticker controls, and profile affordance fixes for private `web-v76`.
+Physical-device acceptance and public readiness remain open.
 Authorities: the current Swift client and the Six7 backend contracts. The backend remains authoritative for identity, membership history, moderation, reciprocity, idempotency, notification eligibility, and media lifecycle.
 
 Interface artwork follow-up: [UI_ASSET_PARITY.md](UI_ASSET_PARITY.md) records the

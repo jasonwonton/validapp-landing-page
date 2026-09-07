@@ -1,10 +1,15 @@
 import { uiIcon } from './ui-icons.js';
 
 // One live video stream, at most two memory-only photos, no uploads or retries.
-export function createLiveCamera({ container, onCapture, onFallback }) {
+export function createLiveCamera({ container, onCapture, onFallback, singlePhoto = false }) {
     container.innerHTML = `<div class="live-camera-stage"><video autoplay muted playsinline aria-label="Live camera preview"></video><img class="live-camera-inset" alt="First captured view" hidden><div class="live-camera-heading"><strong>Memento</strong><span data-camera-step>First view</span></div><div class="live-camera-message" role="status"></div></div><div class="live-camera-controls"><button type="button" data-camera-library aria-label="Choose a photo instead">${uiIcon('photo')}</button><button type="button" class="camera-shutter" data-camera-shutter aria-label="Take photo" disabled><span></span></button><button type="button" data-camera-flip aria-label="Switch front and rear camera" disabled>${uiIcon('flip')}</button></div><p class="live-camera-hint">One tap. Front and back captured in sequence.</p><div class="live-camera-alternatives"><button type="button" data-camera-retry hidden>Try camera again</button><button type="button" data-camera-single hidden>Use one photo</button></div>`;
     const $ = selector => container.querySelector(selector);
     const video = $('video'), message = $('.live-camera-message');
+    if (singlePhoto) {
+        $('.live-camera-heading strong').textContent = 'Photo';
+        $('.live-camera-hint').textContent = 'Tap to take a photo';
+        $('[data-camera-library]').setAttribute('aria-label', 'Photo library');
+    }
     let stream = null, generation = 0, pending = false, busy = false, opened = false;
     let facing = 'environment', photos = [], insetURL = null, permissionTimer = null;
     function release() {
@@ -34,7 +39,7 @@ export function createLiveCamera({ container, onCapture, onFallback }) {
         const requestGeneration = generation;
         message.textContent = 'Starting camera…';
         $('[data-camera-retry]').hidden = true;
-        $('[data-camera-library]').hidden = true;
+        $('[data-camera-library]').hidden = !singlePhoto;
         if (!navigator.mediaDevices?.getUserMedia) return failure('Live capture is unavailable here. Open in a supported browser or choose a photo.');
         pending = true;
         permissionTimer = setTimeout(() => {
@@ -53,7 +58,7 @@ export function createLiveCamera({ container, onCapture, onFallback }) {
             await video.play();
             if (requestGeneration !== generation || !opened) return;
             message.textContent = '';
-            $('[data-camera-step]').textContent = `${photos.length ? 'Second' : 'First'} view${actualFacing ? ` · ${actualFacing === 'user' ? 'Front' : 'Rear'} camera` : ''}`;
+            $('[data-camera-step]').textContent = singlePhoto ? (actualFacing === 'user' ? 'Front camera' : 'Rear camera') : `${photos.length ? 'Second' : 'First'} view${actualFacing ? ` · ${actualFacing === 'user' ? 'Front' : 'Rear'} camera` : ''}`;
             $('[data-camera-shutter]').disabled = false;
             $('[data-camera-flip]').disabled = false;
             stream.getVideoTracks()[0]?.addEventListener('ended', () => {
@@ -83,8 +88,8 @@ export function createLiveCamera({ container, onCapture, onFallback }) {
             canvas.width = canvas.height = 0;
             if (captureGeneration !== generation || !opened) return;
             if (!blob) throw new Error('No image');
-            photos.push(new File([blob], `memento-view-${photos.length + 1}.jpg`, { type: 'image/jpeg' }));
-            if (photos.length === 2) return finish();
+            photos.push(new File([blob], singlePhoto ? 'chat-photo.jpg' : `memento-view-${photos.length + 1}.jpg`, { type: 'image/jpeg' }));
+            if (singlePhoto || photos.length === 2) return finish();
             insetURL = URL.createObjectURL(photos[0]); $('img').src = insetURL; $('img').hidden = false;
             $('[data-camera-single]').hidden = false;
             facing = facing === 'environment' ? 'user' : 'environment';

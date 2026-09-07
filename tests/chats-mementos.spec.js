@@ -29,7 +29,7 @@ test.describe("Memento calendar boundaries", () => {
         await signInToDemo(page);
         await page.getByRole("button", { name: "Chats", exact: true }).click();
         await page.getByRole("button", { name: /Weekend Crew/ }).click();
-        await expect(page.locator(".chat-daily-row > button")).toContainText("Take today's Memento");
+        await expect(page.locator(".chat-daily-row > button")).toHaveAccessibleName("Take today's Memento");
         await page.locator(".chat-daily-row > button").click();
         await expect(page.getByRole("dialog", { name: "Create a Memento" })).toBeVisible();
         const createdLedgerDate = await page.evaluate(async () => {
@@ -462,6 +462,7 @@ test("chat media sends a prepared photo through upload, finalize, and message cr
     const dialog = page.getByRole("dialog", { name: "Send media" });
     await dialog.locator(".chat-media-file-input").setInputFiles("assets/AppIconV2.png");
     await expect(dialog.getByText("Photo ready to send")).toBeVisible();
+    await dialog.getByText('Edit photo', { exact: true }).click();
     await dialog.getByLabel("Text overlay").fill("After practice");
     const overlayHandle = dialog.locator("[data-media-overlay-position]");
     await expect(overlayHandle).toHaveAccessibleName(/50% from left, 50% from top/);
@@ -512,8 +513,10 @@ test("chat media sends a prepared photo through upload, finalize, and message cr
     const sent = page.locator(".chat-message.mine").last();
     await expect(sent.getByRole("img", { name: "Photo" })).toBeVisible();
     await expect(sent).toContainText("After practice");
-    await expect(sent.locator(".chat-media-text")).toHaveAttribute("data-overlay-x", "0.7");
-    await expect(sent.locator(".chat-media-text")).toHaveAttribute("data-overlay-y", "0.3");
+    // Native mouse coordinates round to CSS pixels on WebKit. Preserve the
+    // dragged location to within one percent rather than requiring subpixels.
+    expect(Number(await sent.locator('.chat-media-text').getAttribute('data-overlay-x'))).toBeCloseTo(0.7, 2);
+    expect(Number(await sent.locator('.chat-media-text').getAttribute('data-overlay-y'))).toBeCloseTo(0.3, 2);
     await expect(page.getByText("Photo sent", { exact: true })).toBeVisible();
 });
 
@@ -537,7 +540,8 @@ test("voice composer keeps an M4A picker fallback when a browser cannot record c
     await page.getByRole("button", { name: /Noah Williams/ }).click();
     await page.getByRole("button", { name: "Send photo or video" }).click();
     const dialog = page.getByRole("dialog", { name: "Send media" });
-    await expect(dialog.getByLabel("Voice message")).toHaveAttribute("accept", "audio/mp4,.m4a");
+    await expect(dialog.getByLabel("Voice recording file")).toHaveAttribute("accept", "audio/mp4,.m4a");
+    await expect(dialog.getByRole('button', { name: 'Choose voice recording' })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Record voice message" })).toBeHidden();
 });
 

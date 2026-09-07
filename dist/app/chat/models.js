@@ -41,7 +41,18 @@ export function chatNeedsMemento(chat, dailyLedgerEnabled) {
         && chat?.membership_status === "accepted"
         && Number(chat?.accepted_count || 0) >= 2
         && chat?.is_memento_eligible_today !== false
+        && !chat?.has_skipped_today_memento
         && !chat?.has_posted_today_memento);
+}
+
+// Matches ChatSummary.inboxAttentionPriority. Skipping unlocks reading, but an
+// unposted Memento still belongs in the Memento attention tier on iOS.
+export function chatAttentionPriority(chat, { dailyLedgerEnabled = false, callsEnabled = false } = {}) {
+    if (callsEnabled && chat.unacknowledged_missed_call_id) return 3;
+    if (chat.membership_status === 'invited' || Number(chat.regular_unread_count ?? chat.unread_count ?? 0) > 0
+        || (Number(chat.unopened_view_once_count) > 0 && chat.next_view_once_room_sequence != null)) return 2;
+    if (dailyLedgerEnabled && chat.membership_status === 'accepted' && Number(chat.accepted_count) >= 2 && !chat.has_posted_today_memento) return 1;
+    return 0;
 }
 
 export function chatPreview(chat) {
