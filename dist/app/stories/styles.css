@@ -71,13 +71,11 @@
     .stories-rail { scroll-behavior: auto; }
 }
 
-@media (prefers-color-scheme: dark) {
-    .stories-rail button > span { border-color: rgba(245,251,251,.32); }
-    .stories-shell > header button,
-    .story-composer-preview,
-    .story-file-input,
-    .story-composer label input,
-    .story-share-search,
-    .story-share-people label,
-    .story-viewers-sheet [data-more-story-viewers] { background: #0f2c2f; border-color: rgba(245,251,251,.25); color: var(--ink); }
-}
+:root[data-theme="dark"] .stories-rail button > span { border-color: rgba(245,251,251,.32); }
+:root[data-theme="dark"] .stories-shell > header button,
+:root[data-theme="dark"] .story-composer-preview,
+:root[data-theme="dark"] .story-file-input,
+:root[data-theme="dark"] .story-composer label input,
+:root[data-theme="dark"] .story-share-search,
+:root[data-theme="dark"] .story-share-people label,
+:root[data-theme="dark"] .story-viewers-sheet [data-more-story-viewers] { background: #0f2c2f; border-color: rgba(245,251,251,.25); color: var(--ink); }

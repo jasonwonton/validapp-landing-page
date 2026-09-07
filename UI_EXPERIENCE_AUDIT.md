@@ -3,6 +3,10 @@
 ## Decision
 
 **The PWA is not at native-experience parity. Public release remains NO-GO.**
+Follow-up: [THEME_HAPTICS_STORIES_AUDIT.md](THEME_HAPTICS_STORIES_AUDIT.md)
+records the additional manual theme control, broader contrast corrections,
+Android vibration preferences, and the still-closed Stories release gates.
+
 The earlier matrix put too much weight on API-compatible operations and demo
 tests. Those are necessary, but they did not catch a picker-first Memento
 camera or sufficiently establish real-device visual and interaction quality.

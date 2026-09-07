@@ -22,6 +22,11 @@ try {
             await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
             await page.screenshot({ path: `${output}${colorScheme}-${panel}.png`, animations: 'disabled' });
             console.log(JSON.stringify({ colorScheme, panel, scrollY: await page.evaluate(() => scrollY), horizontalOverflow: await page.evaluate(() => document.documentElement.scrollWidth > innerWidth) }));
+            if (panel === 'profile') {
+                await page.locator('.device-preferences').scrollIntoViewIfNeeded();
+                await page.screenshot({ path: `${output}${colorScheme}-preferences.png`, animations: 'disabled' });
+                await page.evaluate(() => scrollTo(0, 0));
+            }
         }
         await page.getByRole('button', { name: /Weekend Crew/ }).click();
         await page.locator('.chat-daily-row > button').waitFor({ state: 'visible' });

@@ -3897,11 +3897,11 @@ async function loadFeed(reset = false) {
 }
 
 function softHaptic(duration = 8) {
-    if (isAndroidDevice() && navigator.vibrate) navigator.vibrate(duration);
+    window.ValidPreferences?.haptic(duration);
 }
 
 function successHaptic() {
-    if (isAndroidDevice() && navigator.vibrate) navigator.vibrate([10, 35, 18]);
+    window.ValidPreferences?.haptic([10, 35, 18]);
 }
 
 function expectedAuraPerAnswer() {
