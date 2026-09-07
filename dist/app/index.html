@@ -180,11 +180,9 @@
                 <section class="device-preferences" aria-labelledby="devicePreferencesHeading">
                     <h3 id="devicePreferencesHeading">Appearance &amp; feedback</h3>
                     <label class="appearance-control" for="appearanceSelect"><span>Appearance<small>Saved on this device</small></span><select id="appearanceSelect"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
-                    <div id="hapticsPreferences" hidden>
-                    <button id="hapticsToggle" class="haptics-control" type="button" role="switch" aria-checked="false"><span>Haptic feedback<small id="hapticsHint"></small></span><span class="settings-switch" aria-hidden="true"><span></span></span></button>
-                    <button id="testHaptics" class="secondary-button" type="button">Test vibration</button>
-                    <p id="hapticsStatus" class="form-hint" role="status"></p>
-                    </div>
+                    <button id="hapticsToggle" class="haptics-control" type="button" role="switch" aria-checked="false" hidden><span>Haptic feedback<small id="hapticsHint"></small></span><span class="settings-switch" aria-hidden="true"><span></span></span></button>
+                    <button id="testHaptics" class="secondary-button" type="button" hidden>Test vibration</button>
+                    <p id="hapticsStatus" class="form-hint" role="status" hidden></p>
                 </section>
                 <section class="profile-actions" aria-label="Profile actions">
                     <button id="addPasskeyButton" class="settings-row" type="button"><span class="settings-icon passkey-settings-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="7.7" cy="12" r="4.3"/><path d="m11.1 9.4 8-6.2 1.7 1.7-2 2 1.5 1.5-2.2 2.2-1.5-1.5-5.5 4.2"/></svg></span><span><strong>Add another passkey</strong><small id="passkeyStatusText">Add another secure way to sign in</small></span><span aria-hidden="true">›</span></button>

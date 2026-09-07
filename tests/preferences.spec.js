@@ -88,7 +88,7 @@ test('missing vibration and denied preference storage never block the app', asyn
         };
     });
     await profile(page);
-    await expect(page.locator('#hapticsPreferences')).toBeHidden();
+    for (const id of ['hapticsToggle', 'testHaptics', 'hapticsStatus']) await expect(page.locator(`#${id}`)).toBeHidden();
     await expect(page.getByRole('switch', { name: /Haptic feedback/ })).toHaveCount(0);
     await expect(page.locator('#hapticsHint')).toContainText('unavailable');
     await page.locator('#appearanceSelect').selectOption('dark');

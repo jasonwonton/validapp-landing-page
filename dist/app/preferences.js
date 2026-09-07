@@ -27,7 +27,7 @@
         try { return navigator.vibrate(bounded); } catch { return false; }
     }
     function renderHaptics() {
-        document.getElementById('hapticsPreferences').hidden = !supported();
+        for (const id of ['hapticsToggle', 'testHaptics', 'hapticsStatus']) document.getElementById(id).hidden = !supported();
         document.getElementById('devicePreferencesHeading').textContent = supported() ? 'Appearance & feedback' : 'Appearance';
         const toggle = document.getElementById('hapticsToggle');
         toggle.disabled = !supported();
