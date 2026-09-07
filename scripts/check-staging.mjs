@@ -50,6 +50,8 @@ assert(related.origins.includes(origin));
 assert(related.origins.includes('https://validapp.lol'));
 const denied = await fetch(`${origin}/api/v1/auth/passkey/authenticate`, { method: 'POST', headers: { cookie, origin: 'https://untrusted.invalid' }, body: '{}' });
 assert.equal(denied.status, 403);
+const signupDenied = await fetch(`${origin}/api/v1/auth/passkey/signup/complete`, { method: 'POST', headers: { cookie, origin }, body: '{}' });
+assert.equal(signupDenied.status, 403); // No opt-in: must not reach the backend.
 console.log('PASS: private access, HTTPS/CSP, production challenge, related origins, no-store, cohort gates and cross-origin rejection');
 
 const browser = await chromium.launch({ headless: true });

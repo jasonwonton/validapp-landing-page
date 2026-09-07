@@ -3,7 +3,7 @@ import { uiIcon } from "./ui-icons.js";
 import { feedVoterLine, senderGradeIsSafe, tbhSenderLine } from "./feed-sender.js";
 import { DemoAPI, localDemoAllowed } from "./demo-api.js";
 import { createAdditionalPasskey, createSignupPasskey, passkeysSupported, signInWithPasskey } from "./passkeys.js";
-import { authBrowserURL, checkPasskeyEnvironment, completeSignupSafely, reportAuthFailure } from './auth-reliability.js';
+import { authBrowserURL, checkPasskeyEnvironment, completeSignupSafely, enablePreviewSignup, reportAuthFailure } from './auth-reliability.js';
 import { startPerformanceMonitoring } from "./performance.js";
 import { createRealtimeList } from "./realtime-list.js";
 import { activateRoute, preloadRoute } from "./routes/route-loader.js";
@@ -2013,7 +2013,10 @@ function showAuthBrowserHelp(error, signup) {
 
 async function openSignupDialog() {
     if (!demoMode) {
-        try { await checkPasskeyEnvironment(); }
+        try {
+            await checkPasskeyEnvironment();
+            if (!await enablePreviewSignup()) return;
+        }
         catch (error) {
             $('#authStatus').textContent = error.message;
             showAuthBrowserHelp(error, false);

@@ -1,4 +1,5 @@
 import { reportAuthFailure } from './auth-reliability.js';
+import { authStage, authRejectionCode } from './auth-diagnostics.js';
 
 function apiBaseURL() {
     // Browser auth is first-party: production hosting must reverse-proxy this
@@ -63,6 +64,10 @@ export class ValidAPI {
         delete fetchOptions.silentAuthFailure;
         const headers = new Headers(options.headers || {});
         headers.set("Accept", "application/json");
+        if (authStage(path)) {
+            const version = document.querySelector('meta[name="valid-app-version"]')?.content;
+            if (/^web-v\d{1,6}$/.test(version || '')) headers.set('X-Client-Version', version);
+        }
 
         if (options.body && !(options.body instanceof FormData) && !headers.has("Content-Type")) {
             headers.set("Content-Type", "application/json");
@@ -89,17 +94,8 @@ export class ValidAPI {
             const failure = error.name === 'AbortError'
                 ? new APIError('That request took too long. Check your connection and try again.', 408)
                 : new APIError(navigator.onLine === false ? 'You’re offline. Reconnect, then try again.' : 'Could not reach Valid. Check your connection and try again.', 0);
-            const authStages = {
-                '/auth/passkey/authenticate/challenge': 'signin_challenge',
-                '/auth/passkey/authenticate': 'signin_complete',
-                '/auth/passkey/signup/challenge': 'signup_challenge',
-                '/auth/passkey/signup/complete': 'signup_complete',
-                '/auth/phone/request/web': 'phone_request',
-                '/auth/phone/confirm': 'phone_confirm',
-                '/users/phone-check': 'phone_check',
-            };
-            if (authStages[path]) {
-                failure.stage = authStages[path];
+            if (authStage(path)) {
+                failure.stage = authStage(path);
                 failure.code = navigator.onLine === false ? 'offline' : failure.status === 408 ? 'request_timeout' : 'network_failure';
                 reportAuthFailure(failure);
             }
@@ -130,7 +126,14 @@ export class ValidAPI {
                 : typeof detail === "string"
                 ? detail
                 : detail?.message || `Request failed (${response.status})`;
-            throw new APIError(message, response.status, detail, waitSeconds);
+            const failure = new APIError(message, response.status, detail, waitSeconds);
+            if (authStage(path)) {
+                failure.stage = authStage(path);
+                failure.code = authRejectionCode(response.status, detail);
+                failure.requestId = response.headers.get('x-request-id');
+                reportAuthFailure(failure);
+            }
+            throw failure;
         }
 
         return includeResponseHeaders ? { data: payload, headers: response.headers } : payload;

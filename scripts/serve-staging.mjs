@@ -5,9 +5,11 @@ import { request as httpsRequest } from "node:https";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { createStaticOrigin } from "./serve-production.mjs";
+import { authStage, authRejectionCode, authDeviceFamily } from '../app/auth-diagnostics.js';
 
 const COOKIE = "__Host-valid-preview";
 const SESSION_COOKIE = "__Host-valid_web_session";
+const SIGNUP_COOKIE = '__Host-valid-preview-signup';
 const MAX_BODY = 12_582_912;
 const MAX_ACTIVE = 64;
 const TTL = 86_400;
@@ -27,6 +29,11 @@ function admitted(request, secret) {
     const now = Math.floor(Date.now() / 1000);
     return /^\d+$/.test(expiry || "") && Number(expiry) > now && Number(expiry) <= now + TTL && equal(sig, signature(secret, expiry));
 }
+function signupAdmitted(request, secret) {
+    const [expiry, sig] = cookieValue(request, SIGNUP_COOKIE).split('.');
+    const now = Math.floor(Date.now() / 1000);
+    return /^\d+$/.test(expiry || '') && Number(expiry) > now && Number(expiry) <= now + 3600 && equal(sig, signature(secret, `signup:${expiry}`));
+}
 function reply(response, status, detail, headers = {}) {
     response.writeHead(status, {
         "content-type": "application/json", "cache-control": "no-store",
@@ -43,6 +50,7 @@ export async function createStagingOrigin({
     secret = process.env.PREVIEW_ACCESS_KEY,
     root,
     upstreamRequest = httpsRequest,
+    logAuth = event => console.info(JSON.stringify(event)),
 } = {}) {
     if (!/^[a-f0-9]{64}$/.test(secret || "")) throw new Error("PREVIEW_ACCESS_KEY must be 32 random hex bytes");
     if (origin !== "https://staging.validapp.lol") throw new Error("Unapproved staging origin");
@@ -62,6 +70,13 @@ export async function createStagingOrigin({
             });
         }
         if (!admitted(request, secret)) return reply(response, 403, "Private preview. Reopen your preview link to continue.");
+        if (rawPath === '/preview/signup-enable') {
+            if (request.method !== 'POST' || request.headers.origin !== origin || request.headers['x-valid-preview-signup'] !== 'confirm-production') return reply(response, 403, 'Explicit production signup confirmation required.');
+            const expiry = String(Math.floor(Date.now() / 1000) + 3600);
+            return reply(response, 200, 'Signup testing enabled for one hour. Accounts and SMS are real.', {
+                'set-cookie': `${SIGNUP_COOKIE}=${expiry}.${signature(secret, `signup:${expiry}`)}; Path=/; Max-Age=3600; HttpOnly; Secure; SameSite=Strict`,
+            });
+        }
         if (!rawPath.startsWith("/api/")) return staticHandler(request, response);
         // Reject encoded/ambiguous paths and client-chosen upstreams before forwarding cookies.
         if (!rawPath.startsWith("/api/v1/") || /[%\\\x00-\x20]/.test(rawPath) || rawPath.split("/").some((p) => p === "." || p === "..")) {
@@ -69,20 +84,45 @@ export async function createStagingOrigin({
         }
         if (!new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]).has(request.method)) return reply(response, 405, "Method not allowed");
         if ((request.headers.origin && request.headers.origin !== origin) || (!SAFE.has(request.method) && request.headers.origin !== origin)) return reply(response, 403, "Invalid request origin");
-        // Existing accounts only. Production account safety rules remain authoritative.
-        if (rawPath.startsWith("/api/v1/auth/passkey/signup/")) return reply(response, 403, "Preview is for existing accounts. Sign in with your passkey.");
+        // Signup remains opt-in and exact-route only. Backend safety checks are unchanged.
+        if (rawPath.startsWith('/api/v1/auth/passkey/signup/') &&
+            (request.method !== 'POST' || !['/api/v1/auth/passkey/signup/challenge', '/api/v1/auth/passkey/signup/complete'].includes(rawPath) || !signupAdmitted(request, secret))) {
+            return reply(response, 403, 'Enable signup testing from Create an account first. This uses real production accounts.');
+        }
         if (active >= MAX_ACTIVE) return reply(response, 503, "Preview is busy. Try again shortly.", { "retry-after": "5" });
         if (Number(request.headers["content-length"] || 0) > MAX_BODY) return reply(response, 413, "Request too large");
         const headers = {};
         for (const [name, value] of Object.entries(request.headers)) if (FORWARDED.has(name)) headers[name] = value;
         const session = cookieValue(request, SESSION_COOKIE);
-        if (session) headers.cookie = `${SESSION_COOKIE}=${session}`;
+        if (session && rawPath !== '/api/v1/client-logs') headers.cookie = `${SESSION_COOKIE}=${session}`;
+        if (rawPath === '/api/v1/client-logs') delete headers.authorization;
         headers["accept-encoding"] = "identity";
         active += 1;
         let settled = false, deadline;
         const finish = () => { if (!settled) { settled = true; active -= 1; clearTimeout(deadline); } };
         let upstream;
         try { upstream = upstreamRequest({ hostname: "api.six7.lol", port: 443, path: request.url, method: request.method, headers }, (incoming) => {
+            const stage = authStage(rawPath.slice('/api/v1'.length));
+            if (stage) {
+                let bytes = 0; const chunks = [];
+                incoming.on('data', chunk => {
+                    if (incoming.statusCode < 400) return;
+                    bytes += chunk.length;
+                    if (bytes <= 8192) chunks.push(chunk); else chunks.length = 0;
+                });
+                incoming.on('end', () => {
+                    let detail;
+                    try { if (bytes <= 8192) detail = JSON.parse(Buffer.concat(chunks).toString()).detail; } catch {}
+                    const requestId = incoming.headers['x-request-id'];
+                    const version = request.headers['x-client-version'];
+                    try { logAuth({ event: 'auth.preview_response', stage, status: incoming.statusCode,
+                        code: incoming.statusCode < 400 ? 'accepted' : authRejectionCode(incoming.statusCode, detail),
+                        device: authDeviceFamily(request.headers['user-agent']), origin: 'staging.validapp.lol',
+                        build: /^web-v\d{1,6}$/.test(version || '') ? version : 'unknown',
+                        ...( /^[a-f0-9-]{12,36}$/i.test(requestId || '') ? { request_id: requestId } : {} ),
+                    }); } catch {} // Observability cannot break the proxied response.
+                });
+            }
             const output = { "cache-control": "no-store", "x-content-type-options": "nosniff" };
             for (const name of ["content-type", "retry-after", "x-request-id", "www-authenticate", "x-active-classmates-this-week"]) if (incoming.headers[name]) output[name] = incoming.headers[name];
             // Preserve only host-bound application session cookies. Never relay CDN cookies.

@@ -4,12 +4,16 @@ import { before, after, test } from 'node:test';
 import { createStagingOrigin } from '../serve-staging.mjs';
 
 const secret = 'ab'.repeat(32), stage = 'https://staging.validapp.lol';
-let server, backend, cookie, calls = [], fail = false, activeStreams = 0;
+let server, backend, cookie, calls = [], fail = false, activeStreams = 0, authLogs = [], authReply;
 before(async () => {
     backend = createServer((req, res) => {
         calls.push({ path: req.url, headers: req.headers });
         req.resume();
         if (fail) return req.socket.destroy();
+        if (authReply && req.url === '/api/v1/auth/passkey/signup/complete') {
+            res.writeHead(authReply.status, { 'content-type': 'application/json', 'x-request-id': 'abcdef123456' });
+            res.end(authReply.body); return;
+        }
         if (req.url === '/api/v1/events') {
             activeStreams += 1;
             res.once('close', () => activeStreams -= 1);
@@ -28,7 +32,7 @@ before(async () => {
         res.end(JSON.stringify({ enable_chats: true, enable_chat_daily_ledger: true, enable_calls: true, enable_web_calls: true }));
     });
     await new Promise(r => backend.listen(0, '127.0.0.1', r));
-    server = await createStagingOrigin({ secret, upstreamRequest(options, callback) {
+    server = await createStagingOrigin({ secret, logAuth: event => authLogs.push(event), upstreamRequest(options, callback) {
         assert.equal(options.hostname, 'api.six7.lol');
         assert.equal(options.port, 443);
         return request({ ...options, hostname: '127.0.0.1', port: backend.address().port }, callback);
@@ -84,6 +88,40 @@ test('private config gates do not enable unvalidated Stories, calls or comments'
     assert.equal(config.enable_web_chats, true); assert.equal(config.enable_web_mementos, true);
     assert.equal(config.enable_calls, true); assert.equal(config.enable_web_calls, false);
     assert.equal(config.enable_web_stories, false); assert.equal(config.enable_web_comments, false);
+});
+test('signup needs a private session and explicit same-origin confirmation; rejection logging is bounded and private', async () => {
+    const target = '/api/v1/auth/passkey/signup/complete';
+    const headers = { origin: stage };
+    assert.equal((await send(target, { method: 'POST', headers })).status, 403);
+    assert.equal((await send('/preview/signup-enable', { method: 'POST', headers })).status, 403);
+    assert.equal((await send('/preview/signup-enable', { method: 'POST', headers: { origin: 'https://evil.test', 'x-valid-preview-signup': 'confirm-production' } })).status, 403);
+    const enabled = await send('/preview/signup-enable', { method: 'POST', headers: { ...headers, 'x-valid-preview-signup': 'confirm-production' } });
+    assert.equal(enabled.status, 200);
+    assert.match(enabled.headers['set-cookie'][0], /Max-Age=3600; HttpOnly; Secure; SameSite=Strict/);
+    const signupCookie = enabled.headers['set-cookie'][0].split(';')[0];
+    assert.equal((await send(target, { method: 'POST', headers: { ...headers, cookie: signupCookie } })).status, 403);
+    const permitted = { ...headers, cookie: `${cookie}; ${signupCookie}`, 'user-agent': 'Android Chrome private-UA', 'x-client-version': 'web-v83' };
+    assert.equal((await send(target, { method: 'POST', headers: { ...permitted, cookie: permitted.cookie + 'tampered' } })).status, 403);
+    authReply = { status: 400, body: JSON.stringify({ detail: 'Phone number is not verified.', private: '4155550123 credential-data' }) };
+    const response = await send(target, { method: 'POST', headers: permitted, body: '{}' });
+    assert.equal(response.status, 400); assert.equal(response.body, authReply.body);
+    assert.equal(authLogs.at(-1).code, 'phone_not_verified');
+    assert.equal(authLogs.at(-1).device, 'android_chrome');
+    assert.equal(authLogs.at(-1).build, 'web-v83');
+    assert.equal(authLogs.at(-1).request_id, 'abcdef123456');
+    assert.doesNotMatch(JSON.stringify(authLogs), /4155550123|credential-data|private-UA/);
+    authReply.body = JSON.stringify({ detail: 'secret ' + 'x'.repeat(9000) });
+    assert.equal((await send(target, { method: 'POST', headers: permitted, body: '{}' })).body, authReply.body);
+    assert.equal(authLogs.at(-1).code, 'auth_request_rejected');
+    assert.equal((await send('/api/v1/auth/passkey/signup/options', { method: 'POST', headers: permitted })).status, 403);
+    authReply = null;
+});
+test('private diagnostics admit preview cookie but strip account credentials before upstream', async () => {
+    const response = await send('/api/v1/client-logs', { method: 'POST', headers: { origin: stage,
+        cookie: `${cookie}; __Host-valid_web_session=account-secret`, authorization: 'Bearer account-secret' }, body: '{}' });
+    assert.equal(response.status, 200);
+    assert.equal(calls.at(-1).headers.cookie, undefined);
+    assert.equal(calls.at(-1).headers.authorization, undefined);
 });
 test('SSE streams immediately and client close aborts upstream', async () => {
     await new Promise((resolve, reject) => {

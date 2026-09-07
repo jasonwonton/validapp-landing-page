@@ -1,3 +1,4 @@
+import { authDeviceFamily } from './auth-diagnostics.js';
 const RP_ID = 'six7.lol'; // Released iOS credentials must keep this RP ID.
 const WEB_ORIGINS = new Set(['https://validapp.lol', 'https://staging.validapp.lol', 'https://six7.lol']);
 
@@ -74,6 +75,15 @@ export async function completeSignupSafely(api, payload) {
     }
 }
 
+export async function enablePreviewSignup() {
+    if (location.origin !== 'https://staging.validapp.lol') return true;
+    if (!window.confirm('Staging uses live production accounts. This test can send a real verification SMS and create a real account. Use a phone number you control that is not already registered. Continue?')) return false;
+    const response = await fetch('/preview/signup-enable', { method: 'POST', credentials: 'same-origin',
+        headers: { 'X-Valid-Preview-Signup': 'confirm-production' }, signal: AbortSignal.timeout(10000) });
+    if (!response.ok) throw new Error('Could not enable signup testing. Reopen your private staging link and try again.');
+    return true;
+}
+
 let diagnosticsSent = 0;
 const reported = new Set();
 export function reportAuthFailure(error) {
@@ -89,16 +99,16 @@ function sendAuthDiagnostic(error) {
     reported.add(key); diagnosticsSent++;
     const version = document.querySelector('meta[name="valid-app-version"]')?.content || 'web-unknown';
     const instance = [...crypto.getRandomValues(new Uint8Array(32))].map(byte => byte.toString(16).padStart(2, '0')).join('');
-    const ua = navigator.userAgent;
-    const browser = /SamsungBrowser/i.test(ua) ? 'samsung_internet' : /; wv\)|Instagram|FBAN|FBAV/i.test(ua) ? 'embedded' : /Firefox/i.test(ua) ? 'firefox' : /Chrome/i.test(ua) ? 'chrome' : /Safari/i.test(ua) ? 'safari' : 'other';
     const body = JSON.stringify({ id: crypto.randomUUID(), event: 'auth.web_failure', severity: 'warning', message: 'Web authentication could not complete.', occurred_at: new Date().toISOString(), context: {
         app_version: version, build_number: version.match(/\d+/)?.[0] || '0', client_instance_id: instance,
         distribution_channel: 'web_pwa', flow: 'authentication', stage, error_code: code,
         http_status: String(Number(error.status) || 0), route: location.hostname,
-        device_model: `${/Android/i.test(ua) ? 'android' : /iPhone|iPad/i.test(ua) ? 'ios_web' : 'desktop'}_${browser}`,
+        device_model: authDeviceFamily(navigator.userAgent),
+        ...( /^[a-f0-9-]{12,36}$/i.test(error.requestId || '') ? { server_request_id: error.requestId } : {} ),
         network_connected: String(navigator.onLine),
     }, breadcrumbs: [] });
     // Best effort only: no persistent queue, retries, raw errors, credentials,
     // names, phone numbers, URLs with queries, or full user-agent strings.
-    void fetch('/api/v1/client-logs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, credentials: 'omit', keepalive: true }).catch(() => null);
+    void fetch('/api/v1/client-logs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body,
+        credentials: location.origin === 'https://staging.validapp.lol' ? 'same-origin' : 'omit', keepalive: true }).catch(() => null);
 }

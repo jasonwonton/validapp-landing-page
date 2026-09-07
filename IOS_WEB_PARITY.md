@@ -1,6 +1,8 @@
 # Six7 iOS → PWA parity and release matrix
 
 Last audited: September 7, 2026
+Staging auth smoke test: [web-v83 opt-in signup and rejection diagnostics](STAGING_AUTH_SMOKE_2026-09-07.md).
+Public rollout, real-device acceptance and the cause of historical HTTP 400 rejections remain open.
 Android passkeys: [domain compatibility and interrupted signup](ANDROID_PASSKEY_RELIABILITY_2026-09-07.md)
 tracks the frontend-only `web-v82` mitigations. Browser/device acceptance and public rollout remain open.
 Feed sender labels: [native grade / gender product emoji](FEED_SENDER_PARITY_2026-09-07.md)

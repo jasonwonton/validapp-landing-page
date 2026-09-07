@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 async function mount(page, { host = 'validapp.lol', capabilities = true, ua = '' } = {}) {
     await page.route(`https://${host}/**`, async route => {
         const path = new URL(route.request().url()).pathname;
-        if (['/app/auth-reliability.js', '/app/passkeys.js', '/app/api.js'].includes(path)) return route.fulfill({ contentType: 'text/javascript', body: await readFile(new URL(`../${path.slice(1)}`, import.meta.url), 'utf8') });
+        if (['/app/auth-reliability.js', '/app/auth-diagnostics.js', '/app/passkeys.js', '/app/api.js'].includes(path)) return route.fulfill({ contentType: 'text/javascript', body: await readFile(new URL(`../${path.slice(1)}`, import.meta.url), 'utf8') });
         if (path === '/api/v1/client-logs') return route.fulfill({ status: 201, json: {} });
         return route.fulfill({ contentType: 'text/html', body: '<meta name="valid-app-version" content="web-v82"><title>Auth fixture</title>' });
     });
@@ -17,6 +17,35 @@ async function mount(page, { host = 'validapp.lol', capabilities = true, ua = ''
         Object.defineProperty(navigator, 'credentials', { value: { create: async () => {}, get: async () => {} }, configurable: true });
     }, { capabilities, ua });
 }
+
+test('staging signup opt-in can be cancelled and never silently enables real account creation', async ({ page }) => {
+    await mount(page, { host: 'staging.validapp.lol' });
+    let calls = 0;
+    await page.route('**/preview/signup-enable', route => { calls++; return route.fulfill({ status: 200, json: {} }); });
+    page.once('dialog', dialog => dialog.dismiss());
+    expect(await page.evaluate(async () => (await import('/app/auth-reliability.js')).enablePreviewSignup())).toBe(false);
+    expect(calls).toBe(0);
+    page.once('dialog', dialog => { expect(dialog.message()).toContain('real account'); return dialog.accept(); });
+    expect(await page.evaluate(async () => (await import('/app/auth-reliability.js')).enablePreviewSignup())).toBe(true);
+    expect(calls).toBe(1);
+});
+
+test('HTTP signup rejection records a normalized reason and request ID without raw body data', async ({ page }) => {
+    await mount(page, { host: 'staging.validapp.lol' });
+    const reports = [];
+    page.on('request', request => { if (request.url().endsWith('/client-logs')) reports.push(request.postDataJSON()); });
+    await page.route('**/api/v1/auth/passkey/signup/complete', route => route.fulfill({ status: 400,
+        headers: { 'x-request-id': 'abcdef123456' }, json: { detail: 'Phone number is not verified.', private: '4155550123' } }));
+    const result = await page.evaluate(async () => {
+        const { ValidAPI } = await import('/app/api.js');
+        try { await new ValidAPI().request('/auth/passkey/signup/complete', { method: 'POST', body: '{}' }); }
+        catch (error) { return { code: error.code, stage: error.stage, status: error.status }; }
+    });
+    expect(result).toEqual({ code: 'phone_not_verified', stage: 'signup_complete', status: 400 });
+    await expect.poll(() => reports.length).toBe(1);
+    expect(reports[0].context.server_request_id).toBe('abcdef123456');
+    expect(JSON.stringify(reports)).not.toContain('4155550123');
+});
 
 test('signup network diagnostics identify the step without retrying SMS or exposing the phone', async ({ page }) => {
     await mount(page);
