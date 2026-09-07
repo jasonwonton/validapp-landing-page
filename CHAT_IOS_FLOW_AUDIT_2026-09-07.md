@@ -93,6 +93,9 @@ artwork retain the Six7 identity; no decorative emoji were added.
   real upload progress and gallery opening, retaining no-inline-style and
   zero-CSP-error assertions. That stronger check exposed and verified the
   progress-width fix above.
+- Complete final local suite on source `016b505d2203cf0cf3f99c5e053c1791273447db`:
+  **865 passed, 11 explicit platform skips**, zero retries, 5.4 minutes.
+  Includes every Playwright spec in all four configured browser projects.
 
 ## Rollback and next work
 
@@ -107,3 +110,30 @@ Still open: ordinary photo/video/voice composer simplification, real-device
 keyboard and scrolling, Stories, push tray behavior and background recovery,
 screen readers, and intended-account staging acceptance. Screenshot/screen
 recording detection remains native-only with the documented web alternative.
+
+## Live private staging evidence
+
+- Origin: https://staging.validapp.lol. Existing invitation access is retained;
+  the private invitation is not stored in this repository.
+- Active shell: **web-v75**, source
+  `016b505d2203cf0cf3f99c5e053c1791273447db`, deployment
+  `5f720110-98b8-4d9d-afb0-80f6d536108c`, ACTIVE, 6/6 steps.
+- Both `check-staging.mjs` and `check-memento-staging.mjs` pass on the real
+  origin: exact JS/CSS hashes, private access, no-store, CSP/device policy,
+  existing related-origin passkey support, unchanged feature gates, synthetic
+  two-view camera and stopped tracks, plus the new header/gallery/sticker
+  controls mounted with an in-memory adapter. No real account was signed in,
+  no messages or Mementos were created, and no real read receipt was sent.
+- Live API health/readiness and the required upload contract pass. The API
+  deployment at this pass's baseline was `1572613c-2a81-4180-9a0b-3c89645ec446`;
+  an end-of-pass read observed independent deployment activity (active
+  `47ba1622-fbd4-4e50-8860-102f01ac62a7`, pending
+  `f9ea2e0a-54cd-4baa-9a9c-f8eb267be5a0`). This task did not initiate that
+  activity or deploy/modify backend, APNS or SMS code. Do not describe the
+  entire external backend state as unchanged during this frontend release.
+- Hosted workflow: https://github.com/jasonwonton/validapp-landing-page/actions/runs/34155682680
+  on the exact released source: **success**. Static checks and all four browser
+  jobs pass; optional backend passkey-integration job is explicitly skipped.
+- Safe rollback: use the prior web-v72 frontend deployment above, or revert
+  this frontend change and publish a newer worker version. Do not roll back
+  backend infrastructure to undo this UI change.

@@ -38,6 +38,10 @@ September 7 chat hierarchy correction: [CHAT_IOS_FLOW_AUDIT_2026-09-07.md](CHAT_
 tracks the post-capture cleanup, header progress/streaks, dedicated history and
 sticker picker. Screen-level parity is still Partial; the narrower functional
 rows do not imply native-quality or physical-device sign-off.
+The frontend-only update is live on private staging as `web-v75`: 865 local
+browser tests pass (11 explicit platform skips), all hosted browser jobs pass,
+and real-origin checks pass without account writes. Capture/history use the
+authoritative per-chat `viewer_has_shared`, not the global posted-today flag.
 
 | Journey / invariant | Parity | Release | Evidence and remaining gate |
 | --- | --- | --- | --- |
