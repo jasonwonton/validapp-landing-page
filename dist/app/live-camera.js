@@ -24,6 +24,7 @@ export function createLiveCamera({ container, onCapture, onFallback }) {
     function failure(text) {
         message.textContent = text;
         $('[data-camera-retry]').hidden = false;
+        $('[data-camera-library]').hidden = false;
     }
     async function start() {
         if (!opened) return;
@@ -33,6 +34,7 @@ export function createLiveCamera({ container, onCapture, onFallback }) {
         const requestGeneration = generation;
         message.textContent = 'Starting camera…';
         $('[data-camera-retry]').hidden = true;
+        $('[data-camera-library]').hidden = true;
         if (!navigator.mediaDevices?.getUserMedia) return failure('Live capture is unavailable here. Open in a supported browser or choose a photo.');
         pending = true;
         permissionTimer = setTimeout(() => {
@@ -96,7 +98,10 @@ export function createLiveCamera({ container, onCapture, onFallback }) {
     }
     function close() { opened = false; stop(); clearPhotos(); container.hidden = true; }
     function finish() { if (!photos.length) return; const result = photos.slice(0, 2); close(); onCapture(result); }
-    function fallback() { close(); onFallback(); }
+    function fallback() {
+        if ($('[data-camera-library]').hidden) return;
+        close(); onFallback();
+    }
     $('[data-camera-shutter]').addEventListener('click', capture);
     $('[data-camera-flip]').addEventListener('click', () => { if (busy || pending) return; facing = facing === 'environment' ? 'user' : 'environment'; void start(); });
     $('[data-camera-retry]').addEventListener('click', () => void start());

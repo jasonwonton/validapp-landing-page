@@ -110,7 +110,7 @@ test("a Memento stays scoped to the active chat like the released iOS contract",
     await page.getByRole("button", { name: /Weekend Crew/ }).click();
     await page.locator(".chat-daily-row > button").click();
     const composer = page.getByRole("dialog", { name: "Create a Memento" });
-    await expect(composer.locator(".memento-audience")).toHaveText("Sharing with Weekend Crew");
+    await expect(composer.locator(".memento-publish")).toHaveText("Send to Weekend Crew");
     await expect(composer.getByRole("checkbox")).toHaveCount(0);
     await composer.locator(".memento-file-input").setInputFiles("assets/AppIconV2.png");
     await composer.getByRole("button", { name: /^Send to / }).click();

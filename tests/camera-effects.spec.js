@@ -74,41 +74,35 @@ test("a single-view Memento remains a safe fallback and preserves the authoritat
     const preview = dialog.getByRole("img", { name: "Memento preview" });
     const original = await previewDigest(preview);
     await expect(dialog.getByRole("button", { name: "Swap front and back photos" })).toHaveCount(0);
-    await dialog.locator('.memento-options > summary').click();
-    const effects = dialog.getByRole("group", { name: "Photo effect" });
-    await effects.getByRole("button", { name: "Cool photo effect" }).click();
+    await expect(dialog.getByRole("group", { name: "Photo effect" })).toHaveCount(0);
+    await expect(dialog.locator('.memento-caption, .memento-options')).toHaveCount(0);
     await expect(dialog.locator('.memento-publish')).toBeEnabled();
-    expect((await previewDigest(preview)).digest).not.toBe(original.digest);
+    expect(original).toMatchObject({ width: 1024, height: 1024 });
     await dialog.getByRole("button", { name: /^Send to / }).click();
     await expect(page.getByText(/Memento shared · \+10 Aura/)).toBeVisible();
 });
 
 test("sequential rear and front photos produce swappable 1080 by 1440 Memento composites", async ({ page }) => {
-    await signInToDemo(page);
-    await page.getByRole("button", { name: "Chats", exact: true }).click();
-    await page.getByRole("button", { name: /Weekend Crew/ }).click();
-    await page.locator(".chat-daily-row > button").click();
-    const dialog = page.getByRole("dialog", { name: "Create a Memento" });
-    await dialog.locator(".memento-file-input").setInputFiles("assets/AppIconV2.png");
-    await dialog.locator(".memento-secondary-file-input").setInputFiles("assets/app/anonymous.webp");
-    await expect(dialog.getByText('Tap the small photo to swap views.')).toBeVisible();
-
-    const preview = dialog.getByRole("img", { name: "Memento preview" });
-    const rearPrimary = await previewDigest(preview);
+    await page.goto('/app/');
+    await page.evaluate(async () => {
+        const { prepareMementoImages } = await import('/app/chat/media.js');
+        const first = await (await fetch('/assets/AppIconV2.png')).blob();
+        const second = await (await fetch('/assets/app/anonymous.webp')).blob();
+        const prepared = await prepareMementoImages(first, second);
+        for (const [id, blob] of Object.entries(prepared)) {
+            if (!(blob instanceof Blob)) continue;
+            const img = document.createElement('img');
+            img.id = `prepared-${id}`;
+            img.src = URL.createObjectURL(blob);
+            document.body.append(img);
+        }
+    });
+    const rearPrimary = await previewDigest(page.locator('#prepared-primary'));
     expect(rearPrimary).toMatchObject({ width: 1080, height: 1440 });
-    await dialog.getByRole("button", { name: "Swap front and back photos" }).click();
-    await expect(dialog.getByText(/Front view is primary/)).toBeVisible();
-    const frontPrimary = await previewDigest(preview);
+    const frontPrimary = await previewDigest(page.locator('#prepared-swapped'));
     expect(frontPrimary).toMatchObject({ width: 1080, height: 1440 });
     expect(frontPrimary.digest).not.toBe(rearPrimary.digest);
 
-    const effects = dialog.getByRole("group", { name: "Photo effect" });
-    await dialog.locator('.memento-options > summary').click();
-    await effects.getByRole("button", { name: "Warm photo effect" }).click();
-    await expect(dialog.getByText('Tap the small photo to swap views.')).toBeVisible();
-    expect((await previewDigest(preview)).digest).not.toBe(frontPrimary.digest);
-    await dialog.getByRole("button", { name: /^Send to / }).click();
-    await expect(page.getByText(/Memento shared · \+10 Aura/)).toBeVisible();
 });
 
 test("Story photo Effects bake locally before the existing durable upload record", async ({ page }) => {

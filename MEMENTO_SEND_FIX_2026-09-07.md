@@ -16,14 +16,15 @@ the upload method. Those checks did not establish real browser upload parity.
 
 - PWA `web-v72`: one shutter captures the two views sequentially. The default
   review is photo, Retake, and Send to the named chat, following the active
-  Swift `DailyMomentCameraView` / `DailyHighlightViews` flow. Library, effects
-  and caption remain under collapsed More options. A failed second camera has
+  Swift `DailyMomentCameraView` / `DailyHighlightViews` flow. Caption, effects
+  and More options are removed from Mementos. Photo selection is exposed only
+  after camera failure or unavailable access. A failed second camera has
   an explicit one-photo alternative; simultaneous native capture is not claimed.
 - Immediate send progress and failure text stay beside the actions. Repeated
   form submissions are guarded; mutation/cancel controls are disabled during
   delivery. Stalled XHR uploads time out after 60 seconds into existing bounded
   recovery with the stable request identity.
-- Backend commit `6984a8999` on `codex/memento-secondary-upload-fix` adds optional
+- Backend release commit `e80b940e3` on `codex/memento-api-release` adds optional
   `variant=secondary` to the existing authenticated upload proxy and returns
   that URL only for proxy delivery. Native direct uploads and primary defaults
   are unchanged. The service validates ownership, registered secondary size,
@@ -39,6 +40,11 @@ the upload method. Those checks did not establish real browser upload parity.
 - First updated Android camera, effects and Chats/Mementos run: 40 passed.
 - Backend Memento tests: 23 passed, including native defaults, both proxy URLs,
   ownership, size, expiry and invalid-variant cases; repository/storage mocked.
+- Release-base validation: 132 backend Memento/chat/API/grouping/worker-safety/
+  deployment tests passed with a test APNS bundle identifier configured. The
+  initial broader run lacked that identifier; no production secrets or delivery
+  credentials were supplied. Only the three patch files differ from the exact
+  active production source `e9725209e`.
 - Final cross-browser regression: 206 passed, 6 explicit platform skips,
   zero retries across Android-emulated Chromium, desktop Chromium, Firefox
   and WebKit. The skips are synthetic camera and service-worker harness
@@ -49,7 +55,7 @@ the upload method. Those checks did not establish real browser upload parity.
 - Production-CSP browser test performs real XHR for both routed uploads, then
   exactly one finalize and publish. Separate coverage checks visible errors,
   repeated submits, upload timeout, outbox recovery and update/rollback.
-- Build and performance budget passed: 674,922-byte shell transfer estimate,
+- Build and performance budget passed: 674,501-byte shell transfer estimate,
   below 750,000. Synthetic light/dark reviews were visually inspected at
   393 × 852; actions and feedback remain visible. Physical devices remain open.
 

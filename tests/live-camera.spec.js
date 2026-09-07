@@ -1,7 +1,10 @@
 import { test, expect } from '@playwright/test';
 test.use({ launchOptions: async ({ browserName }, use) => use(browserName === 'chromium' ? { args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] } : {}) });
 
-async function openMemento(page) {
+async function openMemento(page, { cameraUnavailable = false } = {}) {
+    if (cameraUnavailable) await page.addInitScript(() => {
+        navigator.mediaDevices.getUserMedia = async () => { throw new DOMException('Denied', 'NotAllowedError'); };
+    });
     await page.bringToFront();
     await page.goto('/app/?demo=1&signin=1');
     await page.getByRole('button', { name: /^sign in$/i }).click();
@@ -29,13 +32,19 @@ test.describe('live Memento capture', () => {
         const preview = await page.locator('.live-camera-stage').boundingBox();
         expect(preview.width / preview.height).toBeCloseTo(3 / 4, 2);
         await expect(page.locator('.memento-file-input')).toBeHidden();
+        await expect(page.getByRole('button', { name: 'Choose a photo instead' })).toBeHidden();
         await shutter.click();
         await expect(page.locator('.memento-publish')).toBeEnabled();
         await expect(page.locator('.memento-preview img')).toBeVisible();
         await expect(page.locator('[data-swap-memento-capture]')).toBeVisible();
+        await expect(page.locator('.memento-options, .memento-caption, [data-memento-effects]')).toHaveCount(0);
+        await expect(page.locator('.memento-photo-fallback')).toBeHidden();
+        await page.locator('[data-swap-memento-capture]').click();
+        await expect(page.locator('.memento-status')).toContainText('Front view is primary');
         await expect.poll(() => page.evaluate(() => cameraStreams.flatMap(s => s.getTracks()).every(t => t.readyState === 'ended'))).toBe(true);
         expect(fileChoosers).toBe(0);
         await page.locator('[data-retake-memento]').click();
+        await expect(page.locator('.memento-publish')).toBeDisabled();
         await expect(shutter).toBeEnabled();
         await shutter.click();
         await expect(page.locator('.memento-publish')).toBeEnabled();
@@ -67,7 +76,7 @@ test.describe('live Memento capture', () => {
 });
 
 test('send gives immediate feedback, prevents repeat submits and shows errors beside the button', async ({ page }) => {
-    await openMemento(page);
+    await openMemento(page, { cameraUnavailable: true });
     await page.getByRole('button', { name: 'Choose a photo instead' }).click();
     await page.locator('.memento-file-input').setInputFiles('assets/AppIconV2.png');
     await expect(page.locator('.memento-publish')).toBeEnabled();
@@ -91,7 +100,8 @@ test('send gives immediate feedback, prevents repeat submits and shows errors be
     const bounds = await page.locator('.memento-status').boundingBox();
     expect(bounds.y).toBeGreaterThanOrEqual(0);
     expect(bounds.y + bounds.height).toBeLessThanOrEqual(await page.evaluate(() => innerHeight));
-    expect(await page.locator('.memento-options').evaluate(el => el.open)).toBe(false);
+    await expect(page.locator('.memento-photo-fallback')).toBeHidden();
+    await expect(page.locator('.memento-options, .memento-caption, [data-memento-effects]')).toHaveCount(0);
 });
 
 test('permission denial offers a deliberate photo fallback, not a silent picker', async ({ page }) => {
@@ -137,7 +147,7 @@ test('chat chrome uses vector symbols and native-sized heading, not emoji contro
 
 test('dark navigation stays legible and review keeps Share reachable without overlapping the photo', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'dark' });
-    await openMemento(page);
+    await openMemento(page, { cameraUnavailable: true });
     await page.getByRole('button', { name: 'Choose a photo instead' }).click();
     await page.locator('.memento-file-input').setInputFiles('assets/AppIconV2.png');
     const share = page.locator('.memento-publish');
