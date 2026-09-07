@@ -65,6 +65,34 @@ test('historical responses cannot replace today’s access or outlive the select
     await expect(page.locator('.chat-message')).toHaveCount(0);
 });
 
+test('posting in another chat never hides this chat’s capture or unlocks its history', async ({ page }) => {
+    await page.goto('/app/?demo=1&signin=1');
+    await page.evaluate(async () => {
+        const { DemoAPI } = await import('/app/demo-api.js');
+        const original = DemoAPI.prototype.getChatDailyRow;
+        DemoAPI.prototype.getChatDailyRow = async function (...args) {
+            const row = await original.apply(this, args);
+            if (row) row.viewer_has_posted_today = true; // Global; not this chat's shared flag.
+            return row;
+        };
+    });
+    await signIn(page);
+    await page.getByRole('button', { name: /Noah Williams/ }).click();
+    await expect(page.locator('[data-open-memento-gallery]')).toBeVisible();
+    await page.getByRole('button', { name: 'Back to chats' }).click();
+    await page.getByRole('button', { name: /Weekend Crew/ }).click();
+    await expect(page.locator('[data-open-memento-gallery]')).toBeHidden();
+    await expect(page.locator('.chat-composer')).toBeHidden();
+    await page.locator('.chat-daily-row > button').click();
+    const capture = page.getByRole('dialog', { name: 'Create a Memento' });
+    await expect(capture).toBeVisible();
+    await capture.locator('.memento-file-input').setInputFiles('assets/AppIconV2.png');
+    await capture.getByRole('button', { name: 'Send to Weekend Crew', exact: true }).click();
+    await expect(page.locator('[data-open-memento-gallery]')).toBeVisible();
+    await expect(page.locator('.chat-daily-row')).toBeHidden();
+    await expect(page.locator('.chat-composer')).toBeVisible();
+});
+
 test('changing rooms fails closed while the new Memento access check is unresolved or fails', async ({ page }) => {
     await page.goto('/app/?demo=1&signin=1');
     await page.evaluate(async () => {

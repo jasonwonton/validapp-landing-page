@@ -512,7 +512,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     function renderDailyRow() {
         const row = store.state.dailyRow;
         const enabled = dailyLedgerEnabled() && row;
-        const offerCapture = enabled && !row.viewer_has_posted_today && row.viewer_is_eligible !== false;
+        const offerCapture = enabled && !row.viewer_has_shared && row.viewer_is_eligible !== false;
         $('.chat-daily-row').innerHTML = offerCapture ? `<button type="button" data-open-memento><span class="chat-daily-icon">${uiIcon('camera')}</span><span><strong>${row.view_gate_locked ? "Take today's Memento" : "Take Memento"}</strong></span></button>` : '';
         $('.chat-daily-row').classList.toggle('hidden', !offerCapture);
         $('.chat-composer').classList.toggle('hidden', chatAccessUnavailable());
@@ -529,7 +529,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     function renderMementoToolbar() {
         const row = store.state.dailyRow;
         const button = $('[data-open-memento-gallery]');
-        const visible = dailyLedgerEnabled() && row?.viewer_has_posted_today === true;
+        const visible = dailyLedgerEnabled() && row?.viewer_has_shared === true;
         button.classList.toggle('hidden', !visible);
         if (!visible) { button.innerHTML = ''; return; }
         const eligible = Math.max(0, Math.floor(Number(row.eligible_count) || 0));
@@ -542,7 +542,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     }
 
     function openMementoGallery() {
-        if (!dailyLedgerEnabled() || !store.state.dailyRow?.viewer_has_posted_today) return;
+        if (!dailyLedgerEnabled() || !store.state.dailyRow?.viewer_has_shared) return;
         store.state.displayedDailyRow = store.state.dailyRow;
         $('.chat-memento-gallery-status').textContent = '';
         renderMementoGallery();
@@ -989,7 +989,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
 
     function openMementoComposer({ showExisting = false } = {}) {
         const row = store.state.dailyRow;
-        if (showExisting || row?.viewer_has_posted_today || row?.viewer_is_eligible === false) {
+        if (showExisting || row?.viewer_has_shared || row?.viewer_is_eligible === false) {
             const first = (row?.entries || []).find((entry) => entry.image_url);
             if (first) return viewMemento(
                 safeMediaURL(first.image_url, api),

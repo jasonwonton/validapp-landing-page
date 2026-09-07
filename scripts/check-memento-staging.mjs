@@ -22,7 +22,7 @@ try {
     const page = await browser.newPage({ viewport: { width: 393, height: 852 } });
     await page.goto(invitation);
     const version = await page.locator('meta[name="valid-app-version"]').getAttribute('content');
-    assert.equal(version, process.env.STAGING_EXPECTED_VERSION || 'web-v73');
+    assert.equal(version, process.env.STAGING_EXPECTED_VERSION || 'web-v74');
     for (const file of ['app/chat/index.js', 'app/live-camera.js', 'app/chat/styles.css', 'app/api.js']) {
         const response = await page.request.get(new URL(`/${file}`, invitation).href);
         assert.equal(response.status(), 200);
@@ -69,7 +69,7 @@ try {
         const today = new Date();
         const ledgerDate = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');
         const chat = { id: 'synthetic-chat', display_name: 'Synthetic chat', membership_status: 'accepted', accepted_count: 2, moment_streak: 3 };
-        const row = { ledger_date: ledgerDate, viewer_has_posted_today: true, view_gate_locked: false, posted_count: 1, eligible_count: 2, entries: [{ first_name: 'Fixture', has_posted: true, image_url: '/assets/app/rocket.webp', entry_id: 'synthetic-entry' }] };
+        const row = { ledger_date: ledgerDate, viewer_has_posted_today: true, viewer_has_shared: true, view_gate_locked: false, posted_count: 1, eligible_count: 2, entries: [{ first_name: 'Fixture', has_posted: true, image_url: '/assets/app/rocket.webp', entry_id: 'synthetic-entry' }] };
         const root = document.createElement('section');
         document.body.replaceChildren(root);
         const api = {

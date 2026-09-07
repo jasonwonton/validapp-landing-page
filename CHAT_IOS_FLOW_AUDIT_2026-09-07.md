@@ -2,7 +2,7 @@
 
 ## Scope and decision
 
-Frontend-only follow-up for private staging, web-v73. No backend, API contract,
+Frontend-only follow-up for private staging, web-v74 (superseding web-v73). No backend, API contract,
 APNS, SMS, membership, moderation, or production feature-flag changes.
 The overall PWA remains **Partial / Not yet tested**, not Production-ready.
 
@@ -27,6 +27,13 @@ simulator or physical-device certification. Colors, typography and existing
 artwork retain the Six7 identity; no decorative emoji were added.
 
 ## Safety checks in this change
+
+- **Contract correction:** the backend's `viewer_has_posted_today` is global,
+  while `viewer_has_shared` is scoped to this chat. The PWA now uses the latter
+  for capture/history placement, exactly like Swift `viewerHasShared`. Posting
+  in one chat must not hide capture in another. Added an explicit two-chat test.
+  No backend change was needed; the existing service and repository already
+  make this distinction.
 
 - A missing or failed current-day gate check hides the composer and cached
   message content; it also suppresses read receipts and pending text retries
@@ -55,7 +62,7 @@ artwork retain the Six7 identity; no decorative emoji were added.
 - `scripts/audit-ui.mjs` adds posted-room, history and standalone sticker views
   to the existing light/dark screenshots. These contain synthetic/demo data.
 - Build, UI runtime, gateway (7), static-origin (3) and performance budgets pass.
-  Shell: 42 entries, 676,762 estimated transferred bytes (<750 KB budget).
+  Shell: 42 entries, 676,759 estimated transferred bytes (<750 KB budget).
 - Broad Chromium/Pixel-emulation, desktop Chromium, Firefox and WebKit run:
   **425 passed, 11 explicitly skipped**, zero retries. Includes contracts,
   core journeys, Mementos, sticker creation, recovery and update/rollback.
@@ -67,6 +74,15 @@ artwork retain the Six7 identity; no decorative emoji were added.
 - Light/dark posted-room, inbox, history and sticker renders were inspected.
   The review caught and fixed the indistinct dark selected-date background.
   Private-origin results are recorded after deployment below.
+- Additional production-adapter and bounded message-window checks:
+  **132 passed** across all four lab projects, zero retries.
+- The initial web-v73 deployment became active during the last contract audit.
+  It retained a pre-existing global/per-chat posted-flag mismatch; web-v74
+  corrects that frontend mapping and includes a new worker version so clients
+  do not retain the superseded module. The two-chat regression is mandatory.
+- Final per-chat correction, hierarchy, Mementos, capture and HTTP-contract
+  rerun: **200 passed, 4 synthetic-camera platform skips**, zero retries, across
+  all four projects. Final web-v74 update/rollback: **2 passed, 2 platform skips**.
 
 ## Rollback and next work
 
