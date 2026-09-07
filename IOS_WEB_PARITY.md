@@ -1,6 +1,9 @@
 # Six7 iOS → PWA parity and release matrix
 
 Last audited: September 7, 2026
+Poll detail: [screenshot-driven appearance correction](POLL_DETAIL_APPEARANCE_2026-09-07.md)
+fixes dark-mode contrast, oversized artwork and selection overlap for private
+`web-v77`; physical-device visual acceptance remains open.
 Latest frontend follow-up: [chat camera / inbox / profile audit](CHAT_CAMERA_PROFILE_AUDIT_2026-09-07.md)
 tracks camera-first message capture, native inbox priorities and tint, peach
 Memento/sticker controls, and profile affordance fixes for private `web-v76`.
