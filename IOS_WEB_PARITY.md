@@ -34,6 +34,11 @@ implementation evidence, not a claim that the whole screen feels like iOS.
 
 ## Chats and Mementos
 
+September 7 chat hierarchy correction: [CHAT_IOS_FLOW_AUDIT_2026-09-07.md](CHAT_IOS_FLOW_AUDIT_2026-09-07.md)
+tracks the post-capture cleanup, header progress/streaks, dedicated history and
+sticker picker. Screen-level parity is still Partial; the narrower functional
+rows do not imply native-quality or physical-device sign-off.
+
 | Journey / invariant | Parity | Release | Evidence and remaining gate |
 | --- | --- | --- | --- |
 | Chat list, unread counts, pagination | Equivalent | Not yet tested | Pixel 7 and desktop Chromium automation pass; final-origin load and large-account paging remain. |
@@ -62,7 +67,9 @@ implementation evidence, not a claim that the whole screen feels like iOS.
 | Memento upload/finalize/publish | Partial | Not yet tested | Secondary authenticated proxy fix is live; native direct defaults remain unchanged. Real XHR under production CSP, backend ownership/expiry/size checks and live API schema pass. Prior demo tests bypassed the real PUT and overstated readiness. Stable request IDs, one session/finalize/publish and bounded recovery remain; physical intended-account send/interruption checks are still required. |
 | Memento reciprocity gate | Equivalent | Not yet tested | Locked message bodies stay out of the DOM; unlock journey passes in all four lab projects. |
 | Skip Memento for today | Equivalent | Not yet tested | Uses the same authoritative daily-row skip endpoint and unlocks without fabricating a post. |
-| Seven-day Memento history | Equivalent | Not yet tested | Date rail and historical rows are automated indirectly; timezone/DST physical tests remain. |
+| Seven-day Memento history | Equivalent | Not yet tested | Dedicated header-opened gallery with a seven-day rail and two-column cards; historical rows cannot alter today's gate. Stale selection/chat responses and closed-gallery cleanup have explicit tests; timezone/DST and physical review remain. |
+| Chat / Memento streak display | Partial | Not yet tested | Authoritative positive `moment_streak` now appears in the inbox and posted-chat toolbar for chats with at least two accepted members. No local streak computation. Cross-device increments and midnight acceptance remain. |
+| Post-Memento chat hierarchy | Partial | Not yet tested | Calendar/banner/thumbnail strip removed after posting; progress and history move to the top-right like Swift. A pending or failed access check hides cached content. Physical iOS/PWA comparison remains. |
 | Chat-scoped Memento audience | Equivalent | Not yet tested | iOS and the authoritative `DailyEntryPublishRequest` permit exactly one active chat per Memento. The PWA labels that destination, sends one `chat_id`, and rejects accidental multi-chat payloads before network I/O; contract and browser coverage pass. |
 | Reshare an existing Memento | Equivalent | Not yet tested | Gallery Share stages the authoritative entry as a removable thumbnail draft, supports optional text and reply context, and sends through the bounded outbox with one stable request ID. Reload recovery persists only the entry ID and text, never a signed/private image URL; four-project UI, contract, and recovery coverage passes. Physical interruption testing remains. |
 | Reply/react from Memento gallery | Equivalent | Not yet tested | Gallery resolves the authoritative chat message before creating a reply or reaction; automation passes. |

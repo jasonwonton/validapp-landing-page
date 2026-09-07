@@ -84,12 +84,17 @@ test("Memento reciprocity keeps locked messages out of the DOM and unlocks after
     await expect(composer.getByRole("button", { name: /^Send to / })).toBeEnabled();
     await composer.getByRole("button", { name: /^Send to / }).click();
 
-    await expect(page.getByText("Today's Mementos", { exact: true })).toBeVisible();
-    await expect(page.locator(".chat-memento-week button")).toHaveCount(7);
-    await expect(page.locator(".chat-memento-week button.selected")).toHaveCount(1);
+    await expect(page.locator('.chat-daily-row')).toBeHidden();
+    await expect(page.locator('[data-open-memento-gallery]')).toBeVisible();
+    await expect(page.locator('[data-open-memento-gallery] .chat-moment-streak')).toHaveText('6');
+    await expect(page.locator('.chat-memento-week button')).toHaveCount(0);
     await expect(page.locator(".chat-message")).toHaveCount(5);
     await expect(page.locator(".chat-composer")).toBeVisible();
     await expect(page.getByText(/Memento shared · \+10 Aura/)).toBeVisible();
+    await page.locator('[data-open-memento-gallery]').click();
+    await expect(page.getByRole('dialog', { name: 'Mementos', exact: true })).toBeVisible();
+    await expect(page.locator('.chat-memento-week button')).toHaveCount(7);
+    await expect(page.locator('.chat-memento-week button.selected')).toHaveCount(1);
 });
 
 test("Memento reciprocity offers the same skip-for-today alternative as iOS", async ({ page }) => {
@@ -121,6 +126,7 @@ test("Memento gallery can reply, react, and safely reshare its authoritative ent
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
+    await page.locator("[data-open-memento-gallery]").click();
     await page.getByRole("button", { name: /Jules Rivera's Memento/ }).click();
     const viewer = page.getByRole("dialog", { name: "Chat media" });
     const image = viewer.getByRole("img", { name: /Jules.*preserved in this chat/ });
@@ -130,10 +136,12 @@ test("Memento gallery can reply, react, and safely reshare its authoritative ent
     await expect(viewer.getByRole("button", { name: "Show primary Memento view" })).toBeVisible();
     await viewer.getByRole("button", { name: "Reply" }).click();
     await expect(page.locator(".chat-reply-draft")).toContainText("Memento");
+    await page.locator("[data-open-memento-gallery]").click();
     await page.getByRole("button", { name: /Jules Rivera's Memento/ }).click();
     await viewer.getByRole("button", { name: /React/ }).click();
     await expect(page.locator('[data-message-id="msg-n2"] .chat-reaction-summary')).toContainText("❤️ 1");
     const before = await page.locator(".memento-label").count();
+    await page.locator("[data-open-memento-gallery]").click();
     await page.getByRole("button", { name: /Jules Rivera's Memento/ }).click();
     await viewer.getByRole("button", { name: "Share", exact: true }).click();
     const draft = page.locator(".chat-memento-draft");
@@ -148,6 +156,7 @@ test("Memento gallery can reply, react, and safely reshare its authoritative ent
     await expect(sharedAsReply).toHaveClass(/sent/);
     await expect(sharedAsReply.locator(".chat-reply-preview")).toContainText("Memento");
 
+    await page.locator("[data-open-memento-gallery]").click();
     await page.getByRole("button", { name: /Jules Rivera's Memento/ }).click();
     await viewer.getByRole("button", { name: "Share", exact: true }).click();
     await page.getByRole("textbox", { name: "Message" }).fill("Still thinking about this");
@@ -449,7 +458,7 @@ test("chat media sends a prepared photo through upload, finalize, and message cr
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
-    await page.getByRole("button", { name: "Send media or a sticker" }).click();
+    await page.getByRole("button", { name: "Send photo or video" }).click();
     const dialog = page.getByRole("dialog", { name: "Send media" });
     await dialog.locator(".chat-media-file-input").setInputFiles("assets/AppIconV2.png");
     await expect(dialog.getByText("Photo ready to send")).toBeVisible();
@@ -512,7 +521,7 @@ test("chat media rejects an undecodable MP4 before upload", async ({ page }) => 
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
-    await page.getByRole("button", { name: "Send media or a sticker" }).click();
+    await page.getByRole("button", { name: "Send photo or video" }).click();
     const dialog = page.getByRole("dialog", { name: "Send media" });
     await dialog.locator(".chat-media-file-input").setInputFiles({ name: "broken.mp4", mimeType: "video/mp4", buffer: Buffer.from("not an mp4") });
     await expect(dialog.getByText("That video could not be read.")).toBeVisible();
@@ -526,7 +535,7 @@ test("voice composer keeps an M4A picker fallback when a browser cannot record c
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
-    await page.getByRole("button", { name: "Send media or a sticker" }).click();
+    await page.getByRole("button", { name: "Send photo or video" }).click();
     const dialog = page.getByRole("dialog", { name: "Send media" });
     await expect(dialog.getByLabel("Voice message")).toHaveAttribute("accept", "audio/mp4,.m4a");
     await expect(dialog.getByRole("button", { name: "Record voice message" })).toBeHidden();
@@ -559,7 +568,7 @@ test("compatible browsers can record an MP4 voice message locally before upload"
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
-    await page.getByRole("button", { name: "Send media or a sticker" }).click();
+    await page.getByRole("button", { name: "Send photo or video" }).click();
     const dialog = page.getByRole("dialog", { name: "Send media" });
     const record = dialog.getByRole("button", { name: "Record voice message" });
     await expect(record).toBeVisible();
@@ -604,8 +613,8 @@ test("saved stickers send through the authoritative chat message contract", asyn
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
-    await page.getByRole("button", { name: "Send media or a sticker" }).click();
-    const dialog = page.getByRole("dialog", { name: "Send media" });
+    await page.getByRole("button", { name: "Send a sticker" }).click();
+    const dialog = page.getByRole("dialog", { name: "Send a sticker" });
     await dialog.getByRole("button", { name: "Send saved sticker" }).click();
     await expect(dialog).toBeHidden();
     await expect(page.locator(".chat-message.mine").last().getByRole("img", { name: "Sticker" })).toBeVisible();

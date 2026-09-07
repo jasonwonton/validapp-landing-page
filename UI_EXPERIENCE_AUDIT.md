@@ -3,6 +3,10 @@
 ## Decision
 
 **The PWA is not at native-experience parity. Public release remains NO-GO.**
+Latest chat hierarchy follow-up: [CHAT_IOS_FLOW_AUDIT_2026-09-07.md](CHAT_IOS_FLOW_AUDIT_2026-09-07.md).
+After posting, Mementos now move into the top-right progress/streak control;
+history is a dedicated sheet and stickers have a standalone composer picker.
+This corrects a major interaction mismatch, not the entire parity gap.
 Follow-up: [THEME_HAPTICS_STORIES_AUDIT.md](THEME_HAPTICS_STORIES_AUDIT.md)
 records the additional manual theme control, broader contrast corrections,
 Android vibration preferences, and the still-closed Stories release gates.

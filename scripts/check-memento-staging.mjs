@@ -22,7 +22,7 @@ try {
     const page = await browser.newPage({ viewport: { width: 393, height: 852 } });
     await page.goto(invitation);
     const version = await page.locator('meta[name="valid-app-version"]').getAttribute('content');
-    assert.equal(version, 'web-v72');
+    assert.equal(version, process.env.STAGING_EXPECTED_VERSION || 'web-v73');
     for (const file of ['app/chat/index.js', 'app/live-camera.js', 'app/chat/styles.css', 'app/api.js']) {
         const response = await page.request.get(new URL(`/${file}`, invitation).href);
         assert.equal(response.status(), 200);
@@ -62,4 +62,39 @@ try {
     assert(result.files.every(file => file.type === 'image/jpeg' && file.bytes > 0 && file.bytes <= 8 * 1024 * 1024));
     assert.equal(result.tracksStopped, true);
     console.log('PASS: exact deployed module hashes, one-shutter two-view synthetic camera, no default picker, released tracks');
+    // Exercise the deployed UI under its real CSP with an in-memory adapter.
+    // No real account, chat, read receipt, sticker send, or upload is involved.
+    const hierarchy = await page.evaluate(async () => {
+        const { createChatsView } = await import('/app/chat/index.js');
+        const today = new Date();
+        const ledgerDate = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');
+        const chat = { id: 'synthetic-chat', display_name: 'Synthetic chat', membership_status: 'accepted', accepted_count: 2, moment_streak: 3 };
+        const row = { ledger_date: ledgerDate, viewer_has_posted_today: true, view_gate_locked: false, posted_count: 1, eligible_count: 2, entries: [{ first_name: 'Fixture', has_posted: true, image_url: '/assets/app/rocket.webp', entry_id: 'synthetic-entry' }] };
+        const root = document.createElement('section');
+        document.body.replaceChildren(root);
+        const api = {
+            assetURL: value => new URL(value, location.origin).href,
+            getChats: async () => ({ items: [chat] }),
+            getChat: async () => ({ chat, members: [] }),
+            getChatMessages: async () => ({ items: [] }),
+            getChatDailyRow: async () => row,
+            markChatRead: async () => { throw new Error('Unexpected synthetic read receipt'); },
+            getStickers: async () => ({ stickers: [{ id: 'synthetic-sticker', image_url: '/assets/app/rocket.webp' }] }),
+        };
+        const view = createChatsView({ root, api, getUser: () => ({ id: 'synthetic-user' }), getConfig: () => ({ enable_chats: true, enable_web_chats: true, enable_chat_daily_ledger: true, enable_web_mementos: true }) });
+        await view.activate({});
+        await view.openChat(chat.id, { updateHistory: false });
+        const inlineHidden = root.querySelector('.chat-daily-row').classList.contains('hidden');
+        const button = root.querySelector('[data-open-memento-gallery]');
+        const header = button.textContent;
+        button.click();
+        const galleryOpened = root.querySelector('[data-memento-gallery-dialog]').open;
+        const dates = root.querySelectorAll('[data-memento-date]').length;
+        root.querySelector('[data-close-memento-gallery]').click();
+        root.querySelector('[data-open-stickers]').click();
+        const stickersOpened = root.querySelector('[data-sticker-library-dialog]').open;
+        return { inlineHidden, header, galleryOpened, dates, stickersOpened };
+    });
+    assert.deepEqual(hierarchy, { inlineHidden: true, header: '1/23', galleryOpened: true, dates: 7, stickersOpened: true });
+    console.log('PASS: deployed posted-chat hierarchy, authoritative streak display, history and standalone stickers (synthetic adapter; no account writes)');
 } finally { await browser.close(); }

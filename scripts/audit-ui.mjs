@@ -29,10 +29,17 @@ try {
             }
         }
         await page.getByRole('button', { name: /Noah Williams/ }).click();
-        await page.getByRole('button', { name: 'Send media or a sticker' }).click();
-        await page.locator('.native-sticker-icon').waitFor({ state: 'visible' });
+        await page.locator('[data-open-memento-gallery]').waitFor({ state: 'visible' });
+        await page.screenshot({ path: `${output}${colorScheme}-posted-room.png`, animations: 'disabled' });
+        await page.locator('[data-open-memento-gallery]').click();
+        await page.getByRole('dialog', { name: 'Mementos', exact: true }).waitFor({ state: 'visible' });
+        await page.screenshot({ path: `${output}${colorScheme}-mementos.png`, animations: 'disabled' });
+        await page.locator('[data-close-memento-gallery]').click();
+        await page.getByRole('button', { name: 'Send a sticker', exact: true }).click();
+        await page.locator('[data-send-sticker]').first().waitFor({ state: 'visible' });
+        await page.locator('[data-send-sticker] img').first().evaluate(img => img.decode());
         await page.screenshot({ path: `${output}${colorScheme}-stickers.png`, animations: 'disabled' });
-        await page.getByRole('dialog', { name: 'Send media', exact: true }).getByRole('button', { name: 'Cancel', exact: true }).click();
+        await page.getByRole('dialog', { name: 'Send a sticker', exact: true }).getByRole('button', { name: 'Close', exact: true }).click();
         await page.getByRole('button', { name: 'Back to chats' }).click();
         await page.getByRole('button', { name: /Weekend Crew/ }).click();
         await page.locator('.chat-daily-row > button').waitFor({ state: 'visible' });

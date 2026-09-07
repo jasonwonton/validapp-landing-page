@@ -50,7 +50,6 @@ for (const theme of ['light', 'dark']) {
         await expect(page.locator('.play-streak-chip [data-ui-icon="fire"]')).toBeVisible();
         await page.getByRole('button', { name: 'Chats', exact: true }).click();
         await page.getByRole('button', { name: /Noah Williams/ }).click();
-        await page.getByRole('button', { name: 'Send media or a sticker' }).click();
         const sticker = page.locator('.native-sticker-icon');
         await expect(sticker).toBeVisible();
         expect(await sticker.evaluate(el => getComputedStyle(el).maskImage)).toContain('sticker-icon.webp');

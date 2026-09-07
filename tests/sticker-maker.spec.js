@@ -62,9 +62,9 @@ test("sticker maker offers an accessible center cut and sends the saved sticker 
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
-    await page.getByRole("button", { name: "Send media or a sticker" }).click();
+    await page.getByRole("button", { name: "Send a sticker" }).click();
 
-    const media = page.getByRole("dialog", { name: "Send media" });
+    const media = page.getByRole("dialog", { name: "Send a sticker" });
     const fileChooserPromise = page.waitForEvent("filechooser");
     await media.getByRole("button", { name: "Make a sticker" }).click();
     const fileChooser = await fileChooserPromise;
@@ -81,7 +81,7 @@ test("sticker maker offers an accessible center cut and sends the saved sticker 
     await expect(page.locator(".chat-message.mine").last().getByRole("img", { name: "Sticker" })).toBeVisible();
     await expect(page.locator(".chat-message.mine").filter({ has: page.getByRole("img", { name: "Sticker" }) })).toHaveCount(1);
 
-    await page.getByRole("button", { name: "Send media or a sticker" }).click();
+    await page.getByRole("button", { name: "Send a sticker" }).click();
     await expect(media.getByRole("button", { name: "Send saved sticker" })).toHaveCount(2);
 });
 
@@ -89,9 +89,9 @@ test("touch and mouse users can replace the center cut with a bounded lasso", as
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
-    await page.getByRole("button", { name: "Send media or a sticker" }).click();
+    await page.getByRole("button", { name: "Send a sticker" }).click();
     const fileChooserPromise = page.waitForEvent("filechooser");
-    await page.getByRole("dialog", { name: "Send media" }).getByRole("button", { name: "Make a sticker" }).click();
+    await page.getByRole("dialog", { name: "Send a sticker" }).getByRole("button", { name: "Make a sticker" }).click();
     await (await fileChooserPromise).setFiles("assets/AppIconV2.png");
 
     const maker = page.getByRole("dialog", { name: "Make a sticker" });
@@ -117,8 +117,8 @@ test("an ambiguous sticker save never retries automatically", async ({ page }) =
     await signInToDemo(page, "&stickerfail=1");
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
-    await page.getByRole("button", { name: "Send media or a sticker" }).click();
-    const media = page.getByRole("dialog", { name: "Send media" });
+    await page.getByRole("button", { name: "Send a sticker" }).click();
+    const media = page.getByRole("dialog", { name: "Send a sticker" });
     const fileChooserPromise = page.waitForEvent("filechooser");
     await media.getByRole("button", { name: "Make a sticker" }).click();
     await (await fileChooserPromise).setFiles("assets/AppIconV2.png");
@@ -137,19 +137,21 @@ test("saved sticker deletion is confirmed and leaves existing chat messages inta
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
-    await page.getByRole("button", { name: "Send media or a sticker" }).click();
-    const media = page.getByRole("dialog", { name: "Send media" });
+    await page.getByRole("button", { name: "Send a sticker" }).click();
+    const media = page.getByRole("dialog", { name: "Send a sticker" });
     const fileChooserPromise = page.waitForEvent("filechooser");
     await media.getByRole("button", { name: "Make a sticker" }).click();
     await (await fileChooserPromise).setFiles("assets/AppIconV2.png");
     await page.getByRole("dialog", { name: "Make a sticker" }).getByRole("button", { name: "Save and send" }).click();
     await expect(page.getByRole("dialog", { name: "Make a sticker" })).toBeHidden();
 
-    await page.getByRole("button", { name: "Send media or a sticker" }).click();
+    await page.getByRole("button", { name: "Send a sticker" }).click();
+    await expect(media.getByRole("button", { name: "Remove saved sticker" })).toHaveCount(0);
+    await media.getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(media.getByRole("button", { name: "Remove saved sticker" })).toHaveCount(2);
     page.once("dialog", (dialog) => dialog.accept());
     await media.getByRole("button", { name: "Remove saved sticker" }).first().click();
     await expect(media.getByRole("button", { name: "Remove saved sticker" })).toHaveCount(1);
-    await media.getByRole("button", { name: "Cancel" }).click();
+    await media.getByRole("button", { name: "Close" }).click();
     await expect(page.locator(".chat-message.mine").last().getByRole("img", { name: "Sticker" })).toBeVisible();
 });

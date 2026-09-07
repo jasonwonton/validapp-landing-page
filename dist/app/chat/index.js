@@ -90,6 +90,8 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     const viewOnceRequestByMessage = new Map();
     const stickerRequestById = new Map();
     let stickerLibraryGeneration = 0;
+    let stickerSending = false;
+    let mementoDateGeneration = 0;
     let sharedMementoDraft = null;
     let viewedMessageId = null;
     let viewedMementoEntryId = null;
@@ -126,7 +128,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 </div>
             </section>
             <section class="chat-room-screen hidden" data-chat-screen="room">
-                <header class="chat-room-header"><button class="chat-back" type="button" data-chat-list aria-label="Back to chats">${uiIcon("back")}</button><button class="chat-room-title" type="button" data-chat-settings><strong>Chat</strong><small>Loading…</small></button><span class="chat-call-actions hidden"><button class="chat-icon-button" type="button" data-start-call="audio" aria-label="Start voice call">${uiIcon("phone")}</button><button class="chat-icon-button" type="button" data-start-call="video" aria-label="Start video call">${uiIcon("video")}</button></span><button class="chat-icon-button" type="button" data-chat-settings aria-label="Chat settings">${uiIcon("more")}</button></header>
+                <header class="chat-room-header"><button class="chat-back" type="button" data-chat-list aria-label="Back to chats">${uiIcon("back")}</button><button class="chat-room-title" type="button" data-chat-settings><strong>Chat</strong><small>Loading…</small></button><div class="chat-room-tools"><span class="chat-call-actions hidden"><button class="chat-icon-button" type="button" data-start-call="audio" aria-label="Start voice call">${uiIcon("phone")}</button><button class="chat-icon-button" type="button" data-start-call="video" aria-label="Start video call">${uiIcon("video")}</button></span><button class="chat-memento-toolbar hidden" type="button" data-open-memento-gallery aria-label="Mementos"></button><button class="chat-icon-button" type="button" data-chat-settings aria-label="Chat settings">${uiIcon("more")}</button></div></header>
                 <div class="chat-daily-row"></div>
                 <div class="chat-room-status" role="status"></div>
                 <button class="chat-load-earlier hidden" type="button" data-load-earlier>Load earlier messages</button>
@@ -139,8 +141,8 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                         <span><strong></strong><small>Add an optional message</small></span>
                         <button type="button" data-remove-memento-draft aria-label="Remove Memento">×</button>
                     </div>
-                    <button class="chat-camera-button" type="button" data-open-memento aria-label="Take today's Memento">${uiIcon('camera')}</button>
-                    <button class="chat-attachment-button" type="button" data-open-chat-media aria-label="Send media or a sticker">${uiIcon('plus')}</button>
+                    <button class="chat-camera-button" type="button" data-open-chat-media aria-label="Send photo or video">${uiIcon('camera')}</button>
+                    <button class="chat-attachment-button" type="button" data-open-stickers aria-label="Send a sticker"><span class="native-sticker-icon" aria-hidden="true"></span></button>
                     <textarea rows="1" maxlength="2000" placeholder="Message" aria-label="Message"></textarea>
                     <button class="chat-send-button" type="submit" aria-label="Send message">${uiIcon('send')}</button>
                 </form>
@@ -176,7 +178,6 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 <fieldset class="camera-effect-picker hidden" data-chat-media-effects><legend>Photo effect</legend><div data-camera-effect-options></div><small>Browser Effects bake supported color and lighting into the photo. Face/body-tracked lenses and filtered video remain available in iOS.</small></fieldset>
                 <label class="chat-audio-input-label">Voice message <input class="chat-audio-file-input" type="file" accept="audio/mp4,.m4a" capture></label>
                 <button class="chat-voice-record hidden" type="button" data-record-voice>Record voice message</button>
-                <section class="chat-sticker-library"><header><h2>Saved stickers</h2><button type="button" data-make-sticker><span class="native-sticker-icon" aria-hidden="true"></span>Make a sticker</button></header><input class="chat-sticker-file-input visually-hidden" type="file" accept="image/*" capture="environment"><div><small>Loading…</small></div></section>
                 <label class="chat-media-option"><input type="checkbox" data-chat-view-once> View once <small>Recipients can open it twice.</small></label>
                 <label>Text overlay <input class="chat-media-overlay" type="text" maxlength="160" placeholder="Optional text — drag it in the preview"></label>
                 <div class="chat-media-progress hidden"><span></span></div>
@@ -184,6 +185,8 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 <button class="primary-button chat-media-publish" type="submit" disabled>Send</button>
             </form>
         </dialog>
+        <dialog class="chat-sheet chat-stickers-sheet" data-sticker-library-dialog aria-label="Send a sticker"><section class="chat-stickers-content"><header><button type="button" data-close-stickers>Close</button><strong>Send a Sticker</strong><button type="button" data-edit-stickers aria-pressed="false">Edit</button></header><p>Tap a sticker to send it.</p><p class="chat-sticker-status" role="status"></p><section class="chat-sticker-library"><header><h2>My Stickers</h2><button type="button" data-make-sticker>${uiIcon('plus')} Make a sticker</button></header><input class="chat-sticker-file-input visually-hidden" type="file" accept="image/*" capture="environment"><div><small>Loading…</small></div></section></section></dialog>
+        <dialog class="chat-sheet chat-mementos-sheet" data-memento-gallery-dialog aria-label="Mementos"><section class="chat-mementos-content"><header><button type="button" data-close-memento-gallery>Close</button><strong>Mementos</strong><span></span></header><p class="chat-memento-gallery-status" role="status"></p><div class="chat-memento-gallery"></div></section></dialog>
         <dialog class="chat-sticker-maker" data-sticker-maker-dialog aria-label="Make a sticker">
             <form class="chat-sticker-maker-form">
                 <header><button type="button" data-close-sticker-maker>Cancel</button><strong>Make a sticker</strong><span></span></header>
@@ -246,9 +249,9 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             await sendSticker(sticker.id);
         },
         onUnconfirmed: async () => {
-            $("[data-chat-media-dialog]").showModal();
+            $("[data-sticker-library-dialog]").showModal();
             await loadStickerLibrary();
-            $(".chat-media-status").textContent = "We couldn't confirm that save. Check your stickers before trying again so you don't create a duplicate.";
+            $(".chat-sticker-status").textContent = "We couldn't confirm that save. Check your stickers before trying again so you don't create a duplicate.";
         },
         softHaptic,
         successHaptic,
@@ -256,6 +259,8 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     const userId = () => getUser()?.id;
     const dailyLedgerEnabled = () => getConfig()?.enable_chat_daily_ledger === true
         && getConfig()?.enable_web_mementos === true;
+    const chatAccessUnavailable = () => dailyLedgerEnabled()
+        && (!store.state.dailyRow || store.state.dailyRow.view_gate_locked === true);
 
     function currentChatAppearance() {
         return loadChatAppearance(userId(), store.state.activeChatId);
@@ -295,6 +300,11 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     $(".memento-file-input").addEventListener("change", selectMemento);
     $(".memento-form").addEventListener("submit", publishMemento);
     $("[data-memento-dialog]").addEventListener("close", resetMementoComposer);
+    $('[data-memento-gallery-dialog]').addEventListener('close', () => {
+        mementoDateGeneration++;
+        store.state.displayedDailyRow = store.state.dailyRow;
+        $('.chat-memento-gallery').innerHTML = '';
+    });
     $("[data-memento-dialog]").addEventListener("cancel", (event) => {
         if (mementoPublishing) event.preventDefault();
     });
@@ -350,6 +360,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             store.replaceChats(response.items || response || []);
             lastListLoad = Date.now();
             renderChatList();
+            if (store.state.activeChatId) renderMementoToolbar();
         } catch (error) {
             $(".chat-list-status").textContent = error.message || "Could not load chats.";
         } finally {
@@ -413,17 +424,30 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             return `<article class="chat-row invitation" data-list-key="${escapeChatHTML(chat.id)}"><button class="chat-row-main" type="button" data-open-chat="${escapeChatHTML(chat.id)}"><span class="chat-avatar">${avatar}</span><span class="chat-row-copy"><strong>${escapeChatHTML(chat.display_name)}</strong><small>${escapeChatHTML(chatPreview(chat))}</small></span></button><div class="chat-invite-actions"><button type="button" data-decline-chat="${escapeChatHTML(chat.membership_id)}">Decline</button><button type="button" data-accept-chat="${escapeChatHTML(chat.membership_id)}">Accept</button></div></article>`;
         }
         const needsMemento = chatNeedsMemento(chat, dailyLedgerEnabled());
-        return `<article class="chat-row ${chat.unread_count || needsMemento ? "attention" : ""}" data-list-key="${escapeChatHTML(chat.id)}"><button class="chat-row-main" type="button" data-open-chat="${escapeChatHTML(chat.id)}"><span class="chat-avatar">${avatar}</span><span class="chat-row-copy"><span><strong>${escapeChatHTML(chat.display_name)}</strong><time>${escapeChatHTML(relativeChatTime(chat.last_message_at || chat.updated_at))}</time></span><small>${escapeChatHTML(needsMemento ? "Take today's Memento" : chatPreview(chat))}</small></span>${chat.unread_count ? `<b class="chat-unread">${Math.min(chat.unread_count, 99)}</b>` : ""}</button></article>`;
+        return `<article class="chat-row ${chat.unread_count || needsMemento ? "attention" : ""}" data-list-key="${escapeChatHTML(chat.id)}"><button class="chat-row-main" type="button" data-open-chat="${escapeChatHTML(chat.id)}"><span class="chat-avatar">${avatar}</span><span class="chat-row-copy"><span><strong>${escapeChatHTML(chat.display_name)}</strong>${streakMarkup(chat)}<time>${escapeChatHTML(relativeChatTime(chat.last_message_at || chat.updated_at))}</time></span><small>${escapeChatHTML(needsMemento ? "Take today's Memento" : chatPreview(chat))}</small></span>${chat.unread_count ? `<b class="chat-unread">${Math.min(chat.unread_count, 99)}</b>` : ""}</button></article>`;
     }
 
     async function openChat(chatId, { updateHistory = true, force = false } = {}) {
         const chat = store.state.chats.find((item) => item.id === String(chatId));
         if (chat?.membership_status === "invited") return;
-        if (store.state.activeChatId && store.state.activeChatId !== String(chatId)) clearSharedMementoDraft();
+        if (store.state.activeChatId !== String(chatId)) {
+            stopTyping();
+            clearSharedMementoDraft();
+            store.state.replyToMessageId = null;
+            renderReplyDraft();
+            store.state.detail = null;
+            store.state.dailyRow = null;
+            store.state.displayedDailyRow = null;
+            store.state.dailyRowsByDate.clear();
+            $('[data-memento-gallery-dialog]').close();
+            $('.chat-memento-gallery').innerHTML = '';
+        }
         const generation = ++roomGeneration;
         store.state.activeChatId = String(chatId);
-        applyChatAppearance();
         store.state.loadingRoom = true;
+        renderDailyRow();
+        renderMessages(false);
+        applyChatAppearance();
         store.state.typingUserIds.clear();
         showScreen("room");
         $(".chat-room-status").textContent = "Loading conversation…";
@@ -445,7 +469,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (dailyResult.status === "fulfilled") {
             store.state.dailyRow = dailyResult.value;
             store.state.displayedDailyRow = dailyResult.value;
-            if (dailyResult.value?.ledger_date) store.state.dailyRowsByDate.set(dailyResult.value.ledger_date, dailyResult.value);
+            rememberDailyRow(dailyResult.value);
         } else {
             store.state.dailyRow = null;
             store.state.displayedDailyRow = null;
@@ -465,7 +489,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         renderSettings();
         await markRoomRead();
         await loadChats({ quiet: true });
-        if (store.state.dailyRow?.view_gate_locked !== true) void retryPendingMessages(chatId);
+        if (!chatAccessUnavailable()) void retryPendingMessages(chatId);
         const requestedCallId = new URLSearchParams(location.search).get("call");
         if (requestedCallId) void calls.open(requestedCallId);
     }
@@ -477,7 +501,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         const totalCount = acceptedCount + pendingCount;
         $(".chat-room-title small").textContent = totalCount > 2
             ? `${totalCount} people${pendingCount ? ` · ${pendingCount} invited` : ""}`
-            : (store.state.typingUserIds.size ? "typing…" : "Mementos together");
+            : (store.state.typingUserIds.size ? "typing…" : "");
         const callsAvailable = calls.enabled()
             && acceptedCount >= 2
             && chat?.membership_status !== "invited"
@@ -486,7 +510,48 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     }
 
     function renderDailyRow() {
-        const container = $(".chat-daily-row");
+        const row = store.state.dailyRow;
+        const enabled = dailyLedgerEnabled() && row;
+        const offerCapture = enabled && !row.viewer_has_posted_today && row.viewer_is_eligible !== false;
+        $('.chat-daily-row').innerHTML = offerCapture ? `<button type="button" data-open-memento><span class="chat-daily-icon">${uiIcon('camera')}</span><span><strong>${row.view_gate_locked ? "Take today's Memento" : "Take Memento"}</strong></span></button>` : '';
+        $('.chat-daily-row').classList.toggle('hidden', !offerCapture);
+        $('.chat-composer').classList.toggle('hidden', chatAccessUnavailable());
+        renderMementoToolbar();
+        if ($('[data-memento-gallery-dialog]').open) renderMementoGallery();
+    }
+
+    function streakMarkup(chat) {
+        const streak = Number(chat?.moment_streak);
+        if (!Number.isSafeInteger(streak) || streak <= 0 || Number(chat?.accepted_count) < 2) return '';
+        return `<span class="chat-moment-streak" aria-label="${streak} day moment streak">${uiIcon('fire')}<span>${streak}</span></span>`;
+    }
+
+    function renderMementoToolbar() {
+        const row = store.state.dailyRow;
+        const button = $('[data-open-memento-gallery]');
+        const visible = dailyLedgerEnabled() && row?.viewer_has_posted_today === true;
+        button.classList.toggle('hidden', !visible);
+        if (!visible) { button.innerHTML = ''; return; }
+        const eligible = Math.max(0, Math.floor(Number(row.eligible_count) || 0));
+        const posted = Math.min(eligible, Math.max(0, Math.floor(Number(row.posted_count) || 0)));
+        const chat = store.state.chats.find(c => c.id === store.state.activeChatId) || store.state.detail?.chat;
+        const waiting = (row.entries || []).filter(entry => !entry.has_posted).map(entry => entry.first_name || 'a member').join(', ');
+        button.innerHTML = `<span class="chat-memento-toolbar-pill">${uiIcon('photo')}<span>${posted}/${eligible}</span>${streakMarkup(chat)}</span>`;
+        button.classList.toggle('complete', eligible > 0 && posted === eligible);
+        button.setAttribute('aria-label', `Mementos, ${posted} of ${eligible} captured. ${waiting ? `Waiting for ${waiting}` : 'Everyone is done'}${Number(chat?.moment_streak) > 0 ? `, ${chat.moment_streak} day streak` : ''}`);
+    }
+
+    function openMementoGallery() {
+        if (!dailyLedgerEnabled() || !store.state.dailyRow?.viewer_has_posted_today) return;
+        store.state.displayedDailyRow = store.state.dailyRow;
+        $('.chat-memento-gallery-status').textContent = '';
+        renderMementoGallery();
+        $('[data-memento-gallery-dialog]').showModal();
+        softHaptic?.();
+    }
+
+    function renderMementoGallery() {
+        const container = $(".chat-memento-gallery");
         const row = store.state.displayedDailyRow || store.state.dailyRow;
         if (!dailyLedgerEnabled() || !row) {
             container.innerHTML = "";
@@ -507,21 +572,33 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             const selected = key === row.ledger_date;
             return `<button type="button" data-memento-date="${key}" class="${selected ? "selected" : ""}" aria-label="${escapeChatHTML(new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric" }).format(date))}" aria-pressed="${selected}"><small>${escapeChatHTML(new Intl.DateTimeFormat(undefined, { weekday: "narrow" }).format(date))}</small><strong>${date.getDate()}</strong>${cached ? `<span>${Number(cached.posted_count || 0)}/${Number(cached.eligible_count || 0)}</span>` : `<i></i>`}</button>`;
         }).join("");
-        const completion = eligible ? Math.min(100, Math.round((posted / eligible) * 100)) : 0;
-        container.innerHTML = `<div class="chat-memento-week" aria-label="Memento dates">${dateButtons}</div><button type="button" data-open-memento ${!isToday || row.viewer_is_eligible === false || row.viewer_has_posted_today ? "data-show-mementos" : ""}><span class="chat-daily-icon">${uiIcon("camera")}</span><span><strong>${isToday ? (row.viewer_has_posted_today ? "Today's Mementos" : "Take today's Memento") : `${dateLabel}'s Mementos`}</strong><small>${posted} of ${eligible} captured${row.view_gate_locked ? " · add yours to reveal" : ""}</small><span class="chat-daily-progress" aria-hidden="true"><i></i></span></span><b>›</b></button><div class="chat-memento-strip">${entries.map((entry) => {
+        container.innerHTML = `<div class="chat-memento-week" aria-label="Memento dates">${dateButtons}</div><h2>${dateLabel}</h2><p>${posted} of ${eligible} captured</p><div class="chat-memento-strip">${entries.map((entry) => {
             const src = safeMediaURL(entry.image_url, api);
             const swapped = safeMediaURL(entry.swapped_image_url, api);
             const name = escapeChatHTML(entry.first_name || "Student");
             return src ? `<button type="button" data-view-memento="${escapeChatHTML(src)}" ${swapped ? `data-memento-swapped="${escapeChatHTML(swapped)}"` : ""} data-memento-owner="${escapeChatHTML(displayMember(entry))}" data-memento-entry="${escapeChatHTML(entry.entry_id || "")}"><img src="${escapeChatHTML(src)}" alt="${escapeChatHTML(displayMember(entry))}'s Memento" loading="lazy" decoding="async"><span>${name}</span></button>` : `<span class="chat-memento-missing"><i aria-hidden="true">${uiIcon(entry.has_posted ? "lock" : "clock")}</i><span>${name}</span><small>${entry.has_posted ? "Locked" : "Waiting"}</small></span>`;
         }).join("")}</div>`;
-        setRuntimeStyles($(".chat-daily-progress i"), { width: `${completion}%` });
-        const locked = row.view_gate_locked === true;
-        $(".chat-timeline").classList.toggle("chat-content-locked", locked);
-        $(".chat-composer").classList.toggle("hidden", locked);
+    }
+
+    function rememberDailyRow(row) {
+        const earliest = new Date();
+        earliest.setDate(earliest.getDate() - 6);
+        const first = localLedgerDate(earliest);
+        const last = localLedgerDate();
+        for (const date of store.state.dailyRowsByDate.keys()) {
+            if (date < first || date > last) store.state.dailyRowsByDate.delete(date);
+        }
+        if (row?.ledger_date >= first && row.ledger_date <= last) store.state.dailyRowsByDate.set(row.ledger_date, row);
     }
 
     function renderMessages(scrollToBottom = false, { focusMessageId = null, focusAlignment = "center" } = {}) {
         const timeline = $(".chat-timeline");
+        if (dailyLedgerEnabled() && !store.state.dailyRow) {
+            timeline.classList.remove('chat-content-locked');
+            timeline.innerHTML = `<div class="chat-room-empty"><p>${store.state.loadingRoom ? 'Loading conversation…' : 'Could not check Memento access. Reopen this chat to retry.'}</p></div>`;
+            $('.chat-load-earlier').classList.add('hidden');
+            return;
+        }
         if (store.state.dailyRow?.view_gate_locked === true) {
             timeline.classList.add("chat-content-locked");
             timeline.innerHTML = `<div class="chat-room-empty"><strong>Chat locked</strong><p>Take today's Memento to see new messages.</p></div>`;
@@ -640,7 +717,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     }
 
     async function retryPendingMessages(chatId) {
-        if (!chatId || outboxRetrying || navigator.onLine === false || store.state.dailyRow?.view_gate_locked === true) return;
+        if (!chatId || outboxRetrying || navigator.onLine === false || chatAccessUnavailable()) return;
         outboxRetrying = true;
         try {
             const records = await listChatTextOutbox(userId()).catch(() => []);
@@ -743,6 +820,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
 
     async function sendMessage(event, retryRequestId = null, { automatic = false } = {}) {
         event?.preventDefault?.();
+        if (chatAccessUnavailable()) return;
         const textarea = $(".chat-composer textarea");
         const pendingRecords = retryRequestId ? await listChatTextOutbox(userId()).catch(() => []) : [];
         const persisted = pendingRecords.find((record) => record.client_request_id === retryRequestId);
@@ -810,6 +888,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     }
 
     async function markRoomRead() {
+        if (chatAccessUnavailable()) return;
         const latest = Math.max(0, ...store.messages().map((message) => message.room_sequence));
         if (!latest || !store.state.activeChatId || document.visibilityState === "hidden") return;
         await api.markChatRead(userId(), store.state.activeChatId, Math.floor(latest)).catch(() => null);
@@ -909,7 +988,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     }
 
     function openMementoComposer({ showExisting = false } = {}) {
-        const row = store.state.displayedDailyRow || store.state.dailyRow;
+        const row = store.state.dailyRow;
         if (showExisting || row?.viewer_has_posted_today || row?.viewer_is_eligible === false) {
             const first = (row?.entries || []).find((entry) => entry.image_url);
             if (first) return viewMemento(
@@ -1093,12 +1172,22 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     }
 
     function openChatMediaComposer() {
-        if (!store.state.activeChatId) return;
+        if (!store.state.activeChatId || chatAccessUnavailable()) return;
         const recordButton = $("[data-record-voice]");
         recordButton.classList.toggle("hidden", !compatibleAudioRecordingType());
         $("[data-chat-media-dialog]").showModal();
-        void loadStickerLibrary();
         void chatMediaEffectPicker.load();
+    }
+
+    function openStickerLibrary() {
+        if (!store.state.activeChatId || chatAccessUnavailable()) return;
+        $('.chat-sticker-status').textContent = '';
+        $('[data-sticker-library-dialog]').classList.remove('is-editing');
+        $('[data-edit-stickers]').textContent = 'Edit';
+        $('[data-edit-stickers]').setAttribute('aria-pressed', 'false');
+        $('[data-sticker-library-dialog]').showModal();
+        void loadStickerLibrary();
+        softHaptic?.();
     }
 
     async function loadStickerLibrary() {
@@ -1124,12 +1213,12 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         const [file] = input.files || [];
         input.value = "";
         if (!file) return;
-        $("[data-chat-media-dialog]").close();
+        $("[data-sticker-library-dialog]").close();
         try {
             await stickerMaker.open(file);
         } catch (error) {
-            $("[data-chat-media-dialog]").showModal();
-            $(".chat-media-status").textContent = error.message || "That photo could not be opened.";
+            $("[data-sticker-library-dialog]").showModal();
+            $(".chat-sticker-status").textContent = error.message || "That photo could not be opened.";
         }
     }
 
@@ -1143,15 +1232,22 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             showToast?.("Sticker removed");
         } catch (error) {
             item?.querySelectorAll("button").forEach((button) => { button.disabled = false; });
-            $(".chat-media-status").textContent = error.message || "Could not remove that sticker.";
+            $(".chat-sticker-status").textContent = error.message || "Could not remove that sticker.";
         }
     }
 
     async function sendSticker(stickerId) {
-        if (!stickerId || !store.state.activeChatId) return;
+        if (!stickerId || !store.state.activeChatId || stickerSending || chatAccessUnavailable()) return;
+        stickerSending = true;
         const chatId = store.state.activeChatId;
-        const clientRequestId = stickerRequestById.get(stickerId) || crypto.randomUUID();
-        stickerRequestById.set(stickerId, clientRequestId);
+        const requestKey = `${chatId}:${stickerId}`;
+        const clientRequestId = stickerRequestById.get(requestKey) || crypto.randomUUID();
+        if (stickerRequestById.size >= 50 && !stickerRequestById.has(requestKey)) {
+            stickerSending = false;
+            $('.chat-sticker-status').textContent = 'Too many pending sticker sends. Retry an existing one first.';
+            return;
+        }
+        stickerRequestById.set(requestKey, clientRequestId);
         $$("[data-send-sticker]").forEach((button) => { button.disabled = true; });
         try {
             const message = await api.sendChatMessage(userId(), chatId, {
@@ -1159,18 +1255,26 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 reply_to_message_id: store.state.replyToMessageId || null,
                 client_request_id: clientRequestId,
             });
-            stickerRequestById.delete(stickerId);
+            stickerRequestById.delete(requestKey);
             store.updateMessage(chatId, message);
-            store.state.replyToMessageId = null;
-            $("[data-chat-media-dialog]").close();
-            renderMessages(true);
+            if (chatId === store.state.activeChatId) {
+                store.state.replyToMessageId = null;
+                $("[data-sticker-library-dialog]").close();
+                renderMessages(true);
+            }
             successHaptic?.();
             void loadChats({ quiet: true });
         } catch (error) {
-            if (!$("[data-chat-media-dialog]").open) $("[data-chat-media-dialog]").showModal();
+            if (chatId !== store.state.activeChatId) {
+                showToast?.('Sticker not confirmed. Reopen that chat and tap the same sticker to retry.');
+                return;
+            }
+            if (!$("[data-sticker-library-dialog]").open) $("[data-sticker-library-dialog]").showModal();
             await loadStickerLibrary();
             $$("[data-send-sticker]").forEach((button) => { button.disabled = false; });
-            $(".chat-media-status").textContent = `${error.message || "Could not send that sticker."} Tap the same sticker to retry safely.`;
+            $(".chat-sticker-status").textContent = `${error.message || "Could not send that sticker."} Tap the same sticker to retry safely.`;
+        } finally {
+            stickerSending = false;
         }
     }
 
@@ -1427,17 +1531,16 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         const date = new Date(`${row.ledger_date}T12:00:00`);
         date.setDate(date.getDate() + Number(offset));
         const target = localLedgerDate(date);
-        const today = localLedgerDate();
-        if (target > today) return;
-        try {
-            store.state.displayedDailyRow = await api.getChatDailyRow(userId(), store.state.activeChatId, target);
-            store.state.dailyRowsByDate.set(target, store.state.displayedDailyRow);
-            renderDailyRow();
-        } catch (error) { showToast?.(error.message || "Could not load that Memento day."); }
+        return loadMementoDate(target);
     }
 
     async function loadMementoDate(target) {
-        if (!target || target > localLedgerDate() || !store.state.activeChatId) return;
+        const earliest = new Date();
+        earliest.setDate(earliest.getDate() - 6);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(target || '') || target > localLedgerDate() || target < localLedgerDate(earliest) || !store.state.activeChatId || !$('[data-memento-gallery-dialog]').open) return;
+        const generation = ++mementoDateGeneration;
+        const chatId = store.state.activeChatId;
+        $('.chat-memento-gallery-status').textContent = '';
         const cached = store.state.dailyRowsByDate.get(target);
         if (cached) {
             store.state.displayedDailyRow = cached;
@@ -1445,10 +1548,16 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             return;
         }
         try {
-            store.state.displayedDailyRow = await api.getChatDailyRow(userId(), store.state.activeChatId, target);
-            store.state.dailyRowsByDate.set(target, store.state.displayedDailyRow);
+            $('.chat-memento-gallery-status').textContent = 'Loading Mementos…';
+            const row = await api.getChatDailyRow(userId(), chatId, target);
+            if (generation !== mementoDateGeneration || chatId !== store.state.activeChatId) return;
+            store.state.displayedDailyRow = row;
+            rememberDailyRow(row);
+            $('.chat-memento-gallery-status').textContent = '';
             renderDailyRow();
-        } catch (error) { showToast?.(error.message || "Could not load that Memento day."); }
+        } catch (error) {
+            if (generation === mementoDateGeneration) $('.chat-memento-gallery-status').textContent = error.message || 'Could not load that Memento day.';
+        }
     }
 
     async function showMediaViewer(url, { kind = "photo", label = "Media", overlay = null } = {}) {
@@ -1562,6 +1671,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (!message) return;
         store.state.replyToMessageId = viewedMessageId;
         closeMediaViewer();
+        $('[data-memento-gallery-dialog]').close();
         renderReplyDraft();
         $(".chat-composer textarea").focus({ preventScroll: true });
     }
@@ -1570,6 +1680,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (!viewedMessageId) return;
         const messageId = viewedMessageId;
         closeMediaViewer();
+        $('[data-memento-gallery-dialog]').close();
         await reactToMessage(messageId, "love");
     }
 
@@ -1582,6 +1693,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         };
         closeMediaViewer();
         renderSharedMementoDraft();
+        $('[data-memento-gallery-dialog]').close();
         $(".chat-composer textarea").focus({ preventScroll: true });
         showToast?.("Memento added to message");
     }
@@ -1917,9 +2029,11 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             return;
         }
         if (chatId && chatId === store.state.activeChatId && ["message_created", "message_updated", "message_deleted", "memento_created", "resync", "ready"].includes(event.type)) {
+            const generation = roomGeneration;
             const latest = Math.max(0, ...store.messages(chatId).map((message) => message.room_sequence));
             const needsFullResync = ["resync", "ready"].includes(event.type);
             const response = await api.getChatMessages(userId(), chatId, { limit: 100, afterSequence: needsFullResync ? null : Math.floor(latest) }).catch(() => null);
+            if (generation !== roomGeneration || chatId !== store.state.activeChatId) return;
             if (response) {
                 if (needsFullResync) store.replaceMessages(chatId, response.items || [], response);
                 else store.mergeMessages(chatId, response.items || []);
@@ -1927,9 +2041,11 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 await markRoomRead();
             }
             if (event.type === "memento_created") {
-                store.state.dailyRow = await api.getChatDailyRow(userId(), chatId).catch(() => store.state.dailyRow);
+                const row = await api.getChatDailyRow(userId(), chatId).catch(() => store.state.dailyRow);
+                if (generation !== roomGeneration || chatId !== store.state.activeChatId) return;
+                store.state.dailyRow = row;
                 const today = localLedgerDate();
-                if (store.state.dailyRow?.ledger_date) store.state.dailyRowsByDate.set(store.state.dailyRow.ledger_date, store.state.dailyRow);
+                rememberDailyRow(store.state.dailyRow);
                 if (!store.state.displayedDailyRow || store.state.displayedDailyRow.ledger_date === today) store.state.displayedDailyRow = store.state.dailyRow;
                 renderDailyRow();
             }
@@ -1968,6 +2084,8 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         store.state.dailyRow = null;
         store.state.displayedDailyRow = null;
         store.state.dailyRowsByDate.clear();
+        $('[data-memento-gallery-dialog]').close();
+        $('[data-sticker-library-dialog]').close();
         showScreen("list");
         const url = new URL(location.href);
         url.searchParams.set("tab", "chats");
@@ -2001,6 +2119,16 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (target.dataset.startCall) return calls.start(target.dataset.startCall, store.state.detail?.chat);
         if (target.dataset.mementoDay) return loadMementoDay(target.dataset.mementoDay);
         if (target.dataset.mementoDate) return loadMementoDate(target.dataset.mementoDate);
+        if (target.matches('[data-open-memento-gallery]')) return openMementoGallery();
+        if (target.matches('[data-close-memento-gallery]')) return $('[data-memento-gallery-dialog]').close();
+        if (target.matches('[data-open-stickers]')) return openStickerLibrary();
+        if (target.matches('[data-close-stickers]')) return $('[data-sticker-library-dialog]').close();
+        if (target.matches('[data-edit-stickers]')) {
+            const editing = $('[data-sticker-library-dialog]').classList.toggle('is-editing');
+            target.textContent = editing ? 'Done' : 'Edit';
+            target.setAttribute('aria-pressed', String(editing));
+            return;
+        }
         if (target.matches("[data-open-memento]")) return openMementoComposer({ showExisting: target.hasAttribute("data-show-mementos") });
         if (target.matches("[data-open-chat-media]")) return openChatMediaComposer();
         if (target.matches("[data-close-chat-media]")) return $("[data-chat-media-dialog]").close();

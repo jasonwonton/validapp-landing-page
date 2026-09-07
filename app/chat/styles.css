@@ -102,6 +102,21 @@
 .chat-room-title { min-width: 0; display: grid; justify-items: center; gap: 2px; padding: 2px; border: 0; background: transparent; }
 .chat-room-title strong, .chat-room-title small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-room-title small { color: var(--muted); font-size: .72rem; }
+.chat-room-title small:empty { display: none; }
+.chat-room-screen > .chat-room-header { grid-template-columns: 44px minmax(0, 1fr) auto; gap: 4px; }
+.chat-room-tools { display: flex; align-items: center; gap: 0; }
+.chat-room-tools .chat-icon-button { width: 44px; min-width: 44px; border: 0; background: transparent; box-shadow: none; }
+.chat-memento-toolbar { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--ink); font: 700 .76rem/1 system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+.chat-memento-toolbar-pill { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 4px 8px; border: 1px solid var(--muted); border-radius: 999px; background: var(--peach); }
+.chat-memento-toolbar.complete .chat-memento-toolbar-pill { background: var(--white); }
+.chat-memento-toolbar-pill > .ui-icon { width: 16px; height: 16px; }
+.chat-moment-streak { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 2px; color: #a54c0a; font: 700 .76rem/1 system-ui, sans-serif; }
+.chat-moment-streak .ui-icon { width: 15px; height: 18px; fill: currentColor; stroke-width: 0; }
+.chat-memento-toolbar .chat-moment-streak { margin-left: 2px; padding-left: 5px; border-left: 1px solid var(--muted); }
+.chat-row-copy > span { align-items: center; }
+.chat-row-copy > span > strong { flex: 0 1 auto; }
+.chat-row-copy time { margin-left: auto; flex: 0 0 auto; }
+:root[data-theme="dark"] .chat-moment-streak { color: #ffb373; }
 .chat-create-submit { min-height: 42px; padding: 7px 12px; border: 0; border-radius: 12px; background: var(--peach); font-weight: 700; }
 .chat-create-submit:disabled { opacity: .45; }
 .chat-create-body { display: grid; gap: 12px; }
@@ -126,9 +141,9 @@
 .chat-memento-week button strong { font-size: .94rem; line-height: 1.15; }
 .chat-memento-week button span { font: 700 .52rem/1 system-ui, sans-serif; }
 .chat-memento-week button i { width: 3px; height: 3px; border-radius: 50%; background: currentColor; opacity: .42; }
-.chat-daily-row > button { width: 100%; min-height: 68px; display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 12px; border: 2px solid var(--ink); border-radius: 18px; background: var(--white); text-align: left; box-shadow: 0 2px 4px rgba(5,9,20,.08); }
+.chat-daily-row > button { justify-self: center; max-width: 100%; min-height: 46px; display: flex; align-items: center; gap: 8px; padding: 6px 14px; border: 1px solid var(--ink); border-radius: 24px; background: var(--white); color: var(--ink); text-align: left; }
 .chat-daily-row > button:active { transform: translateY(1px); box-shadow: 0 2px 0 rgba(5,9,20,.08); }
-.chat-daily-icon { width: 46px; height: 46px; display: grid; place-items: center; border: 2px solid var(--ink); border-radius: 13px; background: var(--peach); color: #000; }
+.chat-daily-icon { width: 24px; height: 24px; display: grid; place-items: center; }
 .chat-daily-row > button > span:nth-child(2) { display: grid; gap: 2px; }
 .chat-daily-row small { color: var(--muted); font-size: .72rem; }
 .chat-daily-progress { height: 4px; margin-top: 3px; overflow: hidden; border-radius: 99px; background: rgba(5,9,20,.1); }
@@ -268,6 +283,32 @@
 .chat-sticker-item [data-send-sticker] { width: 58px; height: 58px; padding: 3px; border: 1px solid var(--ink); border-radius: 13px; background: var(--white); }
 .chat-sticker-item [data-delete-sticker] { width: 58px; min-height: 44px; padding: 3px; border: 1px solid #9d1832; border-radius: 10px; background: #ffe3e9; color: #9d1832; font-size: .62rem; font-weight: 800; }
 .chat-sticker-library img { width: 100%; height: 100%; object-fit: contain; }
+.chat-mementos-content, .chat-stickers-content { padding: 12px 16px max(20px, env(safe-area-inset-bottom)); color: var(--ink); }
+.chat-mementos-content > header, .chat-stickers-content > header { display: grid; grid-template-columns: 60px minmax(0, 1fr) 60px; align-items: center; gap: 4px; text-align: center; }
+.chat-mementos-content > header button, .chat-stickers-content > header button { min-height: 44px; padding: 4px; border: 0; background: transparent; color: var(--ink); font-weight: 600; }
+.chat-mementos-content > p, .chat-stickers-content > p { color: var(--muted); font-size: .85rem; text-align: center; }
+.chat-memento-gallery-status:empty, .chat-sticker-status:empty { display: none; }
+.chat-memento-gallery h2 { margin: 20px 0 4px; text-align: center; font-size: 1.2rem; }
+.chat-memento-gallery > p { margin: 0 0 18px; color: var(--muted); font-size: .82rem; text-align: center; }
+.chat-memento-gallery .chat-memento-week { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; margin-top: 12px; }
+.chat-memento-gallery .chat-memento-week button { min-width: 0; background: var(--white); color: var(--ink); box-shadow: none; }
+.chat-memento-gallery .chat-memento-week button.selected { background: var(--peach); }
+.chat-memento-gallery .chat-memento-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 12px; overflow: visible; }
+.chat-memento-gallery .chat-memento-strip button, .chat-memento-gallery .chat-memento-missing { min-width: 0; width: 100%; align-content: start; gap: 7px; font-size: .82rem; color: var(--ink); }
+.chat-memento-gallery .chat-memento-strip img, .chat-memento-gallery .chat-memento-missing > i { width: 100%; height: auto; aspect-ratio: 3 / 4; border: 0; border-radius: 18px; background: var(--white); box-shadow: none; }
+.chat-memento-gallery .chat-memento-missing small { font-size: .72rem; color: var(--muted); }
+.chat-stickers-sheet .chat-sticker-library { margin-top: 22px; gap: 16px; }
+.chat-stickers-sheet .chat-sticker-library > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; overflow: visible; }
+.chat-stickers-sheet .chat-sticker-library > div > small { grid-column: 1 / -1; color: var(--muted); }
+.chat-stickers-sheet .chat-sticker-item { width: 100%; min-width: 0; }
+.chat-stickers-sheet .chat-sticker-item [data-send-sticker] { width: 100%; height: auto; aspect-ratio: 1; padding: 8px; border: 0; border-radius: 18px; }
+.chat-stickers-sheet .chat-sticker-item [data-delete-sticker] { width: 100%; }
+.chat-stickers-sheet:not(.is-editing) [data-delete-sticker] { display: none; }
+@media (max-width: 540px) {
+    .chat-mementos-sheet, .chat-stickers-sheet { width: 100%; max-width: 100%; max-height: calc(100dvh - max(12px, env(safe-area-inset-top))); margin: auto auto 0; border-radius: 24px 24px 0 0; }
+    .chat-mementos-sheet { height: calc(100dvh - max(12px, env(safe-area-inset-top))); }
+    .chat-stickers-sheet { min-height: min(480px, 80dvh); }
+}
 .chat-sticker-maker { width: 100%; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: max(12px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); border: 0; background: #050914; color: #fff; }
 .chat-sticker-maker::backdrop { background: #050914; }
 .chat-sticker-maker-form { width: min(100%, 620px); min-height: 100%; margin: 0 auto; display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto auto; gap: 12px; }
@@ -345,6 +386,7 @@
 :root[data-theme="dark"] .chat-memento-week button,
 :root[data-theme="dark"] .chat-load-earlier,
 :root[data-theme="dark"] .chat-typing { background: rgba(21,55,58,.9); border-color: rgba(245,251,251,.22); }
+:root[data-theme="dark"] .chat-memento-gallery .chat-memento-week button.selected { background: var(--peach); color: #102c2f; border-color: var(--peach); }
 :root[data-theme="dark"] .chat-daily-row > button { background: linear-gradient(125deg, #493c21 0%, #4c3024 48%, #492936 100%); }
 :root[data-theme="dark"] .chat-daily-icon,
 :root[data-theme="dark"] .chat-memento-strip img,
