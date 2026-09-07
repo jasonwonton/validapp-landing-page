@@ -50,5 +50,35 @@ no migration or server rollback needed. If rolling back the served shell, keep
 the app update protocol's version progression in mind and verify the installed
 PWA actually receives the intended assets.
 
-Release verification results will be recorded after the exact source and live
-deployment pass their checks; this document is not physical-device certification.
+The following evidence verifies the released source and live deployment;
+this document is not physical-device certification.
+
+## Released evidence
+
+- **Live:** `web-v76`, source `ac1840906971c59d29043f9c831c3add0777119d`;
+  frontend deployment `15bfbfb1-2f3d-4950-832e-530f4a8c0c2d` is ACTIVE, 6/6 steps.
+- **Final frozen-source browser run:** 883 passed, 13 explicit platform skips,
+  zero retries, 5.8 minutes across Android/desktop Chromium, Firefox and WebKit.
+  Targeted WebKit late-permission coverage also passed after using a stable
+  media-device fixture. The first full attempt caught a one-node startup budget
+  overrun; the haptics wrapper was removed rather than relaxing the budget.
+- **Local non-browser checks:** UI runtime/inbox policy tests, 7 staging gateway
+  tests, 3 static origin tests, build and performance budgets pass. 42 offline
+  shell entries; estimated transfer 678,831 bytes, below the 750 KB cap.
+- **Real deployed checks:** private admission, no-store, cohort gates, CSP,
+  exact runtime/artwork hashes, related-origin synthetic credential ceremony,
+  Memento dual-view capture, ordinary single-photo capture/review, gallery,
+  stickers and stopped camera tracks all pass. Synthetic adapters only; no
+  production-account authentication, sends, reads or uploads.
+- **Unchanged systems:** no changes to `app/api.js`, `app/chat/outbox.js`, either
+  serving/proxy implementation, iOS or the Six7 backend in this release.
+- **Hosted verification:** [workflow 34161854022](https://github.com/jasonwonton/validapp-landing-page/actions/runs/34161854022)
+  passes static checks and all four browser jobs on the exact released source.
+  Optional private-backend passkey integration is intentionally skipped, not
+  counted as a passing integration.
+
+Remaining native-composer differences are deliberate open parity work, not
+closed by this patch: native focus/zoom gestures, held video recording and
+tracked camera effects; web library MP4/M4A alternatives remain. The existing
+web Keep-in-chat default is unchanged (iOS initially selects View once), and
+the web checkbox has not been converted to the native delivery-mode pill.
