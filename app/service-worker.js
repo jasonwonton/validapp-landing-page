@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "valid-web-";
-const CACHE_NAME = `${CACHE_PREFIX}v80`;
+const CACHE_NAME = `${CACHE_PREFIX}v81`;
 const APP_SHELL = [
     "./",
     "./styles.css",
@@ -14,6 +14,7 @@ const APP_SHELL = [
     "./runtime-style.js",
     "./camera-effects.js",
     "./ui-icons.js",
+    "./feed-sender.js",
     "./live-camera.js",
     "./media-overlay-positioner.js",
     "./routes/route-loader.js",

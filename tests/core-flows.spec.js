@@ -414,7 +414,7 @@ test("feed navigation, filtering, and reactions work", async ({ page }) => {
 test("God Mode first-letter hints appear in the personal feed and poll detail", async ({ page }) => {
     await signInToDemo(page, "&godmode=1");
     const poll = page.locator("[data-feed-detail='9001']");
-    await expect(poll.locator(".feed-answer")).toHaveText("from Sophomore girl (M)");
+    await expect(poll.locator(".feed-answer")).toHaveText("from a 👧💗 Sophomore (M)");
     await poll.click();
     await expect(page.locator("#feedDetailDialog .feed-detail-first-letter-hint")).toHaveText("Hint: starts with M");
 });
@@ -435,7 +435,7 @@ test("own school votes show the iOS-style you marker", async ({ page }) => {
     await signInToDemo(page);
     await page.getByRole("button", { name: "School", exact: true }).click();
     const ownVote = page.locator("[data-feed-detail='9004']");
-    await expect(ownVote).toContainText("from Jules Rivera (you)");
+    await expect(ownVote).toContainText("from Jules Rivera (you 🫵)");
     await ownVote.click();
     await expect(page.locator("#feedDetailDialog .detail-screen-header > strong")).toHaveText("Jules Rivera said");
     await expect(page.locator("#feedDetailDialog")).not.toContainText("(you");

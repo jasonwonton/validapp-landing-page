@@ -22,8 +22,8 @@ try {
     const page = await browser.newPage({ viewport: { width: 393, height: 852 } });
     await page.goto(invitation);
     const version = await page.locator('meta[name="valid-app-version"]').getAttribute('content');
-    assert.equal(version, process.env.STAGING_EXPECTED_VERSION || 'web-v80');
-    for (const file of ['app/chat/index.js', 'app/chat/store.js', 'app/chat/models.js', 'app/chat/message-window.js', 'app/chat/timeline-scroll.js', 'app/keyed-list.js', 'app/live-camera.js', 'app/chat/styles.css', 'app/styles.css', 'app/preferences.js', 'app/ui-icons.js', 'app/api.js']) {
+    assert.equal(version, process.env.STAGING_EXPECTED_VERSION || 'web-v81');
+    for (const file of ['app/app.js', 'app/feed-sender.js', 'app/chat/index.js', 'app/chat/store.js', 'app/chat/models.js', 'app/chat/message-window.js', 'app/chat/timeline-scroll.js', 'app/keyed-list.js', 'app/live-camera.js', 'app/chat/styles.css', 'app/styles.css', 'app/preferences.js', 'app/ui-icons.js', 'app/api.js']) {
         const response = await page.request.get(new URL(`/${file}`, invitation).href);
         assert.equal(response.status(), 200);
         const hash = data => createHash('sha256').update(data).digest('hex');

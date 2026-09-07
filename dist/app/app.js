@@ -1,5 +1,6 @@
 import { ValidAPI } from "./api.js";
 import { uiIcon } from "./ui-icons.js";
+import { feedVoterLine, senderGradeIsSafe, tbhSenderLine } from "./feed-sender.js";
 import { DemoAPI, localDemoAllowed } from "./demo-api.js";
 import { createAdditionalPasskey, createSignupPasskey, passkeysSupported, signInWithPasskey } from "./passkeys.js";
 import { startPerformanceMonitoring } from "./performance.js";
@@ -774,16 +775,8 @@ function voterFirstLetterHint(item) {
 }
 
 function formatVoterHint(item) {
-    if (item.current_user_voted) return `from ${displayName(state.profile)} (you)`;
-    if (item.voter_name) return `from ${item.voter_name}`;
-    const firstLetter = voterFirstLetterHint(item);
-    const firstLetterSuffix = firstLetter ? ` (${firstLetter})` : "";
-    const gender = String(item.voter_gender || "").toLowerCase();
-    const genderLabel = ["female", "girl"].includes(gender) ? "girl" : ["male", "boy"].includes(gender) ? "boy" : gender === "non-binary" ? "non-binary person" : "";
-    const grade = formatGrade(item.voter_grade || "");
-    if (grade) return `from ${grade} ${genderLabel}${firstLetterSuffix}`.replace(/\s+/g, " ").trim();
-    if (genderLabel) return `from a ${genderLabel}${firstLetterSuffix}`;
-    return firstLetter ? `from someone (${firstLetter})` : "";
+    return feedVoterLine(item, { personal: state.feedType === 'personal', currentName: state.profile ? displayName(state.profile) : '',
+        subscriber: api.user?.subscribed_user === true, safeGrade: senderGradeIsSafe(item.voter_grade, state.classmates) });
 }
 
 function formatVoterDemographicsStatement(item) {
@@ -2476,14 +2469,7 @@ function dominantReaction(item) {
 }
 
 function tbhAuthorLine(item) {
-    const gender = String(item.author_gender || "").toLowerCase();
-    const genderLabel = gender === "male" || gender === "boy" ? "boy" : gender === "female" || gender === "girl" ? "girl" : gender === "non-binary" || gender === "nonbinary" ? "non-binary person" : "";
-    if (!genderLabel) return "from a classmate";
-    const grade = String(item.author_grade || "").trim();
-    if (!grade) return `from a ${genderLabel} in your class`;
-    const normalized = formatGrade(grade);
-    const classmatesInGrade = (state.classmates || []).filter((classmate) => formatGrade(classmate.grade || "") === normalized).length;
-    return classmatesInGrade >= 2 ? `from a ${genderLabel} in ${normalized}` : `from a ${genderLabel} (grade hidden until more classmates join)`;
+    return tbhSenderLine(item, { safeGrade: senderGradeIsSafe(item.author_grade, state.classmates) });
 }
 
 function commentsEnabled() {

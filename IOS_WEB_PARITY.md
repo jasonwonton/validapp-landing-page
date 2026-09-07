@@ -1,6 +1,8 @@
 # Six7 iOS → PWA parity and release matrix
 
 Last audited: September 7, 2026
+Feed sender labels: [native grade / gender product emoji](FEED_SENDER_PARITY_2026-09-07.md)
+tracks private `web-v81`, including compact typography and grade-privacy fallbacks.
 Chat scrolling: [automatic history and reading-position repair](CHAT_SCROLLING_2026-09-07.md)
 tracks private `web-v80`: no normal pagination buttons, pixel-preserving history,
 bounded rolling pages and a deliberate Latest shortcut. Physical touch acceptance remains open.
