@@ -12,6 +12,32 @@ test("native Stories can stay enabled while the independent web surface remains 
     await expect(page.getByRole("region", { name: "Stories" })).toHaveCount(0);
 });
 
+for (const unavailable of [false, true]) {
+    test(`Add Story remains available with an ${unavailable ? "unavailable" : "empty"} feed`, async ({ page }) => {
+        await page.goto("/app/?demo=1&signin=1&stories=1");
+        await page.evaluate(async (unavailable) => {
+            const { DemoAPI } = await import('/app/demo-api.js');
+            DemoAPI.prototype.getStories = async () => {
+                if (unavailable) throw new Error('Story feed temporarily unavailable');
+                return { authors: [] };
+            };
+        }, unavailable);
+        await page.getByRole('button', { name: /^sign in$/i }).click();
+        const stories = page.getByRole('region', { name: 'Stories' });
+        await expect(stories).toBeVisible();
+        if (unavailable) await expect(stories).toContainText('Story feed temporarily unavailable');
+        else await expect(stories.locator('.stories-status')).toHaveText('');
+        await expect(stories.locator('[data-story-author]')).toHaveCount(0);
+        await stories.getByRole('button', { name: 'Add Story' }).click();
+        const composer = page.getByRole('dialog', { name: 'Create Story' });
+        await expect(composer).toBeVisible();
+        await expect(composer.getByRole('button', { name: 'Post Story' })).toBeDisabled();
+        await composer.getByRole('button', { name: 'Cancel' }).click();
+        await expect(composer).toBeHidden();
+        await expect(stories.getByRole('button', { name: 'Add Story' })).toBeVisible();
+    });
+}
+
 test("Story rail reveals signed media before recording the authoritative view", async ({ page }) => {
     await signInWithStories(page);
     const noah = page.getByRole("button", { name: "Noah Williams's Story, new" });

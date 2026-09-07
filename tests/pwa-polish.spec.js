@@ -169,8 +169,8 @@ test("classmate browsing, targeted boost, and TBH use the same iOS-style rows", 
     });
     const directoryStyles = await pickerStyles(directoryRow);
     const directorySearchStyles = await searchStyles(directory.locator(".classmate-picker-search"));
-    expect(directoryStyles).toEqual(["grid", "46px", "12px", "12px 14px", "74px", "2px", "20px", "rgb(255, 255, 255)"]);
-    expect(directorySearchStyles).toEqual(["50px", "2px", "20px", "rgb(255, 255, 255)"]);
+    expect(directoryStyles).toEqual(["grid", "46px", "12px", "12px", "72px", "1px", "14px", "rgb(255, 255, 255)"]);
+    expect(directorySearchStyles).toEqual(["44px", "1px", "12px", "rgb(255, 255, 255)"]);
     await expect(directoryRow.getByText("this week", { exact: true })).toBeVisible();
     await expect(directoryRow).not.toContainText("@maya_c");
     const askIndicator = directoryRow.locator(".classmate-ask-indicator");

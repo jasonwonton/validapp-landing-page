@@ -790,19 +790,22 @@ h3 { font-size: 1.45rem; }
 .anonymous-share-section > strong { font-size: 1.1rem; }
 .detail-share-row { width: 100%; gap: 10px; }
 .classmate-picker-dialog { overflow: hidden; }
+.classmate-picker-dialog, .classmate-picker-page { --picker-border: rgba(0,63,66,.24); }
 .classmate-picker-shell { height: min(82dvh, 760px); min-height: 0; display: flex; flex-direction: column; padding: 0 18px 20px; }
 .sheet-heading { min-height: 62px; display: grid; grid-template-columns: minmax(72px, 1fr) auto minmax(72px, 1fr); align-items: center; border-bottom: 1px solid rgba(0,0,0,.1); }
 .sheet-heading h2 { margin: 0; font-size: 1.22rem; text-align: center; }
 .sheet-heading-control { justify-self: start; padding: 10px 0; border: 0; background: transparent; cursor: pointer; font-size: 1rem; }
-.classmate-picker-heading { flex: 0 0 auto; }
-.classmate-picker-note { flex: 0 0 auto; margin: 12px 6px; color: rgba(0,0,0,.7); font-size: 1rem; line-height: 1.35; }
+.classmate-picker-heading { flex: 0 0 auto; min-height: 60px; margin-bottom: 10px; border: 0; grid-template-columns: 60px minmax(0,1fr) 60px; }
+.classmate-picker-heading h2 { font-size: 1.125rem; overflow-wrap: anywhere; }
+.classmate-picker-heading .sheet-heading-control { min-width: 44px; min-height: 44px; }
+.classmate-picker-note { flex: 0 0 auto; margin: 12px 6px; color: var(--muted); font-size: 1rem; line-height: 1.35; }
 .classmate-picker-shell > .status-message:empty { display: none; }
 .classmate-directory-search { margin: 0; }
 .classmate-directory-list { min-height: 0; }
 .classmate-row-meta { display: grid; justify-items: center; gap: 2px; color: var(--ink); }
 .classmate-row-meta > strong { display: flex; align-items: center; gap: 4px; font-size: .88rem; }
 .classmate-row-meta > strong > span { color: var(--heart-pink); font-family: system-ui, sans-serif; font-size: .78rem; }
-.classmate-row-meta > small { color: rgba(0,0,0,.66); font-size: .72rem; }
+.classmate-row-meta > small { color: var(--muted); font-size: .75rem; white-space: nowrap; }
 .classmate-ask-indicator { width: 18px; height: 18px; display: grid; place-items: center; flex: 0 0 18px; align-self: center; color: var(--peach-pressed); line-height: 0; }
 .classmate-ask-indicator .ask-me-symbol { width: 18px; height: 18px; display: block; }
 .classmate-ask-button { display: flex; align-items: center; justify-content: center; gap: 9px; margin: 5px 4px 5px 0; border: 3px solid var(--ink); color: var(--ink); text-decoration: none; box-shadow: 4px 5px 0 var(--ink); }
@@ -1419,17 +1422,19 @@ body.detail-screen-open { overflow: hidden; }
 @keyframes skeleton-shimmer { to { background-position: -220% 0; } }
 
 .classmate-picker-list { min-height: 0; display: grid; align-content: start; flex: 1 1 auto; gap: 12px; overflow-y: auto; overscroll-behavior: contain; padding: 2px 2px calc(12px + env(safe-area-inset-bottom)); }
-.classmate-picker-row { width: 100%; min-height: 74px; display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 14px; border: 2px solid var(--ink); border-radius: 20px; background: var(--white); color: var(--ink); cursor: pointer; text-align: left; font: inherit; box-shadow: none; }
+.classmate-picker-row { width: 100%; min-height: 72px; display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--picker-border); border-radius: 14px; background: var(--white); color: var(--ink); cursor: pointer; text-align: left; font: inherit; box-shadow: none; }
 .classmate-picker-row:active { background: #fff8ef; }
 .classmate-picker-row:disabled { cursor: default; opacity: .55; }
-.classmate-picker-avatar { width: 46px; height: 46px; border: 2px solid var(--ink); }
+.classmate-picker-avatar { width: 46px; height: 46px; border: 1px solid var(--picker-border); }
 .classmate-picker-copy { min-width: 0; display: grid; gap: 3px; }
-.classmate-picker-copy strong, .classmate-picker-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.classmate-picker-copy strong { font-size: 1.06rem; line-height: 1.1; }
-.classmate-picker-copy small, .classmate-picker-trailing small { color: rgba(0,0,0,.65); font-size: .86rem; }
+.classmate-picker-copy strong, .classmate-picker-copy small { overflow-wrap: anywhere; }
+.classmate-picker-copy strong { font-size: 1.0625rem; line-height: 1.2; }
+.classmate-picker-copy small, .classmate-picker-trailing small { color: var(--muted); font-size: .875rem; }
+.classmate-picker-trailing .classmate-row-meta > small { font-size: .75rem; }
 .classmate-picker-trailing { min-width: 34px; display: flex; align-items: center; justify-content: flex-end; gap: 7px; }
 .classmate-picker-chevron { padding-bottom: 3px; color: var(--muted); font-size: 1.8rem; line-height: 1; }
-.classmate-picker-search { min-height: 50px; flex: 0 0 auto; margin: 0 0 12px; border-width: 2px; border-radius: 20px; background: var(--white); }
+.classmate-picker-search { min-height: 44px; flex: 0 0 auto; margin: 0 0 12px; border: 1px solid var(--picker-border); border-radius: 12px; background: var(--white); }
+.classmate-picker-search:focus-within { outline: 2px solid var(--muted); outline-offset: 2px; }
 .classmate-picker-page { gap: 0; padding-top: 12px; }
 .classmate-picker-page .classmate-picker-list { overflow: visible; }
 .classmate-picker-empty { padding: 36px 14px; color: var(--dark-teal); text-align: center; }
@@ -1492,7 +1497,7 @@ body.detail-screen-open { overflow: hidden; }
 #tbhRequestDialog .detail-back-button { padding-left: 6px; }
 #tbhRequestBody { min-height: 0; flex: 1 1 auto; overflow-y: auto; }
 .tbh-flow-content.classmate-picker-page { width: min(100%, 560px); display: flex; flex-direction: column; gap: 0; overflow: hidden; padding: 12px 20px calc(20px + env(safe-area-inset-bottom)); }
-.tbh-flow-content.classmate-picker-page > .classmate-picker-note { margin: 0 0 12px; color: rgba(0,0,0,.8); font-size: 1rem; line-height: 1.35; }
+.tbh-flow-content.classmate-picker-page > .classmate-picker-note { margin: 0 0 12px; color: var(--muted); font-size: 1rem; line-height: 1.35; }
 .tbh-flow-content.classmate-picker-page > .classmate-picker-list { gap: 14px; overflow-y: auto; padding-inline: 2px; }
 .tbh-target-list, .tbh-prompt-list { display: grid; gap: 10px; }
 .tbh-target-row, .tbh-prompt-row { width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 14px; border: 2px solid var(--ink); border-radius: 18px; background: var(--white); text-align: left; font: inherit; }
@@ -1627,6 +1632,8 @@ body.detail-screen-open { overflow: hidden; }
 :root[data-theme="dark"] .nomination-cost.active,
 :root[data-theme="dark"] .signup-library-button { color: #ffc58f; }
 :root[data-theme="dark"] .classmate-picker-row:active { background: var(--mint); }
+:root[data-theme="dark"] .classmate-picker-dialog,
+:root[data-theme="dark"] .classmate-picker-page { --picker-border: rgba(245,251,251,.2); }
 :root[data-theme="dark"] .school-feed-controls button.active { background: var(--peach); color: #000; }
 :root[data-theme="dark"] .personal-inbox-filter-rail button.active small { color: var(--ink); }
 :root[data-theme="dark"] .profile-school-meta-item img { filter: brightness(0) invert(1); }

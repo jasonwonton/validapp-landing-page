@@ -53,7 +53,7 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
     const recordedViews = new Set();
 
     root.innerHTML = `
-        <section class="stories-shell hidden" aria-label="Stories">
+        <section class="stories-shell" aria-label="Stories">
             <header><strong>Stories</strong><span class="stories-status" role="status"></span><button type="button" data-create-story aria-label="Add Story">${uiIcon("plus")}</button></header>
             <div class="stories-rail"></div>
         </section>
@@ -120,9 +120,9 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
     function currentItem() { return currentAuthor()?.items?.[itemIndex] || null; }
 
     function renderRail() {
-        const shell = $(".stories-shell");
         const visibleAuthors = authors.filter((author) => author.items?.length);
-        shell.classList.toggle("hidden", !visibleAuthors.length);
+        // Feature gates own visibility. An empty feed must still let its first
+        // author create a Story, and a failed refresh must not hide that action.
         $(".stories-rail").innerHTML = visibleAuthors.map((author) => {
             const index = authors.indexOf(author);
             const name = author.is_owner ? "Your Story" : displayName(author);

@@ -1,6 +1,9 @@
 # Six7 iOS → PWA parity and release matrix
 
 Last audited: September 7, 2026
+Classmates / Stories: [screenshot correction and Add Story diagnosis](CLASSMATES_STORIES_AUDIT_2026-09-07.md)
+tracks readable shared pickers and the empty-feed creation fix in `web-v78`.
+Stories remains disabled in the private gateway pending its release gates.
 Poll detail: [screenshot-driven appearance correction](POLL_DETAIL_APPEARANCE_2026-09-07.md)
 fixes dark-mode contrast, oversized artwork and selection overlap for private
 `web-v77`; physical-device visual acceptance remains open.
