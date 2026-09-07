@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { createStaticOrigin } from "../scripts/serve-production.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
-const CURRENT_VERSION = 78;
+const CURRENT_VERSION = 79;
 
 async function listen(server) {
     await new Promise((resolve, reject) => {

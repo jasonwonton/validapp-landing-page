@@ -80,6 +80,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     let mementoFrontIsPrimary = false;
     let mementoPreparationGeneration = 0;
     let mementoRequestId = null;
+    let mementoSkipping = false;
     let selectedChatMedia = null;
     let selectedChatMediaSourceFile = null;
     let selectedChatMediaPreview = null;
@@ -543,7 +544,11 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         const row = store.state.dailyRow;
         const enabled = dailyLedgerEnabled() && row;
         const offerCapture = enabled && !row.viewer_has_shared && row.viewer_is_eligible !== false;
-        $('.chat-daily-row').innerHTML = offerCapture ? `<button type="button" data-open-memento aria-label="Take today's Memento"><span class="chat-daily-icon">${uiIcon('camera-filled')}</span><span><strong>Take Memento</strong></span></button>` : '';
+        const locked = offerCapture && row.view_gate_locked === true;
+        const gate = locked ? `<div class="memento-gate-heading"><span class="memento-gate-icon" aria-hidden="true">${uiIcon('camera-filled')}</span><h2>Today's Memento</h2><p>Capture a real moment to remember today and unlock chat.</p></div>` : '';
+        const skip = locked ? `<div><button class="memento-gate-skip" type="button" data-skip-memento aria-describedby="mementoSkipHint" ${mementoSkipping ? 'disabled' : ''}>${mementoSkipping ? 'Skipping…' : 'Skip for today'}</button><span class="visually-hidden" id="mementoSkipHint">Unlocks this chat without posting a Memento</span></div>` : '';
+        $('.chat-daily-row').innerHTML = offerCapture ? `${gate}<button type="button" data-open-memento aria-label="Take today's Memento" ${mementoSkipping ? 'disabled' : ''}><span class="chat-daily-icon">${uiIcon('camera-filled')}</span><span><strong>Take Memento</strong></span></button>${skip}` : '';
+        $('.chat-daily-row').classList.toggle('is-gate', Boolean(locked));
         $('.chat-daily-row').classList.toggle('hidden', !offerCapture);
         $('.chat-composer').classList.toggle('hidden', chatAccessUnavailable());
         renderMementoToolbar();
@@ -1018,6 +1023,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     }
 
     function openMementoComposer({ showExisting = false } = {}) {
+        if (mementoSkipping) return;
         const row = store.state.dailyRow;
         if (showExisting || row?.viewer_has_shared || row?.viewer_is_eligible === false) {
             const first = (row?.entries || []).find((entry) => entry.image_url);
@@ -1031,7 +1037,6 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         }
         if (!store.state.activeChatId) return;
         renderMementoAudience();
-        $(".memento-skip").classList.toggle("hidden", row?.view_gate_locked !== true);
         $("[data-memento-dialog]").showModal();
         startMementoCamera();
     }
@@ -1043,20 +1048,22 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     }
 
     async function skipMementoForToday() {
-        if (!store.state.activeChatId || !confirm("Skip today's Memento and unlock this chat?")) return;
-        const button = $(".memento-skip");
-        button.disabled = true;
-        button.textContent = "Skipping…";
+        const chatId = store.state.activeChatId;
+        if (mementoSkipping || !chatId || !dailyLedgerEnabled() || store.state.dailyRow?.view_gate_locked !== true) return;
+        const generation = roomGeneration;
+        mementoSkipping = true;
+        $('.chat-room-status').textContent = '';
+        renderDailyRow();
         try {
-            await api.skipChatMemento(userId(), store.state.activeChatId);
-            $("[data-memento-dialog]").close();
+            await api.skipChatMemento(userId(), chatId);
+            if (generation !== roomGeneration || chatId !== store.state.activeChatId) return;
             showToast?.("Chat unlocked for today");
-            await openChat(store.state.activeChatId, { updateHistory: false, force: true });
+            await openChat(chatId, { updateHistory: false, force: true });
         } catch (error) {
-            $(".memento-status").textContent = error.message || "Could not skip today's Memento.";
+            if (generation === roomGeneration && chatId === store.state.activeChatId) $('.chat-room-status').textContent = error.message || "Could not skip today's Memento.";
         } finally {
-            button.disabled = false;
-            button.textContent = "Skip for today";
+            mementoSkipping = false;
+            if (store.state.activeChatId) renderDailyRow();
         }
     }
 
@@ -1082,7 +1089,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             selectedMementoFile = mementoFrontIsPrimary && prepared.swapped ? prepared.swapped : prepared.primary;
             selectedMementoSecondaryFile = mementoFrontIsPrimary && prepared.swapped ? prepared.primary : prepared.swapped;
             renderSelectedMementoPreview();
-            $(".memento-status").textContent = prepared.swapped ? "Tap the small photo to swap views." : "";
+            $(".memento-status").textContent = "";
             $('.memento-photo-fallback').hidden = true;
             $(".memento-publish").disabled = false;
         } catch (error) {
@@ -1108,7 +1115,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         mementoFrontIsPrimary = !mementoFrontIsPrimary;
         mementoRequestId = null;
         renderSelectedMementoPreview();
-        $(".memento-status").textContent = `${mementoFrontIsPrimary ? "Front" : "Rear"} view is primary · tap the inset to swap`;
+        $(".memento-status").textContent = "";
     }
 
     let mementoPublishing = false;

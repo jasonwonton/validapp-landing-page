@@ -101,8 +101,6 @@ test("Memento reciprocity offers the same skip-for-today alternative as iOS", as
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Weekend Crew/ }).click();
-    await page.locator(".chat-daily-row > button").click();
-    page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Skip for today" }).click();
     await expect(page.getByText("Chat unlocked for today", { exact: true })).toBeVisible();
     await expect(page.locator(".chat-message")).toHaveCount(4);

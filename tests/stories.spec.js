@@ -168,8 +168,6 @@ test("Story replies and classmate shares use idempotent chat delivery", async ({
     await viewer.getByRole("button", { name: "Close Story" }).click();
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Maya Chen/ }).first().click();
-    await page.locator(".chat-daily-row > button").click();
-    page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Skip for today" }).click();
     await expect(page.getByText(/Shared Story/)).toBeVisible();
     await expect(page.getByRole("img", { name: "Photo" }).last()).toBeVisible();

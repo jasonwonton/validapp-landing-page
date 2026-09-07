@@ -1,6 +1,9 @@
 # Six7 iOS → PWA parity and release matrix
 
 Last audited: September 7, 2026
+Memento: [native gate and quieter capture](MEMENTO_GATE_POLISH_2026-09-07.md)
+tracks the camera-highlight fix, direct Skip and removal of sequencing narration
+for private `web-v79`; access remains server-owned and physical acceptance open.
 Classmates / Stories: [screenshot correction and Add Story diagnosis](CLASSMATES_STORIES_AUDIT_2026-09-07.md)
 tracks readable shared pickers and the empty-feed creation fix in `web-v78`.
 Stories remains disabled in the private gateway pending its release gates.

@@ -2,12 +2,10 @@ import { uiIcon } from './ui-icons.js';
 
 // One live video stream, at most two memory-only photos, no uploads or retries.
 export function createLiveCamera({ container, onCapture, onFallback, singlePhoto = false }) {
-    container.innerHTML = `<div class="live-camera-stage"><video autoplay muted playsinline aria-label="Live camera preview"></video><img class="live-camera-inset" alt="First captured view" hidden><div class="live-camera-heading"><strong>Memento</strong><span data-camera-step>First view</span></div><div class="live-camera-message" role="status"></div></div><div class="live-camera-controls"><button type="button" data-camera-library aria-label="Choose a photo instead">${uiIcon('photo')}</button><button type="button" class="camera-shutter" data-camera-shutter aria-label="Take photo" disabled><span></span></button><button type="button" data-camera-flip aria-label="Switch front and rear camera" disabled>${uiIcon('flip')}</button></div><p class="live-camera-hint">One tap. Front and back captured in sequence.</p><div class="live-camera-alternatives"><button type="button" data-camera-retry hidden>Try camera again</button><button type="button" data-camera-single hidden>Use one photo</button></div>`;
+    container.innerHTML = `<div class="live-camera-stage"><video autoplay muted playsinline aria-label="Live camera preview"></video><img class="live-camera-inset" alt="Memento preview" hidden><div class="live-camera-message" role="status"></div></div><div class="live-camera-controls"><button type="button" data-camera-library aria-label="Choose a photo instead">${uiIcon('photo')}</button><button type="button" class="camera-shutter" data-camera-shutter aria-label="Take photo" disabled><span></span></button><button type="button" data-camera-flip aria-label="Switch front and rear camera" disabled>${uiIcon('flip')}</button></div><p class="live-camera-hint">Tap to capture</p><div class="live-camera-alternatives"><button type="button" data-camera-retry hidden>Try camera again</button><button type="button" data-camera-single hidden>Use one photo</button></div>`;
     const $ = selector => container.querySelector(selector);
     const video = $('video'), message = $('.live-camera-message');
     if (singlePhoto) {
-        $('.live-camera-heading strong').textContent = 'Photo';
-        $('.live-camera-hint').textContent = 'Tap to take a photo';
         $('[data-camera-library]').setAttribute('aria-label', 'Photo library');
     }
     let stream = null, generation = 0, pending = false, busy = false, opened = false;
@@ -37,7 +35,7 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
         if (pending) return failure('Respond to the camera permission prompt first, then try again.');
         stop();
         const requestGeneration = generation;
-        message.textContent = 'Starting camera…';
+        message.textContent = photos.length ? 'Capturing…' : 'Starting camera…';
         $('[data-camera-retry]').hidden = true;
         $('[data-camera-library]').hidden = !singlePhoto;
         if (!navigator.mediaDevices?.getUserMedia) return failure('Live capture is unavailable here. Open in a supported browser or choose a photo.');
@@ -58,7 +56,6 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
             await video.play();
             if (requestGeneration !== generation || !opened) return;
             message.textContent = '';
-            $('[data-camera-step]').textContent = singlePhoto ? (actualFacing === 'user' ? 'Front camera' : 'Rear camera') : `${photos.length ? 'Second' : 'First'} view${actualFacing ? ` · ${actualFacing === 'user' ? 'Front' : 'Rear'} camera` : ''}`;
             $('[data-camera-shutter]').disabled = false;
             $('[data-camera-flip]').disabled = false;
             stream.getVideoTracks()[0]?.addEventListener('ended', () => {

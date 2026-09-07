@@ -29,6 +29,8 @@ test.describe('live Memento capture', () => {
         await openMemento(page);
         const shutter = page.getByRole('button', { name: 'Take photo', exact: true });
         await expect(shutter).toBeEnabled();
+        await expect(page.locator('[data-memento-camera]')).not.toContainText(/sequence|First view|Second view|primary/i);
+        await expect(page.locator('[data-memento-dialog] .live-camera-hint')).toHaveText('Tap to capture');
         const preview = await page.locator('.live-camera-stage').boundingBox();
         expect(preview.width / preview.height).toBeCloseTo(3 / 4, 2);
         await expect(page.locator('.memento-file-input')).toBeHidden();
@@ -40,7 +42,7 @@ test.describe('live Memento capture', () => {
         await expect(page.locator('.memento-options, .memento-caption, [data-memento-effects]')).toHaveCount(0);
         await expect(page.locator('.memento-photo-fallback')).toBeHidden();
         await page.locator('[data-swap-memento-capture]').click();
-        await expect(page.locator('.memento-status')).toContainText('Front view is primary');
+        await expect(page.locator('.memento-status')).toBeEmpty();
         await expect.poll(() => page.evaluate(() => cameraStreams.flatMap(s => s.getTracks()).every(t => t.readyState === 'ended'))).toBe(true);
         expect(fileChoosers).toBe(0);
         await page.locator('[data-retake-memento]').click();

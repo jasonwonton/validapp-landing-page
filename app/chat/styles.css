@@ -28,14 +28,13 @@
 .chat-sheet.is-capturing { width: min(100%, 520px); max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0 auto; border-radius: 0; background: #000; color: #fff; }
 .is-capturing .memento-form { height: 100%; padding: 0; gap: 0; grid-template-rows: auto minmax(0, 1fr); }
 .is-capturing .memento-form > :not(header):not(.live-camera) { display: none; }
-.is-capturing .memento-form > .memento-skip:not(.hidden) { display: block; color: #ddd; background: #000; min-height: 44px; margin: 0; }
 .is-capturing .memento-form > header { padding: max(8px, env(safe-area-inset-top)) 16px 8px; background: #000; }
 .is-capturing .memento-form > header button { color: #fff; min-height: 44px; }
 .live-camera { min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto auto auto; padding: 0 0 max(16px, env(safe-area-inset-bottom)); background: #000; color: #fff; }
 .live-camera-stage { position: relative; min-height: 0; height: min(100%, calc((100vw - 16px) * 4 / 3), 672px); aspect-ratio: 3 / 4; place-self: center; overflow: hidden; background: #111; border-radius: 24px; margin: 0 0 12px; }
 .live-camera-stage video { position: absolute; width: 100%; height: 100%; object-fit: cover; }
 .live-camera-stage video.mirrored { transform: scaleX(-1); }
-.live-camera-stage .live-camera-inset { position: absolute; width: 27%; aspect-ratio: 3 / 4; object-fit: cover; right: 16px; top: 74px; border: 2px solid #fff; border-radius: 12px; }
+.live-camera-stage .live-camera-inset { position: absolute; width: 27%; aspect-ratio: 3 / 4; object-fit: cover; right: 16px; top: 16px; border: 2px solid #fff; border-radius: 12px; }
 .live-camera-heading { position: absolute; left: 16px; right: 16px; top: 16px; display: grid; justify-items: center; gap: 4px; }
 .live-camera-heading strong, .live-camera-heading span { padding: 5px 12px; border-radius: 12px; background: rgba(0,0,0,.65); }
 .live-camera-heading strong { font-size: 20px; }
@@ -168,7 +167,17 @@
 .chat-memento-week button i { width: 3px; height: 3px; border-radius: 50%; background: currentColor; opacity: .42; }
 .chat-daily-row > button { justify-self: center; width: 210px; max-width: 100%; min-height: 46px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 6px 12px; border: 3px solid #000; border-radius: 999px; background: #ffb15e; color: #000; box-shadow: 4px 5px 0 #000; font-size: 16px; font-weight: 700; text-align: center; }
 .chat-daily-row > button:active { transform: translate(3px, 4px); box-shadow: 1px 1px 0 #000; }
-.chat-daily-icon { width: 24px; height: 24px; display: grid; place-items: center; }
+.chat-daily-icon { width: 24px; height: 24px; display: grid; place-items: center; background: transparent; }
+.chat-daily-row.is-gate { flex: 0 1 auto; width: min(400px, calc(100% - 32px)); align-self: center; margin: auto; padding: 24px; gap: 20px; overflow-y: auto; border: 3px solid var(--ink); border-radius: 28px; background: var(--white); box-shadow: 0 8px 16px rgba(0,0,0,.14); text-align: center; }
+.memento-gate-heading { display: grid; justify-items: center; gap: 8px; }
+.memento-gate-icon { width: 64px; height: 64px; display: grid; place-items: center; margin-bottom: 12px; border-radius: 50%; background: rgba(255,177,94,.3); }
+.memento-gate-icon .ui-icon { width: 28px; height: 28px; }
+.memento-gate-heading h2 { margin: 0; font-size: 28px; line-height: 1.15; }
+.memento-gate-heading p { margin: 0; color: var(--muted); font-size: 16px; line-height: 1.35; }
+.chat-daily-row.is-gate > button { width: 100%; min-height: 54px; font-size: 18px; }
+.memento-gate-skip { width: 100%; min-height: 44px; padding: 8px; border: 0; background: transparent; color: var(--muted); font-size: 16px; }
+.chat-daily-row button:disabled { opacity: .55; cursor: default; }
+.chat-room-screen:has(.chat-daily-row.is-gate:not(.hidden)) .chat-timeline.chat-content-locked { display: none; }
 .chat-daily-row > button > span:nth-child(2) { display: grid; gap: 2px; }
 .chat-daily-row small { color: var(--muted); font-size: .72rem; }
 .chat-daily-progress { height: 4px; margin-top: 3px; overflow: hidden; border-radius: 99px; background: rgba(5,9,20,.1); }
@@ -414,7 +423,6 @@
 :root[data-theme="dark"] .chat-load-earlier,
 :root[data-theme="dark"] .chat-typing { background: rgba(21,55,58,.9); border-color: rgba(245,251,251,.22); }
 :root[data-theme="dark"] .chat-memento-gallery .chat-memento-week button.selected { background: var(--peach); color: #102c2f; border-color: var(--peach); }
-:root[data-theme="dark"] .chat-daily-icon,
 :root[data-theme="dark"] .chat-memento-strip img,
 :root[data-theme="dark"] .chat-memento-missing > i { background: rgba(21,55,58,.72); border-color: rgba(245,251,251,.28); }
 :root[data-theme="dark"] .chat-message.mine .chat-bubble { background: var(--chat-appearance-color); }
