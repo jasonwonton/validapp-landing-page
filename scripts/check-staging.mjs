@@ -75,6 +75,7 @@ try {
             const credentialId = randomBytes(32).toString('base64');
             await cdp.send('WebAuthn.addCredential', { authenticatorId, credential: { credentialId, rpId: 'six7.lol', privateKey: privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64'), isResidentCredential: true, userHandle: randomBytes(16).toString('base64'), signCount: 0 } });
             const assertionOrigin = await page.evaluate(async id => {
+                await (await import('/app/auth-reliability.js')).checkPasskeyEnvironment();
                 const credential = await navigator.credentials.get({ publicKey: { challenge: crypto.getRandomValues(new Uint8Array(32)), rpId: 'six7.lol', allowCredentials: [{ type: 'public-key', id: Uint8Array.from(atob(id), c => c.charCodeAt(0)) }], userVerification: 'required', timeout: 15_000 } });
                 return JSON.parse(new TextDecoder().decode(credential.response.clientDataJSON)).origin;
             }, credentialId);

@@ -3,6 +3,7 @@ import { uiIcon } from "./ui-icons.js";
 import { feedVoterLine, senderGradeIsSafe, tbhSenderLine } from "./feed-sender.js";
 import { DemoAPI, localDemoAllowed } from "./demo-api.js";
 import { createAdditionalPasskey, createSignupPasskey, passkeysSupported, signInWithPasskey } from "./passkeys.js";
+import { authBrowserURL, checkPasskeyEnvironment, completeSignupSafely, reportAuthFailure } from './auth-reliability.js';
 import { startPerformanceMonitoring } from "./performance.js";
 import { createRealtimeList } from "./realtime-list.js";
 import { activateRoute, preloadRoute } from "./routes/route-loader.js";
@@ -142,6 +143,7 @@ const state = {
     signupSchoolLookupGeneration: 0,
     signupPhoneVerified: false,
     signupVerifiedPhone: null,
+    signupCompletionUncertain: false,
     turnstileWidgetId: null,
     turnstileToken: null,
     turnstileResolve: null,
@@ -1892,6 +1894,8 @@ async function handlePasskeySignIn() {
         api.saveSession(login);
         await showSignedIn();
     } catch (error) {
+        reportAuthFailure(error);
+        showAuthBrowserHelp(error, false);
         $("#authStatus").textContent = friendlyErrorMessage(error, "Passkey sign-in failed. Please try again.");
     } finally {
         setButtonLoading(button, false);
@@ -1997,7 +2001,32 @@ function selectSignupGender(value) {
     $("#signupStatus").textContent = "";
 }
 
-function openSignupDialog() {
+function showAuthBrowserHelp(error, signup) {
+    const link = $(signup ? '#signupBrowserHelp' : '#authBrowserHelp');
+    const recoverable = ['embedded_browser', 'passkeys_unavailable', 'related_origins_unavailable', 'unsupported_origin', 'secure_context', 'passkey_security'].includes(error?.code);
+    link.classList.toggle('hidden', !recoverable);
+    if (recoverable) {
+        link.href = authBrowserURL({ signup });
+        link.textContent = /Android/i.test(navigator.userAgent) ? 'Open in Chrome' : 'Open Valid in your browser';
+    }
+}
+
+async function openSignupDialog() {
+    if (!demoMode) {
+        try { await checkPasskeyEnvironment(); }
+        catch (error) {
+            $('#authStatus').textContent = error.message;
+            showAuthBrowserHelp(error, false);
+            const help = $('#authBrowserHelp');
+            if (!help.classList.contains('hidden')) help.href = authBrowserURL({ signup: true });
+            reportAuthFailure(error);
+            return;
+        }
+    }
+    state.signupCompletionUncertain = false;
+    $('#signupForm').querySelectorAll('button[type="submit"]').forEach(button => { button.disabled = false; });
+    $('#signupRecoverAccount').classList.add('hidden');
+    $('#signupBrowserHelp').classList.add('hidden');
     setRuntimeStyles($("#signupDialog"), { "--signup-layout-height": `${window.innerHeight}px` });
     $("#signupStatus").textContent = "";
     resetSignupPhotoPreview();
@@ -2363,6 +2392,7 @@ async function resendSignupPhoneCode(button) {
 
 async function createAccount(event) {
     event.preventDefault();
+    if (state.signupCompletionUncertain) return;
     const form = event.currentTarget;
     const button = event.submitter || form.querySelector("button[type=submit]");
     const dateOfBirth = dateOfBirthFromAge($("#signupAge").value);
@@ -2413,7 +2443,7 @@ async function createAccount(event) {
             login = await api.demoSignup({ profile, school_name: school.name });
         } else {
             const credential = await createSignupPasskey(api, username);
-            login = await api.completeWebSignup({
+            login = await completeSignupSafely(api, {
                 ...credential,
                 phoneNumber: signupPhone,
                 deviceInstallationId: deviceInstallationId(),
@@ -2440,10 +2470,14 @@ async function createAccount(event) {
         showToast(photoUploadFailed ? "Welcome! Add your photo from Profile when you're ready." : "Welcome to Valid");
         setTimeout(() => { if (api.hasSession()) openClassmatesDialog({ onboarding: true }); }, 700);
     } catch (error) {
+        reportAuthFailure(error);
+        showAuthBrowserHelp(error, true);
+        state.signupCompletionUncertain = error.code === 'signup_result_unknown';
+        $('#signupRecoverAccount').classList.toggle('hidden', !state.signupCompletionUncertain);
         $("#signupStatus").textContent = error.message || "Could not create your account.";
     } finally {
         setButtonLoading(button, false);
-        submitButtons.forEach((candidate) => { candidate.disabled = false; });
+        submitButtons.forEach((candidate) => { candidate.disabled = state.signupCompletionUncertain; });
     }
 }
 
@@ -6280,6 +6314,10 @@ async function toggleWebPush() {
 function bindEvents() {
     $("#passkeyButton").addEventListener("click", handlePasskeySignIn);
     $("#createAccountButton").addEventListener("click", openSignupDialog);
+    $('#signupRecoverAccount').addEventListener('click', async () => {
+        $('#signupDialog').close();
+        await handlePasskeySignIn();
+    });
     $("[data-signup-login]").addEventListener("click", () => {
         $("#signupDialog").close();
         handlePasskeySignIn();
@@ -6883,6 +6921,7 @@ if ("serviceWorker" in navigator && !demoMode) {
 if (!passkeysSupported() && !demoMode) {
     $("#passkeyButton").disabled = true;
     $("#authStatus").textContent = "This browser does not support passkeys. Try current Chrome, Safari, or Edge.";
+    showAuthBrowserHelp({ code: 'passkeys_unavailable' }, false);
 }
 
 let authFlowStarted = false;

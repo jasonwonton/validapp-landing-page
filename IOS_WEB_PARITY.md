@@ -1,6 +1,8 @@
 # Six7 iOS → PWA parity and release matrix
 
 Last audited: September 7, 2026
+Android passkeys: [domain compatibility and interrupted signup](ANDROID_PASSKEY_RELIABILITY_2026-09-07.md)
+tracks the frontend-only `web-v82` mitigations. Browser/device acceptance and public rollout remain open.
 Feed sender labels: [native grade / gender product emoji](FEED_SENDER_PARITY_2026-09-07.md)
 tracks private `web-v81`, including compact typography and grade-privacy fallbacks.
 Chat scrolling: [automatic history and reading-position repair](CHAT_SCROLLING_2026-09-07.md)

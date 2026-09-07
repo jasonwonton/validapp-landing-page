@@ -1,3 +1,5 @@
+import { authError, checkPasskeyEnvironment, requestAuthChallenge } from './auth-reliability.js';
+
 function normalizeBase64(value) {
     const standard = value.replace(/-/g, "+").replace(/_/g, "/");
     return standard + "=".repeat((4 - (standard.length % 4)) % 4);
@@ -21,6 +23,7 @@ export function passkeysSupported() {
 }
 
 async function createRegistrationCredential(options) {
+    await checkPasskeyEnvironment(options.rpId);
     let credential;
     try {
         credential = await navigator.credentials.create({
@@ -47,7 +50,7 @@ async function createRegistrationCredential(options) {
         });
     } catch (error) {
         if (error?.name === "NotAllowedError") throw new Error("Passkey setup was canceled.");
-        if (error?.name === "SecurityError") throw new Error("Passkey setup is not enabled for this domain yet.");
+        if (error?.name === "SecurityError") throw authError('passkey_security', 'This browser could not verify Valid’s passkey domain. Open Valid in updated Chrome or Safari and try again.', 'credential_create');
         throw error;
     }
     if (!credential?.response) throw new Error("The browser did not create a passkey.");
@@ -61,11 +64,13 @@ async function createRegistrationCredential(options) {
 }
 
 export async function signInWithPasskey(api) {
+    await checkPasskeyEnvironment();
     if (!passkeysSupported()) {
         throw new Error("This browser does not support passkeys. Try Chrome or Safari on a recent device.");
     }
 
-    const challenge = await api.getPasskeyChallenge();
+    const challenge = await requestAuthChallenge(() => api.getPasskeyChallenge(), 'signin_challenge');
+    await checkPasskeyEnvironment(challenge.rpId);
     const allowCredentials = challenge.allowCredentials?.map((credentialId) => ({
         id: base64ToBytes(credentialId),
         type: "public-key",
@@ -92,7 +97,7 @@ export async function signInWithPasskey(api) {
             if (localLoopback) {
                 throw new Error("Valid passkeys belong to six7.lol and cannot be used from 127.0.0.1. Open https://six7.lol:8443/app/ on your phone.");
             }
-            throw new Error("Passkey access is not enabled for this domain yet.");
+            throw authError('passkey_security', 'This browser could not verify Valid’s passkey domain. Open Valid in updated Chrome or Safari and try again.', 'credential_get');
         }
         throw error;
     }
@@ -112,10 +117,11 @@ export async function signInWithPasskey(api) {
 }
 
 export async function createSignupPasskey(api, username) {
+    await checkPasskeyEnvironment();
     if (!passkeysSupported()) {
         throw new Error("This browser does not support passkeys. Try current Chrome, Safari, or Edge.");
     }
-    const options = await api.getWebSignupChallenge(username);
+    const options = await requestAuthChallenge(() => api.getWebSignupChallenge(username), 'signup_challenge');
     return createRegistrationCredential(options);
 }
 
@@ -123,7 +129,7 @@ export async function createAdditionalPasskey(api, userId) {
     if (!passkeysSupported()) {
         throw new Error("This browser does not support passkeys. Try current Chrome, Safari, or Edge.");
     }
-    const options = await api.getPasskeyRegistrationChallenge(userId);
+    const options = await requestAuthChallenge(() => api.getPasskeyRegistrationChallenge(userId), 'register_challenge');
     const registration = await createRegistrationCredential(options);
     await api.registerPasskey(registration);
     return registration;

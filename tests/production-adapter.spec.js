@@ -974,6 +974,45 @@ test("real adapter links signup only after Turnstile-backed SMS verification", a
     expect(verificationConfirmation.body).toEqual({ phone_number: "4155550123", code: "123456" });
 });
 
+test('signup detects Android embedded browsers before requesting SMS', async ({ page }) => {
+    await installCredentialStub(page, 'create');
+    await page.addInitScript(() => Object.defineProperty(navigator, 'userAgent', { value: 'Android; wv) Chrome/110 Instagram' }));
+    const requests = await interceptProductionAPI(page, { signup: true });
+    await page.goto('/app/?signin=1');
+    await page.getByRole('button', { name: 'Create an account' }).click();
+    await expect(page.locator('#authStatus')).toContainText('Open Valid in Chrome');
+    await expect(page.locator('#authBrowserHelp')).toHaveAttribute('href', /intent:.*signup=1/);
+    await expect(page.locator('#signupDialog')).not.toBeVisible();
+    expect(requests.some(request => /phone\/request|signup\/challenge/.test(request.path))).toBe(false);
+});
+
+for (const sessionAvailable of [true, false]) test(`signup connection loss restores session=${sessionAvailable} without duplicate completion`, async ({ page }) => {
+    await installCredentialStub(page, 'create');
+    await installTurnstileStub(page);
+    await interceptProductionAPI(page, { signup: true });
+    let completions = 0;
+    await page.route(`${API_ORIGIN}/api/v1/auth/passkey/signup/complete`, route => { completions++; return route.abort('failed'); });
+    await page.route(`${API_ORIGIN}/api/v1/auth/session`, route => route.fulfill({
+        status: completions && sessionAvailable ? 200 : 401,
+        json: completions && sessionAvailable ? { user: { id: USER_ID, subscribed_user: false } } : { detail: 'signed out' },
+    }));
+    await page.goto('/app/?signin=1');
+    await page.getByRole('button', { name: 'Create an account' }).click();
+    const dialog = page.locator('#signupDialog');
+    await fillProductionSignup(dialog);
+    await dialog.getByRole('button', { name: 'Continue', exact: true }).click();
+    if (sessionAvailable) {
+        await expect(page.getByRole('button', { name: 'Feed', exact: true })).toBeVisible();
+    } else {
+        await expect(page.locator('#signupRecoverAccount')).toBeVisible();
+        await expect(page.locator('#signupStatus')).toContainText('account may already exist');
+        await expect(dialog.getByRole('button', { name: 'Continue', exact: true })).toBeDisabled();
+        await page.locator('#signupRecoverAccount').click();
+        await expect(dialog).not.toBeVisible();
+    }
+    expect(completions).toBe(1);
+});
+
 test("signup sends existing phone identities back to sign in", async ({ page }) => {
     await installCredentialStub(page, "get");
     const requests = await interceptProductionAPI(page, { signup: true, phoneExists: true });

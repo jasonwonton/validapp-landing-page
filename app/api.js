@@ -1,3 +1,5 @@
+import { reportAuthFailure } from './auth-reliability.js';
+
 function apiBaseURL() {
     // Browser auth is first-party: production hosting must reverse-proxy this
     // path to the API just like the local HTTPS server does.
@@ -84,8 +86,24 @@ export class ValidAPI {
                 credentials: "include",
             });
         } catch (error) {
-            if (error.name === "AbortError") throw new APIError("That request took too long. Check your connection and try again.", 408);
-            throw new APIError("Could not reach Valid. Check your connection and try again.", 0);
+            const failure = error.name === 'AbortError'
+                ? new APIError('That request took too long. Check your connection and try again.', 408)
+                : new APIError(navigator.onLine === false ? 'You’re offline. Reconnect, then try again.' : 'Could not reach Valid. Check your connection and try again.', 0);
+            const authStages = {
+                '/auth/passkey/authenticate/challenge': 'signin_challenge',
+                '/auth/passkey/authenticate': 'signin_complete',
+                '/auth/passkey/signup/challenge': 'signup_challenge',
+                '/auth/passkey/signup/complete': 'signup_complete',
+                '/auth/phone/request/web': 'phone_request',
+                '/auth/phone/confirm': 'phone_confirm',
+                '/users/phone-check': 'phone_check',
+            };
+            if (authStages[path]) {
+                failure.stage = authStages[path];
+                failure.code = navigator.onLine === false ? 'offline' : failure.status === 408 ? 'request_timeout' : 'network_failure';
+                reportAuthFailure(failure);
+            }
+            throw failure;
         } finally {
             clearTimeout(timeout);
         }
