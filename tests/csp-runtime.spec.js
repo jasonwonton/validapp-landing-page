@@ -19,6 +19,13 @@ test("strict production CSP keeps dynamic app layout functional without inline s
     page.on("pageerror", (error) => pageErrors.push(error.message));
     await stubTurnstileScript(page);
     await page.goto("/app/?demo=1&signin=1");
+    await page.evaluate(async () => {
+        const { DemoAPI } = await import('/app/demo-api.js');
+        DemoAPI.prototype.putDirectUpload = async (_file, _session, { onProgress } = {}) => {
+            onProgress?.(0.5);
+            await new Promise(resolve => { window.finishCSPUpload = resolve; });
+        };
+    });
 
     await expect.poll(() => page.evaluate(() => (
         getComputedStyle(document.documentElement).getPropertyValue("--visual-viewport-width").trim()
@@ -30,9 +37,20 @@ test("strict production CSP keeps dynamic app layout functional without inline s
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Weekend Crew/ }).click();
 
-    const progress = page.locator(".chat-daily-progress i");
+    // The permanent daily-progress banner was deliberately removed. Exercise
+    // the actual transient upload progress instead, under the same strict CSP.
+    await page.locator('.chat-daily-row > button').click();
+    const capture = page.getByRole('dialog', { name: 'Create a Memento' });
+    await capture.locator('.memento-file-input').setInputFiles('assets/AppIconV2.png');
+    await capture.getByRole('button', { name: 'Send to Weekend Crew', exact: true }).click();
+    const progress = page.locator('.memento-progress span');
+    await expect.poll(() => page.evaluate(() => typeof window.finishCSPUpload)).toBe('function');
     await expect(progress).toBeVisible();
     expect(await progress.evaluate((element) => Number.parseFloat(getComputedStyle(element).width))).toBeGreaterThan(0);
+    await page.evaluate(() => window.finishCSPUpload());
+    await expect(capture).toBeHidden();
+    await page.locator('[data-open-memento-gallery]').click();
+    await expect(page.getByRole('dialog', { name: 'Mementos', exact: true })).toBeVisible();
     expect(await page.locator("[style]").count()).toBe(0);
     expect(styleViolations).toEqual([]);
     expect(pageErrors).toEqual([]);

@@ -2,7 +2,7 @@
 
 ## Scope and decision
 
-Frontend-only follow-up for private staging, web-v74 (superseding web-v73). No backend, API contract,
+Frontend-only follow-up for private staging, web-v75 (superseding web-v73/74). No backend, API contract,
 APNS, SMS, membership, moderation, or production feature-flag changes.
 The overall PWA remains **Partial / Not yet tested**, not Production-ready.
 
@@ -49,6 +49,10 @@ artwork retain the Six7 identity; no decorative emoji were added.
   remain in-memory; recovery after closing a tab is not newly guaranteed.
 - Existing Memento and media outboxes, upload/finalize/publish, reaction values,
   private URLs, server membership rules and service-worker allowlist are retained.
+- The revised strict-CSP test exposed a pre-existing CSS specificity bug:
+  progress width stayed at zero even when the trusted runtime rule supplied
+  48%. The default zero-width rule now applies only before a runtime style is
+  attached. No inline styles or CSP exceptions were introduced.
 
 ## Validation and release record
 
@@ -62,7 +66,7 @@ artwork retain the Six7 identity; no decorative emoji were added.
 - `scripts/audit-ui.mjs` adds posted-room, history and standalone sticker views
   to the existing light/dark screenshots. These contain synthetic/demo data.
 - Build, UI runtime, gateway (7), static-origin (3) and performance budgets pass.
-  Shell: 42 entries, 676,759 estimated transferred bytes (<750 KB budget).
+  Shell: 42 entries, 676,785 estimated transferred bytes (<750 KB budget).
 - Broad Chromium/Pixel-emulation, desktop Chromium, Firefox and WebKit run:
   **425 passed, 11 explicitly skipped**, zero retries. Includes contracts,
   core journeys, Mementos, sticker creation, recovery and update/rollback.
@@ -83,6 +87,12 @@ artwork retain the Six7 identity; no decorative emoji were added.
 - Final per-chat correction, hierarchy, Mementos, capture and HTTP-contract
   rerun: **200 passed, 4 synthetic-camera platform skips**, zero retries, across
   all four projects. Final web-v74 update/rollback: **2 passed, 2 platform skips**.
+- Final web-v75 strict-CSP upload/gallery and update/rollback suite:
+  **10 passed, 2 platform skips**, zero retries. Hosted checks on the earlier
+  candidate caught an obsolete assertion for the removed banner; it now checks
+  real upload progress and gallery opening, retaining no-inline-style and
+  zero-CSP-error assertions. That stronger check exposed and verified the
+  progress-width fix above.
 
 ## Rollback and next work
 

@@ -326,7 +326,8 @@
 .chat-sticker-maker-actions button:disabled { opacity: .52; }
 .memento-form input[type="text"], .memento-caption, .chat-media-overlay { min-height: 46px; padding: 8px 11px; border: 2px solid var(--ink); border-radius: 12px; background: var(--white); }
 .memento-progress, .chat-media-progress { height: 8px; overflow: hidden; border-radius: 999px; background: rgba(5,9,20,.12); }
-.memento-progress span, .chat-media-progress span { display: block; width: 0; height: 100%; background: #1eb780; transition: width .15s linear; }
+.memento-progress span, .chat-media-progress span { display: block; height: 100%; background: #1eb780; transition: width .15s linear; }
+.memento-progress span:not([data-valid-runtime-style]), .chat-media-progress span:not([data-valid-runtime-style]) { width: 0; }
 .memento-status, .chat-media-status { min-height: 1.3em; margin: -4px 0; color: var(--muted); font-size: .78rem; text-align: center; }
 .memento-skip { min-height: 44px; border: 0; background: transparent; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
 .chat-media-viewer { width: 100%; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)); border: 0; background: #050914; color: #fff; }
