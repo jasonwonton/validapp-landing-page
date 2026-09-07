@@ -20,6 +20,8 @@ import {
 } from "./outbox.js";
 import { createCallsController } from "../calls/index.js";
 import { createCameraEffectPicker } from "../camera-effects.js";
+import { createLiveCamera } from "../live-camera.js";
+import { uiIcon } from "../ui-icons.js";
 import { createMediaOverlayPositioner } from "../media-overlay-positioner.js";
 import { setRuntimeStyles } from "../runtime-style.js";
 import {
@@ -108,14 +110,14 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     root.innerHTML = `
         <div class="chat-shell">
             <section class="chat-list-screen" data-chat-screen="list">
-                <header class="chat-page-header"><div><p>Memento</p><h1>Chats</h1></div><button class="chat-icon-button" type="button" data-new-chat aria-label="Start a chat">＋</button></header>
-                <form class="chat-search-form" role="search"><label><span aria-hidden="true">⌕</span><input type="search" minlength="2" maxlength="100" placeholder="Search chats and messages" aria-label="Search chats and messages" autocomplete="off"></label><button type="submit">Search</button></form>
+                <header class="chat-page-header"><button class="chat-icon-button" type="button" data-focus-chat-search aria-label="Search chats">${uiIcon('search')}</button><h1>Chats</h1><button class="chat-icon-button" type="button" data-new-chat aria-label="Start a chat">${uiIcon('compose')}</button></header>
+                <form class="chat-search-form" role="search"><label><span aria-hidden="true">${uiIcon('search')}</span><input type="search" minlength="2" maxlength="100" placeholder="Search chats and messages" aria-label="Search chats and messages" autocomplete="off"></label><button type="submit">Search</button></form>
                 <div class="chat-list-status" role="status"></div>
                 <div class="chat-search-results hidden" aria-label="Chat search results"></div>
                 <div class="chat-list" aria-label="Conversations"></div>
             </section>
             <section class="chat-create-screen hidden" data-chat-screen="create">
-                <header class="chat-room-header"><button class="chat-back" type="button" data-chat-list aria-label="Back to chats">‹</button><strong>New chat</strong><button class="chat-create-submit" type="button" data-create-submit disabled>Create</button></header>
+                <header class="chat-room-header"><button class="chat-back" type="button" data-chat-list aria-label="Back to chats">${uiIcon("back")}</button><strong>New chat</strong><button class="chat-create-submit" type="button" data-create-submit disabled>Create</button></header>
                 <div class="chat-create-body">
                     <label class="chat-group-name hidden">Group name<input type="text" maxlength="40" placeholder="Name your group"></label>
                     <label class="chat-person-search"><span>⌕</span><input type="search" placeholder="Search classmates" autocomplete="off"></label>
@@ -124,7 +126,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 </div>
             </section>
             <section class="chat-room-screen hidden" data-chat-screen="room">
-                <header class="chat-room-header"><button class="chat-back" type="button" data-chat-list aria-label="Back to chats">‹</button><button class="chat-room-title" type="button" data-chat-settings><strong>Chat</strong><small>Loading…</small></button><span class="chat-call-actions hidden"><button class="chat-icon-button" type="button" data-start-call="audio" aria-label="Start voice call">☎</button><button class="chat-icon-button" type="button" data-start-call="video" aria-label="Start video call">▣</button></span><button class="chat-icon-button" type="button" data-chat-settings aria-label="Chat settings">•••</button></header>
+                <header class="chat-room-header"><button class="chat-back" type="button" data-chat-list aria-label="Back to chats">${uiIcon("back")}</button><button class="chat-room-title" type="button" data-chat-settings><strong>Chat</strong><small>Loading…</small></button><span class="chat-call-actions hidden"><button class="chat-icon-button" type="button" data-start-call="audio" aria-label="Start voice call">${uiIcon("phone")}</button><button class="chat-icon-button" type="button" data-start-call="video" aria-label="Start video call">${uiIcon("video")}</button></span><button class="chat-icon-button" type="button" data-chat-settings aria-label="Chat settings">${uiIcon("more")}</button></header>
                 <div class="chat-daily-row"></div>
                 <div class="chat-room-status" role="status"></div>
                 <button class="chat-load-earlier hidden" type="button" data-load-earlier>Load earlier messages</button>
@@ -137,27 +139,31 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                         <span><strong></strong><small>Add an optional message</small></span>
                         <button type="button" data-remove-memento-draft aria-label="Remove Memento">×</button>
                     </div>
-                    <button class="chat-camera-button" type="button" data-open-memento aria-label="Take today's Memento">📷</button>
-                    <button class="chat-attachment-button" type="button" data-open-chat-media aria-label="Send media or a sticker">＋</button>
+                    <button class="chat-camera-button" type="button" data-open-memento aria-label="Take today's Memento">${uiIcon('camera')}</button>
+                    <button class="chat-attachment-button" type="button" data-open-chat-media aria-label="Send media or a sticker">${uiIcon('plus')}</button>
                     <textarea rows="1" maxlength="2000" placeholder="Message" aria-label="Message"></textarea>
-                    <button class="chat-send-button" type="submit" aria-label="Send message">↑</button>
+                    <button class="chat-send-button" type="submit" aria-label="Send message">${uiIcon('send')}</button>
                 </form>
             </section>
         </div>
         <dialog class="chat-sheet" data-memento-dialog aria-label="Create a Memento">
             <form class="memento-form">
                 <header><button type="button" data-close-memento>Cancel</button><strong>Today's Memento</strong><span></span></header>
-                <div class="memento-preview"><span aria-hidden="true">📸</span><p>Capture one real moment from today.</p></div>
-                <div class="memento-capture-inputs">
+                <section class="live-camera" data-memento-camera hidden aria-label="Memento camera"></section>
+                <div class="memento-review-content">
+                <div class="memento-preview">${uiIcon('camera')}<p>Capture one real moment from today.</p></div>
+                <button class="memento-retake" type="button" data-retake-memento>${uiIcon('camera')} Take a new photo</button>
+                <details class="memento-photo-fallback"><summary>Choose existing photos instead</summary><div class="memento-capture-inputs">
                     <label><span>First view · rear camera</span><input class="memento-file-input" type="file" accept="image/*" capture="environment"></label>
                     <label><span>Second view · front camera</span><input class="memento-secondary-file-input" type="file" accept="image/*" capture="user"></label>
-                </div>
-                <small class="memento-capture-hint">Add both views for the iOS-style swappable Memento. Browsers capture them one after the other; one view remains a safe fallback.</small>
+                </div></details>
+                <small class="memento-capture-hint">Your Memento is shared only when you tap Share to this chat.</small>
                 <fieldset class="camera-effect-picker hidden" data-memento-effects><legend>Photo effect</legend><div data-camera-effect-options></div><small>Browser Effects bake supported color and lighting into the photo. Face/body-tracked lenses and filtered video remain available in iOS.</small></fieldset>
                 <label>Caption <input class="memento-caption" maxlength="120" placeholder="What are you up to?"></label>
                 <p class="memento-audience"><strong>Sharing with</strong> <span></span></p>
                 <div class="memento-progress hidden"><span></span></div>
                 <p class="memento-status" role="status"></p>
+                </div>
                 <button class="primary-button memento-publish" type="submit" disabled>Share to this chat</button>
                 <button class="memento-skip" type="button" data-skip-memento>Skip for today</button>
             </form>
@@ -195,7 +201,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         <dialog class="chat-sheet" data-chat-settings-dialog aria-label="Chat settings"><div class="chat-settings-content"></div></dialog>
         <dialog class="chat-sheet" data-chat-reactors-dialog aria-label="Message reactions"><div class="chat-reactors-content"></div></dialog>
         <dialog class="chat-sheet" data-chat-readers-dialog aria-label="Read receipts"><div class="chat-readers-content"></div></dialog>
-        <dialog class="chat-media-viewer" data-chat-media-viewer aria-label="Chat media"><button type="button" data-close-media aria-label="Close">×</button><img alt="" hidden><video playsinline controls hidden></video><div class="chat-viewer-overlay" hidden></div><p></p><div class="chat-viewer-actions"><button type="button" data-swap-viewed-memento aria-label="Swap front and back photos" hidden>⇄ Swap views</button><button type="button" data-share-viewed-memento hidden>Share</button><button type="button" data-reply-viewed-media hidden>Reply</button><button type="button" data-react-viewed-media hidden>❤️ React</button></div></dialog>`;
+        <dialog class="chat-media-viewer" data-chat-media-viewer aria-label="Chat media"><button type="button" data-close-media aria-label="Close">×</button><img alt="" hidden><video playsinline controls hidden></video><div class="chat-viewer-overlay" hidden></div><p></p><div class="chat-viewer-actions"><button type="button" data-swap-viewed-memento aria-label="Swap front and back photos" hidden>⇄ Swap views</button><button type="button" data-share-viewed-memento hidden>Share</button><button type="button" data-reply-viewed-media hidden>Reply</button><button type="button" data-react-viewed-media hidden>${uiIcon("heart")} React</button></div></dialog>`;
 
     const $ = (selector) => root.querySelector(selector);
     const $$ = (selector) => [...root.querySelectorAll(selector)];
@@ -213,6 +219,29 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         api,
         onChange: (effect) => reprepareSelectedChatPhoto(effect),
     });
+    const mementoCamera = createLiveCamera({
+        container: $('[data-memento-camera]'),
+        onCapture: async ([first, second]) => {
+            $('[data-memento-dialog]').classList.remove('is-capturing');
+            selectedMementoSourceFile = first;
+            selectedMementoSecondarySourceFile = second || null;
+            mementoFrontIsPrimary = false;
+            mementoEffectPicker.setMediaKind('photo');
+            await prepareSelectedMemento(first, mementoEffectPicker.value());
+        },
+        onFallback: () => {
+            $('[data-memento-dialog]').classList.remove('is-capturing');
+            $('.memento-photo-fallback').open = true;
+            $('.memento-file-input').focus();
+        },
+    });
+    function startMementoCamera() {
+        $('[data-memento-dialog]').classList.add('is-capturing');
+        $('.memento-photo-fallback').open = false;
+        mementoCamera.open();
+    }
+    $('[data-retake-memento]').addEventListener('click', startMementoCamera);
+    $('[data-focus-chat-search]').addEventListener('click', () => $('.chat-search-form input').focus());
     const stickerMaker = createStickerMaker({
         dialog: $("[data-sticker-maker-dialog]"),
         saveSticker: (file) => api.createSticker(file),
@@ -335,7 +364,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         $(".chat-list-status").textContent = "";
         const entries = store.state.chats.map((chat) => ({ key: chat.id, html: chatRowMarkup(chat) }));
         if (!entries.length) {
-            list.innerHTML = `<article class="chat-empty"><span>💬</span><h2>No chats yet</h2><p>Start a group and capture today's Memento together.</p><button class="primary-button" type="button" data-new-chat>Start a chat</button></article>`;
+            list.innerHTML = `<article class="chat-empty"><span>${uiIcon("chat")}</span><h2>No chats yet</h2><p>Start a group and capture today's Memento together.</p><button class="primary-button" type="button" data-new-chat>Start a chat</button></article>`;
         } else {
             reconcileKeyedElements(list, entries);
         }
@@ -481,11 +510,11 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             return `<button type="button" data-memento-date="${key}" class="${selected ? "selected" : ""}" aria-label="${escapeChatHTML(new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric" }).format(date))}" aria-pressed="${selected}"><small>${escapeChatHTML(new Intl.DateTimeFormat(undefined, { weekday: "narrow" }).format(date))}</small><strong>${date.getDate()}</strong>${cached ? `<span>${Number(cached.posted_count || 0)}/${Number(cached.eligible_count || 0)}</span>` : `<i></i>`}</button>`;
         }).join("");
         const completion = eligible ? Math.min(100, Math.round((posted / eligible) * 100)) : 0;
-        container.innerHTML = `<div class="chat-memento-week" aria-label="Memento dates">${dateButtons}</div><button type="button" data-open-memento ${!isToday || row.viewer_is_eligible === false || row.viewer_has_posted_today ? "data-show-mementos" : ""}><span class="chat-daily-icon">📸</span><span><strong>${isToday ? (row.viewer_has_posted_today ? "Today's Mementos" : "Take today's Memento") : `${dateLabel}'s Mementos`}</strong><small>${posted} of ${eligible} captured${row.view_gate_locked ? " · add yours to reveal" : ""}</small><span class="chat-daily-progress" aria-hidden="true"><i></i></span></span><b>›</b></button><div class="chat-memento-strip">${entries.map((entry) => {
+        container.innerHTML = `<div class="chat-memento-week" aria-label="Memento dates">${dateButtons}</div><button type="button" data-open-memento ${!isToday || row.viewer_is_eligible === false || row.viewer_has_posted_today ? "data-show-mementos" : ""}><span class="chat-daily-icon">${uiIcon("camera")}</span><span><strong>${isToday ? (row.viewer_has_posted_today ? "Today's Mementos" : "Take today's Memento") : `${dateLabel}'s Mementos`}</strong><small>${posted} of ${eligible} captured${row.view_gate_locked ? " · add yours to reveal" : ""}</small><span class="chat-daily-progress" aria-hidden="true"><i></i></span></span><b>›</b></button><div class="chat-memento-strip">${entries.map((entry) => {
             const src = safeMediaURL(entry.image_url, api);
             const swapped = safeMediaURL(entry.swapped_image_url, api);
             const name = escapeChatHTML(entry.first_name || "Student");
-            return src ? `<button type="button" data-view-memento="${escapeChatHTML(src)}" ${swapped ? `data-memento-swapped="${escapeChatHTML(swapped)}"` : ""} data-memento-owner="${escapeChatHTML(displayMember(entry))}" data-memento-entry="${escapeChatHTML(entry.entry_id || "")}"><img src="${escapeChatHTML(src)}" alt="${escapeChatHTML(displayMember(entry))}'s Memento" loading="lazy" decoding="async"><span>${name}</span></button>` : `<span class="chat-memento-missing"><i aria-hidden="true">${entry.has_posted ? "🔒" : "⌛"}</i><span>${name}</span><small>${entry.has_posted ? "Locked" : "Waiting"}</small></span>`;
+            return src ? `<button type="button" data-view-memento="${escapeChatHTML(src)}" ${swapped ? `data-memento-swapped="${escapeChatHTML(swapped)}"` : ""} data-memento-owner="${escapeChatHTML(displayMember(entry))}" data-memento-entry="${escapeChatHTML(entry.entry_id || "")}"><img src="${escapeChatHTML(src)}" alt="${escapeChatHTML(displayMember(entry))}'s Memento" loading="lazy" decoding="async"><span>${name}</span></button>` : `<span class="chat-memento-missing"><i aria-hidden="true">${uiIcon(entry.has_posted ? "lock" : "clock")}</i><span>${name}</span><small>${entry.has_posted ? "Locked" : "Waiting"}</small></span>`;
         }).join("")}</div>`;
         setRuntimeStyles($(".chat-daily-progress i"), { width: `${completion}%` });
         const locked = row.view_gate_locked === true;
@@ -564,7 +593,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         const acceptedOthers = (store.state.detail?.members || []).filter((member) => member.status === "accepted" && String(member.user_id) !== String(userId()));
         const receipt = readers.length ? `<button type="button" class="chat-read-receipt" data-view-readers="${escapeChatHTML(message.id)}">${acceptedOthers.length > 1 ? `Read by ${readers.length}` : "Read"}</button>` : "";
         const viewReceipt = mine && message.view_once ? `<button type="button" class="chat-read-receipt" data-view-once-receipts="${escapeChatHTML(message.id)}">View receipts</button>` : "";
-        return `<article class="chat-message ${mine ? "mine" : "theirs"} ${startsSequence ? "starts-sequence" : ""} ${endsSequence ? "ends-sequence" : ""} ${message.delivery_state || ""}" ${position} data-list-key="${escapeChatHTML(message.id)}" data-message-id="${escapeChatHTML(message.id)}"><div class="chat-message-meta">${!mine && startsSequence ? `<strong>${escapeChatHTML(message.sender_first_name || "Student")}</strong>` : ""}</div><div class="chat-bubble" data-message-bubble="${escapeChatHTML(message.id)}">${replyMarkup}${media}${message.kind === "memento" ? `<small class="memento-label">✦ Memento</small>` : message.kind === "story" ? `<small class="memento-label">✦ ${message.story_share_context === "reply" ? "Story reply" : "Shared Story"}</small>` : ""}${body}<time>${escapeChatHTML(message.delivery_state === "sending" ? "Sending…" : message.delivery_state === "failed" ? "Not sent" : messageTime(message.created_at))}</time><button class="chat-message-menu-button" type="button" data-message-menu="${escapeChatHTML(message.id)}" aria-label="Message actions" aria-expanded="false">•••</button></div>${message.delivery_state === "failed" ? `<button class="chat-retry" type="button" data-retry-message="${escapeChatHTML(message.client_request_id)}">Retry</button>` : ""}<div class="chat-message-actions"><div class="chat-reaction-picker">${CHAT_REACTIONS.map(([type, emoji]) => `<button type="button" aria-label="React ${type}" data-react-message="${escapeChatHTML(message.id)}" data-reaction="${type}" class="${message.current_user_reaction === type ? "active" : ""}">${emoji}</button>`).join("")}</div><div class="chat-action-list"><button type="button" data-reply-message="${escapeChatHTML(message.id)}">↩ Reply</button>${message.body ? `<button type="button" data-copy-message="${escapeChatHTML(message.id)}">⧉ Copy</button>` : ""}<button type="button" data-delete-message="${escapeChatHTML(message.id)}">Hide for me</button>${mine && message.delivery_state === "sent" ? `<button class="danger" type="button" data-unsend-message="${escapeChatHTML(message.id)}">Unsend</button>` : ""}</div></div>${reactions ? `<button type="button" class="chat-reaction-summary" data-view-reactions="${escapeChatHTML(message.id)}" aria-label="View reactions">${reactions}</button>` : ""}${viewReceipt || receipt}</article>`;
+        return `<article class="chat-message ${mine ? "mine" : "theirs"} ${startsSequence ? "starts-sequence" : ""} ${endsSequence ? "ends-sequence" : ""} ${message.delivery_state || ""}" ${position} data-list-key="${escapeChatHTML(message.id)}" data-message-id="${escapeChatHTML(message.id)}"><div class="chat-message-meta">${!mine && startsSequence ? `<strong>${escapeChatHTML(message.sender_first_name || "Student")}</strong>` : ""}</div><div class="chat-bubble" data-message-bubble="${escapeChatHTML(message.id)}">${replyMarkup}${media}${message.kind === "memento" ? `<small class="memento-label">✦ Memento</small>` : message.kind === "story" ? `<small class="memento-label">✦ ${message.story_share_context === "reply" ? "Story reply" : "Shared Story"}</small>` : ""}${body}<time>${escapeChatHTML(message.delivery_state === "sending" ? "Sending…" : message.delivery_state === "failed" ? "Not sent" : messageTime(message.created_at))}</time><button class="chat-message-menu-button" type="button" data-message-menu="${escapeChatHTML(message.id)}" aria-label="Message actions" aria-expanded="false">${uiIcon("more")}</button></div>${message.delivery_state === "failed" ? `<button class="chat-retry" type="button" data-retry-message="${escapeChatHTML(message.client_request_id)}">Retry</button>` : ""}<div class="chat-message-actions"><div class="chat-reaction-picker">${CHAT_REACTIONS.map(([type, emoji]) => `<button type="button" aria-label="React ${type}" data-react-message="${escapeChatHTML(message.id)}" data-reaction="${type}" class="${message.current_user_reaction === type ? "active" : ""}">${emoji}</button>`).join("")}</div><div class="chat-action-list"><button type="button" data-reply-message="${escapeChatHTML(message.id)}">↩ Reply</button>${message.body ? `<button type="button" data-copy-message="${escapeChatHTML(message.id)}">⧉ Copy</button>` : ""}<button type="button" data-delete-message="${escapeChatHTML(message.id)}">Hide for me</button>${mine && message.delivery_state === "sent" ? `<button class="danger" type="button" data-unsend-message="${escapeChatHTML(message.id)}">Unsend</button>` : ""}</div></div>${reactions ? `<button type="button" class="chat-reaction-summary" data-view-reactions="${escapeChatHTML(message.id)}" aria-label="View reactions">${reactions}</button>` : ""}${viewReceipt || receipt}</article>`;
     }
 
     function readReceiptMembers(message) {
@@ -897,6 +926,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         renderMementoAudience();
         $(".memento-skip").classList.toggle("hidden", row?.view_gate_locked !== true);
         $("[data-memento-dialog]").showModal();
+        startMementoCamera();
         void mementoEffectPicker.load();
     }
 
@@ -926,6 +956,8 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     async function selectMemento(event) {
         const file = event.target.files?.[0];
         if (!file) return;
+        mementoCamera.close();
+        $('[data-memento-dialog]').classList.remove('is-capturing');
         selectedMementoSourceFile = file;
         mementoFrontIsPrimary = false;
         mementoEffectPicker.setMediaKind("photo");
@@ -981,7 +1013,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         selectedMementoPreview = selectedMementoFile ? URL.createObjectURL(selectedMementoFile) : null;
         $(".memento-preview").innerHTML = selectedMementoPreview
             ? `<img src="${escapeChatHTML(selectedMementoPreview)}" alt="Memento preview">${selectedMementoSecondaryFile ? '<button class="memento-preview-swap" type="button" data-swap-memento-capture aria-label="Swap front and back photos"></button>' : ""}`
-            : `<span aria-hidden="true">📸</span><p>Capture one real moment from today.</p>`;
+            : `<span aria-hidden="true">${uiIcon("camera")}</span><p>Capture one real moment from today.</p>`;
     }
 
     function swapSelectedMementoViews() {
@@ -1047,6 +1079,9 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     }
 
     function resetMementoComposer() {
+        mementoCamera.close();
+        $(".memento-publish").disabled = true;
+        $('[data-memento-dialog]').classList.remove('is-capturing');
         mementoPreparationGeneration += 1;
         selectedMementoFile = null;
         selectedMementoSecondaryFile = null;
@@ -1065,7 +1100,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         $(".memento-caption").disabled = false;
         $(".memento-audience span").textContent = "";
         $(".memento-skip").disabled = false;
-        $(".memento-preview").innerHTML = `<span aria-hidden="true">📸</span><p>Capture one real moment from today.</p>`;
+        $(".memento-preview").innerHTML = `${uiIcon('camera')}<p>Capture one real moment from today.</p>`;
         $(".memento-status").textContent = "";
         $(".memento-progress").classList.add("hidden");
         setRuntimeStyles($(".memento-progress span"), { width: "0" });
@@ -2063,5 +2098,5 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         }
     }
 
-    return { activate, refresh, openChat, store, beforeSessionEnd: calls.beforeSessionEnd };
+    return { activate, refresh, openChat, store, beforeSessionEnd: async () => { mementoCamera.close(); return calls.beforeSessionEnd(); } };
 }

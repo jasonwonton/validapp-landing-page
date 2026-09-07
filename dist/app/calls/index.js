@@ -1,3 +1,4 @@
+import { uiIcon } from '../ui-icons.js';
 const TERMINAL_STATES = new Set(["ended", "declined", "missed", "cancelled", "failed"]);
 
 async function loadLiveKit() {
@@ -34,7 +35,7 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
     dialog.setAttribute("aria-label", "Valid call");
     dialog.innerHTML = `
         <section class="call-card">
-            <header><span class="call-kind" aria-hidden="true">☎</span><div><strong data-call-title>Valid call</strong><small data-call-status>Connecting…</small></div></header>
+            <header><span class="call-kind" aria-hidden="true">${uiIcon('phone')}</span><div><strong data-call-title>Valid call</strong><small data-call-status>Connecting…</small></div></header>
             <div class="call-media-grid" data-call-media aria-live="polite"></div>
             <div class="call-incoming-actions hidden" data-call-incoming-actions>
                 <button class="call-decline" type="button" data-call-decline>Decline</button>
@@ -153,7 +154,7 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
     function renderParticipants() {
         clearAttachedMedia();
         if (!room) {
-            mediaNode.innerHTML = `<div class="call-avatar" aria-hidden="true">${currentCall?.media_type === "video" ? "▣" : "☎"}</div>`;
+            mediaNode.innerHTML = `<div class="call-avatar" aria-hidden="true">${uiIcon(currentCall?.media_type === 'video' ? 'video' : 'phone')}</div>`;
             return;
         }
         mediaNode.append(participantCard(room.localParticipant, true));

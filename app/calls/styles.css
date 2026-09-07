@@ -66,6 +66,7 @@
 }
 
 .call-avatar { font-size: 4rem; }
+.call-avatar .ui-icon { width: 64px; height: 64px; }
 
 .call-participant > span {
     position: absolute;

@@ -1,9 +1,15 @@
 # Six7 iOS → PWA parity and release matrix
 
-Last audited: September 6, 2026
+Last audited: September 7, 2026
 Authorities: the current Swift client and the Six7 backend contracts. The backend remains authoritative for identity, membership history, moderation, reciprocity, idempotency, notification eligibility, and media lifecycle.
 
 ## Status contract
+
+**Experience audit correction:** passing API/demo tests is not native-quality
+parity. [UI_EXPERIENCE_AUDIT.md](UI_EXPERIENCE_AUDIT.md) records the current
+consumer-surface visual/interaction assessment; every major surface remains
+Partial pending the stated gates. The feature rows below retain their narrower
+implementation evidence, not a claim that the whole screen feels like iOS.
 
 `Parity` uses exactly one of these values:
 
@@ -41,7 +47,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Exact call deep link | Equivalent | Not yet tested | Expiring Web Push and foreground call events route to `?tab=chats&chat=<id>&call=<id>`; the cold-start contract is automated and final-origin tray proof remains. |
 | Pending text after refresh/reopen | Equivalent | Not yet tested | User-scoped IndexedDB outbox is capped at 50/user and 200/global, expires at 7 days, retries at most 8 times with bounded backoff, and reuses the same request ID. Physical killed-tab recovery remains. |
 | Pending text after logout/deletion request | Equivalent | Not yet tested | Both text and media outboxes are erased for that user; automated coverage passes and final-origin verification remains. |
-| Daily Memento capture and JPEG preparation | Equivalent | Not yet tested | The deliberate browser alternative captures rear and front views sequentially, builds the same two swappable 1080×1440 composites with inset framing, and retains a safe single-view fallback. Locally baked photo Effects remain bounded; physical Pixel, Samsung, and iPhone camera UX remains. |
+| Daily Memento capture and JPEG preparation | Partial | Not yet tested | Replaced picker-first inputs with live camera preview, shutter, sequential views, camera switching, retake and explicit single-view/library alternatives. Two swappable 1080×1440 composites retain the existing backend lifecycle. Real lens/orientation, device camera and interrupted capture acceptance remain; simultaneous iOS dual-camera capture is not claimed. |
 | Memento upload/finalize/publish | Equivalent | Not yet tested | Both private composites use one authoritative upload session, one finalize, exactly one active-chat publish, and the same stable request ID. The dual-image IndexedDB record is bounded and resumes on the next Chats open; physical interruption testing remains. |
 | Memento reciprocity gate | Equivalent | Not yet tested | Locked message bodies stay out of the DOM; unlock journey passes in all four lab projects. |
 | Skip Memento for today | Equivalent | Not yet tested | Uses the same authoritative daily-row skip endpoint and unlocks without fabricating a post. |
@@ -115,7 +121,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Cold startup / route splitting | Equivalent | Not yet tested | Lab DCL improved from 5.65 s to 1.93 s; final-origin RUM p75 is required. |
 | Stable keyed feed/chat rows | Equivalent | Not yet tested | Runtime/performance checks enforce identity-preserving reconciliation; overflow-safe bottom alignment prevents long chats from rendering behind the Memento rail. |
 | Long-list DOM bounds | Equivalent | Not yet tested | The authoritative store remains capped at 500 messages while accessible overlapping windows render at most 120 message nodes. Earlier/newer controls preserve an overlap anchor, expose absolute list positions, and reveal hidden reply or exact deep-link targets. A 500-message traversal/DOM soak passes in all four browser projects; physical low-memory long-scroll remains a release gate. |
-| Responsive touch interactions | Equivalent | Not yet tested | Pixel emulation passes; physical low/midrange Android gate remains. |
+| Responsive touch interactions | Partial | Not yet tested | Pixel emulation passes but is not evidence of native feel. Matched iOS/PWA physical touch, scrolling, transitions and low/midrange Android checks remain. |
 | Keyboard-safe layouts | Partial | Not yet tested | Visual Viewport handling exists; Samsung Keyboard, Gboard, and iPhone PWA checks remain. |
 | Camera/composer polish | Partial | Not yet tested | Sequential front/rear Memento capture and swapping, single-view fallback, preview, bounded offline/Featured photo Effects, compression, progress, compatible live MP4 voice recording with M4A fallback, photo/video selection, view-once, overlay, reply, and reactions work; physical camera/microphone/keyboard and richer editing remain. |
 | Accessibility semantics/focus | Partial | Not yet tested | Labels, live regions, reduced motion, and touch targets exist; screen-reader and contrast audit remain. |
@@ -123,7 +129,7 @@ Authorities: the current Swift client and the Six7 backend contracts. The backen
 | Offline private-data isolation | Equivalent | Not yet tested | No authenticated API/media response enters Cache Storage; scoped snapshots/outbox are cleared at account exit. |
 | Predictable app updates | Equivalent | Not yet tested | Telemetry/cache versions remain synchronized. A private-origin Chromium soak holds v66 active until the user accepts the waiting v67 worker, proves matching HTML/JavaScript generations, one-cache activation, offline relaunch, and pending-send preservation, then rolls back to v66 and forward to v67 again. Physical installed-PWA update/backgrounding remains a release gate. |
 | Strict CSP runtime behavior | Equivalent | Not yet tested | Response and meta policies keep `style-src 'self'` without `unsafe-inline`; bounded same-origin CSSOM rules cover dynamic progress, overlays, viewport, crop, and drag state in all four lab projects. Final-origin header verification remains. |
-| Dark Mode | Equivalent | Not yet tested | System color scheme now drives the core shell, Chats, Mementos, forms, and dialogs; automated computed-style check plus visual/accessibility review remain. |
+| Dark Mode | Partial | Not yet tested | Light/dark main surfaces reviewed; near-black inactive navigation and white-on-peach primary text corrected. Full screen/contrast/text-size and physical accessibility acceptance remain. |
 | Haptics | Partial | Not yet tested | Android vibration is progressive enhancement; precise native haptic parity is unavailable. |
 | Contact picking | Native-only | Not yet tested | Web alternative is the user-gesture Contact Picker with explicit selection only. |
 | Native share sheets | Native-only | Not yet tested | Web Share API with clipboard fallback. |

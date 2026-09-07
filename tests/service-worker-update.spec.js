@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { createStaticOrigin } from "../scripts/serve-production.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
-const CURRENT_VERSION = 67;
+const CURRENT_VERSION = 69;
 
 async function listen(server) {
     await new Promise((resolve, reject) => {
@@ -47,7 +47,7 @@ test("a waiting worker upgrades and rolls back without losing a pending send", a
         ]);
     };
 
-    await writeVersion(66);
+    await writeVersion(67);
     const server = await createStaticOrigin({ root: fixtureRoot });
     const origin = await listen(server);
     const appVersion = page.locator('meta[name="valid-app-version"]');
@@ -103,9 +103,9 @@ test("a waiting worker upgrades and rolls back without losing a pending send", a
         }));
         await page.goto(`${origin}/app/?signin=1`);
         await waitForController();
-        await expect(appVersion).toHaveAttribute("content", "web-v66");
-        await expect.poll(() => page.evaluate(() => window.__VALID_UPDATE_FIXTURE_VERSION)).toBe(66);
-        await expect.poll(cacheNames).toEqual(["valid-web-v66"]);
+        await expect(appVersion).toHaveAttribute("content", "web-v67");
+        await expect.poll(() => page.evaluate(() => window.__VALID_UPDATE_FIXTURE_VERSION)).toBe(67);
+        await expect.poll(cacheNames).toEqual(["valid-web-v67"]);
 
         await page.evaluate(async () => {
             const outbox = await import("/app/chat/outbox.js");
@@ -117,18 +117,18 @@ test("a waiting worker upgrades and rolls back without losing a pending send", a
             });
         });
 
-        await installWaitingVersion(66, 67);
+        await installWaitingVersion(67, CURRENT_VERSION);
 
         await context.setOffline(true);
         await page.reload();
         await expect(page).toHaveTitle("Valid");
-        await expect(appVersion).toHaveAttribute("content", "web-v67");
-        await expect.poll(() => page.evaluate(() => window.__VALID_UPDATE_FIXTURE_VERSION)).toBe(67);
+        await expect(appVersion).toHaveAttribute("content", `web-v${CURRENT_VERSION}`);
+        await expect.poll(() => page.evaluate(() => window.__VALID_UPDATE_FIXTURE_VERSION)).toBe(CURRENT_VERSION);
         await expect.poll(pendingSend).toHaveLength(1);
         await context.setOffline(false);
 
-        await installWaitingVersion(67, 66);
-        await installWaitingVersion(66, 67);
+        await installWaitingVersion(CURRENT_VERSION, 67);
+        await installWaitingVersion(67, CURRENT_VERSION);
     } finally {
         await context.setOffline(false).catch(() => null);
         await page.close().catch(() => null);
