@@ -2,7 +2,7 @@ import { uiIcon } from './ui-icons.js';
 
 // One live video stream, at most two memory-only photos, no uploads or retries.
 export function createLiveCamera({ container, onCapture, onFallback }) {
-    container.innerHTML = `<div class="live-camera-stage"><video autoplay muted playsinline aria-label="Live camera preview"></video><img class="live-camera-inset" alt="First captured view" hidden><div class="live-camera-heading"><strong>Memento</strong><span data-camera-step>First view</span></div><div class="live-camera-message" role="status"></div></div><div class="live-camera-controls"><button type="button" data-camera-library aria-label="Choose a photo instead">${uiIcon('photo')}</button><button type="button" class="camera-shutter" data-camera-shutter aria-label="Take photo" disabled><span></span></button><button type="button" data-camera-flip aria-label="Switch front and rear camera" disabled>${uiIcon('flip')}</button></div><p class="live-camera-hint">Two views, captured one after the other.</p><div class="live-camera-alternatives"><button type="button" data-camera-retry hidden>Try camera again</button><button type="button" data-camera-single hidden>Use one photo</button></div>`;
+    container.innerHTML = `<div class="live-camera-stage"><video autoplay muted playsinline aria-label="Live camera preview"></video><img class="live-camera-inset" alt="First captured view" hidden><div class="live-camera-heading"><strong>Memento</strong><span data-camera-step>First view</span></div><div class="live-camera-message" role="status"></div></div><div class="live-camera-controls"><button type="button" data-camera-library aria-label="Choose a photo instead">${uiIcon('photo')}</button><button type="button" class="camera-shutter" data-camera-shutter aria-label="Take photo" disabled><span></span></button><button type="button" data-camera-flip aria-label="Switch front and rear camera" disabled>${uiIcon('flip')}</button></div><p class="live-camera-hint">One tap. Front and back captured in sequence.</p><div class="live-camera-alternatives"><button type="button" data-camera-retry hidden>Try camera again</button><button type="button" data-camera-single hidden>Use one photo</button></div>`;
     const $ = selector => container.querySelector(selector);
     const video = $('video'), message = $('.live-camera-message');
     let stream = null, generation = 0, pending = false, busy = false, opened = false;
@@ -43,6 +43,9 @@ export function createLiveCamera({ container, onCapture, onFallback }) {
             if (requestGeneration !== generation || !opened || document.hidden) { acquired.getTracks().forEach(track => track.stop()); return; }
             stream = acquired;
             const actualFacing = stream.getVideoTracks()[0]?.getSettings?.().facingMode;
+            if (photos.length && actualFacing && actualFacing !== facing) {
+                throw new DOMException('The other camera is unavailable.', 'NotReadableError');
+            }
             video.classList.toggle('mirrored', actualFacing === 'user');
             video.srcObject = stream;
             await video.play();
@@ -83,7 +86,10 @@ export function createLiveCamera({ container, onCapture, onFallback }) {
             insetURL = URL.createObjectURL(photos[0]); $('img').src = insetURL; $('img').hidden = false;
             $('[data-camera-single]').hidden = false;
             facing = facing === 'environment' ? 'user' : 'environment';
+            // iOS uses one shutter for both views. Web captures them sequentially,
+            // retaining the explicit one-photo fallback if the second camera fails.
             await start();
+            if (stream && opened && photos.length === 1) await capture();
         } catch {
             if (captureGeneration === generation && opened) failure('That photo could not be captured. Please try again.');
         } finally { busy = false; if (stream && opened) $('[data-camera-shutter]').disabled = false; }

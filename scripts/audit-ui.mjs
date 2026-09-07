@@ -41,7 +41,6 @@ try {
         await page.locator('[data-camera-shutter]:enabled').waitFor();
         await page.screenshot({ path: `${output}${colorScheme}-camera.png` });
         await page.locator('[data-camera-shutter]').click();
-        await page.getByRole('button', { name: 'Use one photo' }).click();
         await page.locator('.memento-publish:enabled').waitFor();
         await page.screenshot({ path: `${output}${colorScheme}-review.png` });
         await context.close();

@@ -81,8 +81,8 @@ test("Memento reciprocity keeps locked messages out of the DOM and unlocks after
     await page.locator(".chat-daily-row > button").click();
     const composer = page.getByRole("dialog", { name: "Create a Memento" });
     await composer.locator(".memento-file-input").setInputFiles("assets/AppIconV2.png");
-    await expect(composer.getByRole("button", { name: "Share to this chat" })).toBeEnabled();
-    await composer.getByRole("button", { name: "Share to this chat" }).click();
+    await expect(composer.getByRole("button", { name: /^Send to / })).toBeEnabled();
+    await composer.getByRole("button", { name: /^Send to / }).click();
 
     await expect(page.getByText("Today's Mementos", { exact: true })).toBeVisible();
     await expect(page.locator(".chat-memento-week button")).toHaveCount(7);
@@ -113,7 +113,7 @@ test("a Memento stays scoped to the active chat like the released iOS contract",
     await expect(composer.locator(".memento-audience")).toHaveText("Sharing with Weekend Crew");
     await expect(composer.getByRole("checkbox")).toHaveCount(0);
     await composer.locator(".memento-file-input").setInputFiles("assets/AppIconV2.png");
-    await composer.getByRole("button", { name: "Share to this chat" }).click();
+    await composer.getByRole("button", { name: /^Send to / }).click();
     await expect(page.getByText("Memento shared · +10 Aura", { exact: true })).toBeVisible();
 });
 

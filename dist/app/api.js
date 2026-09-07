@@ -1093,6 +1093,7 @@ export class ValidAPI {
             const request = new XMLHttpRequest();
             const uploadURL = new URL(session.upload_url, location.href);
             request.open(session.upload_method || "PUT", uploadURL.href, true);
+            request.timeout = 60_000;
             request.withCredentials = uploadURL.origin === location.origin;
             for (const [name, value] of Object.entries(session.required_headers || {})) request.setRequestHeader(name, value);
             request.upload.addEventListener("progress", (event) => {
@@ -1104,6 +1105,7 @@ export class ValidAPI {
             });
             request.addEventListener("error", () => reject(new APIError("The media could not be uploaded. Check your connection.", 0)));
             request.addEventListener("abort", () => reject(new APIError("The media upload was cancelled.", 0)));
+            request.addEventListener("timeout", () => reject(new APIError("The upload timed out. Your saved photo can be retried.", 0)));
             request.send(file);
         });
     }

@@ -148,24 +148,30 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         </div>
         <dialog class="chat-sheet" data-memento-dialog aria-label="Create a Memento">
             <form class="memento-form">
-                <header><button type="button" data-close-memento>Cancel</button><strong>Today's Memento</strong><span></span></header>
+                <header><button type="button" data-close-memento>Cancel</button><strong>Memento</strong><span></span></header>
                 <section class="live-camera" data-memento-camera hidden aria-label="Memento camera"></section>
                 <div class="memento-review-content">
+                <h2 class="memento-review-title">How does it look?</h2>
                 <div class="memento-preview">${uiIcon('camera')}<p>Capture one real moment from today.</p></div>
-                <button class="memento-retake" type="button" data-retake-memento>${uiIcon('camera')} Take a new photo</button>
+                <details class="memento-options"><summary>More options</summary>
                 <details class="memento-photo-fallback"><summary>Choose existing photos instead</summary><div class="memento-capture-inputs">
                     <label><span>First view · rear camera</span><input class="memento-file-input" type="file" accept="image/*" capture="environment"></label>
                     <label><span>Second view · front camera</span><input class="memento-secondary-file-input" type="file" accept="image/*" capture="user"></label>
                 </div></details>
-                <small class="memento-capture-hint">Your Memento is shared only when you tap Share to this chat.</small>
                 <fieldset class="camera-effect-picker hidden" data-memento-effects><legend>Photo effect</legend><div data-camera-effect-options></div><small>Browser Effects bake supported color and lighting into the photo. Face/body-tracked lenses and filtered video remain available in iOS.</small></fieldset>
                 <label>Caption <input class="memento-caption" maxlength="120" placeholder="What are you up to?"></label>
                 <p class="memento-audience"><strong>Sharing with</strong> <span></span></p>
+                </details>
+                </div>
+                <div class="memento-send-feedback" aria-live="polite" aria-atomic="true">
                 <div class="memento-progress hidden"><span></span></div>
                 <p class="memento-status" role="status"></p>
                 </div>
-                <button class="primary-button memento-publish" type="submit" disabled>Share to this chat</button>
-                <button class="memento-skip" type="button" data-skip-memento>Skip for today</button>
+                <div class="memento-review-actions">
+                    <button class="memento-retake" type="button" data-retake-memento>${uiIcon('flip')} Retake</button>
+                    <button class="primary-button memento-publish" type="submit" disabled>Send to this chat</button>
+                </div>
+                <button class="memento-skip hidden" type="button" data-skip-memento>Skip for today</button>
             </form>
         </dialog>
         <dialog class="chat-sheet" data-chat-media-dialog aria-label="Send media">
@@ -231,11 +237,13 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         },
         onFallback: () => {
             $('[data-memento-dialog]').classList.remove('is-capturing');
+            $('.memento-options').open = true;
             $('.memento-photo-fallback').open = true;
             $('.memento-file-input').focus();
         },
     });
     function startMementoCamera() {
+        if (mementoPublishing) return;
         $('[data-memento-dialog]').classList.add('is-capturing');
         $('.memento-photo-fallback').open = false;
         mementoCamera.open();
@@ -300,6 +308,9 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     $(".memento-secondary-file-input").addEventListener("change", selectMementoSecondary);
     $(".memento-form").addEventListener("submit", publishMemento);
     $("[data-memento-dialog]").addEventListener("close", resetMementoComposer);
+    $("[data-memento-dialog]").addEventListener("cancel", (event) => {
+        if (mementoPublishing) event.preventDefault();
+    });
     $(".chat-media-file-input").addEventListener("change", selectChatMedia);
     $(".chat-audio-file-input").addEventListener("change", selectChatMedia);
     $(".chat-sticker-file-input").addEventListener("change", selectStickerSource);
@@ -933,6 +944,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     function renderMementoAudience() {
         const activeChat = store.state.chats.find((chat) => String(chat.id) === String(store.state.activeChatId));
         $(".memento-audience span").textContent = activeChat?.display_name || store.state.detail?.display_name || "this chat";
+        if (!mementoPublishing) $(".memento-publish").textContent = `Send to ${$(".memento-audience span").textContent}`;
     }
 
     async function skipMementoForToday() {
@@ -994,9 +1006,8 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             selectedMementoFile = mementoFrontIsPrimary && prepared.swapped ? prepared.swapped : prepared.primary;
             selectedMementoSecondaryFile = mementoFrontIsPrimary && prepared.swapped ? prepared.primary : prepared.swapped;
             renderSelectedMementoPreview();
-            $(".memento-status").textContent = prepared.swapped
-                ? `${mementoFrontIsPrimary ? "Front" : "Rear"} view is primary · tap the inset to swap`
-                : "Ready to share · add the second view for a swappable Memento";
+            $(".memento-status").textContent = prepared.swapped ? "Tap the small photo to swap views." : "";
+            $('.memento-options').open = false;
             $(".memento-publish").disabled = false;
         } catch (error) {
             if (generation !== mementoPreparationGeneration) return;
@@ -1017,6 +1028,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     }
 
     function swapSelectedMementoViews() {
+        if (mementoPublishing) return;
         if (!selectedMementoFile || !selectedMementoSecondaryFile) return;
         [selectedMementoFile, selectedMementoSecondaryFile] = [selectedMementoSecondaryFile, selectedMementoFile];
         mementoFrontIsPrimary = !mementoFrontIsPrimary;
@@ -1025,13 +1037,23 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         $(".memento-status").textContent = `${mementoFrontIsPrimary ? "Front" : "Rear"} view is primary · tap the inset to swap`;
     }
 
+    let mementoPublishing = false;
     async function publishMemento(event) {
         event.preventDefault();
-        if (!selectedMementoFile || !store.state.activeChatId) return;
+        if (mementoPublishing) return;
+        if (!selectedMementoFile || !store.state.activeChatId) {
+            $(".memento-status").textContent = "Take a photo before sending your Memento.";
+            return;
+        }
+        mementoPublishing = true;
         const chatIds = [String(store.state.activeChatId)];
         const button = $(".memento-publish");
         button.disabled = true;
         button.textContent = "Sharing…";
+        $(".memento-status").textContent = "Saving your Memento…";
+        $("[data-memento-dialog]").setAttribute("aria-busy", "true");
+        $("[data-retake-memento]").disabled = true;
+        $("[data-close-memento]").disabled = true;
         $(".memento-file-input").disabled = true;
         $(".memento-secondary-file-input").disabled = true;
         $(".memento-caption").disabled = true;
@@ -1055,12 +1077,13 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             };
             await putChatMediaOutbox(record);
             recoverySaved = true;
+            $(".memento-status").textContent = "Sending your Memento…";
             const result = await deliverMediaRecord(record, { onProgress: (progress) => setRuntimeStyles($(".memento-progress span"), { width: `${Math.round(progress * 100)}%` }) });
             await removeChatMediaOutbox(record.id);
             $("[data-memento-dialog]").close();
             successHaptic?.();
             showToast?.(`Memento shared${result.aura_points_earned ? ` · +${result.aura_points_earned} Aura` : ""}`);
-            await openChat(store.state.activeChatId, { updateHistory: false, force: true });
+            await openChat(chatIds[0], { updateHistory: false, force: true });
         } catch (error) {
             if (recoverySaved && chatTextSendIsRetryable(error)) {
                 await markChatMediaOutboxAttempt(`${userId()}:memento:${mementoRequestId}`).catch(() => null);
@@ -1072,7 +1095,16 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                     : "This Memento could not be saved for a safe retry. Free some device storage and try again.";
             }
         } finally {
-            button.textContent = "Share to this chat";
+            mementoPublishing = false;
+            $("[data-memento-dialog]").removeAttribute("aria-busy");
+            $("[data-retake-memento]").disabled = false;
+            $("[data-close-memento]").disabled = false;
+            $(".memento-file-input").disabled = false;
+            $(".memento-secondary-file-input").disabled = false;
+            $(".memento-caption").disabled = false;
+            $(".memento-skip").disabled = false;
+            $(".memento-progress").classList.add("hidden");
+            renderMementoAudience();
             button.disabled = !selectedMementoFile;
             mementoEffectPicker.setDisabled(false);
         }

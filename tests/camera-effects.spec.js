@@ -74,11 +74,12 @@ test("a single-view Memento remains a safe fallback and preserves the authoritat
     const preview = dialog.getByRole("img", { name: "Memento preview" });
     const original = await previewDigest(preview);
     await expect(dialog.getByRole("button", { name: "Swap front and back photos" })).toHaveCount(0);
+    await dialog.locator('.memento-options > summary').click();
     const effects = dialog.getByRole("group", { name: "Photo effect" });
     await effects.getByRole("button", { name: "Cool photo effect" }).click();
-    await expect(dialog.getByText(/Ready to share · add the second view/)).toBeVisible();
+    await expect(dialog.locator('.memento-publish')).toBeEnabled();
     expect((await previewDigest(preview)).digest).not.toBe(original.digest);
-    await dialog.getByRole("button", { name: "Share to this chat" }).click();
+    await dialog.getByRole("button", { name: /^Send to / }).click();
     await expect(page.getByText(/Memento shared · \+10 Aura/)).toBeVisible();
 });
 
@@ -90,7 +91,7 @@ test("sequential rear and front photos produce swappable 1080 by 1440 Memento co
     const dialog = page.getByRole("dialog", { name: "Create a Memento" });
     await dialog.locator(".memento-file-input").setInputFiles("assets/AppIconV2.png");
     await dialog.locator(".memento-secondary-file-input").setInputFiles("assets/app/anonymous.webp");
-    await expect(dialog.getByText(/Rear view is primary/)).toBeVisible();
+    await expect(dialog.getByText('Tap the small photo to swap views.')).toBeVisible();
 
     const preview = dialog.getByRole("img", { name: "Memento preview" });
     const rearPrimary = await previewDigest(preview);
@@ -102,10 +103,11 @@ test("sequential rear and front photos produce swappable 1080 by 1440 Memento co
     expect(frontPrimary.digest).not.toBe(rearPrimary.digest);
 
     const effects = dialog.getByRole("group", { name: "Photo effect" });
+    await dialog.locator('.memento-options > summary').click();
     await effects.getByRole("button", { name: "Warm photo effect" }).click();
-    await expect(dialog.getByText(/Front view is primary/)).toBeVisible();
+    await expect(dialog.getByText('Tap the small photo to swap views.')).toBeVisible();
     expect((await previewDigest(preview)).digest).not.toBe(frontPrimary.digest);
-    await dialog.getByRole("button", { name: "Share to this chat" }).click();
+    await dialog.getByRole("button", { name: /^Send to / }).click();
     await expect(page.getByText(/Memento shared · \+10 Aura/)).toBeVisible();
 });
 

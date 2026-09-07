@@ -28,7 +28,16 @@
 .live-camera-alternatives button[hidden] { display: none; }
 .memento-photo-fallback summary { min-height: 44px; padding: 12px 0; color: var(--muted); cursor: pointer; font-size: .85rem; }
 .chat-sheet[data-memento-dialog]:not(.is-capturing) { height: min(820px, calc(100dvh - 24px)); overflow: hidden; }
-.memento-form { height: 100%; min-height: 0; grid-template-rows: auto minmax(0, 1fr) auto auto; }
+.memento-form { height: 100%; min-height: 0; grid-template-rows: auto minmax(0, 1fr) auto auto auto; }
+.memento-review-title { margin: 0; text-align: center; font-size: 24px; }
+.memento-review-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 12px; }
+.memento-review-actions > button { min-height: 54px; height: auto; margin: 0; padding: 10px; border: 2px solid var(--ink); border-radius: 18px; font-size: .95rem; overflow-wrap: anywhere; }
+.memento-review-actions .memento-retake { background: var(--white); color: var(--ink); }
+.memento-send-feedback { display: grid; gap: 8px; }
+.memento-send-feedback .memento-status { margin: 0; overflow-wrap: anywhere; }
+.memento-options > summary { padding: 10px; min-height: 44px; color: var(--muted); cursor: pointer; text-align: center; }
+.memento-options > :not(summary) { margin-block: 10px; }
+.chat-sheet:not(.is-capturing) .memento-skip { display: none; }
 .memento-review-content { min-height: 0; overflow: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 13px; padding: 2px; }
 .memento-review-content > * { flex-shrink: 0; }
 .memento-review-content > label { display: grid; gap: 5px; font-size: .85rem; }

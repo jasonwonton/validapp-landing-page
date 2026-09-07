@@ -21,7 +21,7 @@ test.describe('live Memento capture', () => {
             };
         });
     });
-    test('takes two photos without a file chooser, reviews, swaps and releases both cameras', async ({ page }) => {
+    test('one shutter captures both views, reviews, retakes and actually sends once', async ({ page }) => {
         let fileChoosers = 0; page.on('filechooser', () => fileChoosers++);
         await openMemento(page);
         const shutter = page.getByRole('button', { name: 'Take photo', exact: true });
@@ -30,9 +30,6 @@ test.describe('live Memento capture', () => {
         expect(preview.width / preview.height).toBeCloseTo(3 / 4, 2);
         await expect(page.locator('.memento-file-input')).toBeHidden();
         await shutter.click();
-        await expect(page.locator('[data-camera-step]')).toContainText('Second view');
-        await expect(shutter).toBeEnabled();
-        await shutter.click();
         await expect(page.locator('.memento-publish')).toBeEnabled();
         await expect(page.locator('.memento-preview img')).toBeVisible();
         await expect(page.locator('[data-swap-memento-capture]')).toBeVisible();
@@ -40,7 +37,12 @@ test.describe('live Memento capture', () => {
         expect(fileChoosers).toBe(0);
         await page.locator('[data-retake-memento]').click();
         await expect(shutter).toBeEnabled();
-        await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+        await shutter.click();
+        await expect(page.locator('.memento-publish')).toBeEnabled();
+        await page.locator('.memento-publish').click();
+        await expect(page.locator('[data-memento-dialog]')).not.toBeVisible();
+        await expect(page.locator('.chat-message.mine .memento-label')).toHaveCount(1);
+        await expect(page.locator('.chat-composer')).toBeVisible();
         await expect.poll(() => page.evaluate(() => cameraStreams.flatMap(s => s.getTracks()).every(t => t.readyState === 'ended'))).toBe(true);
     });
     test('one-photo fallback and background pause do not retain camera tracks', async ({ page }) => {
@@ -55,12 +57,41 @@ test.describe('live Memento capture', () => {
         await page.evaluate(() => Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }));
         await page.getByRole('button', { name: 'Try camera again' }).click();
         await expect(page.locator('[data-camera-shutter]')).toBeEnabled();
+        await page.evaluate(() => navigator.mediaDevices.getUserMedia = async () => { throw new DOMException('Second camera unavailable', 'NotReadableError'); });
         await page.locator('[data-camera-shutter]').click();
         await page.getByRole('button', { name: 'Use one photo' }).click();
         await expect(page.locator('.memento-publish')).toBeEnabled();
         await expect(page.locator('[data-swap-memento-capture]')).toHaveCount(0);
         expect(await page.evaluate(() => cameraStreams.flatMap(s => s.getTracks()).every(t => t.readyState === 'ended'))).toBe(true);
     });
+});
+
+test('send gives immediate feedback, prevents repeat submits and shows errors beside the button', async ({ page }) => {
+    await openMemento(page);
+    await page.getByRole('button', { name: 'Choose a photo instead' }).click();
+    await page.locator('.memento-file-input').setInputFiles('assets/AppIconV2.png');
+    await expect(page.locator('.memento-publish')).toBeEnabled();
+    await page.evaluate(async () => {
+        const { DemoAPI } = await import('/app/demo-api.js');
+        window.uploadAttempts = 0;
+        DemoAPI.prototype.createDailyHighlightUpload = async () => {
+            uploadAttempts++;
+            return new Promise((_, reject) => window.rejectMemento = () => reject(Object.assign(new Error('Upload not allowed. Please try again.'), { status: 403 })));
+        };
+    });
+    await page.locator('.memento-publish').click();
+    await expect(page.locator('.memento-publish')).toHaveText('Sharing…');
+    await expect(page.locator('.memento-status')).toHaveText('Sending your Memento…');
+    await expect(page.locator('[data-retake-memento]')).toBeDisabled();
+    await page.evaluate(() => document.querySelector('.memento-form').requestSubmit());
+    expect(await page.evaluate(() => uploadAttempts)).toBe(1);
+    await page.evaluate(() => rejectMemento());
+    await expect(page.locator('.memento-status')).toHaveText('Upload not allowed. Please try again.');
+    await expect(page.locator('.memento-publish')).toBeEnabled();
+    const bounds = await page.locator('.memento-status').boundingBox();
+    expect(bounds.y).toBeGreaterThanOrEqual(0);
+    expect(bounds.y + bounds.height).toBeLessThanOrEqual(await page.evaluate(() => innerHeight));
+    expect(await page.locator('.memento-options').evaluate(el => el.open)).toBe(false);
 });
 
 test('permission denial offers a deliberate photo fallback, not a silent picker', async ({ page }) => {

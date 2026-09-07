@@ -8,6 +8,12 @@ Interface artwork follow-up: [UI_ASSET_PARITY.md](UI_ASSET_PARITY.md) records th
 portable vector alternatives, preserved user/reaction emoji, and private-only rollout.
 This does not close the physical-device or whole-experience release gates.
 
+September 7 Memento send correction: the deployed two-view proxy path leaves
+the second upload on a storage origin blocked by the PWA CSP. The `web-v72`
+candidate simplifies capture/review and exposes send failures, but requires the
+additive secondary-upload API patch before final-origin acceptance. Neither
+patch is deployed by this follow-up. See [MEMENTO_SEND_FIX_2026-09-07.md](MEMENTO_SEND_FIX_2026-09-07.md).
+
 ## Status contract
 
 **Experience audit correction:** passing API/demo tests is not native-quality
@@ -53,7 +59,7 @@ implementation evidence, not a claim that the whole screen feels like iOS.
 | Pending text after refresh/reopen | Equivalent | Not yet tested | User-scoped IndexedDB outbox is capped at 50/user and 200/global, expires at 7 days, retries at most 8 times with bounded backoff, and reuses the same request ID. Physical killed-tab recovery remains. |
 | Pending text after logout/deletion request | Equivalent | Not yet tested | Both text and media outboxes are erased for that user; automated coverage passes and final-origin verification remains. |
 | Daily Memento capture and JPEG preparation | Partial | Not yet tested | Replaced picker-first inputs with live camera preview, shutter, sequential views, camera switching, retake and explicit single-view/library alternatives. Two swappable 1080×1440 composites retain the existing backend lifecycle. Real lens/orientation, device camera and interrupted capture acceptance remain; simultaneous iOS dual-camera capture is not claimed. |
-| Memento upload/finalize/publish | Equivalent | Not yet tested | Both private composites use one authoritative upload session, one finalize, exactly one active-chat publish, and the same stable request ID. The dual-image IndexedDB record is bounded and resumes on the next Chats open; physical interruption testing remains. |
+| Memento upload/finalize/publish | Partial | Not yet tested | Confirmed live gap: the secondary image still receives a direct storage URL blocked by the browser CSP. A tested, additive secondary proxy patch is prepared but not deployed. Prior demo/adapter tests bypassed the real PUT and did not establish this journey. Stable request IDs, one session/finalize/publish and bounded recovery remain; API rollout and final-origin physical interruption checks are required. |
 | Memento reciprocity gate | Equivalent | Not yet tested | Locked message bodies stay out of the DOM; unlock journey passes in all four lab projects. |
 | Skip Memento for today | Equivalent | Not yet tested | Uses the same authoritative daily-row skip endpoint and unlocks without fabricating a post. |
 | Seven-day Memento history | Equivalent | Not yet tested | Date rail and historical rows are automated indirectly; timezone/DST physical tests remain. |

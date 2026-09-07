@@ -1,8 +1,75 @@
 import { expect, test } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 
 const API_ORIGIN = "https://api.six7.lol";
 const USER_ID = "11111111-1111-1111-1111-111111111111";
 const CHAT_ID = "22222222-2222-2222-2222-222222222222";
+
+test('both Memento photos upload through real XHR under the production CSP', async ({ page }) => {
+    const policy = (await readFile(new URL('../_headers', import.meta.url), 'utf8')).split('\n').find(line => line.trim().startsWith('Content-Security-Policy:')).trim().slice('Content-Security-Policy:'.length).trim();
+    await page.route('**/app/', async route => {
+        const response = await route.fetch();
+        await route.fulfill({ response, headers: { ...response.headers(), 'content-security-policy': policy } });
+    });
+    const requests = [];
+    const mediaId = '33333333-3333-3333-3333-333333333333';
+    const contentPath = `/api/v1/users/${USER_ID}/daily-highlight-uploads/${mediaId}/content`;
+    await page.route('**/api/v1/**', async route => {
+        const request = route.request(), url = new URL(request.url());
+        requests.push({ method: request.method(), path: url.pathname + url.search });
+        if (request.method() === 'PUT') return route.fulfill({ status: 204 });
+        const body = url.pathname.endsWith('/daily-highlight-uploads')
+            ? { media_asset_id: mediaId, upload_url: contentPath, secondary_upload_url: `${contentPath}?variant=secondary`, required_headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=900' }, already_finalized: false }
+            : url.pathname.endsWith('/finalize') ? { media_asset_id: mediaId, state: 'ready' } : { entry_id: 'one-entry' };
+        await route.fulfill({ json: body });
+    });
+    await page.goto('/app/');
+    const sentBytes = await page.evaluate(async ({ userId, chatId }) => {
+        // WebKit routing does not expose File request bodies. Observe the body
+        // at send while still exercising the real browser XHR and CSP.
+        const sentBytes = [];
+        const send = XMLHttpRequest.prototype.send;
+        XMLHttpRequest.prototype.send = function (body) {
+            if (body instanceof Blob) sentBytes.push(body.size);
+            return send.call(this, body);
+        };
+        const { ValidAPI } = await import('/app/api.js');
+        const { deliverMementoRecord } = await import('/app/chat/index.js');
+        await deliverMementoRecord(new ValidAPI(), userId, {
+            file: new File(['primary'], 'primary.jpg', { type: 'image/jpeg' }),
+            secondary: new File(['secondary'], 'secondary.jpg', { type: 'image/jpeg' }),
+            request_id: '66666666-6666-6666-6666-666666666666', chat_ids: [chatId], caption: null,
+        });
+        return sentBytes;
+    }, { userId: USER_ID, chatId: CHAT_ID });
+    expect(requests.filter(r => r.method === 'PUT')).toEqual([
+        { method: 'PUT', path: contentPath },
+        { method: 'PUT', path: `${contentPath}?variant=secondary` },
+    ]);
+    expect(sentBytes).toEqual([7, 9]);
+    expect(requests.filter(r => r.path.endsWith('/finalize'))).toHaveLength(1);
+    expect(requests.filter(r => r.path.endsWith('/daily-entries'))).toHaveLength(1);
+});
+
+test('a stalled media XHR times out with a retryable error', async ({ page }) => {
+    await page.goto('/app/');
+    const result = await page.evaluate(async () => {
+        const { ValidAPI } = await import('/app/api.js');
+        let timeoutMs;
+        window.XMLHttpRequest = class {
+            listeners = {};
+            upload = { addEventListener() {} };
+            open() {}
+            setRequestHeader() {}
+            addEventListener(name, handler) { this.listeners[name] = handler; }
+            send() { timeoutMs = this.timeout; queueMicrotask(() => this.listeners.timeout()); }
+        };
+        try { await new ValidAPI().putDirectUpload(new Blob(['photo']), { upload_url: '/api/v1/upload' }); }
+        catch (error) { return { timeoutMs, message: error.message, status: error.status }; }
+    });
+    expect(result).toMatchObject({ timeoutMs: 60000, status: 0 });
+    expect(result.message).toContain('timed out');
+});
 
 test("dual-view Memento delivery uploads both composites before one finalize and publish", async ({ page }) => {
     await page.goto("/app/");
