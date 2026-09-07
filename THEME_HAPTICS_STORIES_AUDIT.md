@@ -65,3 +65,18 @@ Light/dark main screens and the new preference section were rendered and
 inspected. The private deployment outcome is recorded after completion. App shell
 version is `web-v70`; rollback target for this slice is the v69 camera candidate
 `18cd9a85`. Preserve outboxes and use the explicit update flow on reversal.
+
+## Private deployment verification
+
+Deployed source `5c2054e4404cbff51b3eb9b51caf6a9c5377e605` is ACTIVE in
+staging deployment `281da1c5-11e5-4649-968d-5e9d8c38f268`. Live checks verified
+web-v70, byte-identical preferences code, a manual dark override persisting
+across reload under the actual CSP, and Stories still disabled. Private access,
+signed-out mobile/desktop rendering, exact CORS and synthetic related-origin
+passkey checks also passed. No production-account sign-in or data write was
+performed. The final expanded preference suite passed all 16 cases again.
+
+Hosted CI run 34150690205 was still running at this snapshot; local results do
+not imply full hosted-CI completion. Physical Android vibration and the broader
+parity goal remain unsigned-off. This evidence-only follow-up does not require
+another deployment.
