@@ -1,18 +1,32 @@
-# Memento send repair — candidate, not deployed
+# Memento send repair — live private staging
+
+Released September 7, 2026. Private owner testing is available; this is not
+physical-device acceptance or public release approval.
+
+- API source `e80b940e3f8d33519bddc7dfa2ca17e8ee8fa3f9`, deployment
+  `1572613c-2a81-4180-9a0b-3c89645ec446`: ACTIVE, 43/43 steps passed.
+- PWA source `46e2fa140700908764cc77fadf42b43ee4e7056e`, `web-v72`, deployment
+  `ac4df1ca-24b4-4b22-8224-3eaad1a581d5`: ACTIVE, 6/6 steps passed.
+- Only the API component's source branch changed. All admin, APNS, SMS and
+  other worker/migration source revisions remain at `e9725209e`; environment
+  values and component settings were preserved. No new migration files shipped.
+- Follow-up integration PR: https://github.com/christophertran/six7/pull/61.
+  The API tracks the isolated `codex/memento-api-release` branch; integrate the
+  fix before returning it to the normal main-branch release path.
 
 ## Confirmed defect
 
-The production `delivery=proxy` response rewrites only the primary image URL.
-The secondary image still points to a presigned R2 origin outside the PWA's
+Before this release, `delivery=proxy` rewrote only the primary image URL.
+The secondary image pointed to a presigned R2 origin outside the PWA's
 `connect-src` policy. The two-view send cannot complete through that path.
 Errors were placed inside the long scrolling review, so the send button could
-appear to do nothing. The production OpenAPI inspected on September 7 has no
+appear to do nothing. The pre-release OpenAPI inspected on September 7 had no
 `variant` query parameter on the Memento content endpoint.
 
 Earlier demo responses returned `already_finalized`; adapter tests replaced
 the upload method. Those checks did not establish real browser upload parity.
 
-## Prepared repair
+## Released repair
 
 - PWA `web-v72`: one shutter captures the two views sequentially. The default
   review is photo, Retake, and Send to the named chat, following the active
@@ -52,24 +66,46 @@ the upload method. Those checks did not establish real browser upload parity.
   test-inspection failure (File bodies absent from routing metadata); the test
   now observes Blob sizes at native XHR send and retains real CSP/routing checks.
 - UI runtime, syntax, diff checks and backend pre-commit schema validation passed.
+- Final Retake reset regression: 24 passed, 4 synthetic-camera platform skips.
+  The full UI run initially had a test-only square-image dimension mismatch;
+  corrected to the unchanged 1024×1024 fallback fixture before the passing run.
+- Hosted frontend CI `34153522001` passed all four browser projects and static
+  checks; optional passkey integration was explicitly skipped. Backend CI
+  `34153313468` and PR CI `34153429897` passed PostgreSQL regressions.
 - Production-CSP browser test performs real XHR for both routed uploads, then
   exactly one finalize and publish. Separate coverage checks visible errors,
   repeated submits, upload timeout, outbox recovery and update/rollback.
-- Build and performance budget passed: 674,501-byte shell transfer estimate,
+- Build and performance budget passed: 674,505-byte shell transfer estimate,
   below 750,000. Synthetic light/dark reviews were visually inspected at
   393 × 852; actions and feedback remain visible. Physical devices remain open.
+- Live `check-staging.mjs` passed private access, shell version, native asset
+  hashes, no-store/CSP, exact CORS, production passkey challenge, related-origin
+  WebAuthn with a synthetic credential, and signed-out desktop/mobile layout.
+- Live `check-memento-staging.mjs` passed API health/readiness, additive upload
+  variant schema, exact deployed module hashes, and one-shutter two-view
+  synthetic capture under the real origin's CSP with no default picker and
+  all camera tracks released. No real account was signed in or posted from.
+- Bounded rollout log samples: 1,209 API lines, 50 APNS-chat lines and 50 SMS
+  audience-worker lines contained no ERROR/Traceback/read-only errors; the API
+  sample contained no response 5xx. Readiness reported writable/schema/identity
+  checks passing. These samples are not a throughput or exhaustive error audit.
 
 ## Release gate and reversal
 
-Private staging remains `web-v71` (source `8970744`). These candidates are not
-live. Deploy the additive API patch through the backend's normal isolated
-release process first; do not deploy unrelated notification/SMS working-tree
-changes or blindly deploy the branch base. Then release the independent private
-PWA candidate and verify final-origin, intended-account sharing on physical
-Pixel, Samsung and iPhone PWA. Production-account sends affect real chats.
+Private staging is `web-v72`. Reopen the existing private invitation, accept
+Update if offered, and use the production passkey. Verify camera → one shutter
+→ review → Retake or Send to the named chat. Check exactly one Memento on iOS
+and web after sending. Repeat on physical Pixel, Samsung and iPhone PWA;
+production-account sends affect real chats. Do not clear browser storage to
+force an update, because it may contain pending sends.
 
 The API patch is backward-compatible with the current frontend and iOS.
 Frontend rollback is the existing v71 source; preserve pending outboxes and use
-the explicit service-worker update flow. Reverting the API patch restores the
+the explicit service-worker update flow. Prior frontend deployment:
+`fa9aeee6-6f0c-45f4-bd63-f2ef1311f830`; prior API deployment:
+`fbf782d9-96e4-4bfd-8e55-d5d9461f33ee`. Fresh spec snapshots are stored outside
+the repository with owner-only permissions. Recheck current configuration
+before any rollback so concurrent edits are not overwritten.
+Reverting the API patch restores the
 known two-view defect, so disable the private Memento entry point if it must be
 reverted. Public launch and the overall parity goal remain NO-GO.
