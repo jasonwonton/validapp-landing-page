@@ -5,7 +5,8 @@ export function reconcileKeyedElements(container, entries, {
     const existing = new Map([...container.children]
         .filter((element) => element.dataset.listKey)
         .map((element) => [element.dataset.listKey, element]));
-    const fragment = document.createDocumentFragment();
+    let cursor = container.firstElementChild;
+    const retained = new Set();
 
     for (const entry of entries) {
         const key = String(keyOf(entry));
@@ -19,8 +20,11 @@ export function reconcileKeyedElements(container, entries, {
             element.dataset.listKey = key;
             element.__validListMarkup = markup;
         }
-        fragment.append(element);
+        retained.add(element);
+        // Leave unchanged live nodes attached (focus, audio and scroll anchors).
+        if (element !== cursor) container.insertBefore(element, cursor);
+        cursor = element.nextElementSibling;
     }
 
-    container.replaceChildren(fragment);
+    for (const element of [...container.children]) if (!retained.has(element)) element.remove();
 }

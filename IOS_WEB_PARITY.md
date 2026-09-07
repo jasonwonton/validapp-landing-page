@@ -1,6 +1,9 @@
 # Six7 iOS → PWA parity and release matrix
 
 Last audited: September 7, 2026
+Chat scrolling: [automatic history and reading-position repair](CHAT_SCROLLING_2026-09-07.md)
+tracks private `web-v80`: no normal pagination buttons, pixel-preserving history,
+bounded rolling pages and a deliberate Latest shortcut. Physical touch acceptance remains open.
 Memento: [native gate and quieter capture](MEMENTO_GATE_POLISH_2026-09-07.md)
 tracks the camera-highlight fix, direct Skip and removal of sequencing narration
 for private `web-v79`; access remains server-owned and physical acceptance open.
@@ -155,7 +158,7 @@ authoritative per-chat `viewer_has_shared`, not the global posted-today flag.
 | --- | --- | --- | --- |
 | Cold startup / route splitting | Equivalent | Not yet tested | Lab DCL improved from 5.65 s to 1.93 s; final-origin RUM p75 is required. |
 | Stable keyed feed/chat rows | Equivalent | Not yet tested | Runtime/performance checks enforce identity-preserving reconciliation; overflow-safe bottom alignment prevents long chats from rendering behind the Memento rail. |
-| Long-list DOM bounds | Equivalent | Not yet tested | The authoritative store remains capped at 500 messages while accessible overlapping windows render at most 120 message nodes. Earlier/newer controls preserve an overlap anchor, expose absolute list positions, and reveal hidden reply or exact deep-link targets. A 500-message traversal/DOM soak passes in all four browser projects; physical low-memory long-scroll remains a release gate. |
+| Long-list DOM bounds | Equivalent | Not yet tested | Automatic bidirectional history uses a rolling 500-message buffer and at most 120 rendered messages. A 750-message traversal passes in all four browser projects; appends, prepends and delayed row growth preserve the visible pixel. Accessible keyboard fallback and a Latest shortcut remain. Physical low-memory long-scroll is still a release gate. |
 | Responsive touch interactions | Partial | Not yet tested | Pixel emulation passes but is not evidence of native feel. Matched iOS/PWA physical touch, scrolling, transitions and low/midrange Android checks remain. |
 | Keyboard-safe layouts | Partial | Not yet tested | Visual Viewport handling exists; Samsung Keyboard, Gboard, and iPhone PWA checks remain. |
 | Camera/composer polish | Partial | Not yet tested | Sequential front/rear Memento capture and swapping, single-view fallback, preview, bounded offline/Featured photo Effects, compression, progress, compatible live MP4 voice recording with M4A fallback, photo/video selection, view-once, overlay, reply, and reactions work; physical camera/microphone/keyboard and richer editing remain. |
@@ -253,13 +256,13 @@ browser produces a transparent, outlined PNG from an accessible center cut or
 bounded manual lasso, holds source and output only in memory, never retries an
 ambiguous create, sends the confirmed server ID through the existing idempotent
 chat path, and preserves old messages when a saved sticker is removed.
-Long conversations retain the full bounded 500-message client window while
-rendering no more than 120 message nodes at once. Overlapping earlier/newer
-controls preserve the prior anchor, absolute `aria-posinset`/`aria-setsize`
-metadata describes each rendered message, and reply or exact-link navigation
-materializes a hidden target without growing the DOM. Four-project automation
-traverses both ends of a 500-message history and verifies the bound after every
-shift.
+Long conversations use a rolling 500-message buffer while rendering at most
+120 message nodes. Scrolling automatically fetches/evicts older or newer pages,
+preserving visible pixels rather than recentering a message. List-position metadata
+describes the loaded buffer (not a fabricated total for the entire server history).
+Replies and exact links to loaded targets still materialize without DOM growth.
+Four-project automation traverses both ends of a 750-message history; see
+[the scrolling audit](CHAT_SCROLLING_2026-09-07.md) for limitations and release evidence.
 The update lifecycle now runs against a private ephemeral production-style
 origin rather than a mocked registration. Chromium keeps v66 active while v67
 waits, shows the user-controlled update action, activates exactly one complete

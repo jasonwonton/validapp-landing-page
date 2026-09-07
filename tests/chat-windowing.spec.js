@@ -107,7 +107,8 @@ test("a long chat keeps the full bounded store but renders no more than 120 mess
     expect(mounted.stored).toBe(500);
     const root = page.locator("#window-test-root");
     await expect(root.locator(".chat-message")).toHaveCount(120);
-    await expect(root.getByRole("button", { name: /Show earlier messages 380 earlier/ })).toBeVisible();
+    await expect(root.locator('[data-history-direction="older"]')).toHaveCount(1);
+    await expect(root.getByText('Load earlier messages', { exact: true })).toHaveCount(0);
     await expect(root.locator('[data-message-id="history-500"]')).toHaveAttribute("aria-posinset", "500");
     await expect(root.locator('[data-message-id="history-500"]')).toHaveAttribute("aria-setsize", "500");
     await expect(root.locator('[data-message-id="history-1"]')).toHaveCount(0);
@@ -119,7 +120,7 @@ test("a reply reveals its hidden target without allowing DOM growth", async ({ p
     await root.locator('[data-message-id="history-500"] [data-scroll-message="history-10"]').click();
     await expect(root.locator('[data-message-id="history-10"]')).toBeVisible();
     await expect(root.locator('[data-message-id="history-10"]')).toHaveAttribute("aria-posinset", "10");
-    await expect(root.getByRole("button", { name: /Show newer messages/ })).toBeVisible();
+    await expect(root.getByRole("button", { name: 'Jump to latest messages' })).toBeVisible();
     expect(await root.locator(".chat-message").count()).toBeLessThanOrEqual(120);
 });
 
@@ -132,31 +133,24 @@ test("an exact message deep link reveals a target outside the initial window", a
     expect(await root.locator(".chat-message").count()).toBeLessThanOrEqual(120);
 });
 
-test("accessible history controls reach both ends through repeated shifts", async ({ page }) => {
+test("scrolling reaches both ends without a pagination button or DOM growth", async ({ page }) => {
     await mountLongConversation(page);
     const root = page.locator("#window-test-root");
-    const earlier = root.locator("[data-show-older-messages]");
-    await earlier.click();
-    await expect(root.locator('[data-message-id="history-381"]')).toBeVisible();
-    await expect.poll(() => root.evaluate((container) => {
-        const timeline = container.querySelector(".chat-timeline");
-        const anchor = container.querySelector('[data-message-id="history-381"]');
-        const timelineRect = timeline.getBoundingClientRect();
-        const anchorRect = anchor.getBoundingClientRect();
-        return Math.abs((anchorRect.top + anchorRect.height / 2) - (timelineRect.top + timelineRect.height / 2));
-    })).toBeLessThan(3);
-    for (let shift = 1; shift < 6 && await earlier.count(); shift += 1) {
-        await earlier.click();
+    const timeline = root.locator('.chat-timeline');
+    for (let shift = 0; shift < 10 && !await root.locator('[data-message-id="history-1"]').count(); shift += 1) {
+        const first = await root.locator('[data-message-id]').first().getAttribute('data-message-id');
+        await timeline.evaluate(element => { element.scrollTop = 0; });
+        await expect(root.locator('[data-message-id]').first()).not.toHaveAttribute('data-message-id', first);
         expect(await root.locator(".chat-message").count()).toBeLessThanOrEqual(120);
     }
-    await expect(root.locator('[data-message-id="history-1"]')).toBeVisible();
-    await expect(earlier).toHaveCount(0);
+    await expect(root.locator('[data-message-id="history-1"]')).toHaveCount(1);
+    await expect(root.locator('[data-history-direction="older"]')).toHaveCount(0);
 
-    const newer = root.locator("[data-show-newer-messages]");
-    for (let shift = 0; shift < 6 && await newer.count(); shift += 1) {
-        await newer.click();
+    for (let shift = 0; shift < 10 && !await root.locator('[data-message-id="history-500"]').count(); shift += 1) {
+        const last = await root.locator('[data-message-id]').last().getAttribute('data-message-id');
+        await timeline.evaluate(element => { element.scrollTop = element.scrollHeight; });
+        await expect(root.locator('[data-message-id]').last()).not.toHaveAttribute('data-message-id', last);
         expect(await root.locator(".chat-message").count()).toBeLessThanOrEqual(120);
     }
-    await expect(root.locator('[data-message-id="history-500"]')).toBeVisible();
-    await expect(newer).toHaveCount(0);
+    await expect(root.locator('[data-message-id="history-500"]')).toHaveCount(1);
 });

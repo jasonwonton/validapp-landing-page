@@ -83,7 +83,7 @@ export function createMessageWindow({
         const nextTotal = items.length;
         if (toEnd) setBottom(nextTotal);
         else if (focusId && focus(items, focusId, focusAlignment)) total = nextTotal;
-        else if (nextTotal !== total) {
+        else {
             if (pinnedToEnd) setBottom(nextTotal);
             else {
                 const anchoredIndex = anchorKey ? items.findIndex((item) => itemKey(item) === anchorKey) : -1;
@@ -93,7 +93,7 @@ export function createMessageWindow({
                 }
                 clampRange(nextTotal);
             }
-        } else clampRange(nextTotal);
+        }
         return snapshot(items);
     }
 

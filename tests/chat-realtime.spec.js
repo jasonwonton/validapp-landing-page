@@ -43,6 +43,7 @@ test("named chat SSE events trigger bounded authoritative reconnect repair", asy
             calls.length = 0;
             FakeEventSource.instance.emit("chat", { type: "ready", chat_id: chat.id }, "cursor-ready");
             while (calls.length < 1) await new Promise((resolve) => setTimeout(resolve, 10));
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
             FakeEventSource.instance.emit("chat", { id: "event-4", type: "message_created", chat_id: chat.id });
             while (calls.length < 2) await new Promise((resolve) => setTimeout(resolve, 10));
             return {
@@ -61,4 +62,3 @@ test("named chat SSE events trigger bounded authoritative reconnect repair", asy
     expect(result.incrementalOptions).toMatchObject({ limit: 100, afterSequence: 3 });
     expect(result.lastEventId).toBe("event-4");
 });
-

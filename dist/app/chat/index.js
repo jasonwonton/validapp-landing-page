@@ -4,7 +4,7 @@ import {
     CHAT_REACTIONS, chatAttentionPriority, chatNeedsMemento, chatPreview, displayMember, escapeChatHTML,
     messageTime, normalizeMessage, relativeChatTime, safeMediaURL,
 } from "./models.js";
-import { MAX_MESSAGES_PER_CHAT, createChatStore } from "./store.js";
+import { createChatStore } from "./store.js";
 import {
     MAX_AUTOMATIC_ATTEMPTS,
     MAX_MEDIA_AUTOMATIC_ATTEMPTS,
@@ -32,6 +32,7 @@ import {
 } from "./appearance.js";
 import { createStickerMaker } from "./sticker-maker.js";
 import { createMessageWindow } from "./message-window.js";
+import { createTimelineScroll } from "./timeline-scroll.js";
 
 const REFRESH_MS = 30_000;
 const MAX_VOICE_RECORDING_MS = 300_000;
@@ -108,6 +109,13 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     let typingTimer = null;
     let typingSent = false;
     let roomGeneration = 0;
+    let historyLoading = null;
+    let historyError = null;
+    let historyHasNewer = false;
+    let messagesRevision = 0;
+    let realtimeRefreshing = false;
+    let pendingRealtimeEvent = null;
+    let readWatermark = { chatId: null, sequence: 0 };
     let inviteMode = false;
     let messageActionHoldTimer = null;
     let outboxRetrying = false;
@@ -137,8 +145,8 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 <header class="chat-room-header"><button class="chat-back" type="button" data-chat-list aria-label="Back to chats">${uiIcon("back")}</button><button class="chat-room-title" type="button" data-chat-settings><strong>Chat</strong><small>Loading…</small></button><div class="chat-room-tools"><span class="chat-call-actions hidden"><button class="chat-icon-button" type="button" data-start-call="audio" aria-label="Start voice call">${uiIcon("phone")}</button><button class="chat-icon-button" type="button" data-start-call="video" aria-label="Start video call">${uiIcon("video")}</button></span><button class="chat-memento-toolbar hidden" type="button" data-open-memento-gallery aria-label="Mementos"></button><button class="chat-icon-button" type="button" data-chat-settings aria-label="Chat settings">${uiIcon("more")}</button></div></header>
                 <div class="chat-daily-row"></div>
                 <div class="chat-room-status" role="status"></div>
-                <button class="chat-load-earlier hidden" type="button" data-load-earlier>Load earlier messages</button>
                 <div class="chat-timeline" role="list" aria-live="polite" aria-label="Messages"></div>
+                <button class="chat-jump-latest hidden" type="button" data-jump-latest aria-label="Jump to latest messages">${uiIcon('down')}<span>Latest</span></button>
                 <div class="chat-typing hidden" aria-live="polite">Someone is typing…</div>
                 <div class="chat-reply-draft hidden"><span></span><button type="button" data-cancel-reply aria-label="Cancel reply">×</button></div>
                 <form class="chat-composer">
@@ -323,6 +331,10 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     root.addEventListener("pointerup", cancelMessageActionHold);
     root.addEventListener("pointercancel", cancelMessageActionHold);
     root.addEventListener("pointermove", cancelMessageActionHold);
+    const timelineScroll = createTimelineScroll($('.chat-timeline'), {
+        onEdge: direction => void advanceHistory(direction),
+        onPosition: updateLatestButton,
+    });
     $(".chat-composer").addEventListener("submit", sendMessage);
     $(".chat-search-form").addEventListener("submit", searchChats);
     $(".chat-composer textarea").addEventListener("input", handleTypingInput);
@@ -458,9 +470,12 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         return `<article class="chat-row ${attentionPriority(chat) > 0 ? "attention" : ""}" data-list-key="${escapeChatHTML(chat.id)}"><button class="chat-row-main" type="button" data-open-chat="${escapeChatHTML(chat.id)}"><span class="chat-avatar">${avatar}</span><span class="chat-row-copy"><span><strong>${escapeChatHTML(chat.display_name)}</strong>${streakMarkup(chat)}<time>${escapeChatHTML(relativeChatTime(chat.last_message_at || chat.updated_at))}</time></span><small>${escapeChatHTML(needsMemento ? "Take today's Memento" : chatPreview(chat))}</small></span>${chat.regular_unread_count && !needsMemento ? `<b class="chat-unread">${Math.min(chat.regular_unread_count, 99)}</b>` : ""}</button></article>`;
     }
 
-    async function openChat(chatId, { updateHistory = true, force = false } = {}) {
+    async function openChat(chatId, { updateHistory = true, force = false, latest = false } = {}) {
         const chat = store.state.chats.find((item) => item.id === String(chatId));
         if (chat?.membership_status === "invited") return;
+        const savedPosition = store.state.activeChatId === String(chatId) && !latest ? timelineScroll.capture() : null;
+        const savedAnchor = savedPosition && !savedPosition.bottom
+            ? savedPosition.anchors.map(anchor => store.messages().find(item => item.id === anchor.key)).find(Boolean) : null;
         if (store.state.activeChatId !== String(chatId)) {
             stopTyping();
             clearSharedMementoDraft();
@@ -474,6 +489,11 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             $('.chat-memento-gallery').innerHTML = '';
         }
         const generation = ++roomGeneration;
+        historyLoading = null;
+        historyError = null;
+        historyHasNewer = false;
+        messagesRevision++;
+        timelineScroll.reset();
         store.state.activeChatId = String(chatId);
         store.state.loadingRoom = true;
         renderDailyRow();
@@ -488,7 +508,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (cached.length && !force) renderMessages(false);
         const [detailResult, messagesResult, dailyResult] = await Promise.allSettled([
             api.getChat(userId(), chatId),
-            api.getChatMessages(userId(), chatId, { limit: 50 }),
+            api.getChatMessages(userId(), chatId, savedAnchor ? { limit: 100, afterSequence: Math.max(0, Math.floor(savedAnchor.room_sequence) - 1) } : { limit: 50 }),
             dailyLedgerEnabled() ? api.getChatDailyRow(userId(), chatId) : Promise.resolve(null),
         ]);
         if (generation !== roomGeneration || store.state.activeChatId !== String(chatId)) return;
@@ -507,18 +527,25 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         }
         if (messagesResult.status === "fulfilled") {
             store.replaceMessages(chatId, messagesResult.value.items || [], messagesResult.value);
+            if (savedAnchor) {
+                historyHasNewer = (messagesResult.value.items || []).length === 100;
+                store.state.messagePageByChat.set(String(chatId), { next_before_sequence: store.messages()[0]?.room_sequence > 1 ? store.messages()[0].room_sequence : null });
+            }
             $(".chat-room-status").textContent = "";
         } else {
+            if ([401, 403, 404].includes(messagesResult.reason?.status)) store.replaceMessages(chatId, []);
             const locked = messagesResult.reason?.status === 403 && /memento/i.test(messagesResult.reason?.message || "");
             $(".chat-room-status").textContent = locked ? "Take today's Memento to open this chat." : (messagesResult.reason?.message || "Could not load messages.");
         }
         await restorePendingMessages(chatId);
+        if (generation !== roomGeneration || store.state.activeChatId !== String(chatId)) return;
         store.state.loadingRoom = false;
         renderDailyRow();
-        renderMessages(true);
+        renderMessages(!savedAnchor);
+        if (savedAnchor) timelineScroll.restore(savedPosition);
         focusDeepLinkedMessage(chatId);
         renderSettings();
-        await markRoomRead();
+        if (!savedAnchor) await markRoomRead();
         await loadChats({ quiet: true });
         if (!chatAccessUnavailable()) void retryPendingMessages(chatId);
         const requestedCallId = new URLSearchParams(location.search).get("call");
@@ -626,18 +653,19 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (row?.ledger_date >= first && row.ledger_date <= last) store.state.dailyRowsByDate.set(row.ledger_date, row);
     }
 
-    function renderMessages(scrollToBottom = false, { focusMessageId = null, focusAlignment = "center" } = {}) {
+    function renderMessages(scrollToBottom = false, { focusMessageId = null, focusAlignment = "center", preservePosition = false } = {}) {
         const timeline = $(".chat-timeline");
+        const position = timelineScroll.capture();
         if (dailyLedgerEnabled() && !store.state.dailyRow) {
             timeline.classList.remove('chat-content-locked');
             timeline.innerHTML = `<div class="chat-room-empty"><p>${store.state.loadingRoom ? 'Loading conversation…' : 'Could not check Memento access. Reopen this chat to retry.'}</p></div>`;
-            $('.chat-load-earlier').classList.add('hidden');
+            $('[data-jump-latest]').classList.add('hidden');
             return;
         }
         if (store.state.dailyRow?.view_gate_locked === true) {
             timeline.classList.add("chat-content-locked");
             timeline.innerHTML = `<div class="chat-room-empty"><strong>Chat locked</strong><p>Take today's Memento to see new messages.</p></div>`;
-            $(".chat-load-earlier").classList.add("hidden");
+            $('[data-jump-latest]').classList.add('hidden');
             return;
         }
         timeline.classList.remove("chat-content-locked");
@@ -645,13 +673,14 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         const byId = new Map(items.map((message) => [message.id, message]));
         const visible = messageWindow.range(store.state.activeChatId, items, {
             toEnd: scrollToBottom,
-            focusId: focusMessageId,
+            focusId: focusMessageId || (!scrollToBottom && (preservePosition || !position.bottom) ? position.anchors[0]?.key : null),
             focusAlignment,
         });
         const entries = [];
-        if (visible.hiddenBefore) entries.push({
+        const page = store.state.messagePageByChat.get(String(store.state.activeChatId));
+        if (visible.hiddenBefore || page?.next_before_sequence) entries.push({
             key: "window:earlier",
-            html: `<div class="chat-message-window-control" role="presentation" data-list-key="window:earlier"><button type="button" data-show-older-messages><strong>Show earlier messages</strong><small>${visible.hiddenBefore} earlier in this loaded conversation</small></button></div>`,
+            html: historyEdgeMarkup('older'),
         });
         visible.items.forEach((message, visibleIndex) => {
             const index = visible.start + visibleIndex;
@@ -660,20 +689,42 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 html: messageMarkup(message, byId.get(String(message.reply_to_message_id)), items[index - 1], items[index + 1], index, visible.total),
             });
         });
-        if (visible.hiddenAfter) entries.push({
+        if (visible.hiddenAfter || historyHasNewer) entries.push({
             key: "window:newer",
-            html: `<div class="chat-message-window-control" role="presentation" data-list-key="window:newer"><button type="button" data-show-newer-messages><strong>Show newer messages</strong><small>${visible.hiddenAfter} newer in this loaded conversation</small></button></div>`,
+            html: historyEdgeMarkup('newer'),
         });
         reconcileKeyedElements(timeline, entries);
         $$(".chat-media-text[data-overlay-x]").forEach((overlay) => setRuntimeStyles(overlay, {
             left: `${Number(overlay.dataset.overlayX) * 100}%`,
             top: `${Number(overlay.dataset.overlayY) * 100}%`,
         }));
-        const page = store.state.messagePageByChat.get(String(store.state.activeChatId));
-        $(".chat-load-earlier").classList.toggle("hidden", !page?.next_before_sequence || items.length >= MAX_MESSAGES_PER_CHAT);
         if (!items.length && !store.state.loadingRoom && !store.state.dailyRow?.view_gate_locked) timeline.innerHTML = `<div class="chat-room-empty"><strong>Start the conversation</strong><p>Send a message or capture today's Memento.</p></div>`;
         renderReplyDraft();
-        if (scrollToBottom) requestAnimationFrame(() => timeline.scrollTo({ top: timeline.scrollHeight, behavior: "auto" }));
+        timelineScroll.restore(position, { bottom: scrollToBottom || (!preservePosition && !focusMessageId && position.bottom && !visible.hiddenAfter && !historyHasNewer) });
+        timelineScroll.observe();
+    }
+
+    function historyEdgeMarkup(direction) {
+        const failed = historyError === direction;
+        return `<div class="chat-history-edge ${failed ? 'failed' : ''}" role="presentation" data-list-key="window:${direction === 'older' ? 'earlier' : 'newer'}"><span role="status">${historyLoading?.direction === direction ? 'Loading…' : failed ? 'Couldn’t load messages.' : ''}</span><button type="button" data-history-direction="${direction}" ${historyLoading ? 'disabled' : ''}>${failed ? 'Retry' : direction === 'older' ? 'Earlier messages' : 'Newer messages'}</button></div>`;
+    }
+
+    function updateLatestButton() {
+        const visible = messageWindow.range(store.state.activeChatId, store.messages());
+        $('[data-jump-latest]').classList.toggle('hidden', !store.state.activeChatId || chatAccessUnavailable()
+            || (!historyHasNewer && !visible.hiddenAfter && timelineScroll.atBottom()));
+        if (!store.state.loadingRoom && !historyHasNewer && !visible.hiddenAfter && timelineScroll.atBottom()) void markRoomRead();
+    }
+
+    async function advanceHistory(direction, { retry = false } = {}) {
+        if (!store.state.activeChatId || store.state.loadingRoom || chatAccessUnavailable() || historyLoading || (historyError && !retry)) return;
+        if (retry) historyError = null;
+        const visible = messageWindow.range(store.state.activeChatId, store.messages());
+        if (direction === 'older' ? visible.hiddenBefore : visible.hiddenAfter) {
+            shiftMessageWindow(direction);
+            return;
+        }
+        await loadHistory(direction);
     }
 
     function messageMarkup(message, reply, previous, next, index = 0, total = 1) {
@@ -906,6 +957,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 client_request_id: clientRequestId,
             });
             await removeChatTextOutbox(userId(), clientRequestId).catch(() => null);
+            if (!automatic && historyHasNewer && store.state.activeChatId === chatId) await openChat(chatId, { updateHistory: false, force: true, latest: true });
             store.updateMessage(chatId, { ...message, delivery_state: "sent" });
             if (store.state.activeChatId === chatId) renderMessages(!automatic);
             if (!automatic) successHaptic?.();
@@ -926,18 +978,65 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (chatAccessUnavailable()) return;
         const latest = Math.max(0, ...store.messages().map((message) => message.room_sequence));
         if (!latest || !store.state.activeChatId || document.visibilityState === "hidden") return;
-        await api.markChatRead(userId(), store.state.activeChatId, Math.floor(latest)).catch(() => null);
+        const chatId = store.state.activeChatId;
+        const sequence = Math.floor(latest);
+        if (readWatermark.chatId === chatId && readWatermark.sequence >= sequence) return;
+        const token = { chatId, sequence };
+        readWatermark = token;
+        await api.markChatRead(userId(), chatId, sequence).catch(() => {
+            if (readWatermark === token) readWatermark = { chatId: null, sequence: 0 };
+        });
     }
 
-    async function loadEarlier() {
-        const page = store.state.messagePageByChat.get(String(store.state.activeChatId));
-        if (!page?.next_before_sequence) return;
-        const anchorId = $(".chat-timeline [data-message-id]")?.dataset.messageId || null;
-        const response = await api.getChatMessages(userId(), store.state.activeChatId, { limit: 50, beforeSequence: page.next_before_sequence });
-        store.mergeMessages(store.state.activeChatId, response.items || [], { prepend: true });
-        store.state.messagePageByChat.set(String(store.state.activeChatId), response);
-        renderMessages(false, { focusMessageId: anchorId, focusAlignment: "center" });
-        if (anchorId) requestAnimationFrame(() => scrollMessageWithinTimeline($(`[data-message-id="${CSS.escape(anchorId)}"]`)));
+    async function loadHistory(direction) {
+        const chatId = store.state.activeChatId;
+        const page = store.state.messagePageByChat.get(String(chatId)) || {};
+        const older = direction === 'older';
+        const cursor = older ? page.next_before_sequence : Math.floor(Math.max(0, ...store.messages().map(item => item.room_sequence)));
+        if (older ? !cursor : !historyHasNewer) return;
+        const token = { direction, generation: roomGeneration, revision: messagesRevision };
+        historyLoading = token;
+        renderMessages(false, { preservePosition: true });
+        try {
+            const response = await api.getChatMessages(userId(), chatId, { limit: 50, ...(older ? { beforeSequence: cursor } : { afterSequence: cursor }) });
+            if (token.generation !== roomGeneration || chatId !== store.state.activeChatId || token.revision !== messagesRevision) return;
+            const items = response.items || [];
+            // Never loop on a repeated cursor or a response that makes no progress.
+            const progress = items.filter(item => older ? item.room_sequence < cursor : item.room_sequence > cursor);
+            if (!progress.length && items.length) throw new Error('History did not advance');
+            const before = store.messages();
+            const merged = store.mergeMessages(chatId, progress, { prepend: older });
+            const evicted = before.some(item => !merged.some(next => next.id === item.id));
+            historyHasNewer = older ? historyHasNewer || evicted : progress.length === 50;
+            const nextBefore = older ? response.next_before_sequence : evicted ? merged[0]?.room_sequence : page.next_before_sequence;
+            if (older && nextBefore && nextBefore >= cursor) {
+                historyError = direction;
+            }
+            store.state.messagePageByChat.set(String(chatId), { ...page, next_before_sequence: older && !progress.length ? null : nextBefore });
+            messagesRevision++;
+        } catch (error) {
+            if (token.generation === roomGeneration && chatId === store.state.activeChatId) {
+                historyError = direction;
+                if ([401, 403, 404].includes(error.status)) {
+                    messagesRevision++;
+                    store.replaceMessages(chatId, []);
+                    if (dailyLedgerEnabled()) store.state.dailyRow = null;
+                }
+            }
+        } finally {
+            if (historyLoading === token) {
+                historyLoading = null;
+                renderMessages(false, { preservePosition: true });
+            }
+        }
+    }
+
+    async function jumpToLatest() {
+        if (historyHasNewer) await openChat(store.state.activeChatId, { updateHistory: false, force: true, latest: true });
+        else {
+            renderMessages(true);
+            await markRoomRead();
+        }
     }
 
     async function openCreateChat({ addToCurrent = false } = {}) {
@@ -1960,14 +2059,10 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     }
 
     function shiftMessageWindow(direction) {
-        const timeline = $(".chat-timeline");
-        const rendered = [...timeline.querySelectorAll("[data-message-id]")];
-        const anchorId = (direction === "older" ? rendered[0] : rendered.at(-1))?.dataset.messageId || null;
         const items = store.messages();
         if (direction === "older") messageWindow.previous(store.state.activeChatId, items);
         else messageWindow.next(store.state.activeChatId, items);
-        renderMessages(false);
-        if (anchorId) requestAnimationFrame(() => scrollMessageWithinTimeline($(`[data-message-id="${CSS.escape(anchorId)}"]`)));
+        renderMessages(false, { preservePosition: true });
     }
 
     function toggleMessageActions(messageId, forceOpen = null) {
@@ -2077,25 +2172,63 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             return;
         }
         if (chatId && chatId === store.state.activeChatId && ["message_created", "message_updated", "message_deleted", "memento_created", "resync", "ready"].includes(event.type)) {
-            const generation = roomGeneration;
-            const latest = Math.max(0, ...store.messages(chatId).map((message) => message.room_sequence));
-            const needsFullResync = ["resync", "ready"].includes(event.type);
-            const response = await api.getChatMessages(userId(), chatId, { limit: 100, afterSequence: needsFullResync ? null : Math.floor(latest) }).catch(() => null);
-            if (generation !== roomGeneration || chatId !== store.state.activeChatId) return;
-            if (response) {
-                if (needsFullResync) store.replaceMessages(chatId, response.items || [], response);
-                else store.mergeMessages(chatId, response.items || []);
-                renderMessages(true);
-                await markRoomRead();
+            // One active repair and one coalesced hint, never a growing SSE queue.
+            if (realtimeRefreshing) {
+                pendingRealtimeEvent = { ...event, type: 'resync' };
+                return;
             }
-            if (event.type === "memento_created") {
-                const row = await api.getChatDailyRow(userId(), chatId).catch(() => store.state.dailyRow);
+            realtimeRefreshing = true;
+            const generation = roomGeneration;
+            const revision = messagesRevision;
+            const latest = Math.max(0, ...store.messages(chatId).map((message) => message.room_sequence));
+            const position = timelineScroll.capture();
+            const away = historyHasNewer || messageWindow.range(chatId, store.messages()).hiddenAfter > 0 || !position.bottom;
+            const anchor = away ? position.anchors.map(item => store.messages().find(message => message.id === item.key)).find(Boolean) : null;
+            const needsFullResync = !!anchor || ["resync", "ready", "message_updated", "message_deleted"].includes(event.type);
+            try {
+                const response = await api.getChatMessages(userId(), chatId, { limit: 100, afterSequence: anchor ? Math.max(0, Math.floor(anchor.room_sequence) - 1) : needsFullResync ? null : Math.floor(latest) });
                 if (generation !== roomGeneration || chatId !== store.state.activeChatId) return;
-                store.state.dailyRow = row;
-                const today = localLedgerDate();
-                rememberDailyRow(store.state.dailyRow);
-                if (!store.state.displayedDailyRow || store.state.displayedDailyRow.ledger_date === today) store.state.displayedDailyRow = store.state.dailyRow;
-                renderDailyRow();
+                const current = timelineScroll.capture();
+                if (revision !== messagesRevision || (anchor && current.anchors[0]?.key !== position.anchors[0]?.key) || (!away && !current.bottom)) {
+                    pendingRealtimeEvent = { ...event, type: 'resync' };
+                    return;
+                }
+                if (needsFullResync) {
+                    // Replace, never merge a safety repair: hidden/deleted content
+                    // outside the authoritative response must not survive reconnect.
+                    store.replaceMessages(chatId, response.items || [], response);
+                    historyHasNewer = !!anchor && ((response.items || []).length === 100 || latest > Math.max(0, ...store.messages().map(item => item.room_sequence)));
+                    if (anchor) store.state.messagePageByChat.set(chatId, { next_before_sequence: store.messages()[0]?.room_sequence > 1 ? store.messages()[0].room_sequence : null });
+                } else {
+                    const oldest = store.messages()[0]?.id;
+                    store.mergeMessages(chatId, response.items || []);
+                    if (oldest && !store.messages().some(item => item.id === oldest)) store.state.messagePageByChat.set(chatId, { next_before_sequence: store.messages()[0]?.room_sequence });
+                    historyHasNewer = (response.items || []).length === 100;
+                }
+                messagesRevision++;
+                renderMessages(!away && !historyHasNewer);
+                if (!away) await markRoomRead();
+                if (event.type === 'memento_created' || event.type === 'resync') {
+                    const row = dailyLedgerEnabled() ? await api.getChatDailyRow(userId(), chatId) : null;
+                    if (generation !== roomGeneration || chatId !== store.state.activeChatId) return;
+                    store.state.dailyRow = row;
+                    rememberDailyRow(row);
+                    if (!store.state.displayedDailyRow || store.state.displayedDailyRow.ledger_date === localLedgerDate()) store.state.displayedDailyRow = row;
+                    renderDailyRow();
+                    renderMessages(false);
+                }
+            } catch (error) {
+                if (generation === roomGeneration && chatId === store.state.activeChatId && [401, 403, 404].includes(error.status)) {
+                    messagesRevision++;
+                    store.replaceMessages(chatId, []);
+                    if (dailyLedgerEnabled()) store.state.dailyRow = null;
+                    renderMessages(false);
+                }
+            } finally {
+                realtimeRefreshing = false;
+                const pending = pendingRealtimeEvent;
+                pendingRealtimeEvent = null;
+                if (pending?.chat_id === store.state.activeChatId) void handleRealtimeEvent(pending);
             }
         }
         void loadChats({ quiet: true });
@@ -2127,6 +2260,9 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         stopTyping();
         clearSharedMementoDraft();
         roomGeneration += 1;
+        historyLoading = null;
+        pendingRealtimeEvent = null;
+        timelineScroll.reset();
         store.state.activeChatId = null;
         store.state.detail = null;
         store.state.dailyRow = null;
@@ -2161,9 +2297,8 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (target.dataset.openChat) return openChat(target.dataset.openChat);
         if (target.dataset.acceptChat) return acceptInvitation(target.dataset.acceptChat);
         if (target.dataset.declineChat) return declineInvitation(target.dataset.declineChat);
-        if (target.matches("[data-load-earlier]")) return loadEarlier();
-        if (target.matches("[data-show-older-messages]")) return shiftMessageWindow("older");
-        if (target.matches("[data-show-newer-messages]")) return shiftMessageWindow("newer");
+        if (target.matches("[data-history-direction]")) return advanceHistory(target.dataset.historyDirection, { retry: true });
+        if (target.matches("[data-jump-latest]")) return jumpToLatest();
         if (target.dataset.startCall) return calls.start(target.dataset.startCall, store.state.detail?.chat);
         if (target.dataset.mementoDay) return loadMementoDay(target.dataset.mementoDay);
         if (target.dataset.mementoDate) return loadMementoDate(target.dataset.mementoDate);
@@ -2260,5 +2395,5 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         }
     }
 
-    return { activate, refresh, openChat, store, beforeSessionEnd: async () => { mementoCamera.close(); chatCamera?.close(); $('[data-chat-media-dialog]').close(); return calls.beforeSessionEnd(); } };
+    return { activate, refresh, openChat, store, beforeSessionEnd: async () => { roomGeneration++; historyLoading = null; pendingRealtimeEvent = null; timelineScroll.reset(); mementoCamera.close(); chatCamera?.close(); $('[data-chat-media-dialog]').close(); return calls.beforeSessionEnd(); } };
 }

@@ -98,7 +98,8 @@ export function createChatStore({ attentionPriority = chatAttentionPriority } = 
             resolved.push(message);
         }
         resolved.sort((left, right) => left.room_sequence - right.room_sequence || String(left.created_at).localeCompare(String(right.created_at)));
-        const bounded = resolved.slice(-MAX_MESSAGES_PER_CHAT);
+        // History is a rolling buffer, not a hard stop after 500 messages.
+        const bounded = prepend ? resolved.slice(0, MAX_MESSAGES_PER_CHAT) : resolved.slice(-MAX_MESSAGES_PER_CHAT);
         state.messagesByChat.set(String(chatId), bounded);
         return bounded;
     }
