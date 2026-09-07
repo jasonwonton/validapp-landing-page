@@ -248,6 +248,28 @@ remain inside the enforced startup and cache budgets.
 
 ## Release decision
 
+### Private production-account preview (September 6)
+
+The independent `https://staging.validapp.lol` service now offers a private
+invitation-gated preview backed by the existing production API. See
+[STAGING_PROD_ACCOUNT.md](STAGING_PROD_ACCOUNT.md) for access, limits,
+authentication configuration, real-data warnings and reversal instructions.
+This is not a public release or a physical-device sign-off. Chats and Mementos
+are the private cohort; Stories, calls and comments remain disabled there.
+
+Seven gateway tests cover private access, exact host/origin restrictions,
+HttpOnly session-cookie isolation, response-header preservation, config gates,
+stream cancellation, bounded chunked uploads, 64-connection cap/recovery and
+non-retry of ambiguous writes. Three static-origin tests, the UI-runtime suite
+and startup/cache budgets pass. The live HTTPS preview passes signed-out
+desktop/mobile layout checks and a Chromium related-origin passkey ceremony
+using a synthetic local credential; that assertion is never submitted to
+production. Real-account sign-in and the four physical-device journeys remain
+user acceptance gates. No parity row is promoted to Production-ready by this
+staging deployment.
+
+### Public release
+
 **Current decision: NO-GO for public exposure.** The core Chats/Mementos, photo communication, compatible voice recording, Story, and open-app call implementation is a credible staging candidate, but physical-device, final-origin, SSE failure, notification destination, codec-dependent video, photo-Effect color review, multi-clip Story/contact sharing, and real two-account LiveKit gates are still open. Face/body-tracked lenses are intentionally classified Native-only with the labeled photo-Effect alternative above.
 
 The read-only production preflight currently passes the manifest/service worker,

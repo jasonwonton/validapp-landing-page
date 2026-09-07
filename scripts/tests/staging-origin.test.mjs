@@ -4,18 +4,24 @@ import { before, after, test } from 'node:test';
 import { createStagingOrigin } from '../serve-staging.mjs';
 
 const secret = 'ab'.repeat(32), stage = 'https://staging.validapp.lol';
-let server, backend, cookie, calls = [], fail = false;
+let server, backend, cookie, calls = [], fail = false, activeStreams = 0;
 before(async () => {
     backend = createServer((req, res) => {
         calls.push({ path: req.url, headers: req.headers });
         req.resume();
         if (fail) return req.socket.destroy();
         if (req.url === '/api/v1/events') {
+            activeStreams += 1;
+            res.once('close', () => activeStreams -= 1);
             res.writeHead(200, { 'content-type': 'text/event-stream' });
             res.write('data: ready\n\n');
             return;
         }
-        res.writeHead(200, { 'content-type': 'application/json', 'set-cookie': [
+        if (req.url === '/api/v1/upload') {
+            req.once('end', () => { res.writeHead(200); res.end('uploaded'); });
+            return;
+        }
+        res.writeHead(200, { 'content-type': 'application/json', 'x-active-classmates-this-week': '12', 'set-cookie': [
             '__Host-valid_web_session=test-session; Secure; HttpOnly; Path=/; SameSite=Lax',
             'unrelated=never-forward', '__Host-valid_web_session=bad; Domain=six7.lol',
         ] });
@@ -70,6 +76,7 @@ test('only intended API, cookies and exact origins reach backend', async () => {
     assert.equal(calls.at(-1).headers.cookie, '__Host-valid_web_session=real');
     assert.equal(response.headers['set-cookie'].length, 1);
     assert.equal(response.headers['cache-control'], 'no-store');
+    assert.equal(response.headers['x-active-classmates-this-week'], '12');
 });
 test('private config gates do not enable unvalidated Stories, calls or comments', async () => {
     const response = await send('/api/v1/config');
@@ -86,6 +93,8 @@ test('SSE streams immediately and client close aborts upstream', async () => {
         });
         req.on('error', reject); req.end();
     });
+    for (let attempt = 0; attempt < 20 && activeStreams; attempt++) await new Promise(r => setTimeout(r, 5));
+    assert.equal(activeStreams, 0);
 });
 test('ambiguous upstream failure never retries a write', async () => {
     fail = true;
@@ -93,4 +102,25 @@ test('ambiguous upstream failure never retries a write', async () => {
     assert.equal((await send('/api/v1/message', { method: 'POST', headers: { origin: stage }, body: '{}' })).status, 502);
     assert.equal(calls.length, prior + 1);
     fail = false;
+});
+test('chunked uploads are bounded even without Content-Length', async () => {
+    const response = await send('/api/v1/upload', { method: 'POST', headers: { origin: stage, 'transfer-encoding': 'chunked' }, body: Buffer.alloc(12_582_913) });
+    assert.equal(response.status, 413);
+});
+test('SSE concurrency cap is finite and slots recover after disconnect', async () => {
+    const requests = [];
+    try {
+        await Promise.all(Array.from({ length: 64 }, () => new Promise((resolve, reject) => {
+            const req = request({ hostname: '127.0.0.1', port: server.address().port, path: '/api/v1/events', headers: { host: 'staging.validapp.lol', cookie } }, res => {
+                assert.equal(res.statusCode, 200);
+                res.once('data', resolve);
+            });
+            requests.push(req); req.on('error', reject); req.end();
+        })));
+        assert.equal(activeStreams, 64);
+        assert.equal((await send('/api/v1/config')).status, 503);
+    } finally { for (const req of requests) req.destroy(); }
+    for (let attempt = 0; attempt < 30 && activeStreams; attempt++) await new Promise(r => setTimeout(r, 5));
+    assert.equal(activeStreams, 0);
+    assert.equal((await send('/api/v1/config')).status, 200);
 });

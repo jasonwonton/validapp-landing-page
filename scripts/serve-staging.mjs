@@ -84,7 +84,7 @@ export async function createStagingOrigin({
         let upstream;
         try { upstream = upstreamRequest({ hostname: "api.six7.lol", port: 443, path: request.url, method: request.method, headers }, (incoming) => {
             const output = { "cache-control": "no-store", "x-content-type-options": "nosniff" };
-            for (const name of ["content-type", "retry-after", "x-request-id", "www-authenticate"]) if (incoming.headers[name]) output[name] = incoming.headers[name];
+            for (const name of ["content-type", "retry-after", "x-request-id", "www-authenticate", "x-active-classmates-this-week"]) if (incoming.headers[name]) output[name] = incoming.headers[name];
             // Preserve only host-bound application session cookies. Never relay CDN cookies.
             const cookies = (incoming.headers["set-cookie"] || []).filter((v) => v.startsWith(`${SESSION_COOKIE}=`) && !/;\s*domain=/i.test(v));
             if (cookies.length) output["set-cookie"] = cookies;

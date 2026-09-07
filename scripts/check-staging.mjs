@@ -1,0 +1,79 @@
+// Read-only live checks. Never print or persist the private invitation/cookie.
+import assert from 'node:assert/strict';
+import { chromium } from '@playwright/test';
+import { generateKeyPairSync, randomBytes } from 'node:crypto';
+const invitation = process.env.STAGING_PREVIEW_URL;
+assert(invitation, 'Set STAGING_PREVIEW_URL to the private invitation');
+const target = new URL(invitation);
+assert.equal(target.origin, 'https://staging.validapp.lol');
+assert.match(target.pathname, /^\/preview\/[a-f0-9]{64}$/);
+const origin = target.origin;
+const anonymous = await fetch(`${origin}/app/`);
+assert.equal(anonymous.status, 403);
+const entry = await fetch(invitation, { redirect: 'manual' });
+assert.equal(entry.status, 303);
+assert.equal(entry.headers.get('cache-control'), 'no-store');
+const invitationCookie = entry.headers.getSetCookie().find(value => value.startsWith('__Host-valid-preview='));
+assert.match(invitationCookie, /HttpOnly; Secure; SameSite=Lax/);
+const cookie = invitationCookie.split(';')[0];
+const read = path => fetch(`${origin}${path}`, { headers: { cookie }, redirect: 'manual' });
+const shell = await read('/app/');
+assert.equal(shell.status, 200);
+assert.match(shell.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+assert.match(shell.headers.get('permissions-policy'), /camera=\(self\)/);
+const configResponse = await read('/api/v1/config');
+assert.equal(configResponse.status, 200);
+assert.equal(configResponse.headers.get('cache-control'), 'no-store');
+const config = await configResponse.json();
+assert.equal(config.enable_web_chats, config.enable_chats === true);
+assert.equal(config.enable_web_mementos, config.enable_chat_daily_ledger === true);
+assert.equal(config.enable_web_calls, false);
+assert.equal(config.enable_web_stories, false);
+const challenge = await read('/api/v1/auth/passkey/authenticate/challenge');
+assert.equal(challenge.status, 200);
+assert.equal((await challenge.json()).rpId, 'six7.lol');
+const related = await fetch('https://six7.lol/.well-known/webauthn').then(r => r.json());
+assert(related.origins.includes(origin));
+assert(related.origins.includes('https://validapp.lol'));
+const denied = await fetch(`${origin}/api/v1/auth/passkey/authenticate`, { method: 'POST', headers: { cookie, origin: 'https://untrusted.invalid' }, body: '{}' });
+assert.equal(denied.status, 403);
+console.log('PASS: private access, HTTPS/CSP, production challenge, related origins, no-store, cohort gates and cross-origin rejection');
+
+const browser = await chromium.launch({ headless: true });
+try {
+    for (const viewport of [{ width: 1280, height: 800 }, { width: 393, height: 852 }]) {
+        const context = await browser.newContext({ viewport });
+        const page = await context.newPage();
+        const failures = [];
+        page.on('pageerror', error => failures.push(error.message));
+        await page.goto(invitation, { waitUntil: 'networkidle' });
+        assert.equal(new URL(page.url()).pathname, '/app/');
+        await page.getByRole('button', { name: /sign in/i }).first().waitFor({ state: 'visible' });
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+        assert.deepEqual(failures, []);
+        console.log(`PASS: signed-out browser ${viewport.width}px, no runtime errors or horizontal overflow`);
+        if (viewport.width === 1280) {
+            // A synthetic local credential verifies browser related-origin support.
+            // The assertion is NEVER sent to production or associated with an account.
+            const cdp = await context.newCDPSession(page);
+            await cdp.send('WebAuthn.enable');
+            const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
+            const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+            const credentialId = randomBytes(32).toString('base64');
+            await cdp.send('WebAuthn.addCredential', { authenticatorId, credential: { credentialId, rpId: 'six7.lol', privateKey: privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64'), isResidentCredential: true, userHandle: randomBytes(16).toString('base64'), signCount: 0 } });
+            const assertionOrigin = await page.evaluate(async id => {
+                const credential = await navigator.credentials.get({ publicKey: { challenge: crypto.getRandomValues(new Uint8Array(32)), rpId: 'six7.lol', allowCredentials: [{ type: 'public-key', id: Uint8Array.from(atob(id), c => c.charCodeAt(0)) }], userVerification: 'required', timeout: 15_000 } });
+                return JSON.parse(new TextDecoder().decode(credential.response.clientDataJSON)).origin;
+            }, credentialId);
+            assert.equal(assertionOrigin, origin);
+            console.log('PASS: Chromium related-origin WebAuthn ceremony (synthetic credential, no production authentication)');
+        }
+        await context.close();
+    }
+} finally { await browser.close(); }
+for (const allowed of [origin, 'https://validapp.lol', 'https://six7.lol']) {
+    const preflight = await fetch('https://api.six7.lol/api/v1/config', { method: 'OPTIONS', headers: { origin: allowed, 'access-control-request-method': 'GET' } });
+    assert.equal(preflight.status, 200, `Origin not enabled: ${allowed}`);
+    assert.equal(preflight.headers.get('access-control-allow-origin'), allowed);
+}
+console.log('PASS: exact staging CORS enabled and existing native/web origins preserved');
