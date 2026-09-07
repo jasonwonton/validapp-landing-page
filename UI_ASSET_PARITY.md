@@ -1,6 +1,6 @@
 # Interface artwork and symbol policy
 
-September 7, 2026 · private staging candidate `web-v71`
+September 7, 2026 · private staging `web-v71`
 
 User-directed policy: use the real iOS custom artwork where applicable and consistent
 portable vector symbols for controls. Do not use emoji as interface decoration.
@@ -56,3 +56,42 @@ app artwork files total 373,242 bytes against the unchanged 400,000-byte budget.
 
 Physical Pixel, Samsung, iPhone PWA, and real-account cross-client validation are
 still outstanding. They must not be relabeled Production-ready based on emulation.
+
+## Recorded local evidence for source `8970744`
+
+- Final consolidated core, visual polish, theme/haptics and interface-asset run:
+  **291 passed, 5 platform-specific skips**, four browser projects, no retries.
+- Focused verification of artwork, user emoji, first-letter hint, profile, selected
+  poll and initial DOM bounds: **40 passed**, four projects, no retries.
+- The broader communication/camera/Stories/comments/update run completed with
+  469 passes and 11 skips. Four UI failures during iteration (one extra initial
+  DOM element and three old demographic-copy expectations) were corrected and
+  covered by both clean runs above. No communication or update failure remained.
+- A concurrent follow-up run was discarded when its shared local test server
+  exited with the original run; the final consolidated run above used its own
+  server lifecycle. New visual tests were corrected to use an unlocked demo chat
+  instead of bypassing the Memento gate.
+- Build, UI runtime, all 7 staging-origin tests, all 3 static-origin tests, and
+  unchanged performance budgets passed. Shell estimate: **674,365 bytes**, 42
+  entries; route artwork remains outside the offline shell.
+- Light/dark screenshots reviewed for Feed, Profile, Play, sticker picker and
+  Memento review; camera/room/preferences captures are also saved by the audit
+  script. No horizontal overflow in the captured main panels.
+
+## Live private-staging evidence
+
+Deployment `fa9aeee6-6f0c-45f4-bd63-f2ef1311f830` is ACTIVE on the exact tested
+source `8970744ac5427e72fb64bfa80c4e628aa314f0ec`. The existing staging specification
+was reused without changing environment values or feature flags.
+
+`scripts/check-staging.mjs` passed on the live site with expected version `web-v71`:
+all three native asset bytes match the pinned hashes; private access, HTTPS/CSP,
+no-store, cohort gates, exact CORS origins, and cross-origin rejection passed.
+Signed-out 393px and 1280px Chromium layouts had no runtime errors or horizontal
+overflow. Related-origin WebAuthn used only a synthetic credential and never
+submitted an assertion to production. No real-account content was mutated.
+
+Remote full-suite CI run `34151710075` is tracked separately from these completed
+local and live checks; it was still running at the time of the staging smoke test.
+Public production deployment and full physical-device parity are not approved by
+this evidence.
