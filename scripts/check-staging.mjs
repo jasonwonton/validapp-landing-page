@@ -1,7 +1,8 @@
 // Read-only live checks. Never print or persist the private invitation/cookie.
 import assert from 'node:assert/strict';
 import { chromium } from '@playwright/test';
-import { generateKeyPairSync, randomBytes } from 'node:crypto';
+import { createHash, generateKeyPairSync, randomBytes } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 const invitation = process.env.STAGING_PREVIEW_URL;
 assert(invitation, 'Set STAGING_PREVIEW_URL to the private invitation');
 const target = new URL(invitation);
@@ -19,6 +20,18 @@ const cookie = invitationCookie.split(';')[0];
 const read = path => fetch(`${origin}${path}`, { headers: { cookie }, redirect: 'manual' });
 const shell = await read('/app/');
 assert.equal(shell.status, 200);
+const shellHTML = await shell.text();
+const version = shellHTML.match(/name="valid-app-version" content="([^"]+)"/)?.[1];
+assert.match(version || '', /^web-v\d+$/);
+if (process.env.STAGING_EXPECTED_VERSION) assert.equal(version, process.env.STAGING_EXPECTED_VERSION);
+const nativeAssets = JSON.parse(await readFile(new URL('../assets/app/ios-interface-provenance.json', import.meta.url), 'utf8'));
+for (const asset of nativeAssets) {
+    const response = await read(`/${asset.web}`);
+    assert.equal(response.status, 200, asset.web);
+    assert.match(response.headers.get('content-type'), /^image\/webp/);
+    assert.equal(createHash('sha256').update(Buffer.from(await response.arrayBuffer())).digest('hex'), asset.webSHA256, asset.web);
+}
+console.log(`PASS: ${version} shell and all three native interface asset hashes`);
 assert.match(shell.headers.get('content-security-policy'), /frame-ancestors 'none'/);
 assert.match(shell.headers.get('permissions-policy'), /camera=\(self\)/);
 const configResponse = await read('/api/v1/config');

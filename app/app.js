@@ -1,4 +1,5 @@
 import { ValidAPI } from "./api.js";
+import { uiIcon } from "./ui-icons.js";
 import { DemoAPI, localDemoAllowed } from "./demo-api.js";
 import { createAdditionalPasskey, createSignupPasskey, passkeysSupported, signInWithPasskey } from "./passkeys.js";
 import { startPerformanceMonitoring } from "./performance.js";
@@ -656,7 +657,7 @@ async function handleNotificationRoute() {
         await loadPlay();
         const message = "A secret admirer is now appearing more often in your polls.";
         $("#playStatus").textContent = message;
-        showToast("A secret admirer is in your polls 💘");
+        showToast("A secret admirer is in your polls");
     } else if (["aura_gifted", "boost_expired", "target_voted"].includes(notification)) {
         await preloadRoute("profile");
         switchPanel("profile");
@@ -667,7 +668,7 @@ async function handleNotificationRoute() {
                 .some((classmate) => String(classmate.user_id) === String(targetUserId));
         if (openedTarget) {
             await openClassmateProfile(targetUserId);
-            showToast("Your boost worked — they voted for you ✨");
+            showToast("Your boost worked — they voted for you");
         } else {
             const boostType = params.get("boost_type") === "targeted" ? "targeted" : "global";
             const message = notification === "aura_gifted"
@@ -773,21 +774,20 @@ function voterFirstLetterHint(item) {
 }
 
 function formatVoterHint(item) {
-    if (item.current_user_voted) return `from ${displayName(state.profile)} (you 🫵)`;
+    if (item.current_user_voted) return `from ${displayName(state.profile)} (you)`;
     if (item.voter_name) return `from ${item.voter_name}`;
     const firstLetter = voterFirstLetterHint(item);
     const firstLetterSuffix = firstLetter ? ` (${firstLetter})` : "";
     const gender = String(item.voter_gender || "").toLowerCase();
-    const emoji = ["female", "girl"].includes(gender) ? "👧💗" : ["male", "boy"].includes(gender) ? "👦💙" : gender === "non-binary" ? "🧑💛" : "";
+    const genderLabel = ["female", "girl"].includes(gender) ? "girl" : ["male", "boy"].includes(gender) ? "boy" : gender === "non-binary" ? "non-binary person" : "";
     const grade = formatGrade(item.voter_grade || "");
-    if (grade) return `from ${emoji} ${grade}${firstLetterSuffix}`.replace(/\s+/g, " ");
-    if (emoji) return `from ${emoji}${firstLetterSuffix}`;
+    if (grade) return `from ${grade} ${genderLabel}${firstLetterSuffix}`.replace(/\s+/g, " ").trim();
+    if (genderLabel) return `from a ${genderLabel}${firstLetterSuffix}`;
     return firstLetter ? `from someone (${firstLetter})` : "";
 }
 
 function formatVoterDemographicsStatement(item) {
     const gender = String(item.voter_gender || "").toLowerCase();
-    const emoji = ["female", "girl"].includes(gender) ? "👧💗" : ["male", "boy"].includes(gender) ? "👦💙" : gender === "non-binary" ? "🧑💛" : "";
     const genderWord = ["female", "girl"].includes(gender) ? "Girl" : ["male", "boy"].includes(gender) ? "Boy" : gender === "non-binary" ? "Person" : "";
     const rawGrade = formatGrade(item.voter_grade || "").replace(/\s*\([^)]*\)\s*$/, "").trim();
     const normalizedGrade = rawGrade.toLowerCase();
@@ -807,8 +807,8 @@ function formatVoterDemographicsStatement(item) {
                                 ? "Senior"
                                 : rawGrade;
     const article = /^[aeiou8]/i.test(grade) || /^(11|18)/.test(grade) ? "An" : "A";
-    if (grade && genderWord) return `${article} ${grade} ${emoji} ${genderWord} said`;
-    if (genderWord) return `A ${emoji} ${genderWord} said`;
+    if (grade && genderWord) return `${article} ${grade} ${genderWord} said`;
+    if (genderWord) return `A ${genderWord} said`;
     return "Poll";
 }
 
@@ -828,7 +828,7 @@ function renderProfilePolls(container, questions, emptyMessage) {
         const pollKey = `${question.question_id || question.id || index}`;
         return `<button class="profile-poll-row" type="button" data-top-poll="${escapeHTML(pollKey)}" aria-label="Open poll: ${escapeHTML(question.question_text)}">
             <div class="profile-poll-art">${imageURL ? `<img loading="lazy" decoding="async" src="${escapeHTML(imageURL)}" alt="">` : `<span>${index + 1}</span>`}</div>
-            <div class="profile-poll-copy"><strong>${escapeHTML(question.question_text)}</strong><span>♥ ${Number(question.vote_count || 0).toLocaleString()} votes</span></div>
+            <div class="profile-poll-copy"><strong>${escapeHTML(question.question_text)}</strong><span>${uiIcon("heart")} ${Number(question.vote_count || 0).toLocaleString()} votes</span></div>
             <span class="profile-poll-chevron" aria-hidden="true">›</span>
         </button>`;
     }).join("");
@@ -870,11 +870,11 @@ function renderProfilePanel() {
     $("#profileCard").innerHTML = `<article class="full-profile-card">
         <button class="profile-photo-button" type="button" data-edit-photo aria-label="Change profile picture">
             <span class="full-profile-avatar">${imageURL ? `<img loading="lazy" decoding="async" src="${escapeHTML(imageURL)}" alt="${escapeHTML(displayName(profile))}">` : `<span>${escapeHTML(initials(profile))}</span>`}</span>
-            <span class="photo-edit-badge" aria-hidden="true">✎</span>
+            <span class="photo-edit-badge" aria-hidden="true">${uiIcon("edit")}</span>
         </button>
-        ${hasProfilePhoto ? "" : '<p class="profile-photo-warning">⚠️ Users without profile pictures receive less votes.</p>'}
+        ${hasProfilePhoto ? "" : '<p class="profile-photo-warning">Users without profile pictures receive less votes.</p>'}
         <h3>${escapeHTML(displayName(profile))}</h3>
-        <div class="profile-identity-line"><span class="profile-handle">@${escapeHTML(profile.username || "valid")}</span>${streak ? `<span class="profile-streak ${profile.streak_needs_activity ? "needs-activity" : ""}" aria-label="${streak} day streak">🔥 ${streak}</span>` : ""}</div>
+        <div class="profile-identity-line"><span class="profile-handle">@${escapeHTML(profile.username || "valid")}</span>${streak ? `<span class="profile-streak ${profile.streak_needs_activity ? "needs-activity" : ""}" aria-label="${streak} day streak">${uiIcon("fire")} ${streak}</span>` : ""}</div>
         <button class="profile-bio-button ${profile.bio ? "" : "empty"}" type="button" data-edit-bio>${profile.bio ? escapeHTML(profile.bio) : '<span>Add bio</span><span class="profile-add-bio-icon" aria-hidden="true">+</span>'}</button>
         ${(schoolName || grade) ? `<div class="profile-school-meta">${schoolName ? `<span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-school.svg" alt=""><span>${escapeHTML(schoolName)}</span></span>` : ""}${grade ? `<span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-graduation-cap.svg" alt=""><span>${escapeHTML(grade)}</span></span>` : ""}</div>` : ""}
         <button class="profile-information-inline" type="button" data-edit-profile>
@@ -884,7 +884,7 @@ function renderProfilePanel() {
         </button>
         <div class="profile-stats-grid">
             <div class="profile-stat-card" data-profile-stat="aura"><strong><img loading="lazy" decoding="async" class="profile-aura-icon" src="../assets/app/aura.webp" alt="">${Number(profile.aura_points || 0).toLocaleString()}</strong><span>Aura</span></div>
-            <div class="profile-stat-card"><strong><span class="heart">♥</span>${Number(profile.vote_count || 0).toLocaleString()}</strong><span>Votes Received</span></div>
+            <div class="profile-stat-card"><strong><span class="heart">${uiIcon("heart")}</span>${Number(profile.vote_count || 0).toLocaleString()}</strong><span>Votes Received</span></div>
         </div>
     </article>`;
     renderSchoolCard();
@@ -925,7 +925,7 @@ function renderSchoolCard() {
                 <span class="school-rank-number">#${index + 1}</span>
                 ${avatarMarkup(classmate, "school-rank-avatar")}
                 <strong>${escapeHTML(isCurrentUser ? `${displayName(classmate)} (You)` : displayName(classmate))}</strong>
-                <small><span aria-hidden="true">♥</span> ${Number(classmate.weekly_vote_count || 0).toLocaleString()} this week</small>
+                <small><span aria-hidden="true">${uiIcon("heart")}</span> ${Number(classmate.weekly_vote_count || 0).toLocaleString()} this week</small>
             </button>`;
         }).join("")}</div>` : `<p>No classmates on Valid yet.</p>`}
         <div class="school-card-actions"><button id="findContactsButton" class="secondary-button" type="button">Contacts</button><button id="viewClassmatesButton" class="secondary-button" type="button">Classmates</button></div>
@@ -1023,7 +1023,7 @@ function renderGodModeCard() {
     const weeklyReveals = Math.max(1, Number(state.config?.max_full_reveals_per_week || 2));
     const weeklyPrice = Math.max(0, Number(state.config?.god_mode_price || 6.99));
     $("#godModeCard").innerHTML = `<article class="god-mode-card ${active ? "active" : ""}">
-        <div class="god-mode-title"><span><img loading="lazy" decoding="async" src="../assets/app/crown.webp" alt=""></span><div><strong>${active ? "God Mode Active" : "God Mode"}</strong><small>${active ? "Everything unlocked" : `$${weeklyPrice.toFixed(2)} / week`}</small></div>${active ? `<span class="god-mode-active">✨ Active</span>` : ""}</div>
+        <div class="god-mode-title"><span><img loading="lazy" decoding="async" src="../assets/app/crown.webp" alt=""></span><div><strong>${active ? "God Mode Active" : "God Mode"}</strong><small>${active ? "Everything unlocked" : `$${weeklyPrice.toFixed(2)} / week`}</small></div>${active ? `<span class="god-mode-active">Active</span>` : ""}</div>
         <p class="god-mode-benefits-heading">${active ? "You're enjoying:" : "Go legendary with:"}</p>
         <ul><li>${weeklyReveals} weekly reveals to see exactly who voted.</li><li>First-letter hints on every poll.</li><li>${multiplier}× aura on every answer you give.</li><li>Get boosted to the top of classmates' polls.</li></ul>
         ${active
@@ -1092,7 +1092,7 @@ function renderGodModePitch() {
 function openGodModePitch() {
     if (hasActiveGodMode()) {
         renderGodModeCard();
-        showToast("God Mode is already active 👑");
+        showToast("God Mode is already active");
         return;
     }
     renderGodModePitch();
@@ -1124,7 +1124,7 @@ async function checkStripeCheckout() {
         api.user.subscribed_user = true;
         await refreshProfile();
         if ($("#godModePitchDialog").open) $("#godModePitchDialog").close();
-        showToast("God Mode is active 👑");
+        showToast("God Mode is active");
     } catch (error) {
         if (error.status >= 400 && error.status < 500) stopStripeCheckoutPolling();
     } finally {
@@ -1136,7 +1136,7 @@ async function startGodModeCheckout(button) {
     if (hasActiveGodMode()) {
         if ($("#godModePitchDialog").open) $("#godModePitchDialog").close();
         renderGodModeCard();
-        showToast("God Mode is already active 👑");
+        showToast("God Mode is already active");
         return;
     }
     const checkoutWindow = window.open("about:blank", "_blank");
@@ -1152,7 +1152,7 @@ async function startGodModeCheckout(button) {
             checkoutWindow?.close();
             $("#godModePitchDialog").close();
             renderGodModeCard();
-            showToast("God Mode is already active 👑");
+            showToast("God Mode is already active");
             return;
         }
         const checkout = await api.createGodModeCheckout(api.user.id);
@@ -1510,7 +1510,7 @@ function openTopPoll(pollKey) {
     $("#pollSummaryBody").innerHTML = `<article class="poll-summary-card">
         ${imageURL ? `<div class="profile-poll-art"><img loading="lazy" decoding="async" src="${escapeHTML(imageURL)}" alt=""></div>` : ""}
         <h3>${escapeHTML(question.question_text)}</h3>
-        <span class="poll-summary-votes"><span aria-hidden="true">♥</span><strong>${Number(question.vote_count || 0).toLocaleString()} votes</strong></span>
+        <span class="poll-summary-votes"><span aria-hidden="true">${uiIcon("heart")}</span><strong>${Number(question.vote_count || 0).toLocaleString()} votes</strong></span>
         <button class="primary-button" type="button" data-share-top-poll>Share poll</button>
     </article>`;
     $("#pollSummaryDialog").showModal();
@@ -1598,8 +1598,8 @@ async function confirmAuraSpend() {
         } else showToast(purchase.kind === "reveal"
             ? `Revealed: ${purchase.target.voter_name}`
             : purchase.kind === "global"
-                ? "You're boosted 🚀"
-                : `Boosted toward ${displayName(purchase.target)} ✨`);
+                ? "You're boosted"
+                : `Boosted toward ${displayName(purchase.target)}`);
     } catch (error) {
         $("#auraSpendStatus").textContent = error.message || (purchase.kind === "reveal"
             ? "Could not reveal this sender."
@@ -1657,7 +1657,7 @@ function renderClassmateDirectory() {
         rowOptions: (classmate) => ({
             dataAttribute: `data-directory-classmate="${escapeHTML(classmate.user_id)}"`,
             extraClass: "classmate-directory-row",
-            trailingMarkup: `${classmate.ask_link_active ? `<span class="classmate-ask-indicator" aria-label="Ask Me is on">${appSymbolMarkup("ask", "ask-me-symbol")}</span>` : ""}<span class="classmate-row-meta"><strong><span aria-hidden="true">♥</span> ${Number(classmate.weekly_vote_count || 0).toLocaleString()}</strong><small>this week</small></span>`,
+            trailingMarkup: `${classmate.ask_link_active ? `<span class="classmate-ask-indicator" aria-label="Ask Me is on">${appSymbolMarkup("ask", "ask-me-symbol")}</span>` : ""}<span class="classmate-row-meta"><strong><span aria-hidden="true">${uiIcon("heart")}</span> ${Number(classmate.weekly_vote_count || 0).toLocaleString()}</strong><small>this week</small></span>`,
         }),
     });
 }
@@ -1700,7 +1700,7 @@ function renderClassmateProfile() {
         <div class="profile-school-meta"><span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-school.svg" alt=""><span>${escapeHTML(profile.school_name || state.profile?.school_name || "Your school")}</span></span>${profile.grade ? `<span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-graduation-cap.svg" alt=""><span>${escapeHTML(formatGrade(profile.grade))}</span></span>` : ""}</div>
         ${state.selectedClassmateAskTarget?.public_token ? `<a class="primary-button classmate-ask-button" href="../a/${encodeURIComponent(state.selectedClassmateAskTarget.public_token)}">${appSymbolMarkup("ask", "ask-me-symbol")}<span>Ask anonymously</span></a>` : ""}
         <div class="profile-stats-grid ${tbhRequestsEnabled() ? "" : "single"}">
-            <div class="profile-stat-card"><strong><span class="heart">♥</span>${Number(profile.vote_count || 0).toLocaleString()}</strong><span>Votes Received</span></div>
+            <div class="profile-stat-card"><strong><span class="heart">${uiIcon("heart")}</span>${Number(profile.vote_count || 0).toLocaleString()}</strong><span>Votes Received</span></div>
             ${tbhRequestsEnabled() ? `<div class="profile-stat-card"><strong>${appSymbolMarkup("tbh", "profile-stat-symbol tbh-stat-symbol")}${Number(profile.tbh_unique_requester_count || 0).toLocaleString()}</strong><span>TBH Requests</span></div>` : ""}
         </div>
     </article>`;
@@ -2444,7 +2444,7 @@ async function createAccount(event) {
         resetSignupPhotoPreview();
         $("#signupDialog").close();
         await showSignedIn();
-        showToast(photoUploadFailed ? "Welcome! Add your photo from Profile when you're ready." : "Welcome to Valid ✨");
+        showToast(photoUploadFailed ? "Welcome! Add your photo from Profile when you're ready." : "Welcome to Valid");
         setTimeout(() => { if (api.hasSession()) openClassmatesDialog({ onboarding: true }); }, 700);
     } catch (error) {
         $("#signupStatus").textContent = error.message || "Could not create your account.";
@@ -2477,13 +2477,13 @@ function dominantReaction(item) {
 
 function tbhAuthorLine(item) {
     const gender = String(item.author_gender || "").toLowerCase();
-    const emoji = gender === "male" || gender === "boy" ? "👦💙" : gender === "female" || gender === "girl" ? "👧💗" : gender === "non-binary" || gender === "nonbinary" ? "🧑💛" : "";
-    if (!emoji) return "from a classmate";
+    const genderLabel = gender === "male" || gender === "boy" ? "boy" : gender === "female" || gender === "girl" ? "girl" : gender === "non-binary" || gender === "nonbinary" ? "non-binary person" : "";
+    if (!genderLabel) return "from a classmate";
     const grade = String(item.author_grade || "").trim();
-    if (!grade) return `from a ${emoji} classmate`;
+    if (!grade) return `from a ${genderLabel} in your class`;
     const normalized = formatGrade(grade);
     const classmatesInGrade = (state.classmates || []).filter((classmate) => formatGrade(classmate.grade || "") === normalized).length;
-    return classmatesInGrade >= 2 ? `from a ${emoji} ${normalized}` : `from a ${emoji} (grade hidden until more classmates join)`;
+    return classmatesInGrade >= 2 ? `from a ${genderLabel} in ${normalized}` : `from a ${genderLabel} (grade hidden until more classmates join)`;
 }
 
 function commentsEnabled() {
@@ -2680,7 +2680,10 @@ function patchReactionControls(targetType, targetId, item) {
         control.classList.toggle("selected", Boolean(selected));
         const picker = control.querySelector("[data-reaction-picker]");
         const emoji = picker?.querySelector("[aria-hidden='true']");
-        if (emoji) emoji.textContent = displayed?.emoji || "☺";
+        if (emoji) {
+            if (displayed) emoji.textContent = displayed.emoji;
+            else emoji.innerHTML = uiIcon("smile");
+        }
         if (picker) picker.setAttribute("aria-label", selected ? `Your reaction is ${selected.label}. Change reaction` : "React");
         const countButton = control.querySelector("[data-reactors]");
         if (countButton) {
@@ -2778,7 +2781,7 @@ async function openReactorList(target) {
         const reactors = targetType === "poll"
             ? await api.getFeedReactors(api.user.id, targetId)
             : await api.getFeedActivityReactors(api.user.id, targetId);
-        $("#reactorList").innerHTML = reactors.length ? reactors.map((reactor) => `<div class="reactor-row">${avatarMarkup({ first_name: reactor.first_name, last_name: reactor.last_name, profile_picture_url: reactor.profile_picture_url }, "row-avatar")}<strong>${escapeHTML(`${reactor.first_name} ${reactor.last_name}`)}</strong><span aria-label="${escapeHTML(REACTION_BY_TYPE.get(reactor.reaction_type)?.label || "Reaction")}">${REACTION_BY_TYPE.get(reactor.reaction_type)?.emoji || "✨"}</span></div>`).join("") : '<div class="empty-card"><strong>No reactions yet</strong><p>Be the first to react.</p></div>';
+        $("#reactorList").innerHTML = reactors.length ? reactors.map((reactor) => `<div class="reactor-row">${avatarMarkup({ first_name: reactor.first_name, last_name: reactor.last_name, profile_picture_url: reactor.profile_picture_url }, "row-avatar")}<strong>${escapeHTML(`${reactor.first_name} ${reactor.last_name}`)}</strong><span aria-label="${escapeHTML(REACTION_BY_TYPE.get(reactor.reaction_type)?.label || "Reaction")}">${REACTION_BY_TYPE.get(reactor.reaction_type)?.emoji || uiIcon("smile")}</span></div>`).join("") : '<div class="empty-card"><strong>No reactions yet</strong><p>Be the first to react.</p></div>';
     } catch (error) {
         $("#reactorList").innerHTML = `<div class="empty-card"><strong>Couldn't load reactions</strong><p>${escapeHTML(error.message || "Please try again.")}</p></div>`;
     }
@@ -2803,7 +2806,7 @@ function renderFeedDetail() {
         ${options.length ? `<div class="feed-detail-options">${options.map((option) => {
             const name = option.name || option.contact_name || "A classmate";
             const selected = name === selectedName;
-            return `<div class="feed-detail-option ${selected ? "selected" : ""}"><strong>${escapeHTML(name)}</strong>${selected ? `<span class="feed-detail-selection-indicator" aria-label="Picked">👆</span>` : ""}</div>`;
+            return `<div class="feed-detail-option ${selected ? "selected" : ""}"><strong>${escapeHTML(name)}</strong>${selected ? `<span class="feed-detail-selection-indicator" aria-label="Picked">${uiIcon("check")}</span>` : ""}</div>`;
         }).join("")}</div>` : `<div class="feed-detail-legacy-selection"><strong>Selected: ${escapeHTML(selectedName)}</strong><small>Options not available for this older vote</small></div>`}
         ${firstLetterHint}
         ${revealed}
@@ -3036,8 +3039,12 @@ async function createPollShareFile(item) {
             context.lineJoin = "round";
             context.lineWidth = 8;
             context.strokeStyle = "#000000";
-            context.strokeText("👆", selectedPointer.x, selectedPointer.y);
-            context.fillText("👆", selectedPointer.x, selectedPointer.y);
+            context.beginPath();
+            context.moveTo(selectedPointer.x - 14, selectedPointer.y);
+            context.lineTo(selectedPointer.x - 3, selectedPointer.y + 10);
+            context.lineTo(selectedPointer.x + 18, selectedPointer.y - 13);
+            context.stroke();
+            // Selection marker is vector-drawn, independent of the platform emoji font.
         }
     }
 
@@ -3322,13 +3329,13 @@ async function createAskStoryFile(platform) {
         context.font = '35px "Jua", sans-serif';
         context.textAlign = "center";
         context.textBaseline = "middle";
-        context.fillText("🔗  ADD LINK STICKER HERE", centerX, targetY + targetHeight / 2 + 2);
+        context.fillText("ADD LINK STICKER HERE", centerX, targetY + targetHeight / 2 + 2);
     } else {
         context.fillStyle = "#ffb8d6";
-        context.font = '46px "Apple Color Emoji", sans-serif';
+        context.font = '35px "Jua", sans-serif';
         context.textAlign = "center";
         context.textBaseline = "middle";
-        context.fillText("🔗                                      🔗", centerX, targetY + targetHeight / 2 + 2);
+        context.fillText("ADD LINK STICKER HERE", centerX, targetY + targetHeight / 2 + 2);
     }
 
     const logo = await loadShareArtwork(new URL("../assets/valid_logo.png", import.meta.url).href);
@@ -3980,7 +3987,8 @@ function showStreakCelebration(streak, multiplier) {
     const overlay = $("#streakCelebration");
     if (!overlay || Number(streak) < 1) return;
     const milestone = [7, 14, 30, 50, 100].includes(Number(streak));
-    $("#streakCelebrationFire").textContent = milestone ? "🔥🔥🔥" : "🔥";
+    $("#streakCelebrationFire").innerHTML = uiIcon("fire");
+    $("#streakCelebrationFire").classList.toggle("milestone", milestone);
     $("#streakCelebrationTitle").textContent = `${Number(streak).toLocaleString()} Day Streak!`;
     const multiplierLabel = $("#streakCelebrationMultiplier");
     multiplierLabel.textContent = Number(multiplier) > 1 ? `${Number(multiplier).toFixed(1)}x Aura Bonus!` : "";
@@ -4122,7 +4130,7 @@ function renderPlay() {
 
 async function loadPlay() {
     if (state.questions.length || state.playLocked) return renderPlay();
-    $("#playStatus").innerHTML = `<span class="play-loading-state"><span class="play-loading-gear" aria-hidden="true">⚙</span><span>Finding questions and classmates…</span></span>`;
+    $("#playStatus").innerHTML = `<span class="play-loading-state"><img class="play-loading-gear" src="../assets/app/setting-gear.webp" width="58" height="58" decoding="async" alt=""><span>Finding questions and classmates…</span></span>`;
     try {
         const [questionBatch, classmates, inviteStatus, config] = await Promise.all([
             api.getPlayQuestions(api.user.id),
@@ -4212,7 +4220,7 @@ async function nominateClassmate(candidateId) {
             renderProfileHeader();
         }
         $("#nominationDialog").close();
-        showToast(`You nominated ${displayName(candidate)} 👑`);
+        showToast(`You nominated ${displayName(candidate)}`);
         animateAuraChange(-Math.max(0, Number(state.config?.nomination_aura_cost ?? 100)));
         softHaptic();
         state.questionIndex += 1;
@@ -5393,7 +5401,7 @@ async function confirmQuestionSubmission() {
         resetQuestionArtworkPreview();
         closeDetailScreen($("#questionDialog"));
         await refreshProfile();
-        showToast(result.is_duplicate ? "Already submitted · waiting for review" : "Question sent for review ✨");
+        showToast(result.is_duplicate ? "Already submitted · waiting for review" : "Question sent for review");
     } catch (error) {
         const definitive = error.status >= 400 && error.status < 500 && ![408, 429].includes(error.status);
         if (definitive) {
@@ -5709,7 +5717,7 @@ async function chooseContacts() {
         state.choicesByQuestion.clear();
         if (state.contactOnboarding || state.classmates.length >= 4) {
             $("#classmatesDialog").close();
-            showToast(state.contactOnboarding ? "Friends added ✨" : "Classmates are ready for Play ✨");
+            showToast(state.contactOnboarding ? "Friends added" : "Classmates are ready for Play");
             if (state.activePanel === "play") renderPlay();
         }
     } catch (error) {
@@ -5785,7 +5793,7 @@ async function cancelAccountDeletion() {
         await api.cancelAccountDeletion(api.user.id);
         api.user.deletion_requested_at = null;
         $("#pendingDeletionDialog").close();
-        showToast("Your account is staying on Valid ✨");
+        showToast("Your account is staying on Valid");
     } catch (error) {
         $("#pendingDeletionStatus").textContent = error.message || "Could not keep your account.";
     } finally {
@@ -6045,7 +6053,7 @@ async function installWebApp() {
     const choice = await prompt.userChoice.catch(() => null);
     if (choice?.outcome === "accepted") {
         finishAndroidInstall();
-        showToast("Valid is installed ✨");
+        showToast("Valid is installed");
         return;
     }
     if ($("#androidInstallDialog").open) {
@@ -6241,7 +6249,7 @@ async function toggleWebPush() {
                 renderWebPushStatus();
                 await syncWebPushSubscription(existing);
                 renderWebPushStatus();
-                showToast("Notifications are on ✨");
+                showToast("Notifications are on");
             }
             return;
         }
@@ -6266,7 +6274,7 @@ async function toggleWebPush() {
         state.webPushSubscription = subscription;
         await syncWebPushSubscription(subscription);
         renderWebPushStatus();
-        showToast("Notifications are on ✨");
+        showToast("Notifications are on");
     } catch (error) {
         if (state.webPushSubscription) {
             state.webPushRegistrationState = "error";
@@ -6856,7 +6864,7 @@ function bindEvents() {
     addEventListener("appinstalled", () => {
         state.installPrompt = null;
         finishAndroidInstall();
-        showToast("Valid is on your home screen ✨");
+        showToast("Valid is on your home screen");
     });
 }
 

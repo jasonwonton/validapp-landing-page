@@ -350,7 +350,7 @@ test("profile header mirrors the iOS identity card", async ({ page }) => {
     const card = page.locator("#profileCard .full-profile-card");
     await expect(card.getByRole("heading", { name: "Jules Rivera" })).toBeVisible();
     await expect(card.locator(".profile-identity-line")).toContainText("@jules");
-    await expect(card.locator(".profile-streak")).toHaveText("🔥 7");
+    await expect(card.locator(".profile-streak")).toHaveText("7");
     await expect(card.locator(".profile-school-meta")).toContainText("Westview High School");
     await expect(card.locator(".profile-school-meta")).toContainText("Junior");
     await expect(card.locator(".profile-school-meta img")).toHaveCount(2);

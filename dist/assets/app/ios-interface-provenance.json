@@ -1,0 +1,32 @@
+[
+  {
+    "source": "ios/Six7/Six7/Assets.xcassets/setting_gear.imageset/setting_gear.png",
+    "sourceSHA256": "894548ba02d540629b67bb9e68b3f418ef3a1d516010dd29fe7fc298250839b6",
+    "web": "assets/app/setting-gear.webp",
+    "webSHA256": "951e7262b63d456c34948546da39cd3417b8de40ecddb3be7527c216ff4ee727",
+    "bytes": 6440,
+    "width": 256,
+    "height": 256,
+    "conversion": "cwebp -q 85 -resize 256 256"
+  },
+  {
+    "source": "ios/Six7/Six7/Assets.xcassets/notification_bell.imageset/notification_bell.png",
+    "sourceSHA256": "091ca348b3f4640e21823b8ee279e511a4fad7adadc3d5a4d5a7b681dd8927a1",
+    "web": "assets/app/notification-bell.webp",
+    "webSHA256": "ce553f6ad68147fb69d73a76891971437deebae39e2fbeb9e37e351750191362",
+    "bytes": 6994,
+    "width": 256,
+    "height": 256,
+    "conversion": "cwebp -q 85 -resize 256 256"
+  },
+  {
+    "source": "ios/Six7/Six7/Assets.xcassets/sticker_icon.imageset/sticker_icon.png",
+    "sourceSHA256": "301a29573de983957cbba54a76d7e1bee7d7b7b1e81114c9f4fcea478637312d",
+    "web": "assets/app/sticker-icon.webp",
+    "webSHA256": "ff28a3f344ba421a46fa59f87251947f8d2a2a8e3f16bbdc9aa3b3de9f60466f",
+    "bytes": 1186,
+    "width": 128,
+    "height": 128,
+    "conversion": "cwebp -lossless -resize 128 128; use alpha as template mask"
+  }
+]

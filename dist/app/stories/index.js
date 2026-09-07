@@ -1,3 +1,4 @@
+import { uiIcon } from "../ui-icons.js";
 import { prepareChatMedia } from "../chat/media.js";
 import {
     MAX_MEDIA_AUTOMATIC_ATTEMPTS,
@@ -53,7 +54,7 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
 
     root.innerHTML = `
         <section class="stories-shell hidden" aria-label="Stories">
-            <header><strong>Stories</strong><span class="stories-status" role="status"></span><button type="button" data-create-story aria-label="Add Story">＋</button></header>
+            <header><strong>Stories</strong><span class="stories-status" role="status"></span><button type="button" data-create-story aria-label="Add Story">${uiIcon("plus")}</button></header>
             <div class="stories-rail"></div>
         </section>
         <dialog class="story-viewer" aria-label="Story viewer">
@@ -70,7 +71,7 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
         <dialog class="story-composer" aria-label="Create Story">
             <form>
                 <header><button type="button" data-close-story-composer>Cancel</button><strong>New Story</strong><span></span></header>
-                <div class="story-composer-preview"><span aria-hidden="true">＋</span><p>Choose a photo or an MP4 video.</p></div>
+                <div class="story-composer-preview"><span aria-hidden="true">${uiIcon("plus")}</span><p>Choose a photo or an MP4 video.</p></div>
                 <input class="story-file-input" type="file" accept="image/*,video/mp4" capture="environment">
                 <fieldset class="camera-effect-picker hidden" data-story-effects><legend>Photo effect</legend><div data-camera-effect-options></div><small>Browser Effects bake supported color and lighting into the photo. Face/body-tracked lenses and filtered video remain available in iOS.</small></fieldset>
                 <label>Caption <input class="story-caption" type="text" maxlength="120" placeholder="Optional caption"></label>
@@ -486,7 +487,7 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
         $(".story-file-input").value = "";
         $(".story-caption").value = "";
         $(".story-overlay").value = "";
-        $(".story-composer-preview").innerHTML = `<span aria-hidden="true">＋</span><p>Choose a photo or an MP4 video.</p>`;
+        $(".story-composer-preview").innerHTML = `<span aria-hidden="true">${uiIcon("plus")}</span><p>Choose a photo or an MP4 video.</p>`;
         $(".story-composer-status").textContent = "";
         $(".story-upload-progress").classList.add("hidden");
         setRuntimeStyles($(".story-upload-progress span"), { width: "0" });

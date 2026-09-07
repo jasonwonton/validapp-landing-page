@@ -3,6 +3,11 @@
 Last audited: September 7, 2026
 Authorities: the current Swift client and the Six7 backend contracts. The backend remains authoritative for identity, membership history, moderation, reciprocity, idempotency, notification eligibility, and media lifecycle.
 
+Interface artwork follow-up: [UI_ASSET_PARITY.md](UI_ASSET_PARITY.md) records the
+`web-v71` removal of decorative UI emoji, three additional real iOS artwork imports,
+portable vector alternatives, preserved user/reaction emoji, and private-only rollout.
+This does not close the physical-device or whole-experience release gates.
+
 ## Status contract
 
 **Experience audit correction:** passing API/demo tests is not native-quality

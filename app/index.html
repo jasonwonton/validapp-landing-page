@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-    <meta name="valid-app-version" content="web-v70">
+    <meta name="valid-app-version" content="web-v71">
     <base href="/app/">
     <meta name="theme-color" content="#ccf7f4" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#0b2528" media="(prefers-color-scheme: dark)">
@@ -54,7 +54,7 @@
                 <div id="feedUnlockedContent">
                     <div id="storiesRoot"></div>
                     <section id="feedNotificationPrompt" class="feed-notification-prompt hidden" aria-label="Enable vote notifications">
-                        <span class="feed-notification-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M10 21h4"/></svg></span>
+                        <img class="feed-notification-icon" src="../assets/app/notification-bell.webp" alt="" width="44" height="44" decoding="async">
                         <span><strong>Don’t miss your next vote</strong><small>Enable notifications to know when someone picks you.</small></span>
                         <button id="feedNotificationButton" class="secondary-button" type="button">Enable notifications</button>
                     </section>
@@ -147,7 +147,7 @@
 
             <section id="playPanel" class="panel hidden">
                 <div class="play-status-bar" aria-label="Play status">
-                    <span class="play-streak-chip">🔥 <strong id="playStreakCount">0</strong><small id="playStreakMultiplier" class="hidden"></small></span>
+                    <span class="play-streak-chip"><svg class="ui-icon" data-ui-icon="fire" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 2c1 5-5 6-5 11 0 2 1 3 2 4-1-4 3-4 3-7 4 3 5 5 3 9 4-1 6-4 5-8-1-4-4-7-8-9Z"/></svg> <strong id="playStreakCount">0</strong><small id="playStreakMultiplier" class="hidden"></small></span>
                     <span id="playProgress" class="play-progress"></span>
                     <span class="play-aura-chip"><img src="../assets/app/aura.webp" alt="" width="688" height="856" loading="lazy" decoding="async"><strong id="auraCount">0</strong></span>
                 </div>
@@ -237,7 +237,7 @@
         </div>
         <form id="questionForm" class="question-submission-form" role="tabpanel" aria-labelledby="questionSubmitTab">
             <div class="question-submission-scroll">
-            <p class="question-kind-note">IMPORTANT: Keep it kind, specific, and something your classmates would love to vote on. ❤️</p>
+            <p class="question-kind-note">IMPORTANT: Keep it kind, specific, and something your classmates would love to vote on.</p>
             <fieldset class="identity-picker">
                 <legend>Anonymity</legend>
                 <label><input type="radio" name="questionIdentity" value="anonymous"><img src="../assets/app/anonymous.webp" alt="" width="1024" height="1024" loading="lazy" decoding="async"><span><strong>Stay anonymous</strong><small>Your name will not be on the question</small></span></label>
@@ -416,16 +416,16 @@
             <fieldset class="signup-step signup-gender-step hidden" data-signup-step="8">
                 <h2>What's your gender?</h2>
                 <div class="signup-gender-options" role="radiogroup" aria-label="Gender">
-                    <button class="signup-gender-option boy" type="button" role="radio" aria-checked="false" data-signup-gender="male"><span aria-hidden="true">👦</span><strong>Boy</strong></button>
-                    <button class="signup-gender-option girl" type="button" role="radio" aria-checked="false" data-signup-gender="female"><span aria-hidden="true">👧</span><strong>Girl</strong></button>
-                    <button class="signup-gender-option non-binary" type="button" role="radio" aria-checked="false" data-signup-gender="non-binary"><span aria-hidden="true">🧑</span><strong>Non-binary</strong></button>
+                    <button class="signup-gender-option boy" type="button" role="radio" aria-checked="false" data-signup-gender="male"><span aria-hidden="true"><svg class="ui-icon" data-ui-icon="person" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg></span><strong>Boy</strong></button>
+                    <button class="signup-gender-option girl" type="button" role="radio" aria-checked="false" data-signup-gender="female"><span aria-hidden="true"><svg class="ui-icon" data-ui-icon="person" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg></span><strong>Girl</strong></button>
+                    <button class="signup-gender-option non-binary" type="button" role="radio" aria-checked="false" data-signup-gender="non-binary"><span aria-hidden="true"><svg class="ui-icon" data-ui-icon="person" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg></span><strong>Non-binary</strong></button>
                 </div>
                 <input id="signupGender" type="hidden" value="">
                 <button id="signupGenderContinue" class="primary-button" type="button" data-signup-next disabled>Continue</button>
             </fieldset>
             <fieldset class="signup-step signup-photo-step hidden" data-signup-step="9">
                 <h2>Add a profile photo</h2>
-                <p class="signup-photo-benefit">📷 Users with profile pictures<br>receive 2-3x more votes</p>
+                <p class="signup-photo-benefit"><svg class="ui-icon" data-ui-icon="camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="4"/></svg> Users with profile pictures<br>receive 2-3x more votes</p>
                 <div class="signup-photo-picker">
                     <label class="signup-photo-circle" for="signupPicture">
                         <span id="signupPhotoPreview" class="signup-photo-preview" aria-hidden="true"><span class="signup-photo-placeholder"><span class="signup-photo-person-icon"></span><small>Tap to add photo</small></span></span>
@@ -862,7 +862,7 @@
 
     <div id="streakCelebration" class="streak-celebration hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="streakCelebrationTitle">
         <div class="streak-celebration-card">
-            <span id="streakCelebrationFire" class="streak-celebration-fire" aria-hidden="true">🔥</span>
+            <span id="streakCelebrationFire" class="streak-celebration-fire" aria-hidden="true"><svg class="ui-icon" data-ui-icon="fire" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 2c1 5-5 6-5 11 0 2 1 3 2 4-1-4 3-4 3-7 4 3 5 5 3 9 4-1 6-4 5-8-1-4-4-7-8-9Z"/></svg></span>
             <strong id="streakCelebrationTitle">1 Day Streak!</strong>
             <span id="streakCelebrationMultiplier" class="hidden"></span>
         </div>

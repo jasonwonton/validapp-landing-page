@@ -1,3 +1,4 @@
+import { uiIcon } from "../ui-icons.js";
 import { reconcileKeyedElements } from "../keyed-list.js";
 import { createStoriesView } from "../stories/index.js";
 
@@ -23,7 +24,7 @@ export function createFeedView(context) {
         const selected = context.reactionByType.get(item.current_user_reaction);
         const canReact = item.can_react !== false && Boolean(targetId);
         const target = `${targetType}:${targetId}`;
-        return `<span class="reaction-control ${selected ? "selected" : ""} ${canReact ? "" : "disabled"}" data-reaction-control="${escapeHTML(target)}"><button class="reaction-picker-button" type="button" data-reaction-picker="${escapeHTML(target)}" aria-label="${escapeHTML(selected ? `Your reaction is ${selected.label}. Change reaction` : "React")}" ${canReact ? "" : "disabled"}>${displayed ? `<span aria-hidden="true">${displayed.emoji}</span>` : `<span aria-hidden="true">☺</span>`}</button><span class="reaction-divider" aria-hidden="true"></span><button class="reaction-count-button" type="button" data-reactors="${escapeHTML(target)}" aria-label="View ${Number(item.reaction_count || 0)} reactions">${Number(item.reaction_count || 0)}</button></span>`;
+        return `<span class="reaction-control ${selected ? "selected" : ""} ${canReact ? "" : "disabled"}" data-reaction-control="${escapeHTML(target)}"><button class="reaction-picker-button" type="button" data-reaction-picker="${escapeHTML(target)}" aria-label="${escapeHTML(selected ? `Your reaction is ${selected.label}. Change reaction` : "React")}" ${canReact ? "" : "disabled"}>${displayed ? `<span aria-hidden="true">${displayed.emoji}</span>` : `<span aria-hidden="true">${uiIcon("smile")}</span>`}</button><span class="reaction-divider" aria-hidden="true"></span><button class="reaction-count-button" type="button" data-reactors="${escapeHTML(target)}" aria-label="View ${Number(item.reaction_count || 0)} reactions">${Number(item.reaction_count || 0)}</button></span>`;
     };
     const tbhAvatarMarkup = (profile, request = false) => `<span class="tbh-avatar-shell ${request ? "request" : "response"}">${avatarMarkup(profile, "row-avatar tbh-avatar")}<span class="tbh-avatar-badge" aria-hidden="true">${request ? "TBH" : "❞"}</span></span>`;
     const feedAvatar = (item) => state.feedType === "personal" ? avatarMarkup(state.profile) : avatarMarkup({ first_name: item.voted_for_name || item.contact_name || "Student", profile_picture_url: item.voted_for_profile_picture_url });
@@ -125,7 +126,7 @@ export function createFeedView(context) {
         }
         const voteRows = filteredVotes.map((item) => {
             normalizeReactionState(item);
-            const title = state.feedType === "personal" ? `${item.is_nomination ? "👑 " : ""}<strong>You</strong> got ${item.is_nomination ? "nominated" : "voted"}` : `<strong>${escapeHTML(item.voted_for_name || item.contact_name || "A classmate")}</strong> got voted`;
+            const title = state.feedType === "personal" ? `${item.is_nomination ? `<img class="feed-nomination-icon" src="../assets/app/crown.webp" alt="" width="22" height="22" decoding="async"> ` : ""}<strong>You</strong> got ${item.is_nomination ? "nominated" : "voted"}` : `<strong>${escapeHTML(item.voted_for_name || item.contact_name || "A classmate")}</strong> got voted`;
             const detail = context.formatVoterHint(item);
             return { key: `poll:${item.question_answer_id}`, timestamp: item.timestamp, item, html: `<article class="feed-card vote-feed-row" data-answer-id="${item.question_answer_id}" data-feed-detail="${item.question_answer_id}" role="button" tabindex="0" aria-label="Open poll details: ${escapeHTML(item.question_text)}">${feedAvatar(item)}<div class="feed-body"><div class="feed-meta"><span>${title}</span></div><div class="feed-question">${escapeHTML(item.question_text)}</div><div class="feed-detail-row">${detail ? `<span class="feed-answer">${escapeHTML(detail)}</span>` : "<span></span>"}<time>${escapeHTML(relativeTime(item.timestamp))}</time></div></div>${reactionControlMarkup(item, "poll", item.question_answer_id)}${commentControlMarkup(item, "poll", item.question_answer_id)}</article>` };
         });

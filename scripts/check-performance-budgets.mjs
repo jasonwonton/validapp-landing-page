@@ -32,7 +32,7 @@ assert.match(indexHTML, /name="theme-color" content="#0b2528" media="\(prefers-c
 
 const appArtwork = [
     "anonymous", "aura", "crown", "letter_aligned", "lock", "magnifying_glass",
-    "message", "pencil-clipboard", "rocket", "scroll", "snapchat-logo",
+    "message", "pencil-clipboard", "rocket", "scroll", "snapchat-logo", "setting-gear", "notification-bell", "sticker-icon",
 ];
 const artworkBytes = (await Promise.all(appArtwork.map((name) => bytes(`assets/app/${name}.webp`))))
     .reduce((total, size) => total + size, 0);

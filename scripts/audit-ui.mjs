@@ -28,6 +28,12 @@ try {
                 await page.evaluate(() => scrollTo(0, 0));
             }
         }
+        await page.getByRole('button', { name: /Noah Williams/ }).click();
+        await page.getByRole('button', { name: 'Send media or a sticker' }).click();
+        await page.locator('.native-sticker-icon').waitFor({ state: 'visible' });
+        await page.screenshot({ path: `${output}${colorScheme}-stickers.png`, animations: 'disabled' });
+        await page.getByRole('dialog', { name: 'Send media', exact: true }).getByRole('button', { name: 'Cancel', exact: true }).click();
+        await page.getByRole('button', { name: 'Back to chats' }).click();
         await page.getByRole('button', { name: /Weekend Crew/ }).click();
         await page.locator('.chat-daily-row > button').waitFor({ state: 'visible' });
         await page.screenshot({ path: `${output}${colorScheme}-room.png` });

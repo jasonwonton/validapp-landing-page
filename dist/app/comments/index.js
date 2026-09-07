@@ -378,7 +378,7 @@ export function createCommentsView(context) {
 
     function renderReactors() {
         $("#commentReactorsList").innerHTML = reactorState.rows.length
-            ? reactorState.rows.map((reactor) => `<div class="comment-reactor-row">${avatarMarkup(reactor, "row-avatar")}<strong>${escapeHTML([reactor.first_name, reactor.last_name].filter(Boolean).join(" ") || "Valid user")}</strong><span aria-label="${escapeHTML(REACTION_BY_TYPE.get(reactor.reaction_type)?.label || "Reaction")}">${REACTION_BY_TYPE.get(reactor.reaction_type)?.emoji || "✨"}</span></div>`).join("")
+            ? reactorState.rows.map((reactor) => `<div class="comment-reactor-row">${avatarMarkup(reactor, "row-avatar")}<strong>${escapeHTML([reactor.first_name, reactor.last_name].filter(Boolean).join(" ") || "Valid user")}</strong><span aria-label="${escapeHTML(REACTION_BY_TYPE.get(reactor.reaction_type)?.label || "Reaction")}">${REACTION_BY_TYPE.get(reactor.reaction_type)?.emoji || "—"}</span></div>`).join("")
             : `<div class="comments-empty"><strong>No reactions yet</strong></div>`;
         $("#loadMoreCommentReactors").classList.toggle("hidden", !reactorState.hasMore || reactorState.rows.length >= MAX_REACTORS);
     }

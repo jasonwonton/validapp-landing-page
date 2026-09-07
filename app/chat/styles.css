@@ -250,6 +250,10 @@
 .chat-sticker-library > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .chat-sticker-library h2 { margin: 0; font-size: .8rem; }
 .chat-sticker-library > header button { min-height: 42px; padding: 6px 10px; border: 1px solid var(--ink); border-radius: 11px; background: var(--white); font-weight: 800; }
+.chat-sticker-library > header button { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); }
+.native-sticker-icon { display: inline-block; width: 24px; height: 24px; flex: 0 0 auto; background: currentColor; mask: url("../../assets/app/sticker-icon.webp") center / contain no-repeat; -webkit-mask: url("../../assets/app/sticker-icon.webp") center / contain no-repeat; }
+.chat-action-list button, .chat-add-people { display: inline-flex; align-items: center; gap: 5px; }
+.chat-action-list .ui-icon { width: 18px; height: 18px; }
 .chat-sticker-library > div { display: flex; gap: 8px; min-height: 54px; overflow-x: auto; }
 .chat-sticker-item { flex: 0 0 62px; width: 62px; display: grid; gap: 4px; }
 .chat-sticker-item [data-send-sticker] { width: 58px; height: 58px; padding: 3px; border: 1px solid var(--ink); border-radius: 13px; background: var(--white); }

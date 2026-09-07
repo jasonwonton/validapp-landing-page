@@ -413,7 +413,7 @@ test("feed navigation, filtering, and reactions work", async ({ page }) => {
 test("God Mode first-letter hints appear in the personal feed and poll detail", async ({ page }) => {
     await signInToDemo(page, "&godmode=1");
     const poll = page.locator("[data-feed-detail='9001']");
-    await expect(poll.locator(".feed-answer")).toContainText("Sophomore (M)");
+    await expect(poll.locator(".feed-answer")).toHaveText("from Sophomore girl (M)");
     await poll.click();
     await expect(page.locator("#feedDetailDialog .feed-detail-first-letter-hint")).toHaveText("Hint: starts with M");
 });
@@ -434,7 +434,7 @@ test("own school votes show the iOS-style you marker", async ({ page }) => {
     await signInToDemo(page);
     await page.getByRole("button", { name: "School", exact: true }).click();
     const ownVote = page.locator("[data-feed-detail='9004']");
-    await expect(ownVote).toContainText("from Jules Rivera (you 🫵)");
+    await expect(ownVote).toContainText("from Jules Rivera (you)");
     await ownVote.click();
     await expect(page.locator("#feedDetailDialog .detail-screen-header > strong")).toHaveText("Jules Rivera said");
     await expect(page.locator("#feedDetailDialog")).not.toContainText("(you");
@@ -451,7 +451,7 @@ test("feed polls open the iOS-style detail and moderation flow", async ({ page }
     await expect(dialog.locator(".feed-detail-option")).toHaveCount(4);
     await expect(dialog.getByText("Jules Rivera").first()).toBeVisible();
     await expect(dialog.locator(".feed-detail-option.selected")).toContainText("Jules Rivera");
-    await expect(dialog.locator(".feed-detail-selection-indicator")).toHaveText("👆");
+    await expect(dialog.locator('.feed-detail-selection-indicator [data-ui-icon="check"]')).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Share poll to Snapchat" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Share poll to Instagram" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Share poll to TikTok" })).toBeVisible();

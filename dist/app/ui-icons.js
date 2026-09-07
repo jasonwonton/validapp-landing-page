@@ -13,11 +13,19 @@ const paths = {
     clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v6l4 2"/>',
     phone: '<path d="m7 3 3 5-3 3c2 3 3 4 6 6l3-3 5 3-1 4C10 22 2 14 3 4z"/>',
     video: '<rect x="2" y="5" width="13" height="14" rx="3"/><path d="m15 9 7-4v14l-7-4"/>',
-    heart: '<path d="M12 21 3 12C-3 3 7-2 12 6 17-2 27 3 21 12z"/>',
+    heart: '<path d="M12 21 3.5 12.5C-2 6 6 0 12 6 18 0 26 6 20.5 12.5z"/>',
+    fire: '<path d="M12 2c1 5-5 6-5 11 0 2 1 3 2 4-1-4 3-4 3-7 4 3 5 5 3 9 4-1 6-4 5-8-1-4-4-7-8-9Z"/>',
+    person: '<circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>',
+    check: '<path d="m5 12 4 4L19 6"/>',
+    edit: '<path d="m4 16-1 5 5-1L21 7l-4-4Z M14 6l4 4"/>',
+    reply: '<path d="m9 4-7 7 7 7M2 11h11a8 8 0 0 1 8 8"/>',
+    copy: '<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V3H3v13h5"/>',
+    play: '<path d="m7 3 14 9-14 9Z"/>',
+    smile: '<circle cx="12" cy="12" r="9"/><path d="M8 15c2 3 6 3 8 0M8 8h.01M16 8h.01"/>',
     more: '<circle cx="4" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="20" cy="12" r="1"/>',
     photo: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="2"/><path d="m3 17 6-6 4 4 3-3 5 5"/>',
 };
 export function uiIcon(name) {
     if (!paths[name]) throw new Error(`Unknown interface icon: ${name}`);
-    return `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths[name]}</svg>`;
+    return `<svg class="ui-icon" data-ui-icon="${name}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths[name]}</svg>`;
 }
