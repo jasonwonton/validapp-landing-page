@@ -236,6 +236,14 @@ test("installed Chromium shell opens a previously unvisited Chats overlay journe
 
 test("Android landing handoff requires native installation before signup", async ({ page }) => {
     await page.addInitScript(() => {
+        // Model an Android browser with passkey support as well as its installer.
+        // Linux WebKit has no WebAuthn implementation; UA spoofing alone correctly
+        // triggers the unsupported-browser guard instead of opening signup.
+        Object.defineProperty(window, "PublicKeyCredential", { configurable: true, value: class {} });
+        Object.defineProperty(navigator, "credentials", { configurable: true, value: {
+            create: async () => { throw new Error("This handoff test must not create a credential"); },
+            get: async () => { throw new Error("This handoff test must not request a credential"); },
+        } });
         Object.defineProperty(navigator, "userAgent", {
             configurable: true,
             get: () => "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 Chrome/138.0 Mobile Safari/537.36",
