@@ -1,6 +1,7 @@
 import { cp, mkdir, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { build } from "esbuild";
 
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
 const outputRoot = path.join(repositoryRoot, "dist");
@@ -36,5 +37,18 @@ await writeFile(
     path.join(outputRoot, "app", "local-config.js"),
     "// Production uses the same-origin /api/v1 proxy.\n",
 );
+
+// LiveKit is self-hosted and loaded only after a user starts or accepts a call.
+// It is deliberately omitted from the service-worker app shell.
+await build({
+    entryPoints: [path.join(repositoryRoot, "app", "calls", "livekit-entry.js")],
+    outfile: path.join(outputRoot, "app", "calls", "livekit.bundle.js"),
+    bundle: true,
+    format: "esm",
+    target: ["es2020"],
+    minify: true,
+    legalComments: "none",
+});
+await rm(path.join(outputRoot, "app", "calls", "livekit-entry.js"), { force: true });
 
 console.log(`Static site packaged in ${path.relative(repositoryRoot, outputRoot)}/`);

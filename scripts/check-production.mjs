@@ -10,11 +10,12 @@ const checks = [
     ["app shell and security headers", async () => {
         const app = await fetchOK("https://validapp.lol/app/");
         const appHTML = await app.text();
-        assert.match(appHTML, /<title>Valid on the web<\/title>/, "production app shell is missing");
+        assert.match(appHTML, /<title>Valid<\/title>/, "production app shell is missing");
         assert.match(appHTML, /content-security-policy/i, "production app is missing its fallback CSP");
         assert.match(app.headers.get("content-security-policy") || "", /frame-ancestors 'none'/, "response CSP must prevent framing");
         assert.equal(app.headers.get("x-content-type-options"), "nosniff", "nosniff header is missing");
-        assert.match(app.headers.get("permissions-policy") || "", /camera=\(\)/, "permissions policy is missing");
+        assert.match(app.headers.get("permissions-policy") || "", /camera=\(self\)/, "camera policy is missing");
+        assert.match(app.headers.get("permissions-policy") || "", /microphone=\(self\)/, "microphone policy is missing");
     }],
     ["PWA manifest and service worker", async () => {
         const manifest = await fetchOK("https://validapp.lol/app/manifest.webmanifest");

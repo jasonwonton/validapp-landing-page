@@ -43,13 +43,26 @@ test("production CSP permits only Cloudflare's Turnstile script and frame host",
     const policy = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute("content");
     expect(policy).toContain("script-src 'self' https://challenges.cloudflare.com");
     expect(policy).toContain("frame-src https://challenges.cloudflare.com");
-    expect(policy).toContain("connect-src 'self' https://api.six7.lol https://validappcdn.com");
+    const connections = policy.match(/connect-src ([^;]+)/)[1].split(' ');
+    expect(connections).toEqual([
+        "'self'", 'https://9472d27fa2e1a3762bd91728bb7d9437.r2.cloudflarestorage.com',
+        'https://api.six7.lol', 'https://validappcdn.com', 'wss://livekit.six7.lol',
+        'wss://livekit-staging-150-136-43-223.sslip.io', 'wss://livekit-prod-150-136-43-223.sslip.io',
+    ]);
 });
 
 
 test("signup exchanges a browser challenge token before sending SMS", async ({ page }) => {
     let otpRequest = null;
     await page.addInitScript(() => {
+        // This tests the SMS step in a passkey-capable browser, not credential
+        // creation. Linux WebKit does not provide WebAuthn, so model the required
+        // capability explicitly without weakening the application's guard.
+        Object.defineProperty(window, "PublicKeyCredential", { configurable: true, value: class {} });
+        Object.defineProperty(navigator, "credentials", { configurable: true, value: {
+            create: async () => { throw new Error("The SMS test must not create a credential"); },
+            get: async () => { throw new Error("The SMS test must not request a credential"); },
+        } });
         window.turnstile = {
             render(selector, options) {
                 setTimeout(() => options.callback("verified-browser-token"), 0);

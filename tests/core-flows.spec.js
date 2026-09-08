@@ -212,8 +212,38 @@ test("android shell surfaces connectivity and install affordances", async ({ pag
     await expect(page.getByRole("button", { name: "Install Valid" })).toBeHidden();
 });
 
+test("installed Chromium shell opens a previously unvisited Chats overlay journey offline", async ({ page, context, browserName }) => {
+    test.skip(browserName !== "chromium", "Service workers are intentionally blocked in this project");
+    await page.goto("/app/");
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.reload();
+    await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
+    await page.goto("/app/?demo=1&signin=1");
+    await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
+    await context.setOffline(true);
+    await page.reload();
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await page.getByRole("button", { name: "Chats", exact: true }).click();
+    await page.getByRole("button", { name: /Noah Williams/ }).click();
+    await page.getByRole("button", { name: "Send photo or video" }).click();
+    const dialog = page.getByRole("dialog", { name: "Send media" });
+    await dialog.locator(".chat-media-file-input").setInputFiles("assets/AppIconV2.png");
+    await dialog.getByRole('button', { name: 'Add text', exact: true }).click();
+    await dialog.getByLabel("Text overlay").fill("Offline draft");
+    await expect(dialog.locator("[data-media-overlay-position]")).toHaveAccessibleName(/50% from left, 50% from top/);
+    await context.setOffline(false);
+});
+
 test("Android landing handoff requires native installation before signup", async ({ page }) => {
     await page.addInitScript(() => {
+        // Model an Android browser with passkey support as well as its installer.
+        // Linux WebKit has no WebAuthn implementation; UA spoofing alone correctly
+        // triggers the unsupported-browser guard instead of opening signup.
+        Object.defineProperty(window, "PublicKeyCredential", { configurable: true, value: class {} });
+        Object.defineProperty(navigator, "credentials", { configurable: true, value: {
+            create: async () => { throw new Error("This handoff test must not create a credential"); },
+            get: async () => { throw new Error("This handoff test must not request a credential"); },
+        } });
         Object.defineProperty(navigator, "userAgent", {
             configurable: true,
             get: () => "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 Chrome/138.0 Mobile Safari/537.36",
@@ -253,7 +283,7 @@ test("PWA ships install icons and Web Push worker handlers", async ({ request })
         expect.objectContaining({ sizes: "512x512", purpose: "maskable" }),
     ]));
     expect(manifest.orientation).toBe("portrait-primary");
-    expect(manifest.shortcuts.map((shortcut) => shortcut.name)).toEqual(["Feed", "Play", "Profile"]);
+    expect(manifest.shortcuts.map((shortcut) => shortcut.name)).toEqual(["Feed", "Play", "Chats", "Profile"]);
     expect(manifest.launch_handler.client_mode).toBe("navigate-existing");
 
     const workerResponse = await request.get("/app/service-worker.js");
@@ -264,6 +294,13 @@ test("PWA ships install icons and Web Push worker handlers", async ({ request })
     expect(worker).toContain("safeNotificationURL");
     expect(worker).toContain("SKIP_WAITING");
     expect(worker).toContain('{ action: "play", title: "Play" }');
+    expect(worker).toContain('url.pathname.startsWith("/api/")');
+    expect(worker).not.toContain("cache.put(");
+    expect(worker).not.toContain("Jua-Regular.ttf");
+    expect(worker).toContain("Jua-Latin.woff2");
+    expect(worker).toContain("./routes/route-loader.js");
+    expect(worker).toContain("./realtime-list.js");
+    expect(worker).toContain("./runtime-style.js");
 });
 
 test("Android back and forward follow the in-app detail stack", async ({ page }) => {
@@ -280,9 +317,15 @@ test("Android back and forward follow the in-app detail stack", async ({ page })
 
 test("bottom tabs preserve independent scroll positions", async ({ page }) => {
     await signInToDemo(page);
+    const waitForPanelRestore = () => page.evaluate(() => new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+    }));
+    await waitForPanelRestore();
     await page.evaluate(() => scrollTo(0, 360));
     const feedScroll = await page.evaluate(() => scrollY);
     await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+    await waitForPanelRestore();
     await page.evaluate(() => scrollTo(0, 720));
     const profileScroll = await page.evaluate(() => scrollY);
     await page.getByRole("button", { name: "Feed", exact: true }).click();
@@ -379,7 +422,7 @@ test("feed navigation, filtering, and reactions work", async ({ page }) => {
 test("God Mode first-letter hints appear in the personal feed and poll detail", async ({ page }) => {
     await signInToDemo(page, "&godmode=1");
     const poll = page.locator("[data-feed-detail='9001']");
-    await expect(poll.locator(".feed-answer")).toContainText("Sophomore (M)");
+    await expect(poll.locator(".feed-answer")).toHaveText("from a 👧💗 Sophomore (M)");
     await poll.click();
     await expect(page.locator("#feedDetailDialog .feed-detail-first-letter-hint")).toHaveText("Hint: starts with M");
 });
@@ -417,7 +460,7 @@ test("feed polls open the iOS-style detail and moderation flow", async ({ page }
     await expect(dialog.locator(".feed-detail-option")).toHaveCount(4);
     await expect(dialog.getByText("Jules Rivera").first()).toBeVisible();
     await expect(dialog.locator(".feed-detail-option.selected")).toContainText("Jules Rivera");
-    await expect(dialog.locator(".feed-detail-selection-indicator")).toHaveText("👆");
+    await expect(dialog.locator('.feed-detail-selection-indicator [data-ui-icon="check"]')).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Share poll to Snapchat" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Share poll to Instagram" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Share poll to TikTok" })).toBeVisible();
@@ -436,8 +479,9 @@ test("feed polls open the iOS-style detail and moderation flow", async ({ page }
 
 test("feed polls can be privately deleted without reporting", async ({ page }) => {
     await signInToDemo(page);
-    await page.locator("[data-feed-detail='9002']").click();
+    await page.locator("[data-feed-detail='9002'] .feed-question").click();
     const dialog = page.locator("#feedDetailDialog");
+    await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "More poll actions" }).click();
     page.once("dialog", async (confirmation) => {
         expect(confirmation.message()).toContain("It won't be reported or affect anyone else.");
@@ -487,7 +531,7 @@ test("poll share buttons generate the iOS-style 9:16 photo", async ({ page }) =>
     await page.getByRole("button", { name: "School", exact: true }).click();
     await page.locator("[data-feed-detail='9003']").click();
     const dialog = page.locator("#feedDetailDialog");
-    await expect(dialog.locator(".feed-detail-art > img")).toHaveAttribute("src", /anonymous\.png/);
+    await expect(dialog.locator(".feed-detail-art > img")).toHaveAttribute("src", /anonymous\.webp/);
     await expect(dialog.locator(".feed-detail-art .artwork-placeholder")).toHaveCount(0);
     await expect(dialog.getByText("Share this poll")).toHaveCount(0);
     await dialog.getByRole("button", { name: "Share poll to Snapchat" }).click();
@@ -563,7 +607,7 @@ test("new users vote to unlock Feed just like iOS", async ({ page }) => {
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await expect(page.getByRole("heading", { name: "84 votes" })).toBeVisible();
     await expect(page.getByText("Cast 2 more votes to unlock your Feed and see what classmates said.")).toBeVisible();
-    await expect(page.locator(".feed-gate-lock")).toHaveAttribute("src", "../assets/app/lock.png");
+    await expect(page.locator(".feed-gate-lock")).toHaveAttribute("src", "../assets/app/lock.webp");
     await expect(page.getByText("1 / 3 votes cast")).toBeVisible();
     await page.getByRole("button", { name: "Vote now to unlock Feed" }).click();
     await expect(page.getByText("Who would survive longest on a deserted island?")).toBeVisible();
@@ -630,7 +674,7 @@ test("play answers a poll and advances", async ({ page }) => {
     await expect(page.locator(".play-streak-chip")).toContainText("1.5x");
     await expect(page.locator("#auraCount")).toHaveText("1,280");
     const artworkBox = await page.locator("#playCard .question-artwork").boundingBox();
-    expect(Math.abs(artworkBox.width - artworkBox.height)).toBeLessThan(16);
+    expect(Math.abs(artworkBox.width - artworkBox.height)).toBeLessThan(1);
     await expect(page.locator("#playCard .choice-button").first()).toHaveCSS("min-height", "90px");
     for (const name of [/Shuffle/, /Nominate/, /Skip \(3\)/]) {
         const button = page.getByRole("button", { name });
@@ -770,7 +814,7 @@ test("profile exposes iOS-style editing, ask link, purchases, invites, and sign 
     await bioDialog.getByRole("button", { name: "Save bio" }).click();
     await expect(page.locator("[data-edit-bio]")).toHaveText("Senior year, good music, better people.");
     await page.getByRole("button", { name: /Submit a school question for/i }).click();
-    await expect(page.getByRole("dialog", { name: "Submit a school question" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "School Questions" })).toBeVisible();
 });
 
 test("settings shows aura balance and confirms boost spending", async ({ page }) => {
