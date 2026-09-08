@@ -92,6 +92,12 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
             lifecycleTimer = null;
             if (!currentCall || String(currentCall.id) !== String(call.id)) return;
             const token = generation;
+            if (currentCall.state !== 'active') {
+                // Stop local waiting audio at the authoritative deadline even
+                // when the status request hangs or the network disappears.
+                ringbackFinished = true; ringback.stop();
+                setStatus('Checking call status…');
+            }
             try {
                 const refreshed = await api.getCall(userId(), call.id);
                 if (!isCurrent(token)) return;

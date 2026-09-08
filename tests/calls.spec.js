@@ -167,6 +167,23 @@ test('reconnection pauses waiting tone and cannot restart it after answer',async
     await page.locator('[data-call-hangup]').click();
 });
 
+test('ringback stops at server deadline even when the status request hangs',async({page})=>{
+    await installCallHarness(page);await installToneProbe(page);await page.clock.install();
+    await page.evaluate(async()=>{
+        const original=__callAPI.joinCall;
+        __callAPI.joinCall=async(...args)=>{
+            const response=await original(...args);
+            response.call.ringing_expires_at=new Date(Date.now()+1000).toISOString();return response;
+        };
+        __callAPI.getCall=()=>new Promise(()=>{});
+        await __calls.start('audio',{id:'chat-1',accepted_count:2});
+    });
+    await page.clock.fastForward(5001);
+    expect(await page.evaluate(()=>__toneLog)).toEqual(['prepare','start','stop']);
+    await expect(page.locator('[data-call-status]')).toHaveText('Checking call status…');
+    await page.locator('[data-call-hangup]').click();
+});
+
 test("open-app voice calls preflight media, use idempotent server state, and end cleanly", async ({ page }) => {
     await installCallHarness(page);
     await page.evaluate(() => window.__calls.start("audio", { id: "chat-1", display_name: "Maya", accepted_count: 2 }));
