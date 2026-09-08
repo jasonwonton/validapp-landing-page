@@ -2,6 +2,27 @@
 
 ## Cutover update — 2026-09-07
 
+- Cloudflare is now Active. Its universal edge certificate is Active for the
+  apex and first-level subdomains. Only the existing staging CNAME is proxied;
+  production A/AAAA records remain DNS-only. Staging's private-access, exact
+  asset hashes, synthetic passkey ceremony, narrow/wide browser, CORS and
+  uncached API tests passed through the proxy. Shell/service worker revalidate;
+  API responses have no PWA-only COOP/Permissions-Policy headers. Real signed
+  uploads, call audio, authenticated realtime and installed updates remain gates.
+- DigitalOcean `validapp.lol` domain metadata now uses externally managed DNS
+  (only its `zone` field removed). Metadata deployment
+  `27afb062-5bd8-4b08-92b1-48089a1cfd14` is ACTIVE and reuses all prior source
+  revisions, including the migration job; migration preflight passed. All other
+  configuration is identical after ignoring autoscaler-managed replica counts.
+  Production PWA/config/API health remain HTTP 200. No new frontend release.
+- Full CI run 34180927146 passed static, Android, Chromium and Firefox and
+  progressed through WebKit's earlier layout failures. Its last failure was
+  the SMS signup fixture lacking WebAuthn on Linux WebKit, confirmed by the
+  unsupported-browser UI in the trace. The fixture now explicitly models
+  capability; a separate negative test preserves the unsupported-browser guard.
+
+Earlier cutover chronology:
+
 - Correct Porkbun owner account `jasonwonton123` saved the assigned Cloudflare
   nameservers. Reopening the registrar editor confirmed both exact names.
 - Before saving, direct queries to both Cloudflare nameservers matched all seven

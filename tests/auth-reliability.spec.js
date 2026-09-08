@@ -85,6 +85,18 @@ test('cross-domain capability failure is caught before issuing a challenge', asy
     expect(result).toEqual({ calls: 0, code: 'related_origins_unavailable' });
 });
 
+test('a browser without WebAuthn is rejected before requesting a signup challenge', async ({ page }) => {
+    await mount(page);
+    const result = await page.evaluate(async () => {
+        Object.defineProperty(window, 'PublicKeyCredential', { configurable: true, value: undefined });
+        const { createSignupPasskey } = await import('/app/passkeys.js');
+        let calls = 0;
+        try { await createSignupPasskey({ getWebSignupChallenge: async () => { calls++; } }, 'private_name'); }
+        catch (error) { return { calls, code: error.code }; }
+    });
+    expect(result).toEqual({ calls: 0, code: 'passkeys_unavailable' });
+});
+
 test('RP-native domains work without related-origin support', async ({ page }) => {
     await mount(page, { host: 'six7.lol', capabilities: false });
     expect(await page.evaluate(async () => { await (await import('/app/auth-reliability.js')).checkPasskeyEnvironment(); return true; })).toBe(true);

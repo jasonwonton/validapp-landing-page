@@ -55,6 +55,14 @@ test("production CSP permits only Cloudflare's Turnstile script and frame host",
 test("signup exchanges a browser challenge token before sending SMS", async ({ page }) => {
     let otpRequest = null;
     await page.addInitScript(() => {
+        // This tests the SMS step in a passkey-capable browser, not credential
+        // creation. Linux WebKit does not provide WebAuthn, so model the required
+        // capability explicitly without weakening the application's guard.
+        Object.defineProperty(window, "PublicKeyCredential", { configurable: true, value: class {} });
+        Object.defineProperty(navigator, "credentials", { configurable: true, value: {
+            create: async () => { throw new Error("The SMS test must not create a credential"); },
+            get: async () => { throw new Error("The SMS test must not request a credential"); },
+        } });
         window.turnstile = {
             render(selector, options) {
                 setTimeout(() => options.callback("verified-browser-token"), 0);
