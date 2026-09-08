@@ -254,7 +254,9 @@ test("Android landing handoff requires native installation before signup", async
         contentType: "application/json",
         body: JSON.stringify({ detail: "Authentication required" }),
     }));
-    await page.goto("/app/?install=1&signup=1");
+    await page.goto("/");
+    await page.getByRole("link", { name: "Download on Android" }).click();
+    await expect(page).toHaveURL(/\/app\/\?install=1&signup=1$/);
     const installDialog = page.getByRole("dialog", { name: "Install Valid on Android" });
     await expect(installDialog).toBeVisible();
     await expect(page.getByRole("dialog", { name: "Create your Valid account" })).toBeHidden();
