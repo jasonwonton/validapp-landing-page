@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "valid-web-";
-const CACHE_NAME = `${CACHE_PREFIX}v87`;
+const CACHE_NAME = `${CACHE_PREFIX}v88`;
 const APP_SHELL = [
     "./",
     "./styles.css",
@@ -33,6 +33,7 @@ const APP_SHELL = [
     "./chat/message-window.js",
     "./chat/timeline-scroll.js",
     "./chat/models.js",
+    "./chat/call-history.js",
     "./chat/store.js",
     "./chat/media.js",
     "./chat/outbox.js",

@@ -41,6 +41,33 @@ async function mount(page, total = 750) {
     await expect.poll(() => page.locator('.chat-timeline').evaluate(el => el.scrollHeight - el.clientHeight - el.scrollTop)).toBeLessThan(2);
 }
 
+test('call events refresh the same authoritative history row and preserve removal rules', async ({ page }) => {
+    await mount(page, 10);
+    await page.evaluate(() => {
+        scrollFixture.messages.push({ id: 'call-message', chat_id: 'scroll-chat', room_sequence: 11,
+            kind: 'system', status: 'active', sender_user_id: 'scroll-user', viewer_is_sender: true,
+            call_id: 'call-1', call_state: 'ringing', call_media_type: 'audio', created_at: new Date().toISOString() });
+        scrollFixture.emit({ type: 'call_started', call_id: 'call-1' });
+    });
+    await expect(page.locator('.chat-call-history')).toHaveText(/Outgoing voice call.*Outgoing/);
+    await page.evaluate(() => {
+        scrollFixture.messages.at(-1).call_state = 'cancelled';
+        scrollFixture.emit({ type: 'call_ended', call_id: 'call-1' });
+    });
+    await expect(page.locator('.chat-call-history')).toHaveCount(1);
+    await expect(page.locator('.chat-call-history')).toContainText('Cancelled voice call');
+    await page.evaluate(() => { for (let i = 0; i < 20; i++) scrollFixture.emit({ type: 'call_ended', call_id: 'call-1' }); });
+    await expect(page.locator('.chat-call-history')).toHaveCount(1);
+    expect(await page.evaluate(() => scrollFixture.maxActive)).toBe(1);
+    await page.screenshot({ path: test.info().outputPath('cancelled-call-history.png') });
+    await page.evaluate(() => {
+        scrollFixture.messages.at(-1).status = 'deleted';
+        scrollFixture.emit({ type: 'message_deleted' });
+    });
+    await expect(page.locator('.chat-call-history')).toHaveCount(0);
+    await expect(page.getByText('Message removed', { exact: true })).toBeVisible();
+});
+
 async function top(page) { await page.locator('.chat-timeline').evaluate(el => { el.scrollTop = 0; }); }
 
 test('automatic history preserves the exact visible pixel and deduplicates in-flight loads', async ({ page }) => {

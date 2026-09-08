@@ -1,9 +1,81 @@
 import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
+import { createServer } from 'node:http';
 
 const API_ORIGIN = "https://api.six7.lol";
 const USER_ID = "11111111-1111-1111-1111-111111111111";
 const CHAT_ID = "22222222-2222-2222-2222-222222222222";
+
+test('signed chat storage PUT is allowed by both CSPs and sends no app credentials', async ({ page, browserName }) => {
+    // Real browser XHR + CSP, fixture storage response. This does NOT certify
+    // production R2 CORS, which has a separate live preflight release gate.
+    const host = 'https://9472d27fa2e1a3762bd91728bb7d9437.r2.cloudflarestorage.com';
+    const policy = (await readFile(new URL('../_headers', import.meta.url), 'utf8')).split('\n').find(line => line.trim().startsWith('Content-Security-Policy:')).trim().slice('Content-Security-Policy:'.length).trim();
+    const html = await readFile(new URL('../app/index.html', import.meta.url), 'utf8');
+    expect(html).toContain(`connect-src 'self' ${host}`);
+    await page.route('**/app/', async route => {
+        const response = await route.fetch();
+        await route.fulfill({ response, headers: { ...response.headers(), 'content-security-policy': policy } });
+    });
+    const uploads = [];
+    await page.route(`${host}/**`, async route => {
+        uploads.push({ method: route.request().method(), headers: await route.request().allHeaders() });
+        await route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*' } });
+    });
+    await page.goto('/app/');
+    const result = await page.evaluate(async host => {
+        const { ValidAPI } = await import('/app/api.js');
+        const bytes = [], credentials = [], violations = [];
+        document.addEventListener('securitypolicyviolation', event => violations.push(event.violatedDirective));
+        const send = XMLHttpRequest.prototype.send;
+        XMLHttpRequest.prototype.send = function(body) { bytes.push(body.size); credentials.push(this.withCredentials); return send.call(this, body); };
+        for (const [name, type] of [['photo', 'image/jpeg'], ['voice', 'audio/mp4'], ['thumbnail', 'image/jpeg']]) {
+            await new ValidAPI().putDirectUpload(new Blob([name], { type }), {
+                upload_url: `${host}/six7-private-media/fixture/${name}?X-Amz-Signature=fixture`,
+                required_headers: { 'Content-Type': type, 'Cache-Control': 'private, max-age=900' },
+            });
+        }
+        return { bytes, credentials, violations };
+    }, host);
+    expect(result).toEqual({ bytes: [5, 5, 9], credentials: [false, false, false], violations: [] });
+    expect(uploads).toHaveLength(3);
+    for (const upload of uploads) {
+        expect(upload.method).toBe('PUT');
+        // WebKit's routing disables cache and rewrites this header. Verify the
+        // actual un-intercepted transport separately below, not a routed mock.
+        if (browserName !== 'webkit') expect(upload.headers['cache-control']).toBe('private, max-age=900');
+        expect(upload.headers.authorization).toBeUndefined();
+        expect(upload.headers.cookie).toBeUndefined();
+    }
+});
+
+test('unintercepted upload transport preserves signed headers and exact bytes', async ({ page }) => {
+    const uploads = [];
+    const sources = new Map(await Promise.all(['api.js', 'auth-reliability.js', 'auth-diagnostics.js'].map(async name => [`/app/${name}`, await readFile(new URL(`../app/${name}`, import.meta.url))])));
+    const server = createServer(async (request, response) => {
+        if (sources.has(request.url)) { response.writeHead(200, { 'content-type': 'text/javascript' }); response.end(sources.get(request.url)); return; }
+        if (request.method === 'PUT') {
+            const chunks = []; for await (const chunk of request) chunks.push(chunk);
+            uploads.push({ headers: request.headers, body: Buffer.concat(chunks).toString() });
+            response.writeHead(204); response.end(); return;
+        }
+        response.writeHead(200, { 'content-type': 'text/html' }); response.end('<!doctype html><title>Upload transport fixture</title>');
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    try {
+        await page.goto(`http://127.0.0.1:${server.address().port}/`);
+        await page.evaluate(async () => {
+            const { ValidAPI } = await import('/app/api.js');
+            await new ValidAPI().putDirectUpload(new Blob(['photo bytes'], { type: 'image/jpeg' }), {
+                upload_url: '/upload', required_headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=900' },
+            });
+        });
+        expect(uploads).toHaveLength(1);
+        expect(uploads[0].body).toBe('photo bytes');
+        expect(uploads[0].headers['content-type']).toBe('image/jpeg');
+        expect(uploads[0].headers['cache-control']).toBe('private, max-age=900');
+    } finally { await new Promise(resolve => server.close(resolve)); }
+});
 
 test('both Memento photos upload through real XHR under the production CSP', async ({ page }) => {
     const policy = (await readFile(new URL('../_headers', import.meta.url), 'utf8')).split('\n').find(line => line.trim().startsWith('Content-Security-Policy:')).trim().slice('Content-Security-Policy:'.length).trim();

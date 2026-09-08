@@ -9,7 +9,6 @@ import {
     removeChatMediaOutbox,
 } from "../chat/outbox.js";
 import { setRuntimeStyles } from "../runtime-style.js";
-import { createCameraEffectPicker } from "../camera-effects.js";
 import { createMediaOverlayPositioner } from "../media-overlay-positioner.js";
 
 const REFRESH_MS = 30_000;
@@ -40,7 +39,6 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
     let viewerCursor = null;
     let viewerRows = [];
     let selectedStoryMedia = null;
-    let selectedStorySourceFile = null;
     let selectedStoryPreview = null;
     let storyPreparationGeneration = 0;
     let storyUploadRequestId = null;
@@ -73,7 +71,6 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
                 <header><button type="button" data-close-story-composer>Cancel</button><strong>New Story</strong><span></span></header>
                 <div class="story-composer-preview"><span aria-hidden="true">${uiIcon("plus")}</span><p>Choose a photo or an MP4 video.</p></div>
                 <input class="story-file-input" type="file" accept="image/*,video/mp4" capture="environment">
-                <fieldset class="camera-effect-picker hidden" data-story-effects><legend>Photo effect</legend><div data-camera-effect-options></div><small>Browser Effects bake supported color and lighting into the photo. Face/body-tracked lenses and filtered video remain available in iOS.</small></fieldset>
                 <label>Caption <input class="story-caption" type="text" maxlength="120" placeholder="Optional caption"></label>
                 <label>Text overlay <input class="story-overlay" type="text" maxlength="160" placeholder="Optional text — drag it in the preview"></label>
                 <div class="story-upload-progress hidden"><span></span></div>
@@ -95,11 +92,6 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
     const storyOverlay = createMediaOverlayPositioner({
         preview: $(".story-composer-preview"),
         input: $(".story-overlay"),
-    });
-    const storyEffectPicker = createCameraEffectPicker({
-        fieldset: $("[data-story-effects]"),
-        api,
-        onChange: (effect) => reprepareSelectedStoryPhoto(effect),
     });
     root.addEventListener("click", handleClick);
     $(".story-file-input").addEventListener("change", selectStoryMedia);
@@ -302,37 +294,27 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
     function openStoryComposer() {
         resetStoryComposer();
         $(".story-composer").showModal();
-        void storyEffectPicker.load();
     }
 
     async function selectStoryMedia(event) {
         const file = event.target.files?.[0];
         if (!file) return;
-        selectedStorySourceFile = file.type.startsWith("image/") ? file : null;
-        if (!selectedStorySourceFile) storyEffectPicker.reset();
         storyOverlay.reset();
         await prepareSelectedStoryMedia(file, {
-            photoEffect: selectedStorySourceFile ? storyEffectPicker.value() : null,
             preserveOverlay: false,
         });
     }
 
-    async function reprepareSelectedStoryPhoto(effect) {
-        if (!selectedStorySourceFile) return;
-        await prepareSelectedStoryMedia(selectedStorySourceFile, { photoEffect: effect, preserveOverlay: true });
-    }
-
-    async function prepareSelectedStoryMedia(file, { photoEffect = null, preserveOverlay = false } = {}) {
+    async function prepareSelectedStoryMedia(file, { preserveOverlay = false } = {}) {
         const generation = ++storyPreparationGeneration;
         $(".story-composer-status").textContent = "Preparing media…";
         $(".story-publish").disabled = true;
         $(".story-overlay").disabled = true;
         storyOverlay.setDisabled(true);
-        storyEffectPicker.setDisabled(true);
         storyUploadRequestId = null;
         storyPublishRequestId = null;
         try {
-            const prepared = await prepareChatMedia(file, { photoEffect });
+            const prepared = await prepareChatMedia(file);
             if (generation !== storyPreparationGeneration) return;
             if (prepared.kind === "audio") throw new Error("Choose a photo or MP4 video for your Story.");
             selectedStoryMedia = prepared;
@@ -341,7 +323,6 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
             $(".story-composer-preview").innerHTML = selectedStoryMedia.kind === "video"
                 ? `<video src="${escapeHTML(selectedStoryPreview)}" muted playsinline controls aria-label="Story video preview"></video>`
                 : `<img src="${escapeHTML(selectedStoryPreview)}" alt="Story photo preview" decoding="async">`;
-            storyEffectPicker.setMediaKind(selectedStoryMedia.kind);
             if (!preserveOverlay) storyOverlay.reset();
             storyOverlay.mount();
             $(".story-composer-status").textContent = `${selectedStoryMedia.kind === "video" ? "Video" : "Photo"} ready to post`;
@@ -354,7 +335,6 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
             if (generation === storyPreparationGeneration) {
                 $(".story-overlay").disabled = false;
                 storyOverlay.setDisabled(false);
-                storyEffectPicker.setDisabled(false);
             }
         }
     }
@@ -406,7 +386,6 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
         button.disabled = true;
         button.textContent = "Posting…";
         storyOverlay.setDisabled(true);
-        storyEffectPicker.setDisabled(true);
         $(".story-upload-progress").classList.remove("hidden");
         let saved = false;
         try {
@@ -422,7 +401,7 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
         } catch (error) {
             if (saved && chatTextSendIsRetryable(error)) {
                 await markChatMediaOutboxAttempt(record.id).catch(() => null);
-                $(".story-composer-status").textContent = `${error.message || "Could not post your Story."} It is saved on this device and will retry while Six7 is open.`;
+                $(".story-composer-status").textContent = `${error.message || "Could not post your Story."} It is saved on this device and will retry while Valid is open.`;
                 scheduleStoryRetry(await listChatMediaOutbox(getUser().id).catch(() => []));
             } else {
                 await removeChatMediaOutbox(record.id).catch(() => null);
@@ -433,7 +412,6 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
         } finally {
             button.textContent = "Post Story";
             button.disabled = !selectedStoryMedia;
-            storyEffectPicker.setDisabled(false);
         }
     }
 
@@ -477,11 +455,9 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
     function resetStoryComposer() {
         storyPreparationGeneration += 1;
         selectedStoryMedia = null;
-        selectedStorySourceFile = null;
         if (selectedStoryPreview) URL.revokeObjectURL(selectedStoryPreview);
         selectedStoryPreview = null;
         storyOverlay.reset();
-        storyEffectPicker.reset();
         storyUploadRequestId = null;
         storyPublishRequestId = null;
         $(".story-file-input").value = "";

@@ -6,7 +6,10 @@ test('interface source has no decorative emoji; product reactions remain intact'
     const root = new URL('../app/', import.meta.url);
     const paths = await readdir(root, { recursive: true });
     for (const path of paths.filter(p => /\.(js|html)$/.test(p) && p !== 'demo-api.js')) {
-        const source = await readFile(new URL(path, root), 'utf8');
+        let source = await readFile(new URL(path, root), 'utf8');
+        // Explicit native product labels requested in the feed follow-up, not
+        // decorative interface emoji. Keep this exception exact and file-scoped.
+        if (path === 'feed-sender.js') source = source.replace(/👦💙|👧💗|🧑💛|🫵/gu, '');
         // Allow only the existing reaction enum definitions, never arbitrary UI text.
         const withoutReactions = source
             .replace(/\{ type: "(?:thumbs_down|surprised|fire|eyes|funny|love|legacy_agree)", emoji: "[^"]+", label: "[^"]+" \}/g, '')
@@ -50,7 +53,7 @@ for (const theme of ['light', 'dark']) {
         await expect(page.locator('.play-streak-chip [data-ui-icon="fire"]')).toBeVisible();
         await page.getByRole('button', { name: 'Chats', exact: true }).click();
         await page.getByRole('button', { name: /Noah Williams/ }).click();
-        const sticker = page.locator('.native-sticker-icon');
+        const sticker = page.getByRole('button', { name: 'Send a sticker', exact: true }).locator('.native-sticker-icon');
         await expect(sticker).toBeVisible();
         expect(await sticker.evaluate(el => getComputedStyle(el).maskImage)).toContain('sticker-icon.webp');
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

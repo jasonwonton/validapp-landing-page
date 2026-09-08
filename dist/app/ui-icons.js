@@ -8,7 +8,10 @@ const paths = {
     play: '<path d="m8 4 12 8-12 8z" fill="currentColor"/>',
     pause: '<path d="M8 5v14M16 5v14" stroke-width="4"/>',
     mic: '<rect x="8" y="2" width="8" height="13" rx="4"/><path d="M5 11v2a7 7 0 0 0 14 0v-2M12 20v2M8 22h8"/>',
-    scissors: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="m8 8 13 13M8 16 21 3"/>',
+    // Upright, open blades and round handles, matching the native scissors control.
+    scissors: '<g transform="translate(1.92 1.92) scale(.84)"><circle cx="6" cy="18" r="3.5"/><circle cx="18" cy="18" r="3.5"/><path d="M8.5 15.5 19 2M15.5 15.5 5 2"/></g>',
+    infinity: '<path d="M12 12C9 8 7.5 7 5.5 7a5 5 0 0 0 0 10c2 0 3.5-1 6.5-5s4.5-5 6.5-5a5 5 0 0 1 0 10c-2 0-3.5-1-6.5-5Z"/>',
+    'view-once': '<circle cx="12" cy="12" r="9" fill="currentColor" stroke="none"/><path d="m10 9 2-2v10" stroke="#ffb15e"/>',
     'camera-filled': '<path fill="currentColor" stroke="none" fill-rule="evenodd" d="M8 4h8l2 3h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h3l2-3Zm4 5a5 5 0 1 0 0 10 5 5 0 0 0 0-10Zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z"/>',
     camera: '<path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="4"/>',
     flip: '<path d="M4 9a8 8 0 0 1 13-4l3 3M20 3v5h-5M20 15a8 8 0 0 1-13 4l-3-3M4 21v-5h5"/>',

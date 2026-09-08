@@ -499,6 +499,13 @@
 .chat-camera-sheet:has(.chat-media-preview > img) .chat-media-form,
 .chat-camera-sheet:has(.chat-media-preview > video) .chat-media-form { grid-template-rows: minmax(0, 1fr); }
 .chat-photo-tools { position: absolute; z-index: 4; inset: 12px 10px auto; display: flex; align-items: center; gap: 6px; }
+.chat-call-history { display: flex; align-items: center; gap: 10px; align-self: flex-start; max-width: 88%; padding: 12px; margin: 4px 0; border-radius: 18px; background: var(--white); color: var(--ink); }
+.chat-call-history.mine { align-self: flex-end; }
+.chat-call-history-icon { display: grid; place-items: center; flex: 0 0 40px; height: 40px; border-radius: 50%; background: color-mix(in srgb, var(--peach) 22%, transparent); color: var(--peach); }
+.chat-call-history.attention .chat-call-history-icon { color: #ef5275; background: #ef527522; }
+.chat-call-history strong { display: block; font-size: 15px; }
+.chat-call-history small { display: block; margin-top: 3px; font-size: 12px; color: var(--muted); }
+.chat-call-history time { align-self: flex-end; margin-left: auto; white-space: nowrap; font-size: 10px; color: var(--muted); }
 .chat-photo-tools > span { flex: 1; }
 .chat-photo-tools button { display: flex; align-items: center; justify-content: center; gap: 5px; min-width: 44px; height: 44px; border: 0; border-radius: 99px; background: #0009; color: #fff; font-size: 14px; padding: 8px 10px; }
 .chat-photo-tools [data-photo-stickers] { color: #ffb15e; }
@@ -509,9 +516,12 @@
 .chat-media-edit-options summary, .chat-media-edit-options .camera-effect-picker small { display: none; }
 .chat-camera-sheet .chat-media-option { position: absolute; z-index: 4; bottom: 20px; left: 12px; justify-content: start; padding: 0 14px; min-height: 48px; background: #0009; border: 2px solid #ffffff70; border-radius: 99px; color: #fff; font-size: 14px; }
 .chat-media-option:has(input:checked) { background: #ffb15e; }
-.chat-camera-sheet .chat-media-option input { appearance: none; border: 0; width: 24px; height: 24px; display: grid; place-items: center; margin: 0; }
-.chat-media-option input::before { content: '∞'; color: #fff; font: 700 26px system-ui; }
-.chat-media-option input:checked::before { content: '①'; font-size: 23px; }
+.chat-camera-sheet .chat-media-option { display: flex; align-items: center; gap: 8px; line-height: 1; }
+.chat-camera-sheet .chat-media-option input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0; cursor: pointer; }
+.chat-media-option .ui-icon { display: block; flex: 0 0 24px; width: 24px; height: 24px; }
+.chat-media-option [data-ui-icon="view-once"], .chat-media-option:has(input:checked) [data-ui-icon="infinity"] { display: none; }
+.chat-media-option:has(input:checked) [data-ui-icon="view-once"] { display: block; }
+.chat-media-option:has(input:focus-visible) { outline: 3px solid #fff; outline-offset: 3px; }
 .chat-camera-sheet .chat-media-review-actions { position: absolute; right: 12px; bottom: 16px; z-index: 4; display: block; }
 .chat-media-review-actions .chat-media-publish { width: 58px; height: 58px; padding: 12px; min-height: 58px; border: 3px solid #fff; background: #ffb15e; color: #fff; border-radius: 50%; font-size: 11px; }
 .chat-camera-sheet .chat-media-status { position: absolute; left: 12px; right: 12px; bottom: 80px; z-index: 5; margin: 0; font-size: 13px; text-align: center; background: #000b; border-radius: 10px; }

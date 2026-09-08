@@ -18,7 +18,11 @@ function permissionMessage(error, mediaType) {
     return error?.message || "This device could not start the call.";
 }
 
-export function createCallsController({ api, getUser, getConfig, showToast }) {
+export function createCallsController({ api, getUser, getConfig, showToast, onCallChanged }) {
+    // History refresh is independent of media cleanup and cannot fail a call.
+    function notifyHistory(call) {
+        if (call?.chat_id) void Promise.resolve().then(() => onCallChanged?.(call)).catch(() => {});
+    }
     let currentCall = null;
     let room = null;
     let liveKit = null;
@@ -290,11 +294,16 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
             await preflightPermissions(mediaType);
             if (!isCurrent(token)) return;
             const call = await api.startCall(callerId, chat.id, mediaType, requestId);
-            if (!isCurrent(token)) { await api.endCall(callerId, call.id, { keepalive: true }); return; }
+            if (!isCurrent(token)) {
+                await api.endCall(callerId, call.id, { keepalive: true });
+                notifyHistory(call);
+                return;
+            }
             startRequestIds.delete(key);
             currentCall = call;
             scheduleLifecycleCheck(call);
             titleNode.textContent = chat.display_name || call.caller_name || "Valid call";
+            notifyHistory(call);
             setStatus("Calling…");
             setIncomingMode(false);
             showDialog();
@@ -361,6 +370,7 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
             const accepted = await api.acceptCall(userId(), call.id);
             if (!isCurrent(token)) return;
             currentCall = accepted;
+            notifyHistory(accepted);
             setIncomingMode(false);
             setStatus("Connecting…");
             await connectToCall(currentCall, token);
@@ -468,7 +478,8 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
             const attempts = keepalive ? 1 : 3;
             for (let attempt = 0; attempt < attempts; attempt += 1) {
                 try {
-                    await api[method](userId(), call.id, { keepalive });
+                    const updated = await api[method](userId(), call.id, { keepalive });
+                    if (!keepalive) notifyHistory(updated?.chat_id ? updated : call);
                     lastError = null;
                     break;
                 } catch (error) {
@@ -478,6 +489,7 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
             }
             if (lastError && !keepalive) showToast?.(lastError.message || "The server could not confirm that you left.");
         }
+        if (call && !notifyBackend && !keepalive) notifyHistory(call);
         currentCall = null;
         cameraReservationId = null;
         cameraRequestId = null;

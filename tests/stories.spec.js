@@ -115,7 +115,7 @@ test("a failed Story publish resumes once after reload with its saved request id
     await page.getByRole("button", { name: "Add Story" }).click();
     const composer = page.getByRole("dialog", { name: "Create Story" });
     await composer.locator(".story-file-input").setInputFiles("assets/AppIconV2.png");
-    await composer.getByRole("button", { name: "Warm photo effect" }).click();
+    await expect(composer.getByRole('group', { name: 'Photo effect' })).toHaveCount(0);
     await expect(composer.getByText("Photo ready to post", { exact: true })).toBeVisible();
     await composer.getByLabel("Text overlay").fill("Recover me");
     const overlayHandle = composer.locator("[data-media-overlay-position]");

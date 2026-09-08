@@ -32,6 +32,14 @@ for (const asset of nativeAssets) {
     assert.equal(createHash('sha256').update(Buffer.from(await response.arrayBuffer())).digest('hex'), asset.webSHA256, asset.web);
 }
 console.log(`PASS: ${version} shell and all three native interface asset hashes`);
+for (const file of ['chat/index.js', 'chat/call-history.js', 'chat/styles.css', 'calls/index.js', 'stories/index.js', 'ui-icons.js', 'service-worker.js']) {
+    const response = await read(`/app/${file}`);
+    assert.equal(response.status, 200, file);
+    const local = await readFile(new URL(`../app/${file}`, import.meta.url));
+    assert.equal(createHash('sha256').update(Buffer.from(await response.arrayBuffer())).digest('hex'), createHash('sha256').update(local).digest('hex'), `${file} differs from validated source`);
+}
+assert(shell.headers.get('content-security-policy').includes('https://9472d27fa2e1a3762bd91728bb7d9437.r2.cloudflarestorage.com'));
+console.log('PASS: changed photo/call assets match validated source and CSP allows the exact signed-storage origin');
 assert.match(shell.headers.get('content-security-policy'), /frame-ancestors 'none'/);
 assert.match(shell.headers.get('permissions-policy'), /camera=\(self\)/);
 const configResponse = await read('/api/v1/config');

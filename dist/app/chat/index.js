@@ -21,7 +21,6 @@ import {
     removeChatTextOutbox,
 } from "./outbox.js";
 import { createCallsController } from "../calls/index.js";
-import { createCameraEffectPicker } from "../camera-effects.js";
 import { createLiveCamera } from "../live-camera.js";
 import { uiIcon } from "../ui-icons.js";
 import { createMediaOverlayPositioner } from "../media-overlay-positioner.js";
@@ -35,6 +34,7 @@ import {
 import { createStickerMaker } from "./sticker-maker.js";
 import { createMessageWindow } from "./message-window.js";
 import { createTimelineScroll } from "./timeline-scroll.js";
+import { callHistoryPresentation } from './call-history.js';
 
 const REFRESH_MS = 30_000;
 const MAX_VOICE_RECORDING_MS = 300_000;
@@ -72,7 +72,9 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     });
     const store = createChatStore({ attentionPriority });
     const messageWindow = createMessageWindow();
-    const calls = createCallsController({ api, getUser, getConfig, showToast });
+    const calls = createCallsController({ api, getUser, getConfig, showToast,
+        onCallChanged: (call) => handleRealtimeEvent({ type: 'call_history_changed', chat_id: call.chat_id }),
+    });
     let lastListLoad = 0;
     let activation = null;
     let selectedMementoFile = null;
@@ -197,10 +199,9 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 <div class="chat-photo-tools"><button type="button" data-retake-chat-photo>${uiIcon('flip')} Retake</button><span></span><button type="button" data-photo-cutout aria-label="Make a sticker from this photo">${uiIcon('scissors')}</button><button type="button" data-photo-stickers aria-label="Open My Stickers"><span class="native-sticker-icon" aria-hidden="true"></span></button><button type="button" data-photo-text aria-label="Add text">Aa</button><button type="button" data-close-chat-media aria-label="Close photo">${uiIcon('close')}</button></div>
                 <div class="chat-media-preview"><span aria-hidden="true">${uiIcon("plus")}</span><p>Choose a photo, an MP4 video, or an M4A voice recording.</p></div>
                 <details class="chat-media-edit-options"><summary>Edit photo</summary>
-                <fieldset class="camera-effect-picker hidden" data-chat-media-effects><legend>Photo effect</legend><div data-camera-effect-options></div><small>Browser Effects bake supported color and lighting into the photo. Face/body-tracked lenses and filtered video remain available in iOS.</small></fieldset>
                 <label>Text overlay <input class="chat-media-overlay" type="text" maxlength="160" placeholder="Optional text — drag it in the preview"></label>
                 </details>
-                <label class="chat-media-option"><input type="checkbox" data-chat-view-once aria-label="View once"><span>Keep in chat</span></label>
+                <label class="chat-media-option"><input type="checkbox" data-chat-view-once aria-label="View once">${uiIcon('infinity')}${uiIcon('view-once')}<span>Keep in chat</span></label>
                 <div class="chat-media-progress hidden"><span></span></div>
                 <p class="chat-media-status" role="status"></p>
                 <div class="chat-media-review-actions"><button class="primary-button chat-media-publish" type="submit" aria-label="Send" disabled>${uiIcon('send')}</button></div>
@@ -235,11 +236,6 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     const chatMediaOverlay = createMediaOverlayPositioner({
         preview: $(".chat-media-preview"),
         input: $(".chat-media-overlay"),
-    });
-    const chatMediaEffectPicker = createCameraEffectPicker({
-        fieldset: $("[data-chat-media-effects]"),
-        api,
-        onChange: (effect) => reprepareSelectedChatPhoto(effect),
     });
     const mementoCamera = createLiveCamera({
         container: $('[data-memento-camera]'),
@@ -785,8 +781,12 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
 
     function messageMarkup(message, reply, previous, next, index = 0, total = 1) {
         const position = `role="listitem" aria-posinset="${index + 1}" aria-setsize="${total}"`;
-        if (message.kind === "system") return `<article class="chat-system-message" ${position} data-list-key="${escapeChatHTML(message.id)}"><span>${escapeChatHTML(message.body || "Chat updated")}</span></article>`;
         if (message.kind === "tombstone" || message.status !== "active") return `<article class="chat-system-message" ${position} data-list-key="${escapeChatHTML(message.id)}"><span>Message removed</span></article>`;
+        if (message.call_id) {
+            const call = callHistoryPresentation(message, userId());
+            return `<article class="chat-call-history ${call.mine ? 'mine' : ''} ${call.attention ? 'attention' : ''}" ${position} data-list-key="${escapeChatHTML(message.id)}"><div class="chat-call-history-icon">${uiIcon(call.icon)}</div><div><strong>${escapeChatHTML(call.title)}</strong><small>${escapeChatHTML(call.detail)}</small></div><time>${escapeChatHTML(messageTime(message.created_at))}</time></article>`;
+        }
+        if (message.kind === "system") return `<article class="chat-system-message" ${position} data-list-key="${escapeChatHTML(message.id)}"><span>${escapeChatHTML(message.body || "Chat updated")}</span></article>`;
         const mine = message.viewer_is_sender || String(message.sender_user_id) === String(userId());
         const sharesSequence = (other) => other && other.kind !== "system" && other.status === "active" && String(other.sender_user_id) === String(message.sender_user_id) && Math.abs(new Date(other.created_at) - new Date(message.created_at)) <= 5 * 60 * 1000;
         const startsSequence = !sharesSequence(previous);
@@ -1320,7 +1320,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         } catch (error) {
             if (recoverySaved && chatTextSendIsRetryable(error)) {
                 await markChatMediaOutboxAttempt(`${userId()}:memento:${mementoRequestId}`).catch(() => null);
-                $(".memento-status").textContent = `${error.message || "Could not share your Memento."} It is saved on this device and will retry while Six7 is open.`;
+                $(".memento-status").textContent = `${error.message || "Could not share your Memento."} It is saved on this device and will retry while Valid is open.`;
             } else {
                 await removeChatMediaOutbox(`${userId()}:memento:${mementoRequestId}`).catch(() => null);
                 $(".memento-status").textContent = recoverySaved
@@ -1370,7 +1370,6 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         $("[data-chat-media-dialog]").showModal();
         startChatCamera();
         $('[data-chat-camera]').focus({ preventScroll: true });
-        void chatMediaEffectPicker.load();
     }
 
     function openStickerLibrary({ photo = false } = {}) {
@@ -1481,28 +1480,23 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         chatMediaSendRequestId = null;
     }
 
-    async function prepareSelectedChatMedia(file, { durationMsHint = null, photoEffect = null, retainSource = false } = {}) {
+    async function prepareSelectedChatMedia(file, { durationMsHint = null } = {}) {
         if (!file || chatMediaPublishing) return;
         showChatMediaReview();
         const isPhotoSource = file.type.startsWith("image/");
-        if (!retainSource) {
-            photoStickers.reset();
-            selectedChatMediaSourceFile = isPhotoSource ? file : null;
-            if (!isPhotoSource) chatMediaEffectPicker.reset();
-            $(".chat-media-overlay").value = "";
-            chatMediaOverlay.reset();
-        }
+        photoStickers.reset();
+        selectedChatMediaSourceFile = isPhotoSource ? file : null;
+        $(".chat-media-overlay").value = "";
+        chatMediaOverlay.reset();
         const generation = ++chatMediaPreparationGeneration;
         $(".chat-media-status").textContent = "Preparing media…";
         $(".chat-media-publish").disabled = true;
         $(".chat-media-overlay").disabled = true;
         chatMediaOverlay.setDisabled(true);
-        chatMediaEffectPicker.setDisabled(true);
         resetChatMediaRequestIds();
         try {
             const prepared = await prepareChatMedia(file, {
                 durationMsHint,
-                photoEffect: isPhotoSource ? (photoEffect || chatMediaEffectPicker.value()) : null,
             });
             if (generation !== chatMediaPreparationGeneration) return;
             selectedChatMedia = prepared;
@@ -1514,7 +1508,6 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 ? `<video src="${escapeChatHTML(selectedChatMediaPreview)}" muted playsinline controls aria-label="Video preview"></video>`
                 : `<img src="${escapeChatHTML(selectedChatMediaPreview)}" alt="Photo preview">`;
             const isAudio = selectedChatMedia.kind === "audio";
-            chatMediaEffectPicker.setMediaKind(selectedChatMedia.kind);
             $("[data-chat-view-once]").checked = false;
             $("[data-chat-view-once]").disabled = isAudio;
             chatMediaOverlay.mount();
@@ -1533,14 +1526,8 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 const disableOverlay = selectedChatMedia?.kind === "audio";
                 $(".chat-media-overlay").disabled = disableOverlay;
                 chatMediaOverlay.setDisabled(disableOverlay);
-                chatMediaEffectPicker.setDisabled(false);
             }
         }
-    }
-
-    async function reprepareSelectedChatPhoto(effect) {
-        if (!selectedChatMediaSourceFile) return;
-        await prepareSelectedChatMedia(selectedChatMediaSourceFile, { photoEffect: effect, retainSource: true });
     }
 
     async function selectChatMedia(event) {
@@ -1681,7 +1668,6 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         $("[data-chat-view-once]").disabled = true;
         $(".chat-media-overlay").disabled = true;
         chatMediaOverlay.setDisabled(true);
-        chatMediaEffectPicker.setDisabled(true);
         $(".chat-media-progress").classList.remove("hidden");
         $(".chat-media-status").textContent = "Starting secure upload…";
         let recoverySaved = false;
@@ -1721,7 +1707,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         } catch (error) {
             if (recoverySaved && chatTextSendIsRetryable(error)) {
                 await markChatMediaOutboxAttempt(recordId).catch(() => null);
-                $(".chat-media-status").textContent = `${error.message || "Could not send that media."} It is saved on this device and will retry while Six7 is open.`;
+                $(".chat-media-status").textContent = `${error.message || "Could not send that media."} It is saved on this device and will retry while Valid is open.`;
             } else {
                 await removeChatMediaOutbox(recordId).catch(() => null);
                 $(".chat-media-status").textContent = recoverySaved
@@ -1733,7 +1719,6 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             root.querySelectorAll('[data-retake-chat-photo], [data-chat-photo-library], [data-chat-audio-library], [data-record-voice]').forEach(control => { control.disabled = false; });
             button.innerHTML = uiIcon('send');
             button.disabled = !selectedChatMedia;
-            chatMediaEffectPicker.setDisabled(false);
         }
     }
 
@@ -1754,7 +1739,6 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (selectedChatMediaPreview) URL.revokeObjectURL(selectedChatMediaPreview);
         selectedChatMediaPreview = null;
         chatMediaOverlay.reset();
-        chatMediaEffectPicker.reset();
         resetChatMediaRequestIds();
         $(".chat-media-file-input").value = "";
         $(".chat-media-file-input").disabled = false;
@@ -2264,6 +2248,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         store.state.lastEventId = event.id || store.state.lastEventId;
         void calls.handleRealtimeEvent(event);
         const chatId = String(event.chat_id || "");
+        const callHistoryChanged = ['call_started', 'call_updated', 'call_answered', 'call_declined', 'call_ended', 'call_history_changed'].includes(event.type);
         if (["typing_started", "typing_stopped"].includes(event.type) && chatId === store.state.activeChatId && String(event.actor_user_id) !== String(userId())) {
             if (event.type === "typing_started") store.state.typingUserIds.add(String(event.actor_user_id));
             else store.state.typingUserIds.delete(String(event.actor_user_id));
@@ -2271,7 +2256,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             renderRoomHeader(store.state.detail?.chat);
             return;
         }
-        if (chatId && chatId === store.state.activeChatId && ["message_created", "message_updated", "message_deleted", "memento_created", "resync", "ready"].includes(event.type)) {
+        if (chatId && chatId === store.state.activeChatId && (callHistoryChanged || ["message_created", "message_updated", "message_deleted", "memento_created", "resync", "ready"].includes(event.type))) {
             // One active repair and one coalesced hint, never a growing SSE queue.
             if (realtimeRefreshing) {
                 pendingRealtimeEvent = { ...event, type: 'resync' };
@@ -2284,7 +2269,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             const position = timelineScroll.capture();
             const away = historyHasNewer || messageWindow.range(chatId, store.messages()).hiddenAfter > 0 || !position.bottom;
             const anchor = away ? position.anchors.map(item => store.messages().find(message => message.id === item.key)).find(Boolean) : null;
-            const needsFullResync = !!anchor || ["resync", "ready", "message_updated", "message_deleted"].includes(event.type);
+            const needsFullResync = !!anchor || callHistoryChanged || ["resync", "ready", "message_updated", "message_deleted"].includes(event.type);
             try {
                 const response = await api.getChatMessages(userId(), chatId, { limit: 100, afterSequence: anchor ? Math.max(0, Math.floor(anchor.room_sequence) - 1) : needsFullResync ? null : Math.floor(latest) });
                 if (generation !== roomGeneration || chatId !== store.state.activeChatId) return;

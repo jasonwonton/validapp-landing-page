@@ -27,7 +27,9 @@ async function previewDigest(locator) {
     });
 }
 
-test("chat photos expose bounded local and Featured Effects and bake the selection into JPEG bytes", async ({ page }) => {
+test("chat photos have no filters or filter catalog requests, while text overlays still work", async ({ page }) => {
+    const catalogRequests = [];
+    page.on('request', request => { if (request.url().includes('camera-filters')) catalogRequests.push(request.url()); });
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
@@ -36,10 +38,7 @@ test("chat photos expose bounded local and Featured Effects and bake the selecti
     await dialog.locator(".chat-media-file-input").setInputFiles("assets/AppIconV2.png");
     await dialog.getByRole('button', { name: 'Add text', exact: true }).click();
     const effects = dialog.getByRole("group", { name: "Photo effect" });
-    await expect(effects).toBeVisible();
-    await expect(effects.getByRole("button")).toHaveCount(6);
-    await expect(effects.getByRole("button", { name: "Sunset photo effect, Featured" })).toBeVisible();
-    await expect(effects).toContainText("Face/body-tracked lenses and filtered video remain available in iOS");
+    await expect(effects).toHaveCount(0);
 
     const preview = dialog.getByRole("img", { name: "Photo preview" });
     const original = await previewDigest(preview);
@@ -47,20 +46,11 @@ test("chat photos expose bounded local and Featured Effects and bake the selecti
     const overlay = dialog.locator("[data-media-overlay-position]");
     await overlay.press("Shift+ArrowRight");
     await expect(overlay).toHaveAccessibleName(/60% from left, 50% from top/);
-    await effects.getByRole("button", { name: "Vivid photo effect" }).click();
     await expect(dialog.locator('.chat-media-publish')).toBeEnabled();
-    await expect(effects.getByRole("button", { name: "Vivid photo effect" })).toHaveAttribute("aria-pressed", "true");
     await expect(dialog.getByRole("textbox", { name: "Text overlay" })).toHaveValue("Keep my position");
     await expect(overlay).toHaveAccessibleName(/60% from left, 50% from top/);
-    const vivid = await previewDigest(preview);
-    expect(vivid.digest).not.toBe(original.digest);
-    expect(vivid.width).toBeGreaterThan(0);
-    expect(vivid.height).toBeGreaterThan(0);
-
-    await effects.getByRole("button", { name: "Sunset photo effect, Featured" }).click();
-    await expect(dialog.locator('.chat-media-publish')).toBeEnabled();
-    const featured = await previewDigest(preview);
-    expect(featured.digest).not.toBe(vivid.digest);
+    expect(await previewDigest(preview)).toEqual(original);
+    expect(catalogRequests).toEqual([]);
     await dialog.getByRole("button", { name: "Send", exact: true }).click();
     await expect(page.getByText("Photo sent", { exact: true })).toBeVisible();
 });
@@ -106,7 +96,7 @@ test("sequential rear and front photos produce swappable 1080 by 1440 Memento co
 
 });
 
-test("Story photo Effects bake locally before the existing durable upload record", async ({ page }) => {
+test("Stories preserve photo previews without exposing filters", async ({ page }) => {
     await signInToDemo(page, "&stories=1");
     await page.getByRole("button", { name: "Add Story" }).click();
     const dialog = page.getByRole("dialog", { name: "Create Story" });
@@ -114,9 +104,9 @@ test("Story photo Effects bake locally before the existing durable upload record
     const preview = dialog.getByRole("img", { name: "Story photo preview" });
     const original = await previewDigest(preview);
     const effects = dialog.getByRole("group", { name: "Photo effect" });
-    await effects.getByRole("button", { name: "Warm photo effect" }).click();
+    await expect(effects).toHaveCount(0);
     await expect(dialog.getByText("Photo ready to post", { exact: true })).toBeVisible();
-    expect((await previewDigest(preview)).digest).not.toBe(original.digest);
+    expect(await previewDigest(preview)).toEqual(original);
     await dialog.getByRole("button", { name: "Post Story" }).click();
     await expect(page.getByText("Story posted", { exact: true })).toBeVisible();
 });

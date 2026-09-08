@@ -145,6 +145,7 @@ async function installCallHarness(page, { chatUI = false } = {}) {
             getUser: () => ({ id: "user-1" }),
             getConfig: () => ({ enable_calls: true, enable_web_calls: true }),
             showToast: (message) => log.push(["toast", message]),
+            onCallChanged: (call) => log.push(['history', call.chat_id]),
         });
     });
 }
@@ -266,6 +267,20 @@ test('hanging up during microphone permission prevents a late outgoing call', as
     await expect(page.locator('.call-overlay')).toBeHidden();
 });
 
+test('hangup while start is in flight refreshes history after the late call is cancelled', async ({ page }) => {
+    await installCallHarness(page);
+    await page.evaluate(() => {
+        const start = __callAPI.startCall;
+        __callAPI.startCall = async (...args) => { await new Promise(resolve => { window.__releaseStart = resolve; }); return start(...args); };
+        window.__pendingStart = __calls.start('audio', { id: 'chat-1', accepted_count: 2 });
+    });
+    await expect.poll(() => page.evaluate(() => typeof window.__releaseStart)).toBe('function');
+    await page.locator('[data-call-hangup]').click();
+    await page.evaluate(async () => { __releaseStart(); await __pendingStart; });
+    expect(await page.evaluate(() => __callLog.filter(([name]) => name === 'end'))).toHaveLength(1);
+    expect(await page.evaluate(() => __callLog.filter(([name]) => name === 'history'))).toEqual([['history', 'chat-1']]);
+});
+
 test('hangup during connection prevents late microphone publication', async ({ page }) => {
     await installCallHarness(page);
     await page.evaluate(() => { window.__delayConnect = true; window.__pendingStart = __calls.start('audio', {id:'chat-1',accepted_count:2}); });
@@ -293,7 +308,25 @@ test('double initiation sends once and an ambiguous explicit retry keeps its ide
 
 test('the chat header initiates one voice call and preserves compact native controls', async ({page}) => {
     await installCallHarness(page, {chatUI:true});
-    await page.evaluate(async () => { const {DemoAPI} = await import('/app/demo-api.js'); Object.assign(DemoAPI.prototype, __callAPI); });
+    await page.evaluate(async () => {
+        const {DemoAPI} = await import('/app/demo-api.js');
+        const start = __callAPI.startCall, end = __callAPI.endCall;
+        let history;
+        __callAPI.startCall = async (...args) => {
+            const call = await start(...args); call.chat_id = args[1];
+            history = { id: 'authoritative-call', chat_id: args[1], room_sequence: 999, kind: 'system', status: 'active',
+                call_id: call.id, call_state: 'ringing', call_media_type: 'audio', viewer_is_sender: true, created_at: new Date().toISOString() };
+            return call;
+        };
+        __callAPI.endCall = async (...args) => { const call = await end(...args); history.call_state = 'cancelled'; return { ...call, chat_id: history.chat_id, state: 'cancelled' }; };
+        const messages = DemoAPI.prototype.getChatMessages;
+        DemoAPI.prototype.getChatMessages = async function(...args) {
+            const response = await messages.apply(this, args);
+            if (history && history.chat_id === args[1]) response.items.push({ ...history });
+            return response;
+        };
+        Object.assign(DemoAPI.prototype, __callAPI);
+    });
     await page.getByRole('button', {name:/^sign in$/i}).click();
     await page.getByRole('button', {name:'Chats',exact:true}).click();
     await page.getByRole('button', {name:/Noah Williams/}).click();
@@ -305,6 +338,9 @@ test('the chat header initiates one voice call and preserves compact native cont
     await expect.poll(() => page.evaluate(() => __callLog.filter(([name]) => name === 'start').length)).toBe(1);
     expect(await page.evaluate(() => __callLog.find(([name]) => name === 'start').slice(1,3))).toEqual(['chat-noah','audio']);
     await page.getByRole('button', {name:'End call',exact:true}).click();
+    // No SSE event is emitted: the acknowledged end must still refresh history.
+    await expect(page.locator('.chat-call-history')).toHaveCount(1);
+    await expect(page.locator('.chat-call-history')).toContainText('Cancelled voice call');
 });
 
 test('available browser audio-output picker applies to remote audio without storing device identifiers', async ({page}) => {

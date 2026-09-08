@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { createStaticOrigin } from "../scripts/serve-production.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
-const CURRENT_VERSION = 87;
+const CURRENT_VERSION = Number((await readFile(path.join(repositoryRoot, 'app/index.html'), 'utf8')).match(/name="valid-app-version" content="web-v(\d+)"/)?.[1]);
 
 async function listen(server) {
     await new Promise((resolve, reject) => {

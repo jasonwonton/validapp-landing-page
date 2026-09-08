@@ -7,6 +7,29 @@ async function room(page) {
     await page.getByRole('button', { name: /Noah Williams/ }).click();
 }
 
+test('retention icons remain centered with their label in both themes and states', async ({ page }) => {
+    await room(page);
+    await page.getByRole('button', { name: 'Send photo or video' }).click();
+    const dialog = page.locator('[data-chat-media-dialog]');
+    await dialog.locator('.chat-media-file-input').setInputFiles('assets/AppIconV2.png');
+    await expect(dialog.locator('.chat-media-publish')).toBeEnabled();
+    for (const theme of ['light', 'dark']) {
+        await page.locator('html').evaluate((el, theme) => { el.dataset.theme = theme; }, theme);
+        for (const checked of [false, true]) {
+            await dialog.getByLabel('View once', { exact: true }).setChecked(checked);
+            const option = dialog.locator('.chat-media-option');
+            await expect(option.locator('span')).toHaveText(checked ? 'View once' : 'Keep in chat');
+            const icon = await option.locator(`[data-ui-icon="${checked ? 'view-once' : 'infinity'}"]`).boundingBox();
+            const label = await option.locator('span').boundingBox();
+            expect(Math.abs(icon.y + icon.height / 2 - label.y - label.height / 2)).toBeLessThan(1);
+            expect(icon.width).toBe(24); expect(icon.height).toBe(24);
+            await page.screenshot({ path: test.info().outputPath(`retention-${theme}-${checked}.png`) });
+        }
+    }
+    await expect(dialog.getByRole('group', { name: 'Photo effect' })).toHaveCount(0);
+    await expect(dialog.locator('[data-photo-cutout] [data-ui-icon="scissors"]')).toBeVisible();
+});
+
 test('keyboard resize and Safari viewport pan keep composer against the keyboard and header visible', async ({ page }) => {
     await page.addInitScript(() => {
         const realViewport = window.visualViewport;
