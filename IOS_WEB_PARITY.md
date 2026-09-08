@@ -1,7 +1,8 @@
 # Six7 iOS → PWA parity and release matrix
 
 Last audited: September 7, 2026
-Photo controls and call history: [web-v88 fixes and storage upload blocker](PHOTO_UPLOAD_CALL_HISTORY_2026-09-07.md). Filters removed at user request; retention icons aligned; call history uses authoritative backend rows. Direct browser uploads remain **Partial / Not yet tested**: CSP is corrected, but the live staging storage preflight is rejected and bucket CORS access is unavailable. Do not treat fixture upload tests as real storage validation.
+Upload configuration follow-up: [production and staging R2 CORS verified](PRODUCTION_STAGING_UPLOAD_CORS_2026-09-07.md). Both exact origins now pass signed-PUT preflight; untrusted origins and DELETE remain denied. This resolves the v88 storage-policy blocker, not the separate production hosting or real-account upload acceptance gates.
+Photo controls and call history: [web-v88 fixes and historical storage upload blocker](PHOTO_UPLOAD_CALL_HISTORY_2026-09-07.md). Filters removed at user request; retention icons aligned; call history uses authoritative backend rows. Direct browser uploads remain **Partial / Not yet tested** end to end: CSP and live storage preflight are now corrected, but a real signed upload/finalize/send still needs verification. Do not treat fixture upload tests as real storage validation.
 Call feedback: [web-v87 native outgoing ringback and explicit outcomes](CALL_RINGBACK_2026-09-07.md). Physical audio routing and real-account staging-to-iOS acceptance remain unverified.
 Calls, voice and stickers: [web-v85 private call initiation and native-style interactions](CALLS_VOICE_STICKERS_2026-09-07.md). Calls are enabled only for private staging smoke testing when the backend master flag is on; public readiness remains gated.
 Chat composer: [web-v84 keyboard, inline microphone, photo review and sticker placement](CHAT_COMPOSER_POLISH_2026-09-07.md).

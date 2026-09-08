@@ -1,0 +1,8 @@
+[
+  {
+    "AllowedOrigins": ["https://validapp.lol", "https://staging.validapp.lol"],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["content-type", "cache-control"],
+    "MaxAgeSeconds": 300
+  }
+]
