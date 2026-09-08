@@ -13,7 +13,9 @@ export default defineConfig({
         trace: "retain-on-failure",
     },
     projects: [
-        { name: "android", use: { ...devices["Pixel 7"] } },
+        // Use full Chromium's headless mode: the separate Linux headless shell
+        // repeatedly crashed in browser.newContext before loading the app.
+        { name: "android", use: { ...devices["Pixel 7"], channel: "chromium" } },
         { name: "desktop", use: { ...devices["Desktop Chrome"] } },
         { name: "desktop-firefox", use: { ...devices["Desktop Firefox"], serviceWorkers: "block" } },
         { name: "desktop-webkit", workers: 1, use: { ...devices["Desktop Safari"], serviceWorkers: "block" } },
