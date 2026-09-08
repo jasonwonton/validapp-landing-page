@@ -46,7 +46,17 @@ for (const theme of ['light', 'dark']) {
         const line = page.locator('[data-feed-detail="9001"] .feed-answer');
         await expect(line).toHaveText('from a 👧💗 Sophomore (M)');
         await expect(line).toHaveCSS('font-size', '12px');
-        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        // Sign-in slides the panel in from the right. Measure the settled layout,
+        // not a frame mid-transition (Linux WebKit reaches this assertion earlier).
+        await page.evaluate(async () => {
+            await document.fonts.ready;
+            await Promise.all([...document.querySelectorAll('#appView > .panel:not(.hidden)')]
+                .flatMap(panel => panel.getAnimations())
+                .filter(animation => animation.effect?.getTiming().iterations !== Infinity)
+                .map(animation => animation.finished.catch(() => {})));
+        });
+        expect(await page.evaluate(() => ({ width: document.documentElement.scrollWidth, viewport: innerWidth })))
+            .toEqual({ width: 393, viewport: 393 });
         const sizes = await line.evaluate(el => ({ width: el.getBoundingClientRect().width, parent: el.parentElement.getBoundingClientRect().width }));
         expect(sizes.width).toBeLessThanOrEqual(sizes.parent + 1);
     });
