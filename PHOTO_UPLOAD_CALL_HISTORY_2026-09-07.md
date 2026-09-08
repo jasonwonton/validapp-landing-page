@@ -1,6 +1,14 @@
 # Photo controls, upload diagnosis, and call history
 
-September 7, 2026 · web-v88 private staging candidate. Public main remains unmerged.
+September 7, 2026 · web-v88 live on private staging. Public main remains unmerged.
+
+Verified deployment: `9b3f618c-ef7b-4c63-adce-c9d16ceeda7a`, ACTIVE 6/6,
+source `1148f35d99c902f6d99b6f2ae019c303da13ec85`.
+Live changed-module hashes, private entry, no-store, API/CSP gates, signed-out
+393px/1280px browsers, related-origin synthetic passkey ceremony, and synthetic
+camera/review checks pass without real-account writes. API CORS passes; **R2
+upload CORS is a separate gate and still fails**. Hosted static CI passes; hosted
+browser jobs were still running at this handoff.
 
 ## Scope and parity
 
@@ -81,6 +89,14 @@ Tests now preserve those exact product emoji, scope the composer sticker control
 and enforce the existing 450-node ceiling inclusively. Worker version is derived
 from the source; CSP assertions enumerate every permitted connection origin.
 No runtime limits were relaxed. Physical devices remain unverified.
+
+Broad local sweep: 1,150 passed, 13 explicit platform skips, 17 failures limited
+to the pre-existing assertions above plus old version/CSP expectations. Every
+failing check was corrected and passed in the final 94-pass/2-skip targeted rerun,
+which also covers every call test and the new in-flight-start cancellation race.
+This is a broad run plus a targeted rerun, not a claim of a fresh all-green full
+suite on one source snapshot. Public release remains gated on CI, real devices,
+the storage policy fix and an actual signed upload/finalize/send smoke test.
 
 Storage reference: [Cloudflare R2 CORS](https://developers.cloudflare.com/r2/buckets/cors/)
 and [presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/).
