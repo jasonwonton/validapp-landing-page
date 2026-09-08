@@ -1,5 +1,12 @@
 // Interface symbols, not replacements for user content or product reactions.
 const paths = {
+    'mic-off': '<path d="m3 3 18 18M8 8v5a4 4 0 0 0 6.8 2.8M16 10V6a4 4 0 0 0-7-2.6M5 11v2a7 7 0 0 0 12 5M19 11v2M12 20v2M8 22h8"/>',
+    'video-off': '<path d="m3 3 18 18M15 9l7-4v14l-7-4M6 5h6a3 3 0 0 1 3 3v3M15 16v1a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7"/>',
+    hangup: '<path d="M3 15v-4c5-5 13-5 18 0v4l-5-1v-3a12 12 0 0 0-8 0v3z"/>',
+    stop: '<rect x="5" y="5" width="14" height="14" rx="3" fill="currentColor" stroke="none"/>',
+    speaker: '<path d="M3 9h4l5-5v16l-5-5H3zM16 8a6 6 0 0 1 0 8M19 5a10 10 0 0 1 0 14"/>',
+    play: '<path d="m8 4 12 8-12 8z" fill="currentColor"/>',
+    pause: '<path d="M8 5v14M16 5v14" stroke-width="4"/>',
     mic: '<rect x="8" y="2" width="8" height="13" rx="4"/><path d="M5 11v2a7 7 0 0 0 14 0v-2M12 20v2M8 22h8"/>',
     scissors: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="m8 8 13 13M8 16 21 3"/>',
     'camera-filled': '<path fill="currentColor" stroke="none" fill-rule="evenodd" d="M8 4h8l2 3h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h3l2-3Zm4 5a5 5 0 1 0 0 10 5 5 0 0 0 0-10Zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z"/>',

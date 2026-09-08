@@ -22,8 +22,8 @@ try {
     const page = await browser.newPage({ viewport: { width: 393, height: 852 } });
     await page.goto(invitation);
     const version = await page.locator('meta[name="valid-app-version"]').getAttribute('content');
-    assert.equal(version, process.env.STAGING_EXPECTED_VERSION || 'web-v84');
-    for (const file of ['app/app.js', 'app/auth-reliability.js', 'app/passkeys.js', 'app/feed-sender.js', 'app/chat/index.js', 'app/chat/photo-stickers.js', 'app/chat/store.js', 'app/chat/models.js', 'app/chat/message-window.js', 'app/chat/timeline-scroll.js', 'app/keyed-list.js', 'app/live-camera.js', 'app/chat/styles.css', 'app/styles.css', 'app/preferences.js', 'app/ui-icons.js', 'app/api.js']) {
+    assert.equal(version, process.env.STAGING_EXPECTED_VERSION || 'web-v85');
+    for (const file of ['app/app.js', 'app/auth-reliability.js', 'app/passkeys.js', 'app/feed-sender.js', 'app/chat/index.js', 'app/chat/photo-stickers.js', 'app/chat/voice-interaction.js', 'app/calls/index.js', 'app/calls/styles.css', 'app/calls/livekit.bundle.js', 'app/chat/store.js', 'app/chat/models.js', 'app/chat/message-window.js', 'app/chat/timeline-scroll.js', 'app/keyed-list.js', 'app/live-camera.js', 'app/chat/styles.css', 'app/styles.css', 'app/preferences.js', 'app/ui-icons.js', 'app/api.js']) {
         const response = await page.request.get(new URL(`/${file}`, invitation).href);
         assert.equal(response.status(), 200);
         const hash = data => createHash('sha256').update(data).digest('hex');
@@ -66,6 +66,8 @@ try {
     // No real account, chat, read receipt, sticker send, or upload is involved.
     const hierarchy = await page.evaluate(async () => {
         const { createChatsView } = await import('/app/chat/index.js');
+        const sdk = await import('/app/calls/livekit.bundle.js');
+        const sdkLoaded = typeof sdk.Room === 'function';
         const today = new Date();
         const ledgerDate = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');
         const chat = { id: 'synthetic-chat', display_name: 'Synthetic chat', membership_status: 'accepted', accepted_count: 2, moment_streak: 3 };
@@ -81,9 +83,11 @@ try {
             markChatRead: async () => { throw new Error('Unexpected synthetic read receipt'); },
             getStickers: async () => ({ stickers: [{ id: 'synthetic-sticker', image_url: '/assets/app/rocket.webp' }] }),
         };
-        const view = createChatsView({ root, api, getUser: () => ({ id: 'synthetic-user' }), getConfig: () => ({ enable_chats: true, enable_web_chats: true, enable_chat_daily_ledger: true, enable_web_mementos: true }) });
+        const view = createChatsView({ root, api, getUser: () => ({ id: 'synthetic-user' }), getConfig: () => ({ enable_chats: true, enable_web_chats: true, enable_chat_daily_ledger: true, enable_web_mementos: true, enable_calls: true, enable_web_calls: true }) });
         await view.activate({});
         await view.openChat(chat.id, { updateHistory: false });
+        const phoneVisible = root.querySelector('[data-start-call="audio"]').getClientRects().length > 0;
+        const singleCallButton = root.querySelectorAll('[data-start-call]').length === 1;
         const inlineHidden = root.querySelector('.chat-daily-row').classList.contains('hidden');
         const button = root.querySelector('[data-open-memento-gallery]');
         const header = button.textContent;
@@ -115,8 +119,8 @@ try {
         const deliveryLabel = root.querySelector('.chat-media-option span').textContent;
         root.querySelector('[data-close-chat-media]').click();
         await view.beforeSessionEnd();
-        return { inlineHidden, header, galleryOpened, dates, stickersOpened, cameraReviewed, cameraStopped, micInField, noVoiceInCamera, photoTools, deliveryLabel };
+        return { sdkLoaded, phoneVisible, singleCallButton, inlineHidden, header, galleryOpened, dates, stickersOpened, cameraReviewed, cameraStopped, micInField, noVoiceInCamera, photoTools, deliveryLabel };
     });
-    assert.deepEqual(hierarchy, { inlineHidden: true, header: '1/23', galleryOpened: true, dates: 7, stickersOpened: true, cameraReviewed: true, cameraStopped: true, micInField: true, noVoiceInCamera: true, photoTools: true, deliveryLabel: 'Keep in chat' });
+    assert.deepEqual(hierarchy, { sdkLoaded: true, phoneVisible: true, singleCallButton: true, inlineHidden: true, header: '1/23', galleryOpened: true, dates: 7, stickersOpened: true, cameraReviewed: true, cameraStopped: true, micInField: true, noVoiceInCamera: true, photoTools: true, deliveryLabel: 'Keep in chat' });
     console.log('PASS: deployed chat hierarchy, streak, history, stickers and single-photo camera/review with stopped tracks (synthetic adapter; no account writes)');
 } finally { await browser.close(); }

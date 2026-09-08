@@ -576,12 +576,13 @@ test("compatible browsers can record an MP4 voice message locally before upload"
     await record.click();
     await expect(page.locator('.chat-voice-status')).toHaveText('0:00');
     await page.getByRole('button', { name: 'Stop recording and preview' }).click();
-    await expect(page.locator('.chat-inline-audio')).toBeVisible();
+    await expect(page.locator('.chat-voice-player')).toBeVisible();
     await expect(page.locator('[data-chat-media-dialog]')).toBeHidden();
     await expect(page.getByRole('button', { name: 'Send voice message' })).toBeEnabled();
     await page.getByRole('button', { name: 'Record voice message', exact: true }).click();
     await expect(page.locator('.chat-inline-audio')).toBeHidden();
-    await expect(page.getByRole('button', { name: 'Send voice message' })).toBeDisabled();
+    await expect(page.locator('[data-send-voice]')).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Send voice message' })).toBeHidden();
     await page.getByRole('button', { name: 'Stop recording and preview' }).click();
     await expect(page.getByRole('button', { name: 'Send voice message' })).toBeEnabled();
     const before = await page.locator('.chat-message.mine audio').count();

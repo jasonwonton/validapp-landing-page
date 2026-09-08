@@ -40,7 +40,7 @@ assert.equal(configResponse.headers.get('cache-control'), 'no-store');
 const config = await configResponse.json();
 assert.equal(config.enable_web_chats, config.enable_chats === true);
 assert.equal(config.enable_web_mementos, config.enable_chat_daily_ledger === true);
-assert.equal(config.enable_web_calls, false);
+assert.equal(config.enable_web_calls, config.enable_calls === true);
 assert.equal(config.enable_web_stories, false);
 const challenge = await read('/api/v1/auth/passkey/authenticate/challenge');
 assert.equal(challenge.status, 200);

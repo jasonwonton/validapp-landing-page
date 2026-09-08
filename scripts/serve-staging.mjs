@@ -51,6 +51,7 @@ export async function createStagingOrigin({
     root,
     upstreamRequest = httpsRequest,
     logAuth = event => console.info(JSON.stringify(event)),
+    enableCalls = process.env.STAGING_ENABLE_CALLS !== 'false',
 } = {}) {
     if (!/^[a-f0-9]{64}$/.test(secret || "")) throw new Error("PREVIEW_ACCESS_KEY must be 32 random hex bytes");
     if (origin !== "https://staging.validapp.lol") throw new Error("Unapproved staging origin");
@@ -141,7 +142,7 @@ export async function createStagingOrigin({
                         config.enable_web_chats = config.enable_chats === true;
                         config.enable_web_mementos = config.enable_chat_daily_ledger === true;
                         config.enable_web_stories = false;
-                        config.enable_web_calls = false;
+                        config.enable_web_calls = enableCalls && config.enable_calls === true;
                         config.enable_web_comments = false;
                         response.writeHead(200, output); response.end(JSON.stringify(config));
                     } catch { reply(response, 502, "Invalid configuration response"); }

@@ -1,6 +1,7 @@
 import { reconcileKeyedElements } from "../keyed-list.js";
 import { prepareChatMedia, prepareMementoImages } from "./media.js";
 import { createPhotoStickers } from './photo-stickers.js';
+import { bindVoiceGesture, createVoiceWaveform } from './voice-interaction.js';
 import {
     CHAT_REACTIONS, chatAttentionPriority, chatNeedsMemento, chatPreview, displayMember, escapeChatHTML,
     messageTime, normalizeMessage, relativeChatTime, safeMediaURL,
@@ -145,7 +146,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 </div>
             </section>
             <section class="chat-room-screen hidden" data-chat-screen="room">
-                <header class="chat-room-header"><button class="chat-back" type="button" data-chat-list aria-label="Back to chats">${uiIcon("back")}</button><button class="chat-room-title" type="button" data-chat-settings><strong>Chat</strong><small>Loading…</small></button><div class="chat-room-tools"><span class="chat-call-actions hidden"><button class="chat-icon-button" type="button" data-start-call="audio" aria-label="Start voice call">${uiIcon("phone")}</button><button class="chat-icon-button" type="button" data-start-call="video" aria-label="Start video call">${uiIcon("video")}</button></span><button class="chat-memento-toolbar hidden" type="button" data-open-memento-gallery aria-label="Mementos"></button><button class="chat-icon-button" type="button" data-chat-settings aria-label="Chat settings">${uiIcon("more")}</button></div></header>
+                <header class="chat-room-header"><button class="chat-back" type="button" data-chat-list aria-label="Back to chats">${uiIcon("back")}</button><button class="chat-room-title" type="button" data-chat-settings><strong>Chat</strong><small>Loading…</small></button><div class="chat-room-tools"><span class="chat-call-actions hidden"><button class="chat-icon-button" type="button" data-start-call="audio" aria-label="Start voice call">${uiIcon("phone")}</button></span><button class="chat-memento-toolbar hidden" type="button" data-open-memento-gallery aria-label="Mementos"></button><button class="chat-icon-button" type="button" data-chat-settings aria-label="Chat settings">${uiIcon("more")}</button></div></header>
                 <div class="chat-daily-row"></div>
                 <div class="chat-room-status" role="status"></div>
                 <div class="chat-timeline" role="list" aria-live="polite" aria-label="Messages"></div>
@@ -162,7 +163,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                     <button class="chat-attachment-button" type="button" data-open-stickers aria-label="Send a sticker"><span class="native-sticker-icon" aria-hidden="true"></span></button>
                     <div class="chat-input-wrap"><textarea rows="1" maxlength="2000" placeholder="Message" aria-label="Message"></textarea><button type="button" class="chat-mic-button" data-record-voice aria-label="Record voice message">${uiIcon('mic')}</button></div>
                     <button class="chat-send-button" type="submit" aria-label="Send message">${uiIcon('send')}</button>
-                    <section class="chat-voice-inline hidden" aria-label="Voice message"><button type="button" data-cancel-voice aria-label="Discard voice message">${uiIcon('close')}</button><div><p class="chat-voice-status" role="status"></p><audio class="chat-inline-audio" controls aria-label="Voice message preview" hidden></audio></div><button type="button" data-send-voice aria-label="Send voice message">${uiIcon('send')}</button></section>
+                    <section class="chat-voice-inline hidden" aria-label="Voice message"><button type="button" data-cancel-voice aria-label="Discard voice message">${uiIcon('close')}</button><div class="chat-voice-body"><p class="chat-voice-status" role="status"></p><canvas class="chat-voice-waveform" width="192" height="28" aria-hidden="true"></canvas><p class="chat-voice-hint"></p><audio class="chat-inline-audio" aria-label="Voice message preview" hidden></audio><div class="chat-voice-player" hidden><button type="button" data-voice-play aria-label="Play voice preview">${uiIcon('play')}</button><input type="range" min="0" max="100" value="0" aria-label="Voice preview position"></div></div><button type="button" data-stop-voice aria-label="Stop recording and preview">${uiIcon('stop')}</button><button type="button" data-record-again aria-label="Record voice message">${uiIcon('mic')}</button><button type="button" data-send-voice aria-label="Send voice message">${uiIcon('send')}</button></section>
                 </form>
             </section>
         </div>
@@ -208,7 +209,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 <input class="chat-audio-file-input" type="file" accept="audio/mp4,.m4a" hidden aria-label="Voice recording file">
             </form>
         </dialog>
-        <dialog class="chat-sheet chat-stickers-sheet" data-sticker-library-dialog aria-label="Send a sticker"><section class="chat-stickers-content"><header><button type="button" data-close-stickers>Close</button><strong>Send a Sticker</strong><button type="button" data-edit-stickers aria-pressed="false">Edit</button></header><p>Tap a sticker to send it.</p><p class="chat-sticker-status" role="status"></p><section class="chat-sticker-library"><header><h2>My Stickers</h2><button type="button" data-make-sticker>${uiIcon('plus')} Make a sticker</button></header><input class="chat-sticker-file-input visually-hidden" type="file" accept="image/*" capture="environment"><div><small>Loading…</small></div></section></section></dialog>
+        <dialog class="chat-sheet chat-stickers-sheet" data-sticker-library-dialog aria-label="Send a sticker"><section class="chat-stickers-content"><header><button type="button" data-close-stickers>Close</button><strong>Send a Sticker</strong><button type="button" data-edit-stickers aria-pressed="false">Edit</button></header><p>Tap a sticker to send it.</p><p class="chat-sticker-status" role="status"></p><section class="chat-sticker-library"><input class="chat-sticker-file-input visually-hidden" type="file" accept="image/*" capture="environment"><div><small>Loading…</small></div></section></section></dialog>
         <dialog class="chat-sheet chat-mementos-sheet" data-memento-gallery-dialog aria-label="Mementos"><section class="chat-mementos-content"><header><button type="button" data-close-memento-gallery>Close</button><strong>Mementos</strong><span></span></header><p class="chat-memento-gallery-status" role="status"></p><div class="chat-memento-gallery"></div></section></dialog>
         <dialog class="chat-sticker-maker" data-sticker-maker-dialog aria-label="Make a sticker">
             <form class="chat-sticker-maker-form">
@@ -258,17 +259,40 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     // Initialize on first use so opening a chat never requests camera permission.
     let chatCamera = null;
     const photoStickers = createPhotoStickers($('.chat-media-preview'), { onChange: resetChatMediaRequestIds, disabled: () => chatMediaPublishing });
+    const voiceWaveform = createVoiceWaveform($('.chat-voice-waveform'));
+    const voiceGesture = bindVoiceGesture($('[data-record-voice]'), {
+        canStart: () => !voiceMode && !chatMediaPublishing && !chatAccessUnavailable() && !calls.isActive() && Boolean(compatibleAudioRecordingType()),
+        begin: () => toggleVoiceRecording(), recording: () => Boolean(voiceRecorder),
+        stop: () => stopVoiceRecorder(), discard: () => resetChatMediaComposer(),
+        hint: value => { $('.chat-voice-hint').textContent = value; },
+    });
+    const voiceAudio = $('.chat-inline-audio');
+    const voiceSeek = $('.chat-voice-player input');
+    $('[data-voice-play]').addEventListener('click', () => {
+        if (voiceAudio.paused) void voiceAudio.play().catch(() => { $('.chat-voice-status').textContent = 'Could not play this recording.'; });
+        else voiceAudio.pause();
+    });
+    for (const event of ['play', 'pause', 'ended']) voiceAudio.addEventListener(event, () => {
+        $('[data-voice-play]').innerHTML = uiIcon(voiceAudio.paused ? 'play' : 'pause');
+        $('[data-voice-play]').setAttribute('aria-label', voiceAudio.paused ? 'Play voice preview' : 'Pause voice preview');
+    });
+    voiceAudio.addEventListener('timeupdate', () => { voiceSeek.value = Number.isFinite(voiceAudio.duration) && voiceAudio.duration > 0 ? voiceAudio.currentTime / voiceAudio.duration * 100 : 0; });
+    voiceSeek.addEventListener('input', () => { if (Number.isFinite(voiceAudio.duration)) voiceAudio.currentTime = Number(voiceSeek.value) / 100 * voiceAudio.duration; });
     function syncVoiceComposer() {
         $('.chat-composer').classList.toggle('voice-mode', voiceMode);
         $('.chat-voice-inline').classList.toggle('hidden', !voiceMode);
         const audio = $('.chat-inline-audio');
         const ready = voiceMode && selectedChatMedia?.kind === 'audio';
-        audio.hidden = !ready;
+        audio.hidden = true;
+        $('.chat-voice-player').hidden = !ready;
+        $('[data-stop-voice]').hidden = !voiceRecorder;
+        $('[data-record-again]').hidden = !ready;
+        $('[data-send-voice]').hidden = !ready;
         if (ready && audio.getAttribute('src') !== selectedChatMediaPreview) audio.src = selectedChatMediaPreview;
         if (!voiceMode) { audio.pause(); audio.removeAttribute('src'); }
         $('[data-send-voice]').disabled = !ready || chatMediaPublishing;
         $('[data-cancel-voice]').disabled = chatMediaPublishing;
-        if (voiceMode && !voiceRecorder) $('.chat-voice-status').textContent = $('.chat-media-status').textContent || (ready ? '' : 'Voice message');
+        if (voiceMode && !voiceRecorder) $('.chat-voice-status').textContent = $('.chat-media-status').textContent || (ready ? `${Math.max(1, Math.round(selectedChatMedia.durationMs / 1000))}s` : 'Voice message');
     }
     new MutationObserver(syncVoiceComposer).observe($('.chat-media-status'), { childList: true });
     document.addEventListener('visibilitychange', () => { if (document.hidden && voiceMode) resetChatMediaComposer(); });
@@ -1352,6 +1376,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     function openStickerLibrary({ photo = false } = {}) {
         if (!store.state.activeChatId || chatAccessUnavailable()) return;
         photoStickerMode = photo;
+        $('[data-sticker-library-dialog] > section > header strong').textContent = photo ? 'My Stickers' : 'Send a Sticker';
         $('[data-sticker-library-dialog] > section > p').textContent = photo ? 'Choose a sticker to add to this photo.' : 'Tap a sticker to send it.';
         $('.chat-sticker-status').textContent = '';
         $('[data-sticker-library-dialog]').classList.remove('is-editing');
@@ -1374,9 +1399,10 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 const url = safeMediaURL(sticker.image_url, api);
                 return url ? `<span class="chat-sticker-item"><button type="button" data-send-sticker="${escapeChatHTML(sticker.id)}" aria-label="Send saved sticker"><img src="${escapeChatHTML(url)}" alt="" loading="lazy"></button><button type="button" data-delete-sticker="${escapeChatHTML(sticker.id)}" aria-label="Remove saved sticker">Remove</button></span>` : "";
             }).join("") || `<small>No saved stickers yet. Make one from a photo.</small>`;
+            container.insertAdjacentHTML('beforeend', `<button class="chat-sticker-new" type="button" data-make-sticker aria-label="Make a sticker"><span>${uiIcon('plus')}</span><small>New</small></button>`);
         } catch (error) {
             if (generation !== stickerLibraryGeneration) return;
-            container.innerHTML = `<small>${escapeChatHTML(error.message || "Could not load stickers.")}</small>`;
+            container.innerHTML = `<small>${escapeChatHTML(error.message || "Could not load stickers.")}</small><button type="button" data-retry-stickers>Try again</button>`;
         }
     }
 
@@ -1530,9 +1556,12 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         $("[data-record-voice]").textContent = '■';
         $("[data-record-voice]").setAttribute('aria-label', 'Stop recording and preview');
         $('.chat-voice-status').textContent = `${Math.floor(elapsedSeconds / 60)}:${String(elapsedSeconds % 60).padStart(2, "0")}`;
+        syncVoiceComposer();
     }
 
     function clearVoiceRecordingState() {
+        voiceWaveform.stop();
+        $('.chat-voice-hint').textContent = '';
         clearInterval(voiceRecordingTimer);
         voiceRecordingTimer = null;
         voiceRecordingStartedAt = 0;
@@ -1554,11 +1583,12 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
 
     async function toggleVoiceRecording() {
         if (chatMediaPublishing || chatAccessUnavailable()) return;
+        if (calls.isActive()) return showToast?.('End your call before recording a voice message.');
         if (voiceRecorder) {
             stopVoiceRecorder();
             return;
         }
-        resetChatMediaComposer(); voiceMode = true; syncVoiceComposer();
+        resetChatMediaComposer({ keepGesture: true }); voiceMode = true; syncVoiceComposer();
         const mimeType = compatibleAudioRecordingType();
         if (!mimeType) {
             $(".chat-media-status").textContent = "Live recording is unavailable here. Choose an M4A voice recording instead.";
@@ -1576,12 +1606,19 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 stream.getTracks().forEach((track) => track.stop());
                 return;
             }
-            const recorder = new MediaRecorder(stream, { mimeType });
-            const chunks = [];
+            const recorder = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 64000 });
+            const chunks = []; let recordedBytes = 0;
             voiceRecorder = recorder;
+            voiceWaveform.start(stream);
             discardVoiceRecording = false;
             recorder.addEventListener("dataavailable", (event) => {
-                if (event.data?.size) chunks.push(event.data);
+                if (!event.data?.size) return;
+                recordedBytes += event.data.size;
+                if (recordedBytes > 4 * 1024 * 1024 || chunks.length >= 600) {
+                    $('.chat-media-status').textContent = 'Recording limit reached. Record a shorter message.';
+                    stopVoiceRecorder({ discard: true }); return;
+                }
+                chunks.push(event.data);
             });
             recorder.addEventListener("error", () => {
                 $(".chat-media-status").textContent = "Voice recording stopped unexpectedly. Try again or choose an M4A file.";
@@ -1700,7 +1737,9 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         }
     }
 
-    function resetChatMediaComposer() {
+    function resetChatMediaComposer({ keepGesture = false } = {}) {
+        if (!keepGesture) voiceGesture.reset();
+        voiceWaveform.reset();
         voiceMode = false;
         photoStickerMode = false;
         photoStickers.reset();
@@ -2360,7 +2399,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (target.dataset.declineChat) return declineInvitation(target.dataset.declineChat);
         if (target.matches("[data-history-direction]")) return advanceHistory(target.dataset.historyDirection, { retry: true });
         if (target.matches("[data-jump-latest]")) return jumpToLatest();
-        if (target.dataset.startCall) return calls.start(target.dataset.startCall, store.state.detail?.chat);
+        if (target.dataset.startCall) { if (voiceMode) resetChatMediaComposer(); document.activeElement?.blur(); return calls.start(target.dataset.startCall, store.state.detail?.chat); }
         if (target.dataset.mementoDay) return loadMementoDay(target.dataset.mementoDay);
         if (target.dataset.mementoDate) return loadMementoDate(target.dataset.mementoDate);
         if (target.matches('[data-open-memento-gallery]')) return openMementoGallery();
@@ -2377,7 +2416,10 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (target.matches("[data-open-chat-media]")) return openChatMediaComposer();
         if (target.matches("[data-close-chat-media]")) { if (!chatMediaPublishing) $('[data-chat-media-dialog]').close(); return; }
         if (target.matches("[data-make-sticker]")) { $('[data-save-sticker]').textContent = photoStickerMode ? 'Save and add' : 'Save and send'; return $(".chat-sticker-file-input").click(); }
+        if (target.matches('[data-retry-stickers]')) return loadStickerLibrary();
         if (target.matches("[data-record-voice]")) return void toggleVoiceRecording();
+        if (target.matches('[data-record-again]')) return void toggleVoiceRecording();
+        if (target.matches('[data-stop-voice]')) return stopVoiceRecorder();
         if (target.matches('[data-cancel-voice]')) return resetChatMediaComposer();
         if (target.matches('[data-send-voice]')) return publishChatMedia(event);
         if (target.matches('[data-photo-text]')) {

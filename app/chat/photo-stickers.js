@@ -23,7 +23,7 @@ export function createPhotoStickers(preview, { onChange, disabled }) {
         const rect = bounds(); if (!rect) return;
         for (const item of items) {
             if (!item.node.isConnected) preview.append(item.node);
-            setRuntimeStyles(item.node, { left: `${rect.x + rect.w * item.x}px`, top: `${rect.y + rect.h * item.y}px`, width: `${rect.w * item.scale}px` });
+            setRuntimeStyles(item.node, { left: `${rect.x + rect.w * item.x}px`, top: `${rect.y + rect.h * item.y}px`, width: `${rect.w * item.scale}px`, transform: `translate(-50%, -50%) rotate(${item.rotation}rad)` });
         }
         if (selected) {
             if (!removeButton.isConnected) preview.append(removeButton);
@@ -49,22 +49,24 @@ export function createPhotoStickers(preview, { onChange, disabled }) {
         if (current !== generation || disabled()) { bitmap.close(); return; }
         if (bitmap.width * bitmap.height > 2048 * 2048) { bitmap.close(); throw new Error('That sticker is too large.'); }
         const node = document.createElement('button'), image = document.createElement('img');
-        node.type = 'button'; node.className = 'chat-photo-sticker'; node.setAttribute('aria-label', 'Move sticker; arrow keys move, plus or minus resize, Delete removes');
+        node.type = 'button'; node.className = 'chat-photo-sticker'; node.setAttribute('aria-label', 'Move sticker; arrows move, plus or minus resize, brackets rotate, Delete removes');
         image.src = URL.createObjectURL(blob); image.alt = ''; image.draggable = false; node.append(image);
-        const item = { node, bitmap, url: image.src, x: .5, y: .5, scale: .28 }; items.push(item);
-        const pointers = new Map(); let pinchDistance = 0, pinchScale = item.scale;
+        const item = { node, bitmap, url: image.src, x: .5, y: .5, scale: .28, rotation: 0 }; items.push(item);
+        const pointers = new Map(); let pinchDistance = 0, pinchScale = item.scale, pinchAngle = 0, pinchRotation = 0;
         const distance = () => { const [a, b] = [...pointers.values()]; return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0; };
+        const angle = () => { const [a, b] = [...pointers.values()]; return a && b ? Math.atan2(b.y - a.y, b.x - a.x) : 0; };
         node.addEventListener('pointerdown', event => {
             if (disabled() || pointers.size >= 2) return;
             event.preventDefault(); event.stopPropagation(); selected = item;
             pointers.set(event.pointerId, { x: event.clientX, y: event.clientY }); node.setPointerCapture(event.pointerId);
-            pinchDistance = distance(); pinchScale = item.scale; mount();
+            pinchDistance = distance(); pinchScale = item.scale; pinchAngle = angle(); pinchRotation = item.rotation; mount();
         });
         node.addEventListener('pointermove', event => {
             if (!pointers.has(event.pointerId) || disabled()) return;
             pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
             if (pointers.size === 2) {
                 if (pinchDistance > 0) item.scale = Math.max(.1, Math.min(.8, pinchScale * distance() / pinchDistance));
+                item.rotation = (pinchRotation + angle() - pinchAngle) % (Math.PI * 2);
                 mount(); onChange(); return;
             }
             const rect = bounds(), box = preview.getBoundingClientRect(); if (!rect) return;
@@ -74,12 +76,13 @@ export function createPhotoStickers(preview, { onChange, disabled }) {
         for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) node.addEventListener(type, event => { pointers.delete(event.pointerId); });
         node.addEventListener('focus', () => { selected = item; mount(); });
         node.addEventListener('keydown', event => {
-            if (disabled() || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', '+', '=', '-', 'Delete', 'Backspace'].includes(event.key)) return;
+            if (disabled() || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', '+', '=', '-', '[', ']', 'Delete', 'Backspace'].includes(event.key)) return;
             event.preventDefault();
             if (['Delete', 'Backspace'].includes(event.key)) { remove(item); return; }
             else { item.x = Math.max(0, Math.min(1, item.x + (event.key === 'ArrowRight' ? .03 : event.key === 'ArrowLeft' ? -.03 : 0)));
                 item.y = Math.max(0, Math.min(1, item.y + (event.key === 'ArrowDown' ? .03 : event.key === 'ArrowUp' ? -.03 : 0)));
-                item.scale = Math.max(.1, Math.min(.8, item.scale + (['+', '='].includes(event.key) ? .04 : event.key === '-' ? -.04 : 0))); mount(); }
+                item.scale = Math.max(.1, Math.min(.8, item.scale + (['+', '='].includes(event.key) ? .04 : event.key === '-' ? -.04 : 0)));
+                item.rotation = (item.rotation + (event.key === ']' ? .15 : event.key === '[' ? -.15 : 0)) % (Math.PI * 2); mount(); }
             onChange();
         });
         selected = item; mount(); onChange();
@@ -94,7 +97,8 @@ export function createPhotoStickers(preview, { onChange, disabled }) {
             const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
             const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0);
             for (const item of items) { const w = image.width * item.scale, h = w * item.bitmap.height / item.bitmap.width;
-                ctx.drawImage(item.bitmap, image.width * item.x - w / 2, image.height * item.y - h / 2, w, h); }
+                ctx.save(); ctx.translate(image.width * item.x, image.height * item.y); ctx.rotate(item.rotation);
+                ctx.drawImage(item.bitmap, -w / 2, -h / 2, w, h); ctx.restore(); }
             const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', .9));
             if (!blob || blob.size > 8 * 1024 * 1024) throw new Error('That photo is too large to send.');
             return new File([blob], 'chat-photo.jpg', { type: 'image/jpeg' });

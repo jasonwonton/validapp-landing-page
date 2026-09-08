@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-async function installCallHarness(page) {
-    await page.goto("/app/?demo=1");
+async function installCallHarness(page, { chatUI = false } = {}) {
+    await page.goto(chatUI ? '/app/?demo=1&signin=1&calls=1' : "/app/?demo=1");
     await page.evaluate(async () => {
         window.__callLog = [];
         const log = window.__callLog;
@@ -12,6 +12,7 @@ async function installCallHarness(page) {
         }
         class FakeRoom {
             constructor() {
+                window.__fakeRoom = this;
                 this.handlers = new Map();
                 this.remoteParticipants = new Map();
                 this.localParticipant = {
@@ -26,7 +27,7 @@ async function installCallHarness(page) {
                 };
             }
             on(name, handler) { this.handlers.set(name, handler); return this; }
-            async connect(url, token) { log.push(["connect", url, token]); }
+            async connect(url, token) { log.push(["connect", url, token]); if (window.__delayConnect) await new Promise(resolve => { window.__resolveConnect = resolve; }); }
             async disconnect() { log.push(["disconnect"]); }
             async startAudio() { log.push(["startAudio"]); }
         }
@@ -38,6 +39,7 @@ async function installCallHarness(page) {
             Reconnecting: "reconnecting", Reconnected: "reconnected", Disconnected: "disconnected",
         };
         window.__VALID_LIVEKIT_LOADER__ = async () => ({ Room: FakeRoom, RoomEvent });
+        window.__FakeTrack = FakeTrack;
         Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: {
             getUserMedia: async (constraints) => {
                 log.push(["permission", constraints]);
@@ -76,11 +78,12 @@ test("open-app voice calls preflight media, use idempotent server state, and end
     await page.evaluate(() => window.__calls.start("audio", { id: "chat-1", display_name: "Maya", accepted_count: 2 }));
     await expect(page.locator(".call-overlay")).toBeVisible();
     await expect(page.locator("[data-call-title]")).toHaveText("Maya");
+    await page.screenshot({path: test.info().outputPath('voice-call.png')});
     const log = await page.evaluate(() => window.__callLog);
     expect(log.findIndex(([name]) => name === "permissionStopped")).toBeLessThan(log.findIndex(([name]) => name === "start"));
     expect(log.map(([name]) => name)).toEqual(expect.arrayContaining(["start", "join", "connect", "microphone"]));
     await page.locator("[data-call-audio]").click();
-    await expect(page.locator("[data-call-audio]")).toHaveText("Mic off");
+    await expect(page.locator("[data-call-audio]")).toHaveAttribute('aria-label', 'Unmute');
     await page.locator("[data-call-hangup]").click();
     await expect(page.locator(".call-overlay")).not.toBeVisible();
     expect(await page.evaluate(() => window.__callLog.some(([name, id]) => name === "end" && id === "call-1"))).toBe(true);
@@ -89,9 +92,9 @@ test("open-app voice calls preflight media, use idempotent server state, and end
 test("video calls reserve and release the authoritative camera slot", async ({ page }) => {
     await installCallHarness(page);
     await page.evaluate(() => window.__calls.start("video", { id: "chat-1", display_name: "Maya", accepted_count: 2 }));
-    await expect(page.locator("[data-call-video]")).toHaveText("Camera on");
+    await expect(page.locator("[data-call-video]")).toHaveAttribute('aria-label', 'Turn camera off');
     await page.locator("[data-call-video]").click();
-    await expect(page.locator("[data-call-video]")).toHaveText("Camera off");
+    await expect(page.locator("[data-call-video]")).toHaveAttribute('aria-label', 'Turn camera on');
     const names = await page.evaluate(() => window.__callLog.map(([name]) => name));
     expect(names).toEqual(expect.arrayContaining(["enableCamera", "camera", "disableCamera"]));
     await page.locator("[data-call-hangup]").click();
@@ -137,4 +140,73 @@ test("web call adapter matches the released call-control contract", async ({ pag
         ["/users/u/calls/call/leave", "POST", null],
         ["/users/u/calls/call/end", "POST", null],
     ]);
+});
+
+test('hanging up during microphone permission prevents a late outgoing call', async ({ page }) => {
+    await installCallHarness(page);
+    await page.evaluate(() => {
+        navigator.mediaDevices.getUserMedia = () => new Promise(resolve => { window.__grant = () => resolve({getTracks: () => [{stop() { __callLog.push(['lateTrackStopped']); }}]}); });
+        window.__pendingStart = __calls.start('audio', {id:'chat-1',accepted_count:2});
+    });
+    await page.getByRole('button', {name:'End call',exact:true}).click();
+    await page.evaluate(async () => { __grant(); await __pendingStart; });
+    expect(await page.evaluate(() => __callLog.map(([name]) => name))).toContain('lateTrackStopped');
+    expect(await page.evaluate(() => __callLog.some(([name]) => name === 'start'))).toBe(false);
+    await expect(page.locator('.call-overlay')).toBeHidden();
+});
+
+test('hangup during connection prevents late microphone publication', async ({ page }) => {
+    await installCallHarness(page);
+    await page.evaluate(() => { window.__delayConnect = true; window.__pendingStart = __calls.start('audio', {id:'chat-1',accepted_count:2}); });
+    await expect.poll(() => page.evaluate(() => typeof window.__resolveConnect)).toBe('function');
+    await page.getByRole('button', {name:'End call',exact:true}).click();
+    await page.evaluate(async () => { __resolveConnect(); await __pendingStart; });
+    expect(await page.evaluate(() => __callLog.some(([name]) => name === 'microphone'))).toBe(false);
+    await expect(page.locator('.call-overlay')).toBeHidden();
+});
+
+test('double initiation sends once and an ambiguous explicit retry keeps its identity', async ({ page }) => {
+    await installCallHarness(page);
+    const result = await page.evaluate(async () => {
+        const original = __callAPI.startCall, ids = []; let fail = true;
+        __callAPI.startCall = async (...args) => { ids.push(args[3]); if (fail) { fail = false; throw Object.assign(new Error('Network interrupted'), {status:0}); } return original(...args); };
+        const chat = {id:'chat-1',accepted_count:2};
+        await __calls.start('audio', chat);
+        const closedAfterFailure = !document.querySelector('.call-overlay').open;
+        await Promise.all([__calls.start('audio', chat), __calls.start('audio', chat)]);
+        return {ids, closedAfterFailure};
+    });
+    expect(result.closedAfterFailure).toBe(true); expect(result.ids).toHaveLength(2); expect(result.ids[0]).toBe(result.ids[1]);
+    await page.getByRole('button', {name:'End call',exact:true}).click();
+});
+
+test('the chat header initiates one voice call and preserves compact native controls', async ({page}) => {
+    await installCallHarness(page, {chatUI:true});
+    await page.evaluate(async () => { const {DemoAPI} = await import('/app/demo-api.js'); Object.assign(DemoAPI.prototype, __callAPI); });
+    await page.getByRole('button', {name:/^sign in$/i}).click();
+    await page.getByRole('button', {name:'Chats',exact:true}).click();
+    await page.getByRole('button', {name:/Noah Williams/}).click();
+    await expect(page.getByRole('button', {name:'Start voice call'})).toBeVisible();
+    await expect(page.getByRole('button', {name:'Start video call'})).toHaveCount(0);
+    await page.screenshot({path:test.info().outputPath('call-enabled-chat.png')});
+    await page.getByRole('button', {name:'Start voice call'}).click();
+    await expect(page.locator('.call-overlay[open]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => __callLog.filter(([name]) => name === 'start').length)).toBe(1);
+    expect(await page.evaluate(() => __callLog.find(([name]) => name === 'start').slice(1,3))).toEqual(['chat-noah','audio']);
+    await page.getByRole('button', {name:'End call',exact:true}).click();
+});
+
+test('available browser audio-output picker applies to remote audio without storing device identifiers', async ({page}) => {
+    await installCallHarness(page);
+    await page.evaluate(async () => {
+        navigator.mediaDevices.selectAudioOutput = async () => ({deviceId:'headphones-fixture'});
+        HTMLMediaElement.prototype.setSinkId = async function(id) { __callLog.push(['output',id]); };
+        await __calls.start('audio', {id:'chat-1',accepted_count:2});
+        __fakeRoom.remoteParticipants.set('user-2', {name:'Maya',trackPublications:new Map([['audio',{track:new __FakeTrack('audio')}]])});
+        __fakeRoom.handlers.get('participantConnected')();
+    });
+    await page.getByRole('button', {name:'Audio output',exact:true}).click();
+    await expect.poll(() => page.evaluate(() => __callLog.some(([name,id]) => name === 'output' && id === 'headphones-fixture'))).toBe(true);
+    expect(await page.evaluate(() => JSON.stringify(localStorage).includes('headphones-fixture'))).toBe(false);
+    await page.getByRole('button', {name:'End call',exact:true}).click();
 });

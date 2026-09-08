@@ -136,3 +136,22 @@
 @media (prefers-reduced-motion: reduce) {
     .call-overlay::backdrop { backdrop-filter: none; }
 }
+
+/* Native hierarchy: participant stage and one compact circular control dock. */
+.call-overlay { height: var(--visual-viewport-height, 100dvh); max-height: var(--visual-viewport-height, 100dvh); background: #0b2023; }
+.call-card { height: 100%; min-height: 0; }
+.call-card > header { justify-content: center; text-align: center; flex: 0 0 auto; }
+.call-kind { display: none; }
+.call-media-grid { min-height: 0; overflow: auto; grid-auto-rows: minmax(150px, 1fr); }
+.call-participant-avatar { width: 96px; height: 96px; display: grid; place-items: center; border-radius: 50%; background: #245459; color: #fff; font-size: 40px; }
+.call-participant-avatar[hidden] { display: none; }
+.call-active-actions { align-self: center; padding: 12px; border-radius: 48px; background: #ffffff15; gap: 18px; }
+.call-active-actions button, .call-incoming-actions button { display: grid; place-items: center; min-width: 0; width: 60px; height: 60px; padding: 16px; border-radius: 50%; background: #ffffff24; color: #fff; }
+.call-active-actions button[aria-pressed="true"] { background: #fff; color: #0b2023; }
+.call-active-actions .call-hangup, .call-incoming-actions .call-decline { background: #ed3f50; color: #fff; }
+.call-incoming-actions .call-accept { background: #31be72; color: #fff; }
+.call-incoming-actions { gap: 90px; padding: 18px; }
+.call-note { font-size: 12px; }
+.call-avatar { background: transparent; }
+.call-active-actions [hidden] { display: none; }
+@media (max-width: 390px) { .call-active-actions { gap: 12px; } .call-active-actions button { width: 52px; height: 52px; padding: 13px; } }

@@ -98,15 +98,20 @@ test('photo stickers bake into JPEG pixels, enforce a bounded count and release 
         const pinched = node.getBoundingClientRect().width > before;
         const baked = await stickers.bake(source); const bitmap = await createImageBitmap(baked);
         ctx.drawImage(bitmap, 0, 0); bitmap.close(); const center = [...ctx.getImageData(50, 50, 1, 1).data];
+        const beforeRotation = [...ctx.getImageData(25, 25, 1, 1).data];
+        for (let i = 0; i < 5; i++) node.dispatchEvent(new KeyboardEvent('keydown', {key:']'}));
+        const rotated = await createImageBitmap(await stickers.bake(source)); ctx.drawImage(rotated, 0, 0); rotated.close();
+        const afterRotation = [...ctx.getImageData(25, 25, 1, 1).data];
         for (let i = 1; i < 8; i++) await stickers.add(red);
         let rejected = false; try { await stickers.add(red); } catch { rejected = true; }
         const count = preview.querySelectorAll('.chat-photo-sticker').length;
         stickers.reset(); const remaining = preview.querySelectorAll('button').length;
         URL.revokeObjectURL(img.src); preview.remove();
-        return { center, pinched, rejected, count, remaining, type: baked.type };
+        return { center, beforeRotation, afterRotation, pinched, rejected, count, remaining, type: baked.type };
     });
     expect(result).toMatchObject({ pinched: true, rejected: true, count: 8, remaining: 0, type: 'image/jpeg' });
     expect(result.center[0]).toBeGreaterThan(240); expect(result.center[1]).toBeLessThan(15);
+    expect(result.beforeRotation[1]).toBeLessThan(15); expect(result.afterRotation[1]).toBeGreaterThan(240);
 });
 
 test('discarding an inline voice request before microphone permission arrives releases the late stream', async ({ page }) => {

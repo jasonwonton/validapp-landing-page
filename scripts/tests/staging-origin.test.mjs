@@ -4,7 +4,7 @@ import { before, after, test } from 'node:test';
 import { createStagingOrigin } from '../serve-staging.mjs';
 
 const secret = 'ab'.repeat(32), stage = 'https://staging.validapp.lol';
-let server, backend, cookie, calls = [], fail = false, activeStreams = 0, authLogs = [], authReply;
+let server, backend, cookie, calls = [], fail = false, activeStreams = 0, authLogs = [], authReply, nativeCallsEnabled = true;
 before(async () => {
     backend = createServer((req, res) => {
         calls.push({ path: req.url, headers: req.headers });
@@ -29,7 +29,7 @@ before(async () => {
             '__Host-valid_web_session=test-session; Secure; HttpOnly; Path=/; SameSite=Lax',
             'unrelated=never-forward', '__Host-valid_web_session=bad; Domain=six7.lol',
         ] });
-        res.end(JSON.stringify({ enable_chats: true, enable_chat_daily_ledger: true, enable_calls: true, enable_web_calls: true }));
+        res.end(JSON.stringify({ enable_chats: true, enable_chat_daily_ledger: true, enable_calls: nativeCallsEnabled, enable_web_calls: true }));
     });
     await new Promise(r => backend.listen(0, '127.0.0.1', r));
     server = await createStagingOrigin({ secret, logAuth: event => authLogs.push(event), upstreamRequest(options, callback) {
@@ -82,12 +82,30 @@ test('only intended API, cookies and exact origins reach backend', async () => {
     assert.equal(response.headers['cache-control'], 'no-store');
     assert.equal(response.headers['x-active-classmates-this-week'], '12');
 });
-test('private config gates do not enable unvalidated Stories, calls or comments', async () => {
+test('private config admits call smoke testing but not Stories or comments', async () => {
     const response = await send('/api/v1/config');
     const config = JSON.parse(response.body);
     assert.equal(config.enable_web_chats, true); assert.equal(config.enable_web_mementos, true);
-    assert.equal(config.enable_calls, true); assert.equal(config.enable_web_calls, false);
+    assert.equal(config.enable_calls, true); assert.equal(config.enable_web_calls, true);
     assert.equal(config.enable_web_stories, false); assert.equal(config.enable_web_comments, false);
+});
+
+test('the native call gate and independent staging kill switch both disable web calls', async () => {
+    nativeCallsEnabled = false;
+    try { assert.equal(JSON.parse((await send('/api/v1/config')).body).enable_web_calls, false); }
+    finally { nativeCallsEnabled = true; }
+    const disabled = await createStagingOrigin({secret, enableCalls:false, upstreamRequest(options, callback) {
+        return request({...options,hostname:'127.0.0.1',port:backend.address().port},callback);
+    }});
+    await new Promise(resolve => disabled.listen(0,'127.0.0.1',resolve));
+    try {
+        const config = await new Promise((resolve,reject) => {
+            const req = request({hostname:'127.0.0.1',port:disabled.address().port,path:'/api/v1/config',headers:{host:'staging.validapp.lol',cookie}}, res => {
+                let data = ''; res.on('data',chunk => data += chunk); res.on('end',() => resolve(JSON.parse(data)));
+            }); req.on('error',reject); req.end();
+        });
+        assert.equal(config.enable_calls,true); assert.equal(config.enable_web_calls,false);
+    } finally { disabled.closeAllConnections(); await new Promise(resolve => disabled.close(resolve)); }
 });
 test('signup needs a private session and explicit same-origin confirmation; rejection logging is bounded and private', async () => {
     const target = '/api/v1/auth/passkey/signup/complete';

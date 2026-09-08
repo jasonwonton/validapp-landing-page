@@ -522,3 +522,25 @@
 .chat-camera-sheet .chat-photo-sticker img { position: static; width: 100%; height: auto; background: transparent; display: block; pointer-events: none; }
 .chat-photo-sticker:focus-visible { outline: 2px dashed #fff; outline-offset: 4px; }
 .chat-photo-sticker-remove { position: absolute; z-index: 4; width: 44px; height: 44px; border: 0; border-radius: 50%; color: #fff; background: #000b; font: 28px system-ui; }
+.chat-composer.voice-mode .chat-input-wrap { display: none; }
+.chat-voice-inline [hidden] { display: none; }
+.chat-voice-body { min-width: 0; padding: 5px 12px; border-radius: 22px; border: 2px solid var(--ink); background: var(--white); }
+.chat-voice-waveform { display: block; width: 100%; height: 28px; }
+.chat-voice-hint { font-size: 11px !important; color: var(--muted); }
+.chat-voice-hint:empty { display: none; }
+.chat-voice-player { display: flex; align-items: center; gap: 6px; }
+.chat-voice-player [data-voice-play] { width: 32px; height: 32px; background: transparent; color: var(--ink); }
+.chat-voice-player input { min-width: 0; width: 100%; accent-color: var(--peach); }
+.chat-voice-inline [data-stop-voice] { color: #e83950; background: var(--white); border: 2px solid var(--ink); }
+.chat-mic-button { touch-action: none; -webkit-user-select: none; user-select: none; }
+.chat-attachment-button .native-sticker-icon { filter: none; }
+.chat-stickers-sheet .chat-sticker-item [data-send-sticker] { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.chat-sticker-new { aspect-ratio: 1; display: grid; place-content: center; justify-items: center; gap: 7px; border: 1.5px dashed #ffb15e; border-radius: 18px; background: linear-gradient(135deg, #f8abc477, #ffb15e55); color: var(--ink); }
+.chat-sticker-new > span { display: grid; place-items: center; width: 42px; height: 42px; padding: 11px; border-radius: 50%; background: #ffb15e; color: #fff; }
+.chat-voice-body { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 8px; }
+.chat-voice-waveform { height: 20px; }
+.chat-voice-hint, .chat-voice-player { grid-column: 1 / -1; }
+.chat-voice-player input { appearance: none; height: 4px; border: 0; border-radius: 4px; background: color-mix(in srgb, var(--ink) 18%, transparent); }
+.chat-voice-player input::-webkit-slider-thumb { appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--peach); }
+.chat-voice-player input::-moz-range-thumb { width: 12px; height: 12px; border: 0; border-radius: 50%; background: var(--peach); }
+.chat-voice-inline [data-record-again] { background: var(--white); color: var(--ink); border: 2px solid var(--ink); }

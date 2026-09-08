@@ -27,6 +27,9 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
     let operationInFlight = false;
     let ending = false;
     let lifecycleTimer = null;
+    let generation = 0;
+    let outputDeviceId = '';
+    const isCurrent = token => token === generation && !ending;
     const startRequestIds = new Map();
     const attachedMedia = new Map();
 
@@ -38,16 +41,17 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
             <header><span class="call-kind" aria-hidden="true">${uiIcon('phone')}</span><div><strong data-call-title>Valid call</strong><small data-call-status>Connecting…</small></div></header>
             <div class="call-media-grid" data-call-media aria-live="polite"></div>
             <div class="call-incoming-actions hidden" data-call-incoming-actions>
-                <button class="call-decline" type="button" data-call-decline>Decline</button>
-                <button class="call-accept" type="button" data-call-accept>Accept</button>
+                <button class="call-decline" type="button" data-call-decline aria-label="Decline call">${uiIcon('hangup')}</button>
+                <button class="call-accept" type="button" data-call-accept aria-label="Accept call">${uiIcon('phone')}</button>
             </div>
             <div class="call-active-actions hidden" data-call-active-actions>
-                <button type="button" data-call-audio aria-pressed="true">Mic on</button>
-                <button type="button" data-call-video aria-pressed="false">Camera off</button>
-                <button class="call-hangup" type="button" data-call-hangup>End</button>
+                <button type="button" data-call-audio aria-label="Mute" aria-pressed="false">${uiIcon('mic')}</button>
+                <button type="button" data-call-output aria-label="Audio output" hidden>${uiIcon('speaker')}</button>
+                <button type="button" data-call-video aria-label="Turn camera on" aria-pressed="false">${uiIcon('video-off')}</button>
+                <button class="call-hangup" type="button" data-call-hangup aria-label="End call">${uiIcon('hangup')}</button>
             </div>
             <button class="call-enable-sound hidden" type="button" data-call-enable-sound>Tap to enable sound</button>
-            <p class="call-note">Calls stay connected only while this web app can run. For reliable lock-screen incoming calls, use the iPhone app.</p>
+            <p class="call-note">Keep Six7 open during your call.</p>
         </section>`;
     document.body.append(dialog);
 
@@ -76,15 +80,17 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
         lifecycleTimer = setTimeout(async () => {
             lifecycleTimer = null;
             if (!currentCall || String(currentCall.id) !== String(call.id)) return;
+            const token = generation;
             try {
                 const refreshed = await api.getCall(userId(), call.id);
+                if (!isCurrent(token)) return;
                 currentCall = refreshed;
                 if (TERMINAL_STATES.has(refreshed.state)) await finish({ notifyBackend: false });
                 else scheduleLifecycleCheck(refreshed);
             } catch (_) {
                 setStatus("Call status unavailable");
             }
-        }, Math.max(0, Math.min(12 * 60 * 60_000, deadlineTime - Date.now() + 250)));
+        }, Math.max(5000, Math.min(12 * 60 * 60_000, deadlineTime - Date.now() + 250)));
     }
 
     function showDialog() {
@@ -97,12 +103,18 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
     }
 
     function updateControls() {
-        microphoneButton.textContent = muted ? "Mic off" : "Mic on";
-        microphoneButton.setAttribute("aria-pressed", String(!muted));
-        cameraButton.textContent = cameraEnabled ? "Camera on" : "Camera off";
+        microphoneButton.innerHTML = uiIcon(muted ? 'mic-off' : 'mic');
+        microphoneButton.setAttribute('aria-label', muted ? 'Unmute' : 'Mute');
+        microphoneButton.setAttribute("aria-pressed", String(muted));
+        cameraButton.innerHTML = uiIcon(cameraEnabled ? 'video' : 'video-off');
+        cameraButton.setAttribute('aria-label', cameraEnabled ? 'Turn camera off' : 'Turn camera on');
         cameraButton.setAttribute("aria-pressed", String(cameraEnabled));
-        cameraButton.disabled = operationInFlight;
-        microphoneButton.disabled = operationInFlight;
+        cameraButton.disabled = operationInFlight || !room;
+        microphoneButton.disabled = operationInFlight || !room;
+        incomingActions.querySelectorAll('button').forEach(button => { button.disabled = operationInFlight; });
+        const output = dialog.querySelector('[data-call-output]');
+        output.hidden = !(navigator.mediaDevices?.selectAudioOutput && HTMLMediaElement.prototype.setSinkId);
+        output.disabled = operationInFlight || !room;
     }
 
     async function preflightPermissions(mediaType) {
@@ -134,6 +146,7 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
         else element.className = "call-video-track";
         card.append(element);
         attachedMedia.set(element, track);
+        if (outputDeviceId && element.setSinkId) void element.setSinkId(outputDeviceId).catch(() => { outputDeviceId = ''; });
         element.play?.().catch(() => soundButton.classList.remove("hidden"));
     }
 
@@ -141,20 +154,24 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
         const card = document.createElement("article");
         card.className = "call-participant";
         const name = isLocal ? "You" : participant.name || "Student";
+        const avatar = document.createElement('b'); avatar.className = 'call-participant-avatar'; avatar.textContent = name.slice(0, 1).toUpperCase(); card.append(avatar);
         const label = document.createElement("span");
         label.textContent = name;
         card.append(label);
         const publications = participant.trackPublications?.values?.() || [];
         for (const publication of publications) {
-            if (publication.track) attachTrack(publication.track, card, isLocal);
+            if (publication.track) { attachTrack(publication.track, card, isLocal); if (publication.track.kind === 'video') avatar.hidden = true; }
         }
         return card;
     }
 
     function renderParticipants() {
         clearAttachedMedia();
-        if (!room) {
-            mediaNode.innerHTML = `<div class="call-avatar" aria-hidden="true">${uiIcon(currentCall?.media_type === 'video' ? 'video' : 'phone')}</div>`;
+        if (!room || (!room.remoteParticipants.size && !cameraEnabled)) {
+            const card = document.createElement('div'), avatar = document.createElement('b');
+            card.className = 'call-avatar'; avatar.className = 'call-participant-avatar';
+            avatar.textContent = titleNode.textContent.trim().slice(0, 1).toUpperCase(); card.append(avatar); mediaNode.append(card);
+            if (room) setStatus(currentCall?.state === 'active' ? 'Waiting for others…' : 'Calling…');
             return;
         }
         mediaNode.append(participantCard(room.localParticipant, true));
@@ -173,8 +190,20 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
         }
     }
 
+    async function chooseAudioOutput() {
+        if (!room || !navigator.mediaDevices?.selectAudioOutput) return;
+        const token = generation;
+        try {
+            const device = await navigator.mediaDevices.selectAudioOutput();
+            if (!isCurrent(token)) return;
+            for (const element of attachedMedia.keys()) if (element.setSinkId) await element.setSinkId(device.deviceId);
+            outputDeviceId = device.deviceId;
+        } catch (error) { if (error?.name !== 'NotAllowedError') showToast?.('Could not change audio output. Use your device’s audio controls.'); }
+    }
+
     function bindRoomEvents() {
-        const rerender = () => renderParticipants();
+        const token = generation;
+        const rerender = () => { if (isCurrent(token)) renderParticipants(); };
         room.on(liveKit.RoomEvent.TrackSubscribed, rerender);
         room.on(liveKit.RoomEvent.TrackUnsubscribed, rerender);
         room.on(liveKit.RoomEvent.TrackMuted, rerender);
@@ -183,25 +212,32 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
         room.on(liveKit.RoomEvent.LocalTrackUnpublished, rerender);
         room.on(liveKit.RoomEvent.ParticipantConnected, rerender);
         room.on(liveKit.RoomEvent.ParticipantDisconnected, rerender);
-        room.on(liveKit.RoomEvent.Reconnecting, () => setStatus("Reconnecting…"));
+        room.on(liveKit.RoomEvent.Reconnecting, () => { if (isCurrent(token)) setStatus("Reconnecting…"); });
         room.on(liveKit.RoomEvent.Reconnected, rerender);
         room.on(liveKit.RoomEvent.Disconnected, () => {
-            if (!ending && currentCall && !TERMINAL_STATES.has(currentCall.state)) setStatus("Call disconnected");
+            if (isCurrent(token) && currentCall && !TERMINAL_STATES.has(currentCall.state)) void finish({ notifyBackend: true });
         });
     }
 
-    async function connectToCall(call) {
+    async function connectToCall(call, token) {
         liveKit ||= await loadLiveKit();
+        if (!isCurrent(token)) return;
         const credentials = await api.joinCall(userId(), call.id);
+        if (!isCurrent(token)) return;
         currentCall = credentials.call;
         scheduleLifecycleCheck(currentCall);
         cameraReservationId = credentials.camera_slot_reservation_id || null;
         room = new liveKit.Room({ adaptiveStream: true, dynacast: true });
+        const connectingRoom = room;
         bindRoomEvents();
         await room.connect(credentials.server_url, credentials.access_token, { autoSubscribe: true });
+        if (!isCurrent(token)) { await connectingRoom.disconnect(); return; }
         await room.localParticipant.setMicrophoneEnabled(true);
+        if (!isCurrent(token)) { await connectingRoom.disconnect(); return; }
         muted = false;
+        outputDeviceId = '';
         if (currentCall.media_type === "video") await setCamera(true, { insideOperation: true });
+        if (!isCurrent(token)) { await connectingRoom.disconnect(); return; }
         updateControls();
         renderParticipants();
         void enableAudioPlayback();
@@ -209,17 +245,23 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
 
     async function start(mediaType, chat) {
         if (!enabled()) return showToast?.("Calls are not available in this web release.");
-        if (currentCall || operationInFlight) return showToast?.("You’re already in a call.");
+        if (currentCall || operationInFlight || ending) return showToast?.("You’re already in a call.");
         if (Number(chat?.accepted_count || 0) < 2 || chat?.has_viewer_blocked_member === true) {
             return showToast?.("This chat isn’t available for calls.");
         }
         operationInFlight = true;
+        const token = ++generation, callerId = userId();
+        titleNode.textContent = chat.display_name || 'Call';
+        setStatus('Connecting…'); setIncomingMode(false); renderParticipants(); showDialog(); updateControls();
         const key = `${chat.id}:${mediaType}`;
         const requestId = startRequestIds.get(key) || crypto.randomUUID();
         startRequestIds.set(key, requestId);
+        if (startRequestIds.size > 32) startRequestIds.delete(startRequestIds.keys().next().value);
         try {
             await preflightPermissions(mediaType);
-            const call = await api.startCall(userId(), chat.id, mediaType, requestId);
+            if (!isCurrent(token)) return;
+            const call = await api.startCall(callerId, chat.id, mediaType, requestId);
+            if (!isCurrent(token)) { await api.endCall(callerId, call.id, { keepalive: true }); return; }
             startRequestIds.delete(key);
             currentCall = call;
             scheduleLifecycleCheck(call);
@@ -228,19 +270,20 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
             setIncomingMode(false);
             showDialog();
             renderParticipants();
-            await connectToCall(call);
+            await connectToCall(call, token);
         } catch (error) {
-            if (![0, 408].includes(error?.status)) startRequestIds.delete(key);
-            if (currentCall) await finish({ notifyBackend: true });
+            if (!isCurrent(token)) return;
+            if (error?.status && error.status !== 408 && error.status < 500) startRequestIds.delete(key);
+            await finish({ notifyBackend: true });
             showToast?.(permissionMessage(error, mediaType));
         } finally {
-            operationInFlight = false;
-            updateControls();
+            if (isCurrent(token)) { operationInFlight = false; updateControls(); }
         }
     }
 
     function presentIncoming(call) {
-        if (!enabled() || currentCall || TERMINAL_STATES.has(call.state)) return;
+        if (!enabled() || currentCall || operationInFlight || TERMINAL_STATES.has(call.state)) return;
+        generation++;
         currentCall = call;
         scheduleLifecycleCheck(call);
         titleNode.textContent = call.caller_name || "Incoming call";
@@ -251,9 +294,12 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
     }
 
     async function open(callId) {
-        if (!enabled() || !callId || currentCall) return;
+        if (!enabled() || !callId || currentCall || operationInFlight || ending) return;
+        const token = ++generation;
+        operationInFlight = true;
         try {
             const call = await api.getCall(userId(), callId);
+            if (!isCurrent(token)) return;
             if (TERMINAL_STATES.has(call.state)) return showToast?.("That call has ended.");
             scheduleLifecycleCheck(call);
             if (call.viewer_invitation_state === "accepted") {
@@ -262,35 +308,43 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
                 setIncomingMode(false);
                 showDialog();
                 await preflightPermissions(call.media_type);
-                await connectToCall(call);
-            } else presentIncoming(call);
+                if (!isCurrent(token)) return;
+                await connectToCall(call, token);
+            } else { operationInFlight = false; presentIncoming(call); }
         } catch (error) {
+            if (!isCurrent(token)) return;
             if (currentCall) await finish({ notifyBackend: true });
             showToast?.(error.message || "That call is no longer available.");
-        }
+        } finally { if (isCurrent(token)) { operationInFlight = false; updateControls(); } }
     }
 
     async function accept() {
         if (!currentCall || operationInFlight) return;
         operationInFlight = true;
+        const token = generation, call = currentCall;
+        updateControls();
         try {
-            await preflightPermissions(currentCall.media_type);
-            currentCall = await api.acceptCall(userId(), currentCall.id);
+            await preflightPermissions(call.media_type);
+            if (!isCurrent(token)) return;
+            const accepted = await api.acceptCall(userId(), call.id);
+            if (!isCurrent(token)) return;
+            currentCall = accepted;
             setIncomingMode(false);
             setStatus("Connecting…");
-            await connectToCall(currentCall);
+            await connectToCall(currentCall, token);
         } catch (error) {
+            if (!isCurrent(token)) return;
             showToast?.(permissionMessage(error, currentCall?.media_type || "audio"));
             if (currentCall?.state === "active") await finish({ notifyBackend: true });
             else if ([404, 410].includes(error?.status)) await finish({ notifyBackend: false });
         } finally {
-            operationInFlight = false;
-            updateControls();
+            if (isCurrent(token)) { operationInFlight = false; updateControls(); }
         }
     }
 
     async function decline() {
         if (!currentCall || operationInFlight) return;
+        const token = generation;
         operationInFlight = true;
         let declined = false;
         try {
@@ -299,27 +353,36 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
         }
         catch (error) { showToast?.(error.message || "Could not decline the call."); }
         finally {
-            operationInFlight = false;
-            if (declined) await finish({ notifyBackend: false });
-            else updateControls();
+            if (isCurrent(token)) {
+                operationInFlight = false;
+                if (declined) await finish({ notifyBackend: false });
+                else updateControls();
+            }
         }
     }
 
     async function setCamera(enabledValue, { quiet = false, insideOperation = false } = {}) {
         if (!room || !currentCall || (operationInFlight && !insideOperation)) return;
+        const token = generation, callId = currentCall.id, cameraRoom = room, callerId = userId();
         const ownsOperation = !operationInFlight;
         if (ownsOperation) operationInFlight = true;
         try {
             if (enabledValue) {
                 cameraRequestId ||= crypto.randomUUID();
-                const slot = await api.enableCallCamera(userId(), currentCall.id, cameraRequestId);
+                const slot = await api.enableCallCamera(callerId, callId, cameraRequestId);
+                if (!isCurrent(token)) {
+                    if (slot.camera_slot_reservation_id) await api.disableCallCamera(callerId, callId, slot.camera_slot_reservation_id).catch(() => {});
+                    return;
+                }
                 if (!slot.camera_slot_reserved || !slot.camera_slot_reservation_id) throw new Error("Video is full. Try again when someone turns off their camera.");
                 cameraReservationId = slot.camera_slot_reservation_id;
                 await room.localParticipant.setCameraEnabled(true, { facingMode: "user" });
+                if (!isCurrent(token)) { await cameraRoom.localParticipant.setCameraEnabled(false); return; }
                 cameraEnabled = true;
                 cameraRequestId = null;
             } else {
                 await room.localParticipant.setCameraEnabled(false);
+                if (!isCurrent(token)) return;
                 cameraEnabled = false;
                 if (cameraReservationId) {
                     const reservationId = cameraReservationId;
@@ -329,6 +392,7 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
             }
             renderParticipants();
         } catch (error) {
+            if (!isCurrent(token)) return;
             if (enabledValue && cameraReservationId) {
                 await api.disableCallCamera(userId(), currentCall.id, cameraReservationId).catch(() => null);
                 cameraReservationId = null;
@@ -336,31 +400,34 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
             cameraEnabled = false;
             if (!quiet) showToast?.(permissionMessage(error, "video"));
         } finally {
-            if (ownsOperation) operationInFlight = false;
-            updateControls();
+            if (isCurrent(token)) { if (ownsOperation) operationInFlight = false; updateControls(); }
         }
     }
 
     async function toggleMute() {
         if (!room || operationInFlight) return;
+        const token = generation;
         operationInFlight = true;
         try {
             await room.localParticipant.setMicrophoneEnabled(muted);
+            if (!isCurrent(token)) return;
             muted = !muted;
         } catch (error) { showToast?.(error.message || "Could not change the microphone."); }
-        finally { operationInFlight = false; updateControls(); }
+        finally { if (isCurrent(token)) { operationInFlight = false; updateControls(); } }
     }
 
     async function finish({ notifyBackend = true, keepalive = false } = {}) {
         const call = currentCall;
-        if (!call || ending) return;
+        if (ending) return;
+        generation++;
         ending = true;
+        currentCall = null;
         clearTimeout(lifecycleTimer);
         lifecycleTimer = null;
         clearAttachedMedia();
         try { await room?.disconnect(); } catch (_) { /* Provider cleanup is best effort. */ }
         room = null;
-        if (notifyBackend && userId()) {
+        if (call && notifyBackend && userId()) {
             const method = call.state === "active" ? "leaveCall" : "endCall";
             let lastError = null;
             const attempts = keepalive ? 1 : 3;
@@ -381,6 +448,7 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
         cameraRequestId = null;
         cameraEnabled = false;
         muted = false;
+        outputDeviceId = '';
         operationInFlight = false;
         if (dialog.open) dialog.close();
         ending = false;
@@ -391,17 +459,19 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
         if (!enabled() || !String(event?.type || "").startsWith("call_")) return;
         const callId = event.call_id;
         if (!callId) return;
-        if (!currentCall && event.type !== "call_started") return;
+        if (!currentCall && (event.type !== "call_started" || operationInFlight)) return;
         if (currentCall && String(currentCall.id) !== String(callId)) return;
+        const token = generation;
         try {
             const call = await api.getCall(userId(), callId);
+            if (!isCurrent(token)) return;
             if (!currentCall && event.type === "call_started" && String(event.actor_user_id) !== String(userId())) return presentIncoming(call);
             currentCall = call;
             scheduleLifecycleCheck(call);
             if (TERMINAL_STATES.has(call.state)) return finish({ notifyBackend: false });
             renderParticipants();
         } catch (_) {
-            if (currentCall) await finish({ notifyBackend: false });
+            if (isCurrent(token) && currentCall) setStatus('Reconnecting…');
         }
     }
 
@@ -414,6 +484,7 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
         if (button.matches("[data-call-hangup]")) void finish();
         if (button.matches("[data-call-audio]")) void toggleMute();
         if (button.matches("[data-call-video]")) void setCamera(!cameraEnabled);
+        if (button.matches('[data-call-output]')) void chooseAudioOutput();
         if (button.matches("[data-call-enable-sound]")) void enableAudioPlayback();
     });
     dialog.addEventListener("cancel", (event) => {
@@ -422,11 +493,11 @@ export function createCallsController({ api, getUser, getConfig, showToast }) {
         else void finish();
     });
     window.addEventListener("pagehide", (event) => {
-        if (!event.persisted && currentCall) void finish({ notifyBackend: true, keepalive: true });
+        if (currentCall || operationInFlight) void finish({ notifyBackend: true, keepalive: true });
     });
     window.addEventListener("valid:session-expired", () => {
-        if (currentCall) void finish({ notifyBackend: false });
+        if (currentCall || operationInFlight) void finish({ notifyBackend: false });
     });
 
-    return { enabled, start, open, handleRealtimeEvent, beforeSessionEnd: () => finish({ notifyBackend: true }) };
+    return { enabled, start, open, handleRealtimeEvent, isActive: () => Boolean(currentCall || operationInFlight || ending), beforeSessionEnd: () => finish({ notifyBackend: true }) };
 }
