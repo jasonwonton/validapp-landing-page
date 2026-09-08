@@ -34,7 +34,7 @@ test("chat photos expose bounded local and Featured Effects and bake the selecti
     await page.getByRole("button", { name: "Send photo or video" }).click();
     const dialog = page.getByRole("dialog", { name: "Send media" });
     await dialog.locator(".chat-media-file-input").setInputFiles("assets/AppIconV2.png");
-    await dialog.getByText('Edit photo', { exact: true }).click();
+    await dialog.getByRole('button', { name: 'Add text', exact: true }).click();
     const effects = dialog.getByRole("group", { name: "Photo effect" });
     await expect(effects).toBeVisible();
     await expect(effects.getByRole("button")).toHaveCount(6);
@@ -48,7 +48,7 @@ test("chat photos expose bounded local and Featured Effects and bake the selecti
     await overlay.press("Shift+ArrowRight");
     await expect(overlay).toHaveAccessibleName(/60% from left, 50% from top/);
     await effects.getByRole("button", { name: "Vivid photo effect" }).click();
-    await expect(dialog.getByText("Photo ready to send")).toBeVisible();
+    await expect(dialog.locator('.chat-media-publish')).toBeEnabled();
     await expect(effects.getByRole("button", { name: "Vivid photo effect" })).toHaveAttribute("aria-pressed", "true");
     await expect(dialog.getByRole("textbox", { name: "Text overlay" })).toHaveValue("Keep my position");
     await expect(overlay).toHaveAccessibleName(/60% from left, 50% from top/);
@@ -58,7 +58,7 @@ test("chat photos expose bounded local and Featured Effects and bake the selecti
     expect(vivid.height).toBeGreaterThan(0);
 
     await effects.getByRole("button", { name: "Sunset photo effect, Featured" }).click();
-    await expect(dialog.getByText("Photo ready to send")).toBeVisible();
+    await expect(dialog.locator('.chat-media-publish')).toBeEnabled();
     const featured = await previewDigest(preview);
     expect(featured.digest).not.toBe(vivid.digest);
     await dialog.getByRole("button", { name: "Send", exact: true }).click();

@@ -22,8 +22,8 @@ try {
     const page = await browser.newPage({ viewport: { width: 393, height: 852 } });
     await page.goto(invitation);
     const version = await page.locator('meta[name="valid-app-version"]').getAttribute('content');
-    assert.equal(version, process.env.STAGING_EXPECTED_VERSION || 'web-v83');
-    for (const file of ['app/app.js', 'app/auth-reliability.js', 'app/passkeys.js', 'app/feed-sender.js', 'app/chat/index.js', 'app/chat/store.js', 'app/chat/models.js', 'app/chat/message-window.js', 'app/chat/timeline-scroll.js', 'app/keyed-list.js', 'app/live-camera.js', 'app/chat/styles.css', 'app/styles.css', 'app/preferences.js', 'app/ui-icons.js', 'app/api.js']) {
+    assert.equal(version, process.env.STAGING_EXPECTED_VERSION || 'web-v84');
+    for (const file of ['app/app.js', 'app/auth-reliability.js', 'app/passkeys.js', 'app/feed-sender.js', 'app/chat/index.js', 'app/chat/photo-stickers.js', 'app/chat/store.js', 'app/chat/models.js', 'app/chat/message-window.js', 'app/chat/timeline-scroll.js', 'app/keyed-list.js', 'app/live-camera.js', 'app/chat/styles.css', 'app/styles.css', 'app/preferences.js', 'app/ui-icons.js', 'app/api.js']) {
         const response = await page.request.get(new URL(`/${file}`, invitation).href);
         assert.equal(response.status(), 200);
         const hash = data => createHash('sha256').update(data).digest('hex');
@@ -109,10 +109,14 @@ try {
         await waitFor(() => !root.querySelector('.chat-media-publish').disabled);
         const cameraReviewed = Boolean(root.querySelector('.chat-media-preview img')) && camera.hidden;
         const cameraStopped = tracks.every(track => track.readyState === 'ended');
+        const micInField = Boolean(root.querySelector('.chat-input-wrap [data-record-voice]'));
+        const noVoiceInCamera = !root.querySelector('[data-chat-media-dialog] [data-record-voice]');
+        const photoTools = Boolean(root.querySelector('[data-photo-cutout]')) && Boolean(root.querySelector('[data-photo-stickers]'));
+        const deliveryLabel = root.querySelector('.chat-media-option span').textContent;
         root.querySelector('[data-close-chat-media]').click();
         await view.beforeSessionEnd();
-        return { inlineHidden, header, galleryOpened, dates, stickersOpened, cameraReviewed, cameraStopped };
+        return { inlineHidden, header, galleryOpened, dates, stickersOpened, cameraReviewed, cameraStopped, micInField, noVoiceInCamera, photoTools, deliveryLabel };
     });
-    assert.deepEqual(hierarchy, { inlineHidden: true, header: '1/23', galleryOpened: true, dates: 7, stickersOpened: true, cameraReviewed: true, cameraStopped: true });
+    assert.deepEqual(hierarchy, { inlineHidden: true, header: '1/23', galleryOpened: true, dates: 7, stickersOpened: true, cameraReviewed: true, cameraStopped: true, micInField: true, noVoiceInCamera: true, photoTools: true, deliveryLabel: 'Keep in chat' });
     console.log('PASS: deployed chat hierarchy, streak, history, stickers and single-photo camera/review with stopped tracks (synthetic adapter; no account writes)');
 } finally { await browser.close(); }

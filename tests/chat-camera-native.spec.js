@@ -56,7 +56,7 @@ test('camera denial keeps an explicit library fallback and clean review', async 
     await expect(dialog.locator('.live-camera')).toBeHidden();
     await expect(dialog.locator('.chat-media-file-input')).toBeHidden();
     await expect(dialog.locator('.chat-media-edit-options')).not.toHaveAttribute('open', '');
-    await dialog.locator('[data-close-chat-media]').click();
+    await dialog.locator('[data-close-chat-media]:visible').click();
     await expect(dialog).toBeHidden();
 });
 
@@ -69,7 +69,7 @@ test('camera permission arriving after dismissal stops every acquired track', as
     });
     const dialog = await room(page);
     await expect.poll(() => page.evaluate(() => typeof window.resolveChatCamera)).toBe('function');
-    await dialog.locator('[data-close-chat-media]').click();
+    await dialog.locator('[data-close-chat-media]:visible').click();
     await expect(dialog).toBeHidden();
     await page.evaluate(() => resolveChatCamera());
     await expect.poll(() => page.evaluate(() => cameraStopped)).toBe(1);
@@ -101,6 +101,6 @@ for (const theme of ['light', 'dark']) test(`${theme}: profile and native chat c
     await expect(page.locator('[data-open-memento]')).toHaveCSS('background-color', 'rgb(255, 177, 94)');
     await page.getByRole('button', { name: 'Back to chats' }).click();
     await page.getByRole('button', { name: /Noah Williams/ }).click();
-    await expect(page.locator('.native-sticker-icon')).toHaveCSS('color', 'rgb(255, 177, 94)');
+    await expect(page.locator('.chat-composer .native-sticker-icon')).toHaveCSS('color', 'rgb(255, 177, 94)');
     await expect(page.locator('.chat-camera-button')).toHaveCSS('border-top-width', '2px');
 });

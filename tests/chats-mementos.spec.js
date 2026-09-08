@@ -459,8 +459,8 @@ test("chat media sends a prepared photo through upload, finalize, and message cr
     await page.getByRole("button", { name: "Send photo or video" }).click();
     const dialog = page.getByRole("dialog", { name: "Send media" });
     await dialog.locator(".chat-media-file-input").setInputFiles("assets/AppIconV2.png");
-    await expect(dialog.getByText("Photo ready to send")).toBeVisible();
-    await dialog.getByText('Edit photo', { exact: true }).click();
+    await expect(dialog.locator('.chat-media-publish')).toBeEnabled();
+    await dialog.getByRole('button', { name: 'Add text', exact: true }).click();
     await dialog.getByLabel("Text overlay").fill("After practice");
     const overlayHandle = dialog.locator("[data-media-overlay-position]");
     await expect(overlayHandle).toHaveAccessibleName(/50% from left, 50% from top/);
@@ -536,11 +536,12 @@ test("voice composer keeps an M4A picker fallback when a browser cannot record c
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
-    await page.getByRole("button", { name: "Send photo or video" }).click();
-    const dialog = page.getByRole("dialog", { name: "Send media" });
-    await expect(dialog.getByLabel("Voice recording file")).toHaveAttribute("accept", "audio/mp4,.m4a");
-    await expect(dialog.getByRole('button', { name: 'Choose voice recording' })).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Record voice message" })).toBeHidden();
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Record voice message', exact: true }).click();
+    await chooser;
+    await expect(page.getByLabel('Voice recording file')).toHaveAttribute('accept', 'audio/mp4,.m4a');
+    await expect(page.locator('[data-chat-media-dialog]')).toBeHidden();
+    await expect(page.locator('.chat-voice-inline')).toContainText('Live recording is unavailable');
 });
 
 test("compatible browsers can record an MP4 voice message locally before upload", async ({ page }) => {
@@ -570,16 +571,23 @@ test("compatible browsers can record an MP4 voice message locally before upload"
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
-    await page.getByRole("button", { name: "Send photo or video" }).click();
-    const dialog = page.getByRole("dialog", { name: "Send media" });
-    const record = dialog.getByRole("button", { name: "Record voice message" });
+    const record = page.getByRole("button", { name: "Record voice message", exact: true });
     await expect(record).toBeVisible();
     await record.click();
-    await expect(dialog.getByText("Recording locally. Tap Stop when you're done.")).toBeVisible();
-    await dialog.getByRole("button", { name: /Stop · 0:00/ }).click();
-    await expect(dialog.getByText("Voice message ready to send")).toBeVisible();
-    await expect(dialog.locator("audio")).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+    await expect(page.locator('.chat-voice-status')).toHaveText('0:00');
+    await page.getByRole('button', { name: 'Stop recording and preview' }).click();
+    await expect(page.locator('.chat-inline-audio')).toBeVisible();
+    await expect(page.locator('[data-chat-media-dialog]')).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Send voice message' })).toBeEnabled();
+    await page.getByRole('button', { name: 'Record voice message', exact: true }).click();
+    await expect(page.locator('.chat-inline-audio')).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Send voice message' })).toBeDisabled();
+    await page.getByRole('button', { name: 'Stop recording and preview' }).click();
+    await expect(page.getByRole('button', { name: 'Send voice message' })).toBeEnabled();
+    const before = await page.locator('.chat-message.mine audio').count();
+    await page.getByRole('button', { name: 'Send voice message' }).click();
+    await expect(page.locator('.chat-voice-inline')).toBeHidden();
+    await expect(page.locator('.chat-message.mine audio')).toHaveCount(before + 1);
 });
 
 test("view-once media starts each server session only after reveal and stops after two views", async ({ page }) => {
