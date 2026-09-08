@@ -17,3 +17,5 @@ Rollback: redeploy private web-v85 source `8178da14bf47611427598fd4400acabdfa369
 The initial web-v86 build (`00383127d31510eeb365b04b107ba55300724fc8`, deployment `9c9b4228-db3c-423a-93f8-6392f60567bb`) became active before the final network-outage safeguard was included. web-v87 additionally stops the tone when the server-provided ringing deadline is reached even if the status request hangs; it does not invent a terminal backend state. A virtual-clock regression covers that boundary.
 
 Final web-v87 call/update rerun: 70 passed, two capability skips, zero failures across all four browser targets. Both waveform/resource unit tests and performance budgets also passed on the final source.
+
+Final private deployment: `719ac3ff-864b-49ac-bdaf-35d9d8debe84`, ACTIVE 6/6, source `7e0f298abd42df038c49f124cd6be44568f5dd71`. Live checks passed for web-v87, exact ringback/call module hashes, private signed access, related-origin passkeys, desktop/mobile startup, call SDK import/header, and synthetic chat/camera hierarchy. No real-account calls or uploads were made by these checks. Main and shared backend were not deployed.
