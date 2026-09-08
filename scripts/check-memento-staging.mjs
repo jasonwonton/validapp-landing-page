@@ -22,13 +22,16 @@ try {
     const page = await browser.newPage({ viewport: { width: 393, height: 852 } });
     await page.goto(invitation);
     const version = await page.locator('meta[name="valid-app-version"]').getAttribute('content');
-    assert.equal(version, process.env.STAGING_EXPECTED_VERSION || 'web-v85');
+    assert.equal(version, process.env.STAGING_EXPECTED_VERSION || 'web-v86');
     for (const file of ['app/app.js', 'app/auth-reliability.js', 'app/passkeys.js', 'app/feed-sender.js', 'app/chat/index.js', 'app/chat/photo-stickers.js', 'app/chat/voice-interaction.js', 'app/calls/index.js', 'app/calls/styles.css', 'app/calls/livekit.bundle.js', 'app/chat/store.js', 'app/chat/models.js', 'app/chat/message-window.js', 'app/chat/timeline-scroll.js', 'app/keyed-list.js', 'app/live-camera.js', 'app/chat/styles.css', 'app/styles.css', 'app/preferences.js', 'app/ui-icons.js', 'app/api.js']) {
         const response = await page.request.get(new URL(`/${file}`, invitation).href);
         assert.equal(response.status(), 200);
         const hash = data => createHash('sha256').update(data).digest('hex');
         assert.equal(hash(await response.body()), hash(await readFile(new URL(`../dist/${file}`, import.meta.url))), file);
     }
+    const toneResponse = await page.request.get(new URL('/app/calls/ringback.js', invitation).href);
+    assert.equal(toneResponse.status(), 200);
+    assert.deepEqual(await toneResponse.body(), await readFile(new URL('../dist/app/calls/ringback.js', import.meta.url)));
     const result = await page.evaluate(async () => {
         const { createLiveCamera } = await import('/app/live-camera.js');
         const streams = [];

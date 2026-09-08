@@ -1,5 +1,81 @@
 import { expect, test } from "@playwright/test";
 
+async function installToneProbe(page) {
+    await page.evaluate(()=>{
+        window.__toneLog=[];
+        window.AudioContext=class {
+            constructor(){this.state='running';__toneLog.push('prepare');}
+            async resume(){if(window.__blockTone)throw new DOMException('Tap required','NotAllowedError');}
+            async close(){__toneLog.push('close');}
+            createBuffer(){return {copyToChannel(){}};}
+            createGain(){return {gain:{value:0},connect(){},disconnect(){}};}
+            createBufferSource(){return {connect(gain){return gain;},start(){__toneLog.push('start');},stop(){__toneLog.push('stop');},disconnect(){}};}
+        };
+    });
+}
+
+test('outgoing native ringback loops once, stops on answer and never restarts',async({page})=>{
+    await installCallHarness(page);await installToneProbe(page);
+    await page.evaluate(()=>__calls.start('audio',{id:'chat-1',accepted_count:2}));
+    await expect(page.locator('[data-call-status]')).toHaveText('Waiting for an answer…');
+    await page.evaluate(()=>__fakeRoom.handlers.get('localTrackPublished')());
+    expect(await page.evaluate(()=>__toneLog.filter(v=>v==='start').length)).toBe(1);
+    await page.evaluate(async()=>{
+        __callAPI.getCall=async()=>({id:'call-1',state:'active'});
+        await __calls.handleRealtimeEvent({type:'call_updated',call_id:'call-1'});
+        __fakeRoom.remoteParticipants.set('peer',{name:'Peer',trackPublications:new Map()});
+        __fakeRoom.handlers.get('participantConnected')();
+    });
+    await expect(page.locator('[data-call-status]')).toHaveText('Connected');
+    await page.evaluate(()=>{__fakeRoom.remoteParticipants.clear();__fakeRoom.handlers.get('participantDisconnected')();});
+    expect(await page.evaluate(()=>__toneLog)).toEqual(['prepare','start','stop']);
+    await page.locator('[data-call-hangup]').click();
+    expect(await page.evaluate(()=>__toneLog.at(-1))).toBe('close');
+});
+
+test('no-answer result remains visible and releases ringback',async({page})=>{
+    await installCallHarness(page);await installToneProbe(page);
+    await page.evaluate(async()=>{
+        await __calls.start('audio',{id:'chat-1',accepted_count:2});
+        __callAPI.getCall=async()=>({id:'call-1',state:'missed'});
+        await __calls.handleRealtimeEvent({type:'call_ended',call_id:'call-1'});
+    });
+    await expect(page.locator('[data-call-status]')).toHaveText('No answer');
+    await expect(page.locator('[data-call-dismiss]')).toBeVisible();
+    await expect(page.locator('.call-note')).not.toBeVisible();
+    await page.screenshot({path:test.info().outputPath('no-answer.png')});
+    expect(await page.evaluate(()=>__toneLog)).toEqual(['prepare','start','stop','close']);
+    await page.locator('[data-call-dismiss]').click();
+    await expect(page.locator('.call-overlay')).not.toBeVisible();
+});
+
+for(const [state,message] of [['declined','Call declined'],['failed','Could not connect'],['ended','Call ended']]) {
+    test(`server ${state} stops the tone and explains the outcome`,async({page})=>{
+        await installCallHarness(page);await installToneProbe(page);
+        await page.evaluate(async state=>{
+            await __calls.start('audio',{id:'chat-1',accepted_count:2});
+            __callAPI.getCall=async()=>({id:'call-1',state});
+            await __calls.handleRealtimeEvent({type:'call_ended',call_id:'call-1'});
+        },state);
+        await expect(page.locator('[data-call-status]')).toHaveText(message);
+        expect(await page.evaluate(()=>__toneLog)).toEqual(['prepare','start','stop','close']);
+    });
+}
+
+test('blocked ringback offers a tap; incoming calls do not play outgoing tone',async({page})=>{
+    await installCallHarness(page);await installToneProbe(page);
+    await page.evaluate(async()=>{window.__blockTone=true;await __calls.start('audio',{id:'chat-1',accepted_count:2});});
+    await expect(page.locator('[data-call-enable-sound]')).toBeVisible();
+    await page.evaluate(()=>{window.__blockTone=false;});
+    await page.locator('[data-call-enable-sound]').click();
+    await expect(page.locator('[data-call-enable-sound]')).not.toBeVisible();
+    await page.locator('[data-call-hangup]').click();
+    await page.evaluate(async()=>{__toneLog.length=0;await __calls.open('incoming-1');});
+    await page.locator('[data-call-accept]').click();
+    expect(await page.evaluate(()=>__toneLog)).toEqual([]);
+    await page.locator('[data-call-hangup]').click();
+});
+
 async function installCallHarness(page, { chatUI = false } = {}) {
     await page.goto(chatUI ? '/app/?demo=1&signin=1&calls=1' : "/app/?demo=1");
     await page.evaluate(async () => {
@@ -72,6 +148,24 @@ async function installCallHarness(page, { chatUI = false } = {}) {
         });
     });
 }
+
+test('reconnection pauses waiting tone and cannot restart it after answer',async({page})=>{
+    await installCallHarness(page);await installToneProbe(page);
+    await page.evaluate(async()=>{
+        await __calls.start('audio',{id:'chat-1',accepted_count:2});
+        __fakeRoom.handlers.get('reconnecting')();
+    });
+    await expect(page.locator('[data-call-status]')).toHaveText('Reconnecting…');
+    expect(await page.evaluate(()=>__toneLog)).toEqual(['prepare','start','stop']);
+    await page.evaluate(async()=>{
+        __fakeRoom.handlers.get('reconnected')();
+        __callAPI.getCall=async()=>({id:'call-1',state:'active'});
+        await __calls.handleRealtimeEvent({type:'call_updated',call_id:'call-1'});
+        __fakeRoom.handlers.get('reconnecting')();__fakeRoom.handlers.get('reconnected')();
+    });
+    expect(await page.evaluate(()=>__toneLog)).toEqual(['prepare','start','stop','start','stop']);
+    await page.locator('[data-call-hangup]').click();
+});
 
 test("open-app voice calls preflight media, use idempotent server state, and end cleanly", async ({ page }) => {
     await installCallHarness(page);
@@ -172,11 +266,11 @@ test('double initiation sends once and an ambiguous explicit retry keeps its ide
         __callAPI.startCall = async (...args) => { ids.push(args[3]); if (fail) { fail = false; throw Object.assign(new Error('Network interrupted'), {status:0}); } return original(...args); };
         const chat = {id:'chat-1',accepted_count:2};
         await __calls.start('audio', chat);
-        const closedAfterFailure = !document.querySelector('.call-overlay').open;
+        const failureExplained = document.querySelector('.call-overlay').open && document.querySelector('[data-call-status]').textContent === 'Could not connect' && !__calls.isActive();
         await Promise.all([__calls.start('audio', chat), __calls.start('audio', chat)]);
-        return {ids, closedAfterFailure};
+        return {ids, failureExplained};
     });
-    expect(result.closedAfterFailure).toBe(true); expect(result.ids).toHaveLength(2); expect(result.ids[0]).toBe(result.ids[1]);
+    expect(result.failureExplained).toBe(true); expect(result.ids).toHaveLength(2); expect(result.ids[0]).toBe(result.ids[1]);
     await page.getByRole('button', {name:'End call',exact:true}).click();
 });
 

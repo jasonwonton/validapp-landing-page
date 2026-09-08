@@ -1,6 +1,7 @@
 # Six7 iOS → PWA parity and release matrix
 
 Last audited: September 7, 2026
+Call feedback: [web-v86 native outgoing ringback and explicit outcomes](CALL_RINGBACK_2026-09-07.md). Physical audio routing and real-account staging-to-iOS acceptance remain unverified.
 Calls, voice and stickers: [web-v85 private call initiation and native-style interactions](CALLS_VOICE_STICKERS_2026-09-07.md). Calls are enabled only for private staging smoke testing when the backend master flag is on; public readiness remains gated.
 Chat composer: [web-v84 keyboard, inline microphone, photo review and sticker placement](CHAT_COMPOSER_POLISH_2026-09-07.md).
 Screen-level parity remains Partial; physical keyboard/camera/recording acceptance is still required.
