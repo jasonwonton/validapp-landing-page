@@ -1,4 +1,26 @@
-# Cloudflare DNS and edge preparation — not activated
+# Cloudflare DNS migration — proxy release still gated
+
+## Cutover update — 2026-09-07
+
+- Correct Porkbun owner account `jasonwonton123` saved the assigned Cloudflare
+  nameservers. Reopening the registrar editor confirmed both exact names.
+- Before saving, direct queries to both Cloudflare nameservers matched all seven
+  application records from DigitalOcean. DNSSEC remained unsigned.
+- Public resolvers 1.1.1.1 and 8.8.8.8 now return the Cloudflare nameserver pair.
+  All web records remain DNS-only; production returned HTTP 200 and private
+  staging returned the expected unauthenticated HTTP 403 after the save.
+- Cloudflare TLS mode is saved and read back as **Full (strict)**.
+- Original DigitalOcean DNS zone, hosting, backend and workers are unchanged.
+  Registrar rollback is the original three DigitalOcean nameservers below;
+  delegation rollback has propagation delay and is not an immediate traffic switch.
+- CI on a7d2f42 passed static, Android, Chromium and Firefox. Linux WebKit caught
+  a feed geometry assertion during the 220 ms panel entrance animation. Test-only
+  commit fb022ba waits for finite panel animations and fonts before asserting
+  exact viewport geometry; all 12 feed tests across four projects passed locally.
+  Full CI must pass before merging. No runtime layout or backend behavior changed.
+
+The preparation snapshot below records the earlier state; its registrar-access
+blocker is now resolved. Proxy compatibility and release validation remain open.
 
 User authorized retaining DigitalOcean hosting/backend, migrating validapp.lol
 DNS to Cloudflare, testing staging proxying before production, and validating
