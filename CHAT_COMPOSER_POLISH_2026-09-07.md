@@ -33,5 +33,8 @@ Automated checks cover camera permission cleanup, both themes, chat hierarchy, s
 - Corrected same-origin fixture and final implementation rerun: 188 passed, four capability skips, zero failures across composer, Chats/Mementos, camera, contracts, recovery and update/rollback suites. This includes actual baked sticker pixel assertions and voice re-record/send.
 - UI runtime, performance budget, nine private gateway tests and three static-origin tests pass. Shell transfer estimate ~694 KB, 47 shell entries. No runtime dependency added.
 - Visually inspected mobile light keyboard/pan layout, dark chat, dark photo review and sticker placement. These are automated-browser renders, not physical-device acceptance.
+- Exact committed-source camera/composer rerun: 34 passed, two platform skips, zero failures.
+
+Private staging is live at `https://staging.validapp.lol/app/`, web-v84, source `41be924be99af09cb731d489ee1855d91e2829d8`, deployment `2c27f6fa-9e4c-43b8-9a91-c99910e029cb` (ACTIVE, 6/6). Both live scripts pass: private access/CSP/origin gates, mobile/desktop signed-out runtime, synthetic related-origin passkey ceremony, exact deployed module hashes, synthetic camera capture/review/track cleanup, inline mic and photo-toolbar checks. No real-account message, media upload or signup was used for automated live validation. Main and the public/shared-backend deployment are unchanged.
 
 Rollback target: private staging deployment `4e168a39-be2f-4c4d-a4b3-b6c0da540ae8`, source `7fdb8b54e6f9d0b0b286d48409defc0d75656ff3` (web-v83). Redeploy that source to the same private staging app; no schema rollback or changes to public/backend infrastructure are needed. Preserve existing queued sends and use the normal app-update flow.
