@@ -29,6 +29,14 @@ Parity remains **Partial**, release **Not yet tested**, not Production-ready. Op
 
 No automated real-account call, message, sticker creation or media upload is used for release checks. Provider media connectivity between two physical accounts remains a user smoke-test gate.
 
+## Private deployment evidence
+
+- Source: `8178da14bf47611427598fd4400acabdfa369e3c` on `codex/pwa-parity-release`; main was not merged.
+- DigitalOcean private staging deployment: `26a49429-236a-4a82-b7c5-029ae33a999c`, ACTIVE, 6/6 steps. Shared backend was not deployed.
+- Live `web-v85` checks passed: exact served module/asset hashes, signed private access, origin restrictions, desktop/mobile signed-out rendering, synthetic related-origin passkey ceremony, API health/readiness and unchanged upload contract.
+- Both live `enable_calls` and `enable_web_calls` are true. The real LiveKit module imports under staging CSP; a synthetic chat adapter renders one visible audio-call button. No call was initiated against a real account.
+- Deployed camera capture/review, stopped tracks, Memento header/history/streak, sticker picker and voice-in-composer hierarchy checks passed with a synthetic adapter.
+
 ## Rollback
 
 Disable private calls with `STAGING_ENABLE_CALLS=false`, or redeploy private web-v84 source `41be924be99af09cb731d489ee1855d91e2829d8`, deployment `2c27f6fa-9e4c-43b8-9a91-c99910e029cb`. This affects only private staging. Existing queued media and backend call records require no migration or deletion. Public/main remain unchanged.
