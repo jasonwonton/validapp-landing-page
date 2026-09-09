@@ -3204,7 +3204,7 @@ async function createAnonymousAnswerShareFile(question) {
         context.fillText(`@${username}`, centerX, 1262);
     }
 
-    const logo = await loadShareArtwork(new URL("../assets/valid_logo.png", import.meta.url).href);
+    const logo = await loadShareArtwork(new URL("/assets/valid_logo.png", import.meta.url).href);
     if (logo) {
         const logoWidth = 250;
         const logoHeight = Math.min(96, logoWidth * (logo.naturalHeight / logo.naturalWidth));
@@ -3361,7 +3361,7 @@ async function createAskStoryFile(platform) {
         context.fillText("ADD LINK STICKER HERE", centerX, targetY + targetHeight / 2 + 2);
     }
 
-    const logo = await loadShareArtwork(new URL("../assets/valid_logo.png", import.meta.url).href);
+    const logo = await loadShareArtwork(new URL("/assets/valid_logo.png", import.meta.url).href);
     if (logo) {
         const logoWidth = 324;
         const logoHeight = logoWidth * (logo.naturalHeight / logo.naturalWidth);

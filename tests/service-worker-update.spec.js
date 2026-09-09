@@ -31,19 +31,35 @@ test("a waiting worker upgrades and rolls back without losing a pending send", a
     const sourceRoot = path.join(repositoryRoot, "dist");
     await cp(sourceRoot, fixtureRoot, { recursive: true });
     const indexPath = path.join(fixtureRoot, "app/index.html");
-    const appPath = path.join(fixtureRoot, "app/app.js");
+    const manifest = JSON.parse(await readFile(path.join(fixtureRoot, "app/build-manifest.json"), "utf8"));
+    const appPath = path.join(fixtureRoot, manifest.assets["/app/app.js"]);
+    const releaseFor = version => version.toString(16).padStart(20, "0");
+    const cacheFor = version => version === 67 ? "valid-web-v67" : `valid-web-v${version}-${releaseFor(version)}`;
     const workerPath = path.join(fixtureRoot, "app/service-worker.js");
     const indexTemplate = await readFile(indexPath, "utf8");
     const appTemplate = await readFile(appPath, "utf8");
     const workerTemplate = await readFile(workerPath, "utf8");
     expect(indexTemplate).toContain(`content="web-v${CURRENT_VERSION}"`);
-    expect(workerTemplate).toContain(`\`\${CACHE_PREFIX}v${CURRENT_VERSION}\``);
+    expect(workerTemplate).toContain(`v${CURRENT_VERSION}-${manifest.release}`);
 
     const writeVersion = async (version) => {
+        const release = releaseFor(version);
+        if (version === 67) {
+            const originalIndex = await readFile(path.join(repositoryRoot, "app/index.html"), "utf8");
+            const originalWorker = await readFile(path.join(repositoryRoot, "app/service-worker.js"), "utf8");
+            await Promise.all([
+                writeFile(indexPath, originalIndex.replace(`content="web-v${CURRENT_VERSION}"`, 'content="web-v67"')),
+                writeFile(path.join(fixtureRoot, "app/app.js"), `window.__VALID_UPDATE_FIXTURE_VERSION = 67;\n${appTemplate}`),
+                writeFile(workerPath, originalWorker.replace(`v${CURRENT_VERSION}\``, 'v67`')),
+            ]);
+            return;
+        }
+        const releaseRoot = path.join(fixtureRoot, "app/_static", release);
+        await cp(path.join(sourceRoot, "app/_static", manifest.release), releaseRoot, { recursive: true });
         await Promise.all([
-            writeFile(indexPath, indexTemplate.replace(`content="web-v${CURRENT_VERSION}"`, `content="web-v${version}"`)),
-            writeFile(appPath, `window.__VALID_UPDATE_FIXTURE_VERSION = ${version};\n${appTemplate}`),
-            writeFile(workerPath, workerTemplate.replace(`\`\${CACHE_PREFIX}v${CURRENT_VERSION}\``, `\`\${CACHE_PREFIX}v${version}\``)),
+            writeFile(indexPath, indexTemplate.replaceAll(manifest.release, release).replace(`content="web-v${CURRENT_VERSION}"`, `content="web-v${version}"`)),
+            writeFile(path.join(releaseRoot, "app.js"), `window.__VALID_UPDATE_FIXTURE_VERSION = ${version};\n${appTemplate}`),
+            writeFile(workerPath, workerTemplate.replaceAll(manifest.release, release).replace(`v${CURRENT_VERSION}-`, `v${version}-`)),
         ]);
     };
 
@@ -55,7 +71,8 @@ test("a waiting worker upgrades and rolls back without losing a pending send", a
 
     const cacheNames = () => page.evaluate(() => caches.keys().then((names) => names.sort()));
     const pendingSend = () => page.evaluate(async () => {
-        const outbox = await import("/app/chat/outbox.js");
+        const entry = document.querySelector('script[type="module"][src]').src;
+        const outbox = await import(new URL("./chat/outbox.js", entry).href);
         return outbox.listChatTextOutbox("update-user");
     });
     const waitForController = () => page.waitForFunction(async () => {
@@ -76,7 +93,7 @@ test("a waiting worker upgrades and rolls back without losing a pending send", a
         })).toBe("installed");
         await expect(updateButton).toBeVisible();
         await expect(appVersion).toHaveAttribute("content", `web-v${fromVersion}`);
-        await expect.poll(cacheNames).toEqual([`valid-web-v${fromVersion}`, `valid-web-v${toVersion}`].sort());
+        await expect.poll(cacheNames).toEqual([cacheFor(fromVersion), cacheFor(toVersion)].sort());
 
         await updateButton.click();
         await expect(appVersion).toHaveAttribute("content", `web-v${toVersion}`);
@@ -84,7 +101,7 @@ test("a waiting worker upgrades and rolls back without losing a pending send", a
         await waitForController();
         await expect(page.locator("#appView")).toBeVisible();
         await expect(updateButton).toBeHidden();
-        await expect.poll(cacheNames).toEqual([`valid-web-v${toVersion}`]);
+        await expect.poll(cacheNames).toEqual([cacheFor(toVersion)]);
         await expect.poll(pendingSend).toEqual([expect.objectContaining({
             user_id: "update-user",
             chat_id: "update-chat",
@@ -105,10 +122,11 @@ test("a waiting worker upgrades and rolls back without losing a pending send", a
         await waitForController();
         await expect(appVersion).toHaveAttribute("content", "web-v67");
         await expect.poll(() => page.evaluate(() => window.__VALID_UPDATE_FIXTURE_VERSION)).toBe(67);
-        await expect.poll(cacheNames).toEqual(["valid-web-v67"]);
+        await expect.poll(cacheNames).toEqual([cacheFor(67)]);
 
         await page.evaluate(async () => {
-            const outbox = await import("/app/chat/outbox.js");
+            const entry = document.querySelector('script[type="module"][src]').src;
+        const outbox = await import(new URL("./chat/outbox.js", entry).href);
             await outbox.putChatTextOutbox({
                 userId: "update-user",
                 chatId: "update-chat",

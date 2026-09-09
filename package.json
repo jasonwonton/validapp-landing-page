@@ -7,7 +7,7 @@
     "start": "node scripts/serve-production.mjs",
     "start:staging": "node scripts/serve-staging.mjs",
     "test:staging": "node --test scripts/tests/staging-origin.test.mjs",
-    "test:static-origin": "node --test scripts/tests/static-origin.test.mjs",
+    "test:static-origin": "node --test scripts/tests/static-origin.test.mjs scripts/tests/version-static-assets.test.mjs",
     "test:performance": "node scripts/check-performance-budgets.mjs",
     "test:ui-runtime": "node scripts/test-ui-runtime.mjs",
     "test:e2e": "playwright test",

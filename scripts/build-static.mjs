@@ -1,7 +1,8 @@
-import { cp, mkdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { build } from "esbuild";
+import { versionStaticAssets } from "./version-static-assets.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
 const outputRoot = path.join(repositoryRoot, "dist");
@@ -16,7 +17,17 @@ const staticFiles = [
     "terms.html",
 ];
 
-await rm(outputRoot, { recursive: true, force: true });
+// Keep immutable releases reachable for installed clients and cold edge caches.
+for (const entry of await readdir(outputRoot, { withFileTypes: true }).catch(error => {
+    if (error.code === "ENOENT") return [];
+    throw error;
+})) {
+    if (entry.name === "app" && entry.isDirectory()) {
+        for (const child of await readdir(path.join(outputRoot, "app"))) {
+            if (child !== "_static") await rm(path.join(outputRoot, "app", child), { recursive: true, force: true });
+        }
+    } else await rm(path.join(outputRoot, entry.name), { recursive: true, force: true });
+}
 await mkdir(outputRoot, { recursive: true });
 
 for (const directory of staticDirectories) {
@@ -50,5 +61,7 @@ await build({
     legalComments: "none",
 });
 await rm(path.join(outputRoot, "app", "calls", "livekit-entry.js"), { force: true });
+
+await versionStaticAssets(outputRoot);
 
 console.log(`Static site packaged in ${path.relative(repositoryRoot, outputRoot)}/`);

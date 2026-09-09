@@ -105,6 +105,9 @@ export async function createStaticOrigin({ root = defaultRoot } = {}) {
                 "X-Content-Type-Options": "nosniff",
                 ...securityHeaders,
             };
+            if (/^\/app\/_static\/[a-f0-9]{20}\/.+\.(js|css)$/.test(pathname)) {
+                headers["Cache-Control"] = "public, max-age=31536000, immutable";
+            }
             if (request.headers["if-none-match"] === etag) {
                 response.writeHead(304, headers);
                 return response.end();

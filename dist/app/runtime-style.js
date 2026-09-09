@@ -9,7 +9,7 @@ function getRuntimeSheet() {
     runtimeSheet = [...document.styleSheets].find((sheet) => {
         if (!sheet.href) return false;
         try {
-            return new URL(sheet.href, location.href).pathname === "/app/styles.css";
+            return /^\/app\/(?:_static\/[a-f0-9]{20}\/)?styles\.css$/.test(new URL(sheet.href, location.href).pathname);
         } catch (_) {
             return false;
         }
