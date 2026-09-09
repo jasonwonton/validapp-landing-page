@@ -65,3 +65,19 @@ test("never proxies API requests and rejects traversal or write methods", async 
     assert.equal(post.status, 405);
     assert.equal(post.headers.get("allow"), "GET, HEAD");
 });
+
+test("only existing immutable release scripts and styles receive long cache lifetimes", async () => {
+    const manifest = await (await fetch(`${origin}/app/build-manifest.json`)).json();
+    for (const original of ['/app/app.js', '/app/styles.css']) {
+        const response = await fetch(`${origin}${manifest.assets[original]}`);
+        assert.equal(response.status, 200);
+        assert.equal(response.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+        assert.match(response.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+    }
+    for (const pathname of ['/app/', '/app/service-worker.js', '/app/app.js', '/app/build-manifest.json']) {
+        assert.equal((await fetch(`${origin}${pathname}`)).headers.get('cache-control'), 'no-cache');
+    }
+    const missing = await fetch(`${origin}${manifest.prefix}missing.js`);
+    assert.equal(missing.status, 404);
+    assert.notEqual(missing.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+});
