@@ -1,3 +1,4 @@
+import { permitsAuthRouteRecovery, fetchAuthWithRecovery } from './auth-route-recovery.js';
 import { reportAuthFailure } from './auth-reliability.js';
 import { authStage, authRejectionCode } from './auth-diagnostics.js';
 
@@ -84,16 +85,22 @@ export class ValidAPI {
         }
         let response;
         try {
-            response = await fetch(`${this.baseURL}${path}`, {
+            const recover = permitsAuthRouteRecovery(path, options, this.baseURL, window.location.origin);
+            const fetcher = recover
+                ? (url, init) => fetchAuthWithRecovery(url, init, { signal: options.signal, timeoutMs: options.timeoutMs || 10000 })
+                : fetch;
+            response = await fetcher(`${this.baseURL}${path}`, {
                 ...fetchOptions,
                 headers,
                 signal: controller.signal,
                 credentials: "include",
             });
         } catch (error) {
-            const failure = error.name === 'AbortError'
+            if (options.signal?.aborted) throw error;
+            const failure = ['AbortError', 'TimeoutError'].includes(error.name)
                 ? new APIError('That request took too long. Check your connection and try again.', 408)
                 : new APIError(navigator.onLine === false ? 'You’re offline. Reconnect, then try again.' : 'Could not reach Valid. Check your connection and try again.', 0);
+            failure.routeRecoveryAttempted = error.routeRecoveryAttempted === true;
             if (authStage(path)) {
                 failure.stage = authStage(path);
                 failure.code = navigator.onLine === false ? 'offline' : failure.status === 408 ? 'request_timeout' : 'network_failure';

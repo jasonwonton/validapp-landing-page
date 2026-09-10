@@ -44,7 +44,7 @@ export async function requestAuthChallenge(operation, stage) {
     for (let attempt = 0; ; attempt++) {
         try { return await operation(); }
         catch (error) {
-            if (attempt === 0 && navigator.onLine !== false && [0, 408].includes(error.status)) continue;
+            if (attempt === 0 && !error.routeRecoveryAttempted && navigator.onLine !== false && [0, 408].includes(error.status)) continue;
             error.stage = stage;
             if ([0, 408].includes(error.status)) {
                 error.code = navigator.onLine === false ? 'offline' : 'challenge_network';
@@ -84,6 +84,37 @@ export async function enablePreviewSignup() {
     return true;
 }
 
+let pageDiagnosticInstance;
+export function authDiagnosticInstance() {
+    if (pageDiagnosticInstance) return pageDiagnosticInstance;
+    const key = 'valid:auth-diagnostic-instance:v1';
+    try {
+        const saved = localStorage.getItem(key);
+        if (/^[a-f0-9]{64}$/.test(saved || '')) return pageDiagnosticInstance = saved;
+    } catch (_) { /* Private browsing/storage restrictions must not break auth. */ }
+    pageDiagnosticInstance = [...crypto.getRandomValues(new Uint8Array(32))].map(byte => byte.toString(16).padStart(2, '0')).join('');
+    try { localStorage.setItem(key, pageDiagnosticInstance); } catch (_) {}
+    return pageDiagnosticInstance;
+}
+
+export function needsPhoneReverification(error) {
+    return ['phone_verification_expired', 'phone_not_verified'].includes(error?.code);
+}
+
+export async function passkeySecurityFailure(rpId, stage) {
+    const sameRP = location.hostname === rpId || location.hostname.endsWith(`.${rpId}`);
+    let related = 'unknown';
+    try {
+        const caps = await PublicKeyCredential.getClientCapabilities?.();
+        if (typeof caps?.relatedOrigins === 'boolean') related = caps.relatedOrigins ? 'supported' : 'unsupported';
+    } catch (_) {}
+    const error = authError('passkey_security',
+        sameRP ? 'Your browser could not complete the passkey security check. Open Valid in an updated Chrome or Safari browser and try again.'
+            : 'Your browser could not verify access to your Six7 passkey. Try mobile data or an updated Chrome or Safari browser. Opening the same page again may not resolve this domain check.', stage);
+    error.passkeyContext = sameRP ? 'webauthn.same_rp' : `webauthn.related_origin_${related}`;
+    return error;
+}
+
 let diagnosticsSent = 0;
 const reported = new Set();
 export function reportAuthFailure(error) {
@@ -98,12 +129,14 @@ function sendAuthDiagnostic(error) {
     if (reported.has(key)) return;
     reported.add(key); diagnosticsSent++;
     const version = document.querySelector('meta[name="valid-app-version"]')?.content || 'web-unknown';
-    const instance = [...crypto.getRandomValues(new Uint8Array(32))].map(byte => byte.toString(16).padStart(2, '0')).join('');
+    const instance = authDiagnosticInstance();
     const body = JSON.stringify({ id: crypto.randomUUID(), event: 'auth.web_failure', severity: 'warning', message: 'Web authentication could not complete.', occurred_at: new Date().toISOString(), context: {
         app_version: version, build_number: version.match(/\d+/)?.[0] || '0', client_instance_id: instance,
         distribution_channel: 'web_pwa', flow: 'authentication', stage, error_code: code,
         http_status: String(Number(error.status) || 0), route: location.hostname,
         device_model: authDeviceFamily(navigator.userAgent),
+        ...(['webauthn.same_rp', 'webauthn.related_origin_supported', 'webauthn.related_origin_unsupported', 'webauthn.related_origin_unknown'].includes(error.passkeyContext)
+            ? { underlying_error_code: error.passkeyContext } : {}),
         ...( /^[a-f0-9-]{12,36}$/i.test(error.requestId || '') ? { server_request_id: error.requestId } : {} ),
         network_connected: String(navigator.onLine),
     }, breadcrumbs: [] });

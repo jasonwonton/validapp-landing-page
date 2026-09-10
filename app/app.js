@@ -3,7 +3,7 @@ import { uiIcon } from "./ui-icons.js";
 import { feedVoterLine, senderGradeIsSafe, tbhSenderLine } from "./feed-sender.js";
 import { DemoAPI, localDemoAllowed } from "./demo-api.js";
 import { createAdditionalPasskey, createSignupPasskey, passkeysSupported, signInWithPasskey } from "./passkeys.js";
-import { authBrowserURL, checkPasskeyEnvironment, completeSignupSafely, enablePreviewSignup, reportAuthFailure } from './auth-reliability.js';
+import { authBrowserURL, checkPasskeyEnvironment, completeSignupSafely, enablePreviewSignup, reportAuthFailure, needsPhoneReverification } from './auth-reliability.js';
 import { startPerformanceMonitoring } from "./performance.js";
 import { createRealtimeList } from "./realtime-list.js";
 import { activateRoute, preloadRoute } from "./routes/route-loader.js";
@@ -2474,6 +2474,14 @@ async function createAccount(event) {
         setTimeout(() => { if (api.hasSession()) openClassmatesDialog({ onboarding: true }); }, 700);
     } catch (error) {
         reportAuthFailure(error);
+        if (needsPhoneReverification(error)) {
+            state.signupPhoneVerified = false;
+            state.signupVerifiedPhone = null;
+            $("#signupPhoneCode").value = "";
+            setSignupStep(3);
+            $("#signupStatus").textContent = "Your phone verification expired. Request a new code to finish signup. Your other details are still here.";
+            return;
+        }
         showAuthBrowserHelp(error, true);
         state.signupCompletionUncertain = error.code === 'signup_result_unknown';
         $('#signupRecoverAccount').classList.toggle('hidden', !state.signupCompletionUncertain);

@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 async function mount(page, { host = 'validapp.lol', capabilities = true, ua = '' } = {}) {
     await page.route(`https://${host}/**`, async route => {
         const path = new URL(route.request().url()).pathname;
-        if (['/app/auth-reliability.js', '/app/auth-diagnostics.js', '/app/passkeys.js', '/app/api.js'].includes(path)) return route.fulfill({ contentType: 'text/javascript', body: await readFile(new URL(`../${path.slice(1)}`, import.meta.url), 'utf8') });
+        if (['/app/auth-route-recovery.js', '/app/auth-reliability.js', '/app/auth-diagnostics.js', '/app/passkeys.js', '/app/api.js'].includes(path)) return route.fulfill({ contentType: 'text/javascript', body: await readFile(new URL(`../${path.slice(1)}`, import.meta.url), 'utf8') });
         if (path === '/api/v1/client-logs') return route.fulfill({ status: 201, json: {} });
         return route.fulfill({ contentType: 'text/html', body: '<meta name="valid-app-version" content="web-v82"><title>Auth fixture</title>' });
     });
@@ -175,4 +175,5 @@ test('diagnostics are capped, deduplicated and omit personal and credential data
     await expect.poll(() => reports.length).toBe(3);
     expect(JSON.stringify(reports)).not.toMatch(/private_name|1234567890|credential=secret|must-not-leak/);
     for (const report of reports) expect(report.context.client_instance_id).toMatch(/^[a-f0-9]{64}$/);
+    expect(new Set(reports.map(report => report.context.client_instance_id)).size).toBe(1);
 });
