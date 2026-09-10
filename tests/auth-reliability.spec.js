@@ -177,3 +177,16 @@ test('diagnostics are capped, deduplicated and omit personal and credential data
     for (const report of reports) expect(report.context.client_instance_id).toMatch(/^[a-f0-9]{64}$/);
     expect(new Set(reports.map(report => report.context.client_instance_id)).size).toBe(1);
 });
+
+test('browser challenge reaches alternate API after primary network failure', async ({ page }) => {
+    await mount(page);
+    const attempted=[];
+    await page.route('**/api/v1/auth/passkey/authenticate/challenge', async route => {
+        const host=new URL(route.request().url()).host;attempted.push(host);
+        if(host==='validapp.lol') return route.abort('failed');
+        return route.fulfill({status:200,headers:{'Access-Control-Allow-Origin':'https://validapp.lol'},json:{challenge:'AQID',rpId:'six7.lol'}});
+    });
+    const result=await page.evaluate(async()=>{const {ValidAPI}=await import('/app/api.js');return new ValidAPI().getPasskeyChallenge();});
+    expect(result.rpId).toBe('six7.lol');
+    expect(attempted).toEqual(['validapp.lol','api.validappcdn.com']);
+});

@@ -1333,3 +1333,25 @@ test("ambiguous question retries reuse one idempotency key and never double-char
     expect(key(submissions[0].body)).toBeTruthy();
     expect(key(submissions[1].body)).toBe(key(submissions[0].body));
 });
+
+test('expired verification returns to phone step without losing profile or resending automatically', async ({ page }) => {
+    await installCredentialStub(page, 'create');
+    await installTurnstileStub(page);
+    const requests = await interceptProductionAPI(page, { signup: true });
+    let completions = 0;
+    await page.route(`${API_ORIGIN}/api/v1/auth/passkey/signup/complete`, route => {
+        completions++; return route.fulfill({status:400,json:{detail:'Phone verification has expired. Request a new code.'}});
+    });
+    await page.goto('/app/?signin=1');
+    await page.getByRole('button', {name:'Create an account'}).click();
+    const dialog = page.locator('#signupDialog');
+    await fillProductionSignup(dialog);
+    const sendsBefore = requests.filter(r => r.path === '/api/v1/auth/phone/request/web').length;
+    await dialog.getByRole('button', {name:'Continue',exact:true}).click();
+    await expect(dialog.getByLabel('Phone number')).toBeVisible();
+    await expect(page.locator('#signupStatus')).toContainText('verification expired');
+    await expect(dialog.locator('#signupFirstName')).toHaveValue('Taylor');
+    await expect(dialog.locator('#signupPhone')).toHaveValue('(415) 555-0123');
+    expect(completions).toBe(1);
+    expect(requests.filter(r => r.path === '/api/v1/auth/phone/request/web').length).toBe(sendsBefore);
+});

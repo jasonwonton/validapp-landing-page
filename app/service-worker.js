@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "valid-web-";
-const CACHE_NAME = `${CACHE_PREFIX}v88`;
+const CACHE_NAME = `${CACHE_PREFIX}v89`;
 const APP_SHELL = [
     "./",
     "./styles.css",
@@ -9,6 +9,7 @@ const APP_SHELL = [
     "./demo-api.js",
     "./passkeys.js",
     "./auth-reliability.js",
+    "./auth-route-recovery.js",
     "./auth-diagnostics.js",
     "./performance.js",
     "./keyed-list.js",
