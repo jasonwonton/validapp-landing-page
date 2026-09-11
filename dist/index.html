@@ -97,23 +97,17 @@
         }
         .hero-copy {
             max-width: 680px;
-            margin: 0 auto 12px;
+            margin: 0 auto 26px;
             color: var(--muted);
             font-size: clamp(1.2rem, 3vw, 1.55rem);
             line-height: 1.45;
-        }
-        .hero-safety {
-            margin: 0 auto 26px;
-            color: var(--muted);
-            font-size: 1rem;
-            line-height: 1.5;
         }
         .cta-row {
             display: flex;
             justify-content: center;
             flex-wrap: wrap;
             gap: 12px;
-            margin-bottom: clamp(26px, 5vw, 42px);
+            margin-bottom: 18px;
         }
         .button {
             display: inline-flex;
@@ -137,6 +131,16 @@
         .button:active {
             transform: translateY(4px);
             box-shadow: 0 2px 0 var(--ink);
+        }
+        .parents-cta {
+            margin-bottom: clamp(26px, 5vw, 42px);
+        }
+        .button-secondary {
+            background: var(--white);
+        }
+        .button:focus-visible {
+            outline: 3px solid var(--ink);
+            outline-offset: 4px;
         }
         .mockup {
             margin: 0 auto;
@@ -199,12 +203,14 @@
         <section class="hero" aria-labelledby="hero-title">
             <h1 class="hero-title" id="hero-title">Connect with classmates</h1>
             <p class="hero-copy">
-                Answer positive polls &amp; connect with your classmates
+                Be kind. Don't bully. Everything is moderated.
             </p>
-            <p class="hero-safety">Be kind. Don't bully. Everything is moderated</p>
             <div class="cta-row">
                 <a id="primaryCta" class="button" href="https://apps.apple.com/us/app/valid-compliment-classmates/id6755367062">Download on the App Store</a>
                 <a class="button" href="app/?install=1&amp;signup=1">Download on Android</a>
+            </div>
+            <div class="parents-cta">
+                <a class="button button-secondary" href="parents.html">FAQ for Parents</a>
             </div>
         </section>
 
@@ -217,7 +223,7 @@
     <footer>
         <span>&copy; <script>document.write(new Date().getFullYear());</script> Valid. All rights reserved.</span>
         <span>
-            <a href="about.html">About</a>
+            <a href="parents.html">For Parents</a>
             &nbsp; &nbsp;
             <a href="contact.html">Contact</a>
             &nbsp; &nbsp;
