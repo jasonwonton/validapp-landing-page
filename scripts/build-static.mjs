@@ -9,7 +9,7 @@ const outputRoot = path.join(repositoryRoot, "dist");
 const staticDirectories = [".well-known", "app", "assets"];
 const staticFiles = [
     "_headers",
-    "about.html",
+    "parents.html",
     "community-guidelines.html",
     "contact.html",
     "index.html",
