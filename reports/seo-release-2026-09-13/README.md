@@ -31,3 +31,9 @@ Cloudflare's sampled last-24-hour report showed 230 verified search-crawler requ
 CI static-release-checks pass. All four broader browser jobs stop at the existing `tests/chat-api-contract.spec.js:52` upload fixture missing `/app/auth-route-recovery.js`; the same failure is present on main in run 34615525515. Release run 34775948269 confirms it. The PR remains open for review rather than changing unrelated app tests.
 
 DigitalOcean can reuse a previously selected branch's cached source revision when `--update-sources` is omitted. A retry to a rewritten branch failed before publishing because its cached revision was unavailable. The final deployment uses a new branch and verifies its exact commit. Do not rewrite deployment branches; do not enable global source updates to work around this.
+
+## Parent safety wording follow-up
+
+The homepage now uses the parent FAQ's fuller bullying answer: a kind, welcoming space; human review of every poll before publication; an under-15-minute moderation SLA; reporting and blocking; and an honest acknowledgment that no social app can prevent every harmful interaction. It links back to the parent FAQ for safety and support.
+
+Copy commit `943874924715073a7342af373ddc7a46479bdbb1` is live from `codex/homepage-parent-safety-20260913`, deployment `7b901dfc-1cfe-4c6e-a091-02f692f11e16` (ACTIVE). All backend, admin, worker, and job source revisions match the preceding deployment. Build and all five SEO checks pass; local layout and the published bare root were verified in the browser.
