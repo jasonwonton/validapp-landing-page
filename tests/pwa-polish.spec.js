@@ -88,8 +88,36 @@ test("shared action buttons use the iOS button tokens", async ({ page }) => {
     await expect(playActions.nth(1)).toHaveCSS("background-color", "rgb(255, 184, 214)");
 });
 
-test("bottom navigation clearly marks Feed, Play, and Profile as current", async ({ page }) => {
+test("bottom navigation stays anchored during viewport changes and marks the current tab", async ({ page }) => {
+    await page.addInitScript(() => {
+        const viewport = window.visualViewport;
+        window.testViewport = Object.assign(new EventTarget(), { offsetTop: 0, offsetLeft: 0, scale: 1 });
+        let height;
+        Object.defineProperties(testViewport, {
+            width: { get: () => viewport.width },
+            height: { get: () => height ?? viewport.height, set: value => { height = value; } },
+        });
+        Object.defineProperty(window, 'visualViewport', { get: () => testViewport });
+    });
     await signInToDemo(page);
+    const expectAnchored = async () => {
+        await expect.poll(() => page.locator('#bottomNav').evaluate(nav => {
+            const bounds = nav.getBoundingClientRect();
+            return Math.max(Math.abs(innerHeight - bounds.bottom), Math.abs(bounds.left), Math.abs(innerWidth - bounds.right));
+        })).toBeLessThan(1);
+    };
+    await expectAnchored();
+    // Focus can leave an input before the keyboard's viewport resize completes.
+    await page.evaluate(() => {
+        testViewport.height = innerHeight - 300;
+        testViewport.dispatchEvent(new Event('resize'));
+    });
+    await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--visual-viewport-bottom').trim())).toBe('300px');
+    await expectAnchored();
+    await page.evaluate(() => {
+        testViewport.height = undefined;
+        testViewport.dispatchEvent(new Event('resize'));
+    });
     const feed = page.getByRole("button", { name: "Feed", exact: true });
     const play = page.getByRole("button", { name: "Play", exact: true });
     const settings = page.getByRole("button", { name: "Profile", exact: true });
@@ -102,6 +130,9 @@ test("bottom navigation clearly marks Feed, Play, and Profile as current", async
     await settings.click();
     await expect(settings).toHaveAttribute("aria-current", "page");
     await expect(play).not.toHaveAttribute("aria-current", "page");
+    await page.setViewportSize({ width: 360, height: 640 });
+    await page.evaluate(() => scrollTo(0, document.body.scrollHeight));
+    await expectAnchored();
 });
 
 test("God Mode actions avoid duplicate icons and overflow dots are centered", async ({ page }) => {
