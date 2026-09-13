@@ -11,7 +11,7 @@
   let referrer = '';
   try { referrer = document.referrer ? new URL(document.referrer).origin + '/' : ''; } catch {}
   window.dataLayer = window.dataLayer || [];
-  const gtag = (...args) => window.dataLayer.push(args);
+  function gtag() { window.dataLayer.push(arguments); }
   gtag('js', new Date());
   gtag('config', measurementId, {
     send_page_view: false,
