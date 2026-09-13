@@ -83,7 +83,7 @@ test('homepage identifies the app and accurately separates its platforms', async
   assert.equal(web.url, 'https://validapp.lol/app/');
   assert.match(html, /Valid — Compliment Classmates is a social app/);
   assert.match(html, /Every poll is reviewed by a human moderator/);
-  assert.match(html, /response-time commitment for bullying reports is under 15 minutes/);
+  assert.match(html, /Our moderation SLA is under 15 minutes/);
   assert.doesNotMatch(html, /RevueAI|data:image|fonts.googleapis.com/);
 });
 
