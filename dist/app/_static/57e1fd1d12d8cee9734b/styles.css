@@ -1,6 +1,6 @@
 @font-face {
     font-family: "Jua";
-    src: url("../assets/Jua-Latin.woff2") format("woff2");
+    src: url("/assets/Jua-Latin.woff2") format("woff2");
     font-display: swap;
     font-style: normal;
     font-weight: 400;
@@ -1249,7 +1249,7 @@ body.play-active .play-actions { margin: 0; }
 #feedDetailDialog .share-platform-button.expanded > span { font-size: 15px; }
 .feed-detail-share { display: grid; gap: 0; }
 .reveal-sender-button { min-height: 60px; display: flex; align-items: center; justify-content: center; gap: 9px; border: 0; border-radius: 20px; background: rgba(var(--surface-rgb),.92); box-shadow: none; }
-.reveal-sender-button::before { content: ""; width: 34px; height: 34px; flex: 0 0 34px; background: url("../assets/app/crown.webp") center / contain no-repeat; }
+.reveal-sender-button::before { content: ""; width: 34px; height: 34px; flex: 0 0 34px; background: url("/assets/app/crown.webp") center / contain no-repeat; }
 
 .detail-screen { position: fixed; z-index: 60; inset: 0; overflow: auto; overscroll-behavior: contain; background: var(--aqua); }
 .detail-screen:not(.hidden) { animation: detail-push-in .2s cubic-bezier(.2,.8,.2,1); }
