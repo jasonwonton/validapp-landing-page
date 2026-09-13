@@ -255,7 +255,16 @@ test("Android landing handoff requires native installation before signup", async
         body: JSON.stringify({ detail: "Authentication required" }),
     }));
     await page.goto("/");
-    await page.getByRole("link", { name: "Download on Android" }).click();
+    const androidLink = page.getByRole("link", { name: "Use on Android" });
+    await expect(androidLink).toHaveAttribute("href", "https://validapp.lol/app/?install=1&signup=1");
+    await expect(androidLink).toHaveAttribute("target", "_blank");
+    // Exercise the production handoff path on the local fixture origin.
+    await androidLink.evaluate(link => {
+        const destination = new URL(link.href);
+        link.href = destination.pathname + destination.search;
+        link.target = "_self";
+    });
+    await androidLink.click();
     await expect(page).toHaveURL(/\/app\/\?install=1&signup=1$/);
     const installDialog = page.getByRole("dialog", { name: "Install Valid on Android" });
     await expect(installDialog).toBeVisible();
