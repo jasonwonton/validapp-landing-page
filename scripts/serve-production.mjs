@@ -8,6 +8,8 @@ const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
 const defaultRoot = path.join(repositoryRoot, "dist");
 
 const CONTENT_TYPES = new Map([
+    [".txt", "text/plain; charset=utf-8"],
+    [".xml", "application/xml; charset=utf-8"],
     [".css", "text/css; charset=utf-8"],
     [".html", "text/html; charset=utf-8"],
     [".ico", "image/x-icon"],
