@@ -2837,7 +2837,7 @@ function renderFeedDetail() {
         ${options.length ? `<div class="feed-detail-options">${options.map((option) => {
             const name = option.name || option.contact_name || "A classmate";
             const selected = name === selectedName;
-            return `<div class="feed-detail-option ${selected ? "selected" : ""}"><strong>${escapeHTML(name)}</strong>${selected ? `<span class="feed-detail-selection-indicator" aria-label="Picked">${uiIcon("check")}</span>` : ""}</div>`;
+            return `<div class="feed-detail-option ${selected ? "selected" : ""}"><strong>${escapeHTML(name)}</strong>${selected ? `<span class="feed-detail-selection-indicator" aria-label="Picked">👆</span>` : ""}</div>`;
         }).join("")}</div>` : `<div class="feed-detail-legacy-selection"><strong>Selected: ${escapeHTML(selectedName)}</strong><small>Options not available for this older vote</small></div>`}
         ${firstLetterHint}
         ${revealed}
@@ -2933,6 +2933,19 @@ async function loadShareArtwork(url) {
     });
 }
 
+function pollShareArtworkFallback(url) {
+    // Use the existing public-image API, never a general-purpose URL proxy.
+    const source = new URL(url, location.href);
+    if (source.protocol !== "https:" || source.username || source.password || source.port
+        || !["validappcdn.com", "media.six7.lol", "staging.validappcdn.com"].includes(source.hostname)) return null;
+    let key;
+    try { key = decodeURIComponent(source.pathname.slice(1)); } catch (_) { return null; }
+    if (!/^(questions\/images|question-images)\//.test(key) || key.length > 512
+        || key.includes("\\") || key.split("/").some(part => !part || part === "." || part === "..")) return null;
+    const base = api.baseURL || new URL("/api/v1", location.origin).href;
+    return `${base.replace(/\/$/, "")}/media/${key.split("/").map(encodeURIComponent).join("/")}`;
+}
+
 async function loadPollShareArtwork(item) {
     const displayedArtwork = $("#feedDetailBody .feed-detail-art > img")?.currentSrc;
     const candidates = [api.assetURL(item.image_url), displayedArtwork]
@@ -2940,9 +2953,15 @@ async function loadPollShareArtwork(item) {
     for (const url of candidates) {
         const artwork = await loadShareArtwork(url);
         if (artwork) return artwork;
+        // Public CDN images can display as images without CORS but cannot be
+        // copied into a canvas. The API returns the same bytes with valid CORS.
+        const fallback = pollShareArtworkFallback(url);
+        if (fallback) {
+            const recovered = await loadShareArtwork(fallback);
+            if (recovered) return recovered;
+        }
     }
-    // Older CDN objects may not expose CORS headers. The poll itself should
-    // still be shareable instead of failing the entire canvas render.
+    if (candidates.length) throw new Error("Poll artwork is unavailable. Please try again.");
     return null;
 }
 
@@ -3067,15 +3086,7 @@ async function createPollShareFile(item) {
             context.font = '60px "Apple Color Emoji", sans-serif';
             context.textAlign = "center";
             context.textBaseline = "middle";
-            context.lineJoin = "round";
-            context.lineWidth = 8;
-            context.strokeStyle = "#000000";
-            context.beginPath();
-            context.moveTo(selectedPointer.x - 14, selectedPointer.y);
-            context.lineTo(selectedPointer.x - 3, selectedPointer.y + 10);
-            context.lineTo(selectedPointer.x + 18, selectedPointer.y - 13);
-            context.stroke();
-            // Selection marker is vector-drawn, independent of the platform emoji font.
+            context.fillText("👆", selectedPointer.x, selectedPointer.y);
         }
     }
 

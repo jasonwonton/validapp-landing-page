@@ -255,7 +255,16 @@ test("Android landing handoff requires native installation before signup", async
         body: JSON.stringify({ detail: "Authentication required" }),
     }));
     await page.goto("/");
-    await page.getByRole("link", { name: "Download on Android" }).click();
+    const androidLink = page.getByRole("link", { name: "Use on Android" });
+    await expect(androidLink).toHaveAttribute("href", "https://validapp.lol/app/?install=1&signup=1");
+    await expect(androidLink).toHaveAttribute("target", "_blank");
+    // Exercise the production handoff path on the local fixture origin.
+    await androidLink.evaluate(link => {
+        const destination = new URL(link.href);
+        link.href = destination.pathname + destination.search;
+        link.target = "_self";
+    });
+    await androidLink.click();
     await expect(page).toHaveURL(/\/app\/\?install=1&signup=1$/);
     const installDialog = page.getByRole("dialog", { name: "Install Valid on Android" });
     await expect(installDialog).toBeVisible();
@@ -462,7 +471,7 @@ test("feed polls open the iOS-style detail and moderation flow", async ({ page }
     await expect(dialog.locator(".feed-detail-option")).toHaveCount(4);
     await expect(dialog.getByText("Jules Rivera").first()).toBeVisible();
     await expect(dialog.locator(".feed-detail-option.selected")).toContainText("Jules Rivera");
-    await expect(dialog.locator('.feed-detail-selection-indicator [data-ui-icon="check"]')).toBeVisible();
+    await expect(dialog.locator(".feed-detail-selection-indicator")).toHaveText("👆");
     await expect(dialog.getByRole("button", { name: "Share poll to Snapchat" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Share poll to Instagram" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Share poll to TikTok" })).toBeVisible();
@@ -551,7 +560,7 @@ test("poll share buttons generate the iOS-style 9:16 photo", async ({ page }) =>
     expect(sharedPoll.artworkPixels).toBeGreaterThan(5_000);
 });
 
-test("poll sharing still creates a photo when CDN artwork cannot be read", async ({ page }) => {
+test("polls without artwork still create a photo", async ({ page }) => {
     await page.addInitScript(() => {
         Object.defineProperty(navigator, "canShare", { configurable: true, value: () => true });
         Object.defineProperty(navigator, "share", {

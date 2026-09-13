@@ -10,6 +10,10 @@ test('interface source has no decorative emoji; product reactions remain intact'
         // Explicit native product labels requested in the feed follow-up, not
         // decorative interface emoji. Keep this exception exact and file-scoped.
         if (path === 'feed-sender.js') source = source.replace(/👦💙|👧💗|🧑💛|🫵/gu, '');
+        // The selected-poll finger is explicitly part of both result and share UI.
+        if (path === 'app.js') source = source
+            .replace('aria-label="Picked">👆</span>', 'aria-label="Picked"></span>')
+            .replace('context.fillText("👆", selectedPointer.x, selectedPointer.y);', '');
         // Allow only the existing reaction enum definitions, never arbitrary UI text.
         const withoutReactions = source
             .replace(/\{ type: "(?:thumbs_down|surprised|fire|eyes|funny|love|legacy_agree)", emoji: "[^"]+", label: "[^"]+" \}/g, '')
@@ -51,6 +55,8 @@ for (const theme of ['light', 'dark']) {
         await expect(page.locator('.heart [data-ui-icon="heart"]')).toBeVisible();
         await page.getByRole('button', { name: 'Play', exact: true }).click();
         await expect(page.locator('.play-streak-chip [data-ui-icon="fire"]')).toBeVisible();
+        await expect(page.locator('.play-streak-chip [data-ui-icon="fire"]')).toHaveCSS('color', 'rgb(255, 59, 48)');
+        await expect(page.locator('.play-streak-chip [data-ui-icon="fire"]')).toHaveCSS('fill', 'rgb(255, 59, 48)');
         await page.getByRole('button', { name: 'Chats', exact: true }).click();
         await page.getByRole('button', { name: /Noah Williams/ }).click();
         const sticker = page.getByRole('button', { name: 'Send a sticker', exact: true }).locator('.native-sticker-icon');

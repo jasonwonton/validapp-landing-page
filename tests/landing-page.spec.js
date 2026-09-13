@@ -24,15 +24,16 @@ for (const [device, userAgent] of [
         }, userAgent);
         await page.goto("/");
         await expect(page.getByRole("heading", { name: "Connect with classmates", level: 1 })).toBeVisible();
-        await expect(page.getByText("Answer positive polls & connect with your classmates", { exact: true })).toBeVisible();
-        await expect(page.getByText("Be kind. Don't bully. Everything is moderated", { exact: true })).toBeVisible();
-        await expect(page.locator(".cta-row .button")).toHaveCount(2);
+        await expect(page.locator(".vs-intro")).toContainText("Answer positive polls, give classmates compliments,");
+        await expect(page.locator(".vs-intro")).toContainText("and connect through chats and Stories.");
+        await expect(page.getByText("Every poll is reviewed by a human moderator before it is published.", { exact: true })).toBeVisible();
+        await expect(page.locator(".vs-actions .vs-button")).toHaveCount(2);
         const apple = page.getByRole("link", { name: "Download on the App Store" });
-        const android = page.getByRole("link", { name: "Download on Android" });
+        const android = page.getByRole("link", { name: "Use on Android" });
         await expect(apple).toBeVisible();
         await expect(apple).toHaveAttribute("href", "https://apps.apple.com/us/app/valid-compliment-classmates/id6755367062");
         await expect(android).toBeVisible();
-        await expect(android).toHaveAttribute("href", "app/?install=1&signup=1");
+        await expect(android).toHaveAttribute("href", "https://validapp.lol/app/?install=1&signup=1");
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     });
 }
@@ -40,11 +41,11 @@ for (const [device, userAgent] of [
 test("landing page uses the app palette and prominent wordmark", async ({ page }) => {
     await emulateDesktopVisitor(page);
     await page.goto("/");
-    await expect(page.locator("body")).toHaveCSS("background-color", "rgb(204, 247, 244)");
-    const wordmarkWidth = await page.locator(".hero-logo").evaluate((image) => image.getBoundingClientRect().width);
+    await expect(page.locator("#valid-simple")).toHaveCSS("background-color", "rgb(242, 255, 253)");
+    const wordmarkWidth = await page.locator(".vs-logo").evaluate((image) => image.getBoundingClientRect().width);
     expect(wordmarkWidth).toBeGreaterThanOrEqual(124);
     await expect(page.locator(".site-header")).toHaveCount(0);
-    await expect(page.locator("#primaryCta")).toHaveCSS("background-color", "rgb(255, 177, 94)");
+    await expect(page.locator(".vs-parent")).toHaveCSS("background-color", "rgb(255, 191, 135)");
 });
 
 test("community guidelines publish the safety and moderation standards", async ({ page }) => {
