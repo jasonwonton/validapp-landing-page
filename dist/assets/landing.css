@@ -30,3 +30,7 @@ html {scroll-behavior:smooth;background:#f2fffd;} body {margin:0;} @media(prefer
 #valid-simple footer nav { display:flex; justify-content:center; flex-wrap:wrap; gap:18px; margin-bottom:11px; }
 #valid-simple footer a { color:#586165; }
 @media(max-width:480px) { #valid-simple {padding:32px 20px 22px} #valid-simple h1{font-size:33px} #valid-simple .vs-logo{width:150px;margin-bottom:22px} #valid-simple .vs-intro{font-size:16px} #valid-simple .vs-actions{gap:10px} #valid-simple .vs-button{padding:13px 16px;font-size:14px} }
+
+#valid-simple .vs-invite-preview { margin:18px 0; }
+#valid-simple .vs-invite-preview img { display:block; width:min(100%,390px); height:auto; margin:0 auto; border-radius:12px; }
+#valid-simple .vs-invite-preview figcaption { margin-top:10px; color:#536b64; font:400 13px/1.6 Jua,sans-serif; text-align:center; }
