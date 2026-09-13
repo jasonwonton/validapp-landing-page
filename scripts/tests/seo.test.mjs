@@ -29,9 +29,12 @@ test('analytics excludes app traffic, privacy opt-outs and URL payloads', async 
   function run(overrides = {}) {
     const scripts = [];
     const listeners = {};
+    const timers = [];
+    const navigations = [];
     const context = {
-      location: { hostname: 'validapp.lol', pathname: '/parents.html', search: '?phone=private', hash: '#private' },
+      location: { hostname: 'validapp.lol', pathname: '/parents.html', search: '?phone=private', hash: '#private', assign: url => navigations.push(url) },
       navigator: {}, window: {}, URL,
+      setTimeout: callback => timers.push(callback),
       document: {
         referrer: 'https://example.com/private?phone=private', title: 'Valid App FAQ for Parents',
         head: { appendChild: node => scripts.push(node) }, createElement: () => ({}),
@@ -40,13 +43,14 @@ test('analytics excludes app traffic, privacy opt-outs and URL payloads', async 
       ...overrides,
     };
     runInNewContext(source, context);
-    return { context, scripts, listeners };
+    return { context, scripts, listeners, timers, navigations };
   }
   const { context, scripts, listeners } = run();
   assert.equal(scripts.length, 1);
   assert.equal(context.window.dataLayer[1][2].page_location, 'https://validapp.lol/parents.html');
   assert.equal(context.window.dataLayer[1][2].page_referrer, 'https://example.com/');
   assert.equal(context.window.dataLayer[1][2].allow_google_signals, false);
+  assert.equal(Object.prototype.toString.call(context.window.dataLayer[1]), '[object Arguments]');
   for (const analyticsEvent of ['download_ios', 'download_android', 'parent_faq_click', 'unknown']) {
     listeners.click({ target: { closest: () => ({ dataset: { analyticsEvent } }) } });
   }
@@ -57,6 +61,15 @@ test('analytics excludes app traffic, privacy opt-outs and URL payloads', async 
     { navigator: { globalPrivacyControl: true } },
     { navigator: { doNotTrack: '1' } },
   ]) assert.equal(run(overrides).scripts.length, 0);
+  const internal = run();
+  let prevented = false;
+  internal.listeners.click({ button: 0, preventDefault: () => { prevented = true; }, target: { closest: () => ({ href: 'https://validapp.lol/parents.html', dataset: { analyticsEvent: 'parent_faq_click' } }) } });
+  assert.equal(prevented, true);
+  assert.deepEqual(internal.navigations, []);
+  // A blocked tag must never strand the visitor; a later callback cannot navigate twice.
+  internal.timers[0]();
+  internal.context.window.dataLayer.at(-1)[2].event_callback();
+  assert.deepEqual(internal.navigations, ['https://validapp.lol/parents.html']);
   assert.doesNotMatch(await read('app/index.html'), /public-analytics|G-49LKQ62956/);
 });
 

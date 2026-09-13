@@ -34,6 +34,23 @@
   document.addEventListener('click', event => {
     const link = event.target.closest?.('a[data-analytics-event]');
     const name = link?.dataset.analyticsEvent;
-    if (events.has(name)) gtag('event', name, { transport_type: 'beacon' });
+    if (!events.has(name)) return;
+    const options = { transport_type: 'beacon' };
+    // Give same-tab navigation a bounded opportunity to send its click event.
+    // Download links open another tab and do not need to delay navigation.
+    if (name === 'parent_faq_click' && !event.defaultPrevented && event.button === 0 &&
+        !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      let navigated = false;
+      const navigate = () => {
+        if (navigated) return;
+        navigated = true;
+        location.assign(link.href);
+      };
+      options.event_callback = navigate;
+      options.event_timeout = 500;
+      setTimeout(navigate, 600);
+    }
+    gtag('event', name, options);
   });
 })();
