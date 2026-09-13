@@ -14,7 +14,8 @@
     "test:e2e:deployed": "playwright test --config=playwright.deployed.config.js",
     "test:e2e:update": "playwright test --update-snapshots",
     "test:passkey-integration": "node scripts/test-passkey-backend.mjs",
-    "test:production": "node scripts/check-production.mjs"
+    "test:production": "node scripts/check-production.mjs",
+    "test:seo": "node --test scripts/tests/seo.test.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

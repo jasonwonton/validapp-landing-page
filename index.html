@@ -1,238 +1,116 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Valid - Connect with classmates</title>
-    <meta name="description" content="Answer positive polls &amp; connect with your classmates. Be kind. Don't bully. Everything is moderated.">
-    <link rel="canonical" href="https://validapp.lol/">
-    <link rel="icon" type="image/png" href="assets/AppIconV2.png">
-    <link rel="apple-touch-icon" href="assets/AppIconV2.png">
-    <meta property="og:url" content="https://validapp.lol/">
-    <meta property="og:type" content="website">
-    <meta property="og:site_name" content="Valid">
-    <meta property="og:title" content="Valid - Connect with classmates">
-    <meta property="og:description" content="Answer positive polls &amp; connect with your classmates. Be kind. Don't bully. Everything is moderated.">
-    <meta property="og:image" content="https://validapp.lol/assets/AppIconV2.png">
-    <meta property="og:image:secure_url" content="https://validapp.lol/assets/AppIconV2.png">
-    <meta property="og:image:width" content="1024">
-    <meta property="og:image:height" content="1024">
-    <meta property="og:image:alt" content="Valid App Icon">
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Valid - Connect with classmates">
-    <meta name="twitter:description" content="Answer positive polls &amp; connect with your classmates. Be kind. Don't bully. Everything is moderated.">
-    <meta name="twitter:image" content="https://validapp.lol/assets/AppIconV2.png">
-    <meta name="twitter:image:alt" content="Valid App Icon">
-    <meta name="theme-color" content="#ccf7f4">
-    <meta name="apple-mobile-web-app-title" content="Valid">
-    <script type="application/ld+json">
-        {
-          "@context": "https://schema.org",
-          "@type": "MobileApplication",
-          "name": "Valid",
-          "operatingSystem": "iOS, Android",
-          "applicationCategory": "SocialNetworkingApplication",
-          "offers": {
-            "@type": "Offer",
-            "price": "0",
-            "priceCurrency": "USD"
-          },
-          "url": "https://validapp.lol/",
-          "image": "https://validapp.lol/assets/AppIconV2.png",
-          "publisher": {
-            "@type": "Organization",
-            "name": "Valid",
-            "logo": "https://validapp.lol/assets/valid_logo.png",
-            "url": "https://validapp.lol/",
-            "email": "support@validapp.lol"
-          },
-          "description": "Answer positive polls & connect with your classmates. Be kind. Don't bully. Everything is moderated."
-        }
-    </script>
-    <style>
-        @font-face {
-            font-family: "Jua-Regular";
-            src: url("assets/Jua-Regular.ttf") format("truetype");
-            font-display: swap;
-        }
-        :root {
-            color-scheme: light;
-            --aqua: #ccf7f4;
-            --ink: #000000;
-            --muted: rgba(0, 63, 66, 0.78);
-            --white: #ffffff;
-            --peach: #ffb15e;
-            --soft-pink: #ffb8d6;
-        }
-        * {
-            box-sizing: border-box;
-        }
-        body {
-            margin: 0;
-            min-height: 100vh;
-            font-family: "Jua-Regular", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            background: var(--aqua);
-            color: var(--ink);
-        }
-        a {
-            color: inherit;
-        }
-        main {
-            width: min(1040px, calc(100% - 32px));
-            margin: 0 auto;
-            padding: clamp(28px, 5vw, 48px) 0 52px;
-            text-align: center;
-        }
-        .hero-logo {
-            width: min(260px, 68vw);
-            height: auto;
-            display: block;
-            margin: 0 auto 12px;
-        }
-        .hero-title {
-            margin: 0 0 12px;
-            font-size: clamp(3rem, 10vw, 5.6rem);
-            line-height: 0.98;
-            letter-spacing: 0;
-        }
-        .hero-copy {
-            max-width: 680px;
-            margin: 0 auto 26px;
-            color: var(--muted);
-            font-size: clamp(1.2rem, 3vw, 1.55rem);
-            line-height: 1.45;
-        }
-        .cta-row {
-            display: flex;
-            justify-content: center;
-            flex-wrap: wrap;
-            gap: 12px;
-            margin-bottom: 18px;
-        }
-        .button {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 54px;
-            padding: 0 28px;
-            border: 3px solid var(--ink);
-            border-radius: 22px;
-            background: var(--peach);
-            color: var(--ink);
-            font-size: 1.08rem;
-            text-decoration: none;
-            box-shadow: 0 6px 0 var(--ink);
-            transition: transform 0.15s ease, box-shadow 0.15s ease;
-        }
-        .button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 0 var(--ink);
-        }
-        .button:active {
-            transform: translateY(4px);
-            box-shadow: 0 2px 0 var(--ink);
-        }
-        .parents-cta {
-            margin-bottom: clamp(26px, 5vw, 42px);
-        }
-        .button-secondary {
-            background: var(--white);
-        }
-        .button:focus-visible {
-            outline: 3px solid var(--ink);
-            outline-offset: 4px;
-        }
-        .mockup {
-            margin: 0 auto;
-            width: min(820px, 100%);
-        }
-        .mockup img {
-            width: 100%;
-            height: auto;
-            display: block;
-            border: 4px solid var(--ink);
-            border-radius: 28px;
-            box-shadow: 0 10px 0 rgba(0, 0, 0, 0.14);
-        }
-        .quick-info {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 12px;
-            margin-top: 24px;
-            color: var(--muted);
-            font-size: 0.98rem;
-        }
-        .quick-info a {
-            color: var(--ink);
-            text-decoration: underline;
-            text-underline-offset: 3px;
-        }
-        footer {
-            width: min(1040px, calc(100% - 32px));
-            margin: 0 auto;
-            padding: 24px 0 34px;
-            border-top: 3px solid var(--ink);
-            color: var(--muted);
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: space-between;
-            gap: 12px;
-            font-size: 0.95rem;
-        }
-        footer a {
-            color: var(--ink);
-            text-decoration: none;
-        }
-        footer a:hover {
-            text-decoration: underline;
-        }
-        @media (max-width: 700px) {
-            .button {
-                width: 100%;
-            }
-            .mockup img {
-                border-radius: 12px;
-            }
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Valid – Compliment Classmates | Official App</title>
+<meta name="description" content="Compliment classmates, answer positive polls, earn aura, and connect through chats and Stories. Download Valid for iPhone or use it on Android.">
+<meta name="google-site-verification" content="0XVnIKZk2A3HkodNxnbDqjdDncayYhLQNIH3fkbaMIE">
+<link rel="canonical" href="https://validapp.lol/">
+<link rel="icon" type="image/png" href="/assets/AppIconV2.png">
+<link rel="apple-touch-icon" href="/assets/AppIconV2.png">
+<link rel="preload" href="/assets/Jua-Latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/landing.css">
+<meta name="theme-color" content="#f2fffd">
+<meta name="apple-itunes-app" content="app-id=6755367062">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Valid">
+<meta property="og:url" content="https://validapp.lol/">
+<meta property="og:title" content="Valid – Compliment Classmates | Official App">
+<meta property="og:description" content="Compliment classmates, answer positive polls, earn aura, and connect through chats and Stories. Download Valid for iPhone or use it on Android.">
+<meta property="og:image" content="https://validapp.lol/assets/AppIconV2.png">
+<meta property="og:image:alt" content="Valid app icon">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Valid – Compliment Classmates | Official App">
+<meta name="twitter:description" content="Compliment classmates, answer positive polls, earn aura, and connect through chats and Stories. Download Valid for iPhone or use it on Android.">
+<meta name="twitter:image" content="https://validapp.lol/assets/AppIconV2.png">
+<script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://validapp.lol/#website",
+      "url": "https://validapp.lol/",
+      "name": "Valid",
+      "alternateName": "Valid – Compliment Classmates"
+    },
+    {
+      "@type": "MobileApplication",
+      "@id": "https://validapp.lol/#ios-app",
+      "name": "Valid – Compliment Classmates",
+      "alternateName": "Valid",
+      "url": "https://validapp.lol/",
+      "operatingSystem": "iOS",
+      "applicationCategory": "SocialNetworkingApplication",
+      "downloadUrl": "https://apps.apple.com/us/app/valid-compliment-classmates/id6755367062",
+      "installUrl": "https://apps.apple.com/us/app/valid-compliment-classmates/id6755367062",
+      "image": "https://validapp.lol/assets/AppIconV2.png",
+      "description": "Valid is a social app for school communities. Answer positive polls, give classmates compliments, earn aura, and connect through chats and Stories.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD",
+        "description": "Free to download with optional in-app purchases."
+      }
+    },
+    {
+      "@type": "WebApplication",
+      "@id": "https://validapp.lol/#web-app",
+      "name": "Valid for Android",
+      "url": "https://validapp.lol/app/",
+      "operatingSystem": "Android",
+      "applicationCategory": "SocialNetworkingApplication",
+      "browserRequirements": "A supported web browser. Can be added to the home screen.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      }
+    }
+  ]
+}</script>
+<script defer src="/assets/public-analytics.js"></script>
 </head>
 <body>
-    <main>
-        <img class="hero-logo" src="assets/valid_logo.png" alt="Valid logo">
-        <section class="hero" aria-labelledby="hero-title">
-            <h1 class="hero-title" id="hero-title">Connect with classmates</h1>
-            <p class="hero-copy">
-                Be kind. Don't bully. Everything is moderated.
-            </p>
-            <div class="cta-row">
-                <a id="primaryCta" class="button" href="https://apps.apple.com/us/app/valid-compliment-classmates/id6755367062">Download on the App Store</a>
-                <a class="button" href="app/?install=1&amp;signup=1">Download on Android</a>
-            </div>
-            <div class="parents-cta">
-                <a class="button button-secondary" href="parents.html">FAQ for Parents</a>
-            </div>
-        </section>
+<div id="valid-simple" aria-label="Valid – Compliment Classmates">
+  <main>
+    <section class="vs-hero">
+      <img class="vs-logo" src="/assets/valid-logo.webp" width="964" height="372" decoding="async" alt="Valid">
+      <h1>Connect with classmates</h1>
+      <p class="vs-intro">Answer positive polls, give classmates compliments,<br>and connect through chats and Stories.</p>
+      <div class="vs-actions">
+        <a class="vs-button" data-analytics-event="download_ios" href="https://apps.apple.com/us/app/valid-compliment-classmates/id6755367062" target="_blank" rel="noopener"><img class="vs-platform-logo" src="/assets/apple.svg" width="21" height="21" alt="" aria-hidden="true"><span>Download on the App Store</span></a>
+        <a class="vs-button" data-analytics-event="download_android" href="https://validapp.lol/app/?install=1&amp;signup=1" target="_blank" rel="noopener"><img class="vs-platform-logo" src="/assets/chrome.svg" width="21" height="21" alt="" aria-hidden="true"><span>Use on Android</span></a>
+      </div>
+      <a class="vs-parent" data-analytics-event="parent_faq_click" href="/parents.html">FAQ for Parents</a>
+      <img class="vs-phones" src="/assets/phone-preview.webp" width="553" height="589" decoding="async" alt="Answer polls about friends and see the compliments classmates give you on Valid.">
+    </section>
+    <section class="vs-info" aria-label="About Valid and common questions">
+      <h2>What is Valid?</h2>
+      <p>Valid — Compliment Classmates is a social app for your school community. Answer polls about friends, see the compliments you receive, earn aura, and stay connected with your school.</p>
+      <details open>
+        <summary>How does Valid handle bullying?</summary>
+        <p>We care deeply about students’ experience on Valid, and we do our best to make it a kind, welcoming place. <strong>Every poll is reviewed by a human moderator before it is published.</strong> Our rules prohibit bullying, harassment, impersonation, and manipulating votes. Students also have reporting and blocking tools to help protect their experience.</p>
+        <p><strong>Our moderation SLA is under 15 minutes.</strong> That is our commitment to a fast moderation turnaround when content needs review.</p>
+        <p>No social app can prevent every harmful interaction, including sarcasm or conflict that carries over from school. If something feels wrong, we want students and parents to report it so we can address it. Read our <a href="/parents.html">parent FAQ</a> for more about safety and support.</p>
+      </details>
+      <details open id="peek-affiliation">
+        <summary>Is Valid affiliated with Peek: Secret Compliment?</summary>
+        <p><strong>No. Valid — Compliment Classmates is not affiliated with Peek: Secret Compliment.</strong> They are separate apps.</p>
+        <p>We’re clarifying this because <a href="https://www.nwahomepage.com/news/featured-stories/what-arkansas-parents-should-know-about-the-compliment-text-targeting-students/" target="_blank" rel="noopener">KNWA/FOX24’s coverage of compliment texts</a> identifies Peek and quotes a school superintendent’s concerns about messages spreading through users’ contact lists. That reporting concerns Peek. For Valid’s own practices, read <a href="/text-messages.html">how our invitations, activity notifications, and opt-outs work</a>.</p>
+      </details>
+      <details open id="data-privacy">
+        <summary>Does Valid buy or sell data?</summary>
+        <p><strong>No. We do not buy or sell data, nor will we ever.</strong> Our <a href="/privacy-policy.html">Privacy Policy</a> explains how we collect, use, and share information to operate Valid.</p>
+      </details>
+      <details><summary>Is Valid free?</summary><p>Valid is free to download, with optional in-app purchases including God Mode. Current prices and benefits are shown in the app.</p></details>
+      <details><summary>Are compliments anonymous?</summary><p>Voter identities are hidden by default, but reveal features can show a voter’s name and profile photo to the recipient. Valid does not offer complete anonymity. Read the <a href="/parents.html">parent FAQ</a> for details.</p></details>
+      <details><summary>Who can use Valid?</summary><p>Valid is for students ages 13 and older. It’s available on the iPhone App Store and as a web app for Android.</p></details>
+      <details><summary>Received a text about Valid?</summary><p>Read <a href="/text-messages.html">why you received a text from Valid</a>, how invitations work, and how to stop messages. For help with a specific message or an opt-out request, <a href="/contact.html">contact support</a>.</p></details>
+    </section>
+  </main>
+  <footer><nav aria-label="Footer"><a href="/parents.html">For Parents</a><a href="/contact.html">Contact</a><a href="/privacy-policy.html">Privacy</a><a href="/terms.html">Terms</a></nav>© 2026 Valid</footer>
+</div>
 
-        <section class="mockup" aria-label="Valid app preview">
-            <img src="assets/phone_mockup.png" alt="Valid app phone mockup">
-        </section>
-
-    </main>
-
-    <footer>
-        <span>&copy; <script>document.write(new Date().getFullYear());</script> Valid. All rights reserved.</span>
-        <span>
-            <a href="parents.html">For Parents</a>
-            &nbsp; &nbsp;
-            <a href="contact.html">Contact</a>
-            &nbsp; &nbsp;
-            <a href="community-guidelines.html">Safety</a>
-            &nbsp; &nbsp;
-            <a href="privacy-policy.html">Privacy</a>
-            &nbsp; &nbsp;
-            <a href="terms.html">Terms</a>
-        </span>
-    </footer>
 </body>
 </html>
