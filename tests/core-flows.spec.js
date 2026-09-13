@@ -462,7 +462,7 @@ test("feed polls open the iOS-style detail and moderation flow", async ({ page }
     await expect(dialog.locator(".feed-detail-option")).toHaveCount(4);
     await expect(dialog.getByText("Jules Rivera").first()).toBeVisible();
     await expect(dialog.locator(".feed-detail-option.selected")).toContainText("Jules Rivera");
-    await expect(dialog.locator('.feed-detail-selection-indicator [data-ui-icon="check"]')).toBeVisible();
+    await expect(dialog.locator(".feed-detail-selection-indicator")).toHaveText("👆");
     await expect(dialog.getByRole("button", { name: "Share poll to Snapchat" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Share poll to Instagram" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Share poll to TikTok" })).toBeVisible();
@@ -551,7 +551,7 @@ test("poll share buttons generate the iOS-style 9:16 photo", async ({ page }) =>
     expect(sharedPoll.artworkPixels).toBeGreaterThan(5_000);
 });
 
-test("poll sharing still creates a photo when CDN artwork cannot be read", async ({ page }) => {
+test("polls without artwork still create a photo", async ({ page }) => {
     await page.addInitScript(() => {
         Object.defineProperty(navigator, "canShare", { configurable: true, value: () => true });
         Object.defineProperty(navigator, "share", {
