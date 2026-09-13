@@ -827,8 +827,8 @@ h3 { font-size: 1.45rem; }
     position: fixed;
     z-index: 30;
     left: 0;
-    bottom: var(--visual-viewport-bottom, 0px);
-    width: var(--visual-viewport-width, 100%);
+    bottom: 0;
+    width: 100%;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     padding: 7px max(12px, env(safe-area-inset-right)) calc(7px + var(--safe-bottom)) max(12px, env(safe-area-inset-left));
