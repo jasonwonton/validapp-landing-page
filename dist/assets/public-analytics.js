@@ -2,7 +2,7 @@
   'use strict';
 
   // Public marketing pages only. Never include account routes or URL payloads.
-  const pages = new Set(['/', '/index.html', '/parents.html', '/text-messages.html', '/contact.html', '/community-guidelines.html', '/privacy-policy.html', '/terms.html']);
+  const pages = new Set(['/', '/index.html', '/parents.html', '/text-messages.html', '/contact.html', '/community-guidelines.html', '/privacy-policy.html', '/terms.html', '/positive-compliments-at-school.html', '/poll-moderation-and-reporting.html', '/manage-valid-texts-and-invitations.html', '/valid-and-peek-parent-guide.html']);
   if (location.hostname !== 'validapp.lol' || !pages.has(location.pathname)) return;
   if (navigator.globalPrivacyControl || navigator.doNotTrack === '1' || window.doNotTrack === '1') return;
 
