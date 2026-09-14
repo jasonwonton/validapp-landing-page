@@ -84,7 +84,12 @@ test('homepage identifies the app and accurately separates its platforms', async
   assert.match(html, /Valid — Compliment Classmates is a social app/);
   assert.match(html, /Every poll is reviewed by a human moderator/);
   assert.match(html, /Our moderation SLA is under 15 minutes/);
-  assert.doesNotMatch(html, /RevueAI|data:image|fonts.googleapis.com/);
+  // RevueAI is the verified legal developer; the public app remains branded Valid.
+  const developer = data['@graph'].find(item => item['@type'] === 'Organization');
+  assert.equal(developer.name, 'RevueAI, Inc');
+  assert.equal(ios.author['@id'], developer['@id']);
+  assert.match(html, /<title>Valid/);
+  assert.doesNotMatch(html, /data:image|fonts.googleapis.com/);
 });
 
 test('homepage resources exist and remain small with a fixed light Jua theme', async () => {
