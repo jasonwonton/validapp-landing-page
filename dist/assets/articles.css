@@ -4,3 +4,10 @@
 #valid-simple .vs-article h2 { margin-top: 32px; }
 #valid-simple .vs-article a { color: #17624d; text-underline-offset: 3px; overflow-wrap: anywhere; }
 #valid-simple .vs-article a:focus-visible { outline: 3px solid #17624d; outline-offset: 4px; }
+
+#valid-simple .vs-article li, #valid-simple .vs-article dd, #valid-simple .vs-article blockquote { font-size:17px; line-height:1.75; color:#536b64; }
+#valid-simple .vs-article li { margin-bottom:12px; }
+#valid-simple .vs-article ul, #valid-simple .vs-article ol { padding-left:24px; }
+#valid-simple .vs-article dt { margin-top:18px; font-size:17px; }
+#valid-simple .vs-article dd { margin:6px 0 0; overflow-wrap:anywhere; }
+#valid-simple .vs-article blockquote { margin:20px 0; padding:16px 20px; border-left:3px solid #38816d; background:#eaf6f0; }
