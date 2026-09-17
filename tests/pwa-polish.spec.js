@@ -12,8 +12,8 @@ test("initial shell parks inactive dialogs until first use", async ({ page }) =>
         elements: document.querySelectorAll("*").length,
         parked: document.querySelectorAll("dialog[data-ui-parked='true']").length,
     }));
-    // The unchanged v87 shell has exactly 450 nodes. Keep that bounded ceiling.
-    expect(shell.elements).toBeLessThanOrEqual(450);
+    // v93 adds one reconnect button to the 450-node shell.
+    expect(shell.elements).toBeLessThanOrEqual(451);
     expect(shell.parked).toBeGreaterThanOrEqual(20);
 
     await page.getByRole("button", { name: "Create an account" }).click();

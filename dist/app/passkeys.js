@@ -1,4 +1,4 @@
-import { authError, checkPasskeyEnvironment, requestAuthChallenge, passkeySecurityFailure } from './auth-reliability.js';
+import { authError, checkPasskeyEnvironment, requestAuthChallenge, passkeySecurityFailure, completePasskeySignInSafely, retryPasskeySetup } from './auth-reliability.js';
 
 function normalizeBase64(value) {
     const standard = value.replace(/-/g, "+").replace(/_/g, "/");
@@ -49,7 +49,7 @@ async function createRegistrationCredential(options) {
             },
         });
     } catch (error) {
-        if (error?.name === "NotAllowedError") throw new Error("Passkey setup was canceled.");
+        if (error?.name === "NotAllowedError") throw authError("passkey_not_completed", "Passkey setup was canceled or timed out. Try again when you’re ready.", "credential_create");
         if (error?.name === "SecurityError") throw await passkeySecurityFailure(options.rpId, 'credential_create');
         throw error;
     }
@@ -64,6 +64,10 @@ async function createRegistrationCredential(options) {
 }
 
 export async function signInWithPasskey(api) {
+    return retryPasskeySetup(() => signInWithPasskeyOnce(api));
+}
+
+async function signInWithPasskeyOnce(api) {
     await checkPasskeyEnvironment();
     if (!passkeysSupported()) {
         throw new Error("This browser does not support passkeys. Try Chrome or Safari on a recent device.");
@@ -90,7 +94,7 @@ export async function signInWithPasskey(api) {
         });
     } catch (error) {
         if (error?.name === "NotAllowedError") {
-            throw new Error("Passkey sign-in was canceled or no matching passkey was available.");
+            throw authError("passkey_not_completed", "Passkey sign-in was canceled, timed out, or no matching passkey was available. Try again and choose the device or password manager where you saved it.", "credential_get");
         }
         if (error?.name === "SecurityError") {
             const localLoopback = ["127.0.0.1", "localhost"].includes(window.location.hostname);
@@ -106,14 +110,14 @@ export async function signInWithPasskey(api) {
         throw new Error("The browser did not return a passkey response.");
     }
 
-    return api.authenticatePasskey({
+    return completePasskeySignInSafely(api, {
         credentialId: bytesToBase64(credential.rawId),
         authenticatorData: bytesToBase64(credential.response.authenticatorData),
         signature: bytesToBase64(credential.response.signature),
         clientDataJSON: bytesToBase64(credential.response.clientDataJSON),
         userHandle: bytesToBase64(credential.response.userHandle),
         correlationId: challenge.correlationId || null,
-    });
+    }, credential.response.userHandle ? new TextDecoder().decode(credential.response.userHandle) : null);
 }
 
 export async function createSignupPasskey(api, username) {
@@ -121,8 +125,10 @@ export async function createSignupPasskey(api, username) {
     if (!passkeysSupported()) {
         throw new Error("This browser does not support passkeys. Try current Chrome, Safari, or Edge.");
     }
-    const options = await requestAuthChallenge(() => api.getWebSignupChallenge(username), 'signup_challenge');
-    return createRegistrationCredential(options);
+    return retryPasskeySetup(async () => {
+        const options = await requestAuthChallenge(() => api.getWebSignupChallenge(username), 'signup_challenge');
+        return createRegistrationCredential(options);
+    });
 }
 
 export async function createAdditionalPasskey(api, userId) {

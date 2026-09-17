@@ -1,3 +1,4 @@
+import { confirmsInvalidSession, fetchSessionRequest } from './session-recovery.js';
 import { permitsAuthRouteRecovery, fetchAuthWithRecovery } from './auth-route-recovery.js';
 import { reportAuthFailure } from './auth-reliability.js';
 import { authStage, authRejectionCode } from './auth-diagnostics.js';
@@ -41,6 +42,8 @@ export class ValidAPI {
         // so no reusable browser credential is stored or exposed to JavaScript.
         this.token = null;
         this.user = null;
+        this.sessionRevision = 0;
+        this.sessionValidation = null;
     }
 
     hasSession() {
@@ -48,21 +51,25 @@ export class ValidAPI {
     }
 
     saveSession(loginResponse) {
+        this.sessionRevision++;
         this.token = loginResponse.access_token || null;
         this.user = loginResponse.user;
     }
 
     clearSession() {
+        this.sessionRevision++;
         this.token = null;
         this.user = null;
     }
 
     async request(path, options = {}) {
+        const requestRevision = this.sessionRevision;
         const includeResponseHeaders = options.includeResponseHeaders === true;
         const silentAuthFailure = options.silentAuthFailure === true;
         const fetchOptions = { ...options };
         delete fetchOptions.includeResponseHeaders;
         delete fetchOptions.silentAuthFailure;
+        delete fetchOptions.validationOnly;
         const headers = new Headers(options.headers || {});
         headers.set("Accept", "application/json");
         if (authStage(path)) {
@@ -77,24 +84,19 @@ export class ValidAPI {
             headers.set("Authorization", `Bearer ${this.token}`);
         }
 
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), options.timeoutMs || 15_000);
-        if (options.signal) {
-            if (options.signal.aborted) controller.abort();
-            else options.signal.addEventListener("abort", () => controller.abort(), { once: true });
-        }
-        let response;
+        let response, payload;
         try {
             const recover = permitsAuthRouteRecovery(path, options, this.baseURL, window.location.origin);
             const fetcher = recover
-                ? (url, init) => fetchAuthWithRecovery(url, init, { signal: options.signal, timeoutMs: options.timeoutMs || 10000 })
+                ? (url, init) => fetchAuthWithRecovery(url, init, { signal: init.signal, timeoutMs: options.timeoutMs || 10000 })
                 : fetch;
-            response = await fetcher(`${this.baseURL}${path}`, {
-                ...fetchOptions,
-                headers,
-                signal: controller.signal,
-                credentials: "include",
-            });
+            // Only safe first-party reads retry. Consumed assertions, SMS, votes,
+            // uploads and other writes are sent once, even if the response is lost.
+            const retry = !recover && this.baseURL === `${window.location.origin}/api/v1`
+                && ['GET', 'HEAD', 'OPTIONS'].includes((options.method || 'GET').toUpperCase());
+            ({ response, payload } = await fetchSessionRequest(`${this.baseURL}${path}`, {
+                ...fetchOptions, headers, credentials: "include",
+            }, { fetcher, retry, signal: options.signal, timeoutMs: options.timeoutMs || 15000 }));
         } catch (error) {
             if (options.signal?.aborted) throw error;
             const failure = ['AbortError', 'TimeoutError'].includes(error.name)
@@ -107,19 +109,35 @@ export class ValidAPI {
                 reportAuthFailure(failure);
             }
             throw failure;
-        } finally {
-            clearTimeout(timeout);
         }
 
         const contentType = response.headers.get("content-type") || "";
-        const payload = contentType.includes("application/json")
-            ? await response.json().catch(() => null)
-            : await response.text().catch(() => "");
-
         if (!response.ok) {
-            if (response.status === 401) {
-                this.clearSession();
-                if (!silentAuthFailure) window.dispatchEvent(new CustomEvent("valid:session-expired"));
+            let sessionInvalid = false;
+            const sessionCheck = path === '/auth/session';
+            if ((sessionCheck || options.auth !== false) && requestRevision === this.sessionRevision
+                && confirmsInvalidSession(response, payload)) {
+                if (sessionCheck) {
+                    sessionInvalid = true;
+                } else {
+                    // A late 401 may belong to an old cookie (including another
+                    // tab's sign-in). Confirm against the current first-party cookie.
+                    let validation = this.sessionValidation;
+                    if (!validation || validation.revision !== requestRevision) {
+                        validation = { revision: requestRevision, promise: this.request('/auth/session', {
+                            auth: false, silentAuthFailure: true, validationOnly: true,
+                        }) };
+                        this.sessionValidation = validation;
+                    }
+                    try { await validation.promise; }
+                    catch (error) { sessionInvalid = error.confirmedSessionInvalid === true; }
+                    finally { if (this.sessionValidation === validation) this.sessionValidation = null; }
+                }
+                sessionInvalid = sessionInvalid && requestRevision === this.sessionRevision;
+                if (sessionInvalid && !options.validationOnly) {
+                    this.clearSession();
+                    if (!silentAuthFailure) window.dispatchEvent(new CustomEvent("valid:session-expired"));
+                }
             }
             const detail = payload?.detail ?? payload;
             const waitSeconds = response.status === 429
@@ -134,7 +152,8 @@ export class ValidAPI {
                 ? detail
                 : detail?.message || `Request failed (${response.status})`;
             const failure = new APIError(message, response.status, detail, waitSeconds);
-            if (authStage(path)) {
+            failure.confirmedSessionInvalid = sessionInvalid;
+            if (authStage(path) && !sessionInvalid) {
                 failure.stage = authStage(path);
                 failure.code = authRejectionCode(response.status, detail);
                 failure.requestId = response.headers.get('x-request-id');

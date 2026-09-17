@@ -579,6 +579,9 @@ function showSignedOut(message = "") {
 }
 
 async function showSignedIn() {
+    sessionRestorePending = false;
+    $("#retrySessionButton").classList.add("hidden");
+    $("#createAccountButton").classList.remove("hidden");
     $("#authView").classList.add("hidden");
     $("#appView").classList.remove("hidden");
     $("#bottomNav").classList.remove("hidden");
@@ -638,7 +641,7 @@ async function showSignedIn() {
             maybePromptForPasskeyEnrollment();
         });
     } catch (error) {
-        if (error.status !== 401) $("#feedStatus").textContent = error.message || "Could not load your profile.";
+        if (!error.confirmedSessionInvalid) $("#feedStatus").textContent = error.message || "Could not load your profile.";
     }
 }
 
@@ -6888,6 +6891,8 @@ function bindEvents() {
     addEventListener("popstate", handleAppPopState);
     addEventListener("offline", updateNetworkStatus);
     addEventListener("online", updateNetworkStatus);
+    addEventListener("online", () => { if (sessionRestorePending) void restoreOrStartAuthFlow(); });
+    $("#retrySessionButton").addEventListener("click", restoreOrStartAuthFlow);
     addEventListener("focus", checkStripeCheckout);
     addEventListener("focus", () => refreshWebPushStatus());
     document.addEventListener("visibilitychange", () => {
@@ -6947,23 +6952,44 @@ if (!passkeysSupported() && !demoMode) {
 }
 
 let authFlowStarted = false;
+let sessionRestorePending = false;
+let sessionRestoreInFlight = false;
 
 async function restoreOrStartAuthFlow() {
-    if (authFlowStarted) return;
+    if (sessionRestoreInFlight || (authFlowStarted && !sessionRestorePending)) return;
     authFlowStarted = true;
     if (!demoMode) {
+        sessionRestoreInFlight = true;
+        const revision = api.sessionRevision;
+        $("#retrySessionButton").disabled = true;
+        $("#createAccountButton").classList.add("hidden");
         $("#authStatus").textContent = "Checking your session…";
         try {
             const session = await api.restoreSession();
+            // An explicit sign-in completed while this older read was in flight.
+            if (api.sessionRevision !== revision) return;
+            if (!session?.user?.id) throw new Error("Incomplete session response");
             api.saveSession(session);
             $("#authStatus").textContent = "";
             await showSignedIn();
             return;
         } catch (error) {
-            api.clearSession();
-            $("#authStatus").textContent = error.status && error.status !== 401
-                ? error.message || "Could not restore your session."
-                : "";
+            if (api.hasSession()) return;
+            if (!error.confirmedSessionInvalid) {
+                sessionRestorePending = true;
+                $("#retrySessionButton").classList.remove("hidden");
+                $("#authStatus").textContent = navigator.onLine === false
+                    ? "You’re offline. Reconnect to restore your session."
+                    : "We couldn’t check your session. Reconnect and try again; you don’t need to create another account.";
+                return;
+            }
+            sessionRestorePending = false;
+            $("#retrySessionButton").classList.add("hidden");
+            $("#createAccountButton").classList.remove("hidden");
+            $("#authStatus").textContent = "";
+        } finally {
+            sessionRestoreInFlight = false;
+            $("#retrySessionButton").disabled = false;
         }
     }
     const authParams = new URLSearchParams(window.location.search);

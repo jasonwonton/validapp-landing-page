@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 async function mount(page, { host = 'validapp.lol', capabilities = true, ua = '' } = {}) {
     await page.route(`https://${host}/**`, async route => {
         const path = new URL(route.request().url()).pathname;
-        if (['/app/auth-route-recovery.js', '/app/auth-reliability.js', '/app/auth-diagnostics.js', '/app/passkeys.js', '/app/api.js'].includes(path)) return route.fulfill({ contentType: 'text/javascript', body: await readFile(new URL(`../${path.slice(1)}`, import.meta.url), 'utf8') });
+        if (['/app/auth-route-recovery.js', '/app/auth-reliability.js', '/app/auth-diagnostics.js', '/app/passkeys.js', '/app/api.js', '/app/session-recovery.js'].includes(path)) return route.fulfill({ contentType: 'text/javascript', body: await readFile(new URL(`../${path.slice(1)}`, import.meta.url), 'utf8') });
         if (path === '/api/v1/client-logs') return route.fulfill({ status: 201, json: {} });
         return route.fulfill({ contentType: 'text/html', body: '<meta name="valid-app-version" content="web-v82"><title>Auth fixture</title>' });
     });
@@ -189,4 +189,26 @@ test('browser challenge reaches alternate API after primary network failure', as
     const result=await page.evaluate(async()=>{const {ValidAPI}=await import('/app/api.js');return new ValidAPI().getPasskeyChallenge();});
     expect(result.rpId).toBe('six7.lol');
     expect(attempted).toEqual(['validapp.lol','api.validappcdn.com']);
+});
+
+
+test('sign-in recovers browser setup once with a fresh challenge and one verification', async ({ page }) => {
+    await mount(page);
+    const result = await page.evaluate(async () => {
+        const { signInWithPasskey } = await import('/app/passkeys.js');
+        let challenges = 0, ceremonies = 0, verifications = 0;
+        navigator.credentials.get = async () => {
+            if (++ceremonies === 1) throw new DOMException('domain check failed', 'SecurityError');
+            return { rawId: new Uint8Array([1]).buffer, response: {
+                authenticatorData: new Uint8Array([2]).buffer, signature: new Uint8Array([3]).buffer,
+                clientDataJSON: new Uint8Array([4]).buffer, userHandle: null,
+            } };
+        };
+        const session = await signInWithPasskey({
+            getPasskeyChallenge: async () => { challenges++; return { challenge: 'AQID', rpId: 'six7.lol' }; },
+            authenticatePasskey: async () => { verifications++; return { user: { id: 'user' } }; },
+        });
+        return { challenges, ceremonies, verifications, user: session.user.id };
+    });
+    expect(result).toEqual({ challenges: 2, ceremonies: 2, verifications: 1, user: 'user' });
 });

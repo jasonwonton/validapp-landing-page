@@ -49,9 +49,9 @@ test('exhaustion is bounded and prevents the outer challenge retry', async () =>
 });
 
 test('overall deadline cancels a stalled fetch', async () => {
-    let calls=0;const start=Date.now();
-    await assert.rejects(fetchAuthWithRecovery(url,{},{timeoutMs:25,fetcher:async(u,o)=>{
-        calls++; return new Promise((resolve,reject)=>o.signal.addEventListener('abort',()=>reject(new DOMException('abort','AbortError'))));
+    let calls=0, elapsed=0;const start=Date.now();
+    await assert.rejects(fetchAuthWithRecovery(url,{},{timeoutMs:25,now:()=>elapsed,fetcher:async(u,o)=>{
+        calls++; return new Promise((resolve,reject)=>o.signal.addEventListener('abort',()=>{elapsed=25;reject(new DOMException('abort','AbortError'));}));
     }}));
     assert.equal(calls,1);assert.ok(Date.now()-start<500);
 });

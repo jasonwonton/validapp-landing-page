@@ -588,11 +588,12 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
         const fulfill = (payload, status = 200) => route.fulfill({
             status,
             contentType: "application/json",
+            headers: status === 401 ? { "WWW-Authenticate": "Bearer", "Access-Control-Expose-Headers": "WWW-Authenticate" } : {},
             body: payload === null ? "" : JSON.stringify(payload),
         });
 
         if (path === "/api/v1/auth/session") {
-            return fulfill({ detail: "signed out" }, 401);
+            return fulfill({ detail: "Authentication required" }, 401);
         }
         if (path === "/api/v1/auth/passkey/authenticate/challenge") {
             return fulfill({
@@ -901,6 +902,9 @@ test("unified search debounces rapid typing into one bounded request pair", asyn
     await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
     await expect.poll(() => requests.some((request) => request.path.endsWith("/feed?limit=20&offset=0"))).toBe(true);
     await expect(page.locator("#feedStatus")).toHaveText("");
+    // Wait for the complete sign-in bootstrap, including its final feed load.
+    // An earlier navigation load can finish before handlePasskeySignIn does.
+    await expect(page.locator("#passkeyButton")).toBeEnabled();
     requests.length = 0;
 
     await page.getByPlaceholder("Search names, questions...").evaluate((input) => {
@@ -994,7 +998,8 @@ for (const sessionAvailable of [true, false]) test(`signup connection loss resto
     await page.route(`${API_ORIGIN}/api/v1/auth/passkey/signup/complete`, route => { completions++; return route.abort('failed'); });
     await page.route(`${API_ORIGIN}/api/v1/auth/session`, route => route.fulfill({
         status: completions && sessionAvailable ? 200 : 401,
-        json: completions && sessionAvailable ? { user: { id: USER_ID, subscribed_user: false } } : { detail: 'signed out' },
+        headers: { "WWW-Authenticate": "Bearer", "Access-Control-Expose-Headers": "WWW-Authenticate" },
+        json: completions && sessionAvailable ? { user: { id: USER_ID, subscribed_user: false } } : { detail: 'Authentication required' },
     }));
     await page.goto('/app/?signin=1');
     await page.getByRole('button', { name: 'Create an account' }).click();
@@ -1277,8 +1282,9 @@ test("real adapter gives rate-limited users an actionable wait time", async ({ p
     await useProductionApiOrigin(page);
     await page.route(`${API_ORIGIN}/api/v1/auth/session`, (route) => route.fulfill({
         status: 401,
+        headers: { "WWW-Authenticate": "Bearer", "Access-Control-Expose-Headers": "WWW-Authenticate" },
         contentType: "application/json",
-        body: JSON.stringify({ detail: "signed out" }),
+        body: JSON.stringify({ detail: "Authentication required" }),
     }));
     await page.route(`${API_ORIGIN}/api/v1/auth/passkey/authenticate/challenge`, (route) => route.fulfill({
         status: 429,

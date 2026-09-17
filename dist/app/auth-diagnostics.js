@@ -1,6 +1,7 @@
 // Shared by the browser and private gateway. Never emit arbitrary server text.
 export function authStage(path) {
     return {
+        '/auth/session': 'session_restore',
         '/auth/passkey/authenticate/challenge': 'signin_challenge',
         '/auth/passkey/authenticate': 'signin_complete',
         '/auth/passkey/signup/challenge': 'signup_challenge',

@@ -251,6 +251,7 @@ test("Android landing handoff requires native installation before signup", async
     });
     await page.route("**/api/v1/**", (route) => route.fulfill({
         status: 401,
+        headers: { "WWW-Authenticate": "Bearer" },
         contentType: "application/json",
         body: JSON.stringify({ detail: "Authentication required" }),
     }));

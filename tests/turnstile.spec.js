@@ -81,7 +81,7 @@ test("signup exchanges a browser challenge token before sending SMS", async ({ p
     await page.route("**/api/v1/**", async (route) => {
         const url = new URL(route.request().url());
         if (url.pathname.endsWith("/auth/session")) {
-            return route.fulfill({ status: 401, contentType: "application/json", body: '{"detail":"signed out"}' });
+            return route.fulfill({ status: 401, headers: { "WWW-Authenticate": "Bearer", "Access-Control-Expose-Headers": "WWW-Authenticate" }, contentType: "application/json", body: '{"detail":"Authentication required"}' });
         }
         if (url.pathname.endsWith("/config")) {
             return route.fulfill({

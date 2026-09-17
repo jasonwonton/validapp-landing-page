@@ -57,6 +57,19 @@ export async function requestAuthChallenge(operation, stage) {
     }
 }
 
+export async function retryPasskeySetup(operation, wait = ms => new Promise(resolve => setTimeout(resolve, ms))) {
+    try { return await operation(); }
+    catch (error) {
+        // Match the native idea of a bounded setup retry. SecurityError happens
+        // before an assertion/attestation is returned. Restart with a fresh
+        // challenge only on browsers known to support this domain relationship.
+        if (error.code !== 'passkey_security' || error.passkeyContext !== 'webauthn.related_origin_supported'
+            || navigator.onLine === false) throw error;
+        await wait(500);
+        return operation();
+    }
+}
+
 export async function completeSignupSafely(api, payload) {
     try {
         const result = await api.completeWebSignup(payload);
@@ -73,6 +86,23 @@ export async function completeSignupSafely(api, payload) {
             if (session?.user?.id === payload.userId) return session;
         } catch (_) { /* Offer an explicit sign-in ceremony below. */ }
         throw authError('signup_result_unknown', 'Your connection dropped while finishing signup. Your account may already exist. Sign in with the passkey you just saved before trying signup again.', 'signup_complete');
+    }
+}
+
+export async function completePasskeySignInSafely(api, assertion, expectedUserId) {
+    try { return await api.authenticatePasskey(assertion); }
+    catch (error) {
+        if (![0, 408, 500, 502, 503, 504].includes(error.status)) throw error;
+        // The assertion can be consumed even if its response was lost. Read the
+        // cookie once instead of replaying it, and require the credential's user
+        // handle to match so an older/different account cannot be mistaken for success.
+        if (/^[a-f0-9-]{36}$/i.test(expectedUserId || '')) {
+            try {
+                const session = await api.restoreSession();
+                if (session?.user?.id === expectedUserId) return session;
+            } catch (_) { /* Keep the cookie; let the user start a fresh ceremony. */ }
+        }
+        throw authError('signin_result_unknown', 'The connection dropped while finishing sign-in. Reconnect to your session or try your passkey again.', 'signin_complete');
     }
 }
 
