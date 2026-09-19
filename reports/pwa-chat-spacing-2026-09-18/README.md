@@ -11,8 +11,10 @@ Compared the native `ChatMessageRows`, `ChatMessageReactionControl`, `ReactionSu
 - Chat list: 12px gaps, 60px avatars, 6px title/preview separation, and native 16×12 content insets accounting for the CSS border.
 - Feed: 8px between outlined rows rather than touching borders.
 
-Verification and production rollout are recorded below after completion. The new dark-mode preview was inspected visually, and DOM measurements confirmed the reaction's 25px height and 4px bubble separation.
+The new dark-mode preview was inspected visually, and DOM measurements confirmed the reaction's 25px height and 4px bubble separation.
 
 Safari correction: WebKit could move a content-visibility:auto feed row between pointerdown and pointerup. A reproduced diagnostic showed those events landing on different cards. Apple browsers now lay out feed cards normally; other browsers retain offscreen rendering optimization. The same diagnostic then passed with a stable tap target.
 
 Validation: 88 chat spacing/scrolling/windowing/media/history browser cases passed across all four configurations. The broader 176-case run passed 175 and exposed the Safari feed tap issue; the final complete eight-case Safari inbox suite passes after the correction. Other browser inbox cases passed. Runtime contracts, performance budget, built release hashes, offline startup and retained previous-release assets pass.
+
+Production: deployment `12f5755e-113e-4d51-aade-307dfad32c70` ACTIVE, 43/43. Frontend source `b6c07c304db2a7f718841c57fff969ae1491e29b`; branch `codex/pwa-chat-spacing-release-20260918`. All 12 other component revisions and the remaining full app specification were preserved. Public release checks passed 62 exact asset hashes, all-browser startup, Chromium offline/API-cache isolation, and previous-release lazy asset retention.

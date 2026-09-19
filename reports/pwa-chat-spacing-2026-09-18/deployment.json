@@ -1,0 +1,19 @@
+{
+  "deployment_id": "12f5755e-113e-4d51-aade-307dfad32c70",
+  "phase": "ACTIVE",
+  "progress": {
+    "success_steps": 43,
+    "total_steps": 43,
+    "error_steps": null
+  },
+  "changed_sources": {
+    "services": {},
+    "static_sites": {
+      "validapp-landing-page": "b6c07c304db2a7f718841c57fff969ae1491e29b"
+    },
+    "workers": {},
+    "jobs": {}
+  },
+  "spec_matches_candidate": true,
+  "active_deployment": "12f5755e-113e-4d51-aade-307dfad32c70"
+}
