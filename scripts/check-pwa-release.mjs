@@ -70,9 +70,17 @@ for (const [name,type,device] of targets) {
         if (origin.startsWith('https:')) await page.getByRole('button', {name:'Create an account'}).waitFor();
         assert.deepEqual(errors, [], `${name} runtime errors`);
         if (type === chromium) {
+            // Registration visibility alone does not mean installation and
+            // activation have finished. Inspect Cache Storage only after the
+            // worker is ready and has claimed this fresh page.
+            await page.evaluate(() => Promise.race([
+                navigator.serviceWorker.ready.then(() => true),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Service worker did not become ready')), 30000)),
+            ]));
             await page.waitForFunction(async () => {
                 const registration = await navigator.serviceWorker.getRegistration();
-                return Boolean(registration?.active);
+                return registration?.active?.state === 'activated'
+                    && navigator.serviceWorker.controller?.state === 'activated';
             });
             const cacheState = await page.evaluate(async () => {
                 const names = (await caches.keys()).filter(name => name.startsWith('valid-web-'));
