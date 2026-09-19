@@ -1,0 +1,2 @@
+PASS all self-hosted game package, model, WASM and worker bytes match the reviewed release
+PASS built player: verified package, native instructions, real worker/model wrist inference, clean close; no camera or score writes

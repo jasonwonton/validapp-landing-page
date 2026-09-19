@@ -23,4 +23,8 @@ Native references: `ChatMessageBubble.swift`, `ChatMediaViewer.swift`, `ChatRoom
 
 This is targeted parity for the requested surfaces, not certification that every iOS screen is identical. Browser rendering and platform glyphs differ; the Memento glyph is a portable vector matching the native angled-photo motif. Multi-item automatic view-once advancement remains separate work. No real user's chat history was changed or deleted during verification, and no live two-account expiry test was performed. The retention integration uses the existing production backend contract and mocked browser cases rather than destructive production test messages.
 
-Production deployment and verification details are recorded after rollout below.
+## Production rollout
+
+Deployment `55699d35-7c94-496c-8dac-df1d9bd69436` is ACTIVE, 43/43 steps. Frontend commit `b93a1144bd25f1ff155521e8c3cbaab56e292a1a`; deployment branch `codex/pwa-chat-parity-release-20260918`. Only the frontend source changed. The full app specification and all 12 other component source revisions were checked against the fresh baseline and preserved.
+
+Live verification passed all 62 release asset hashes, previous-release lazy assets, all-browser startup, Chromium offline shell, and API-cache isolation. The live 67 package, model and worker passed real inference; live Love Flap passed full rounds in Chromium, Firefox and WebKit with local score stubs and no production game writes. See adjacent sanitized logs and deployment receipt. Reopen or refresh the PWA to load web-v97; older static preview pages do not update themselves.

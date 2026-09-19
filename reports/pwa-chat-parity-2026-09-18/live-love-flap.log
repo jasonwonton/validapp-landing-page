@@ -1,0 +1,3 @@
+PASS chromium: exact production sandbox, full Love Flap round, one evidence submission to local stub, native 1080×1920 PNG, clean close; service worker active; no production writes
+PASS firefox: exact production sandbox, full Love Flap round, one evidence submission to local stub, native 1080×1920 PNG, clean close; service worker active; no production writes
+PASS webkit: exact production sandbox, full Love Flap round, one evidence submission to local stub, native 1080×1920 PNG, clean close; WebKit worker disabled; no production writes
