@@ -13,6 +13,44 @@ const demoMode = localDemoAllowed();
 const api = demoMode ? new DemoAPI() : new ValidAPI();
 let chatPresence = null;
 let presenceLifecycle = null;
+let weeklyGame = null;
+let weeklyGameOpening = false;
+let weeklyGameGeneration = 0;
+
+async function refreshWeeklyGame() {
+    if (!api.user?.id || !api.getWeeklyGame) { document.querySelector('#weeklyGameButton')?.remove(); return; }
+    const generation = ++weeklyGameGeneration;
+    try {
+        const result = await api.getWeeklyGame();
+        if (generation !== weeklyGameGeneration || !api.user?.id) return;
+        // Follow the selected weekly release. No separate web feature flag.
+        const available = result.release?.runtime === 'camera-v1';
+        if (!available) { document.querySelector('#weeklyGameButton')?.remove(); return; }
+        let button = document.querySelector('#weeklyGameButton');
+        if (!button) {
+            button = document.createElement('button');
+            button.id = 'weeklyGameButton'; button.className = 'weekly-game-entry'; button.type = 'button';
+            button.innerHTML = '<span class="weekly-game-entry-art" aria-hidden="true"></span><span><small>WEEKLY GAME</small><strong id="weeklyGameTitle"></strong></span><span class="weekly-game-entry-arrow" aria-hidden="true">›</span>';
+            button.addEventListener('click', openWeeklyGame);
+            document.querySelector('#storiesRoot').insertAdjacentElement('afterend', button);
+        }
+        document.querySelector('#weeklyGameTitle').textContent = result.release?.title || 'Weekly game';
+        button.querySelector('.weekly-game-entry-art').innerHTML = result.release?.game_id === '67-challenge' ? '67' : uiIcon('camera');
+    } catch (_) { /* Feed remains usable if the optional game request fails. */ }
+}
+
+async function openWeeklyGame() {
+    if (weeklyGameOpening || !api.user?.id) return;
+    const userId = api.user.id;
+    weeklyGameOpening = true;
+    try {
+        const { createWeeklyGame } = await import('./weekly-game/index.js');
+        if (api.user?.id !== userId) return;
+        weeklyGame ||= createWeeklyGame({ api });
+        await weeklyGame.open();
+    } catch (error) { showToast(error.message || 'Could not open the weekly game.'); }
+    finally { weeklyGameOpening = false; }
+}
 const DEFAULT_FULL_REVEAL_AURA_COST = 1000;
 const TURNSTILE_ACTION = "phone_otp_request";
 const FEED_REACTIONS = [
@@ -567,6 +605,9 @@ function toggleDetailActionMenu(button) {
 }
 
 function showSignedOut(message = "") {
+    weeklyGameGeneration++;
+    weeklyGame?.close();
+    document.querySelector('#weeklyGameButton')?.remove();
     void presenceLifecycle?.stop();
     document.querySelectorAll(".activity-settings-dialog").forEach(dialog => dialog.close());
     clearInterval(state.playLockTimer);
@@ -4007,6 +4048,7 @@ async function loadFeed(reset = false) {
     const hadVisibleFeed = state.feedItems.length > 0;
     if (reset) {
         state.feedOffset = 0;
+        void refreshWeeklyGame();
         state.feedCursor = null;
         if (!hadVisibleFeed) renderFeedSkeleton();
         loadTbhContent();

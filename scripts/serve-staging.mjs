@@ -14,7 +14,7 @@ const MAX_BODY = 12_582_912;
 const MAX_ACTIVE = 64;
 const TTL = 86_400;
 const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
-const FORWARDED = new Set(["accept", "content-type", "authorization", "origin", "user-agent", "last-event-id", "x-client-version", "x-client-platform"]);
+const FORWARDED = new Set(["accept", "content-type", "authorization", "origin", "user-agent", "last-event-id", "x-client-version", "x-client-platform", "x-easter-egg-camera-modes"]);
 
 function equal(a, b) {
     const x = Buffer.from(a || ""), y = Buffer.from(b || "");

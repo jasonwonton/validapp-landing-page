@@ -1,0 +1,2048 @@
+[
+  {
+    "name": "67 crossings",
+    "rules": {
+      "duration_seconds": 10,
+      "countdown_seconds": 5,
+      "reaction_seconds": 3,
+      "instructions": "Just do this on video.",
+      "score_unit": "points",
+      "accent": "#00E5C4",
+      "mechanic": "height_crossings",
+      "steps": [],
+      "instruction_preset": "67-cat",
+      "music_preset": "67-bounce",
+      "instruction_asset": null,
+      "music_asset": null
+    },
+    "samples": [
+      [
+        0,
+        2500,
+        5600,
+        7500,
+        4400
+      ],
+      [
+        80,
+        2500,
+        4400,
+        7500,
+        5600
+      ],
+      [
+        160,
+        2500,
+        5600,
+        7500,
+        4400
+      ]
+    ],
+    "expected": 2
+  },
+  {
+    "name": "three target poses",
+    "rules": {
+      "duration_seconds": 10,
+      "countdown_seconds": 5,
+      "reaction_seconds": 3,
+      "instructions": "Hands in the boxes. Up, down, repeat!",
+      "score_unit": "points",
+      "accent": "#FFB84D",
+      "mechanic": "pose_sequence",
+      "steps": [
+        {
+          "prompt": "Hands up!",
+          "hold_ms": 160,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 5500,
+              "y_max": 8500
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 5500,
+              "y_max": 8500
+            }
+          ]
+        },
+        {
+          "prompt": "Hands down!",
+          "hold_ms": 160,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 1500,
+              "y_max": 4500
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 1500,
+              "y_max": 4500
+            }
+          ]
+        }
+      ],
+      "instruction_preset": "none",
+      "music_preset": "67-bounce",
+      "instruction_asset": null,
+      "music_asset": null
+    },
+    "samples": [
+      [
+        0,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        80,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        160,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        240,
+        2500,
+        3000,
+        7500,
+        3000
+      ],
+      [
+        320,
+        2500,
+        3000,
+        7500,
+        3000
+      ],
+      [
+        400,
+        2500,
+        3000,
+        7500,
+        3000
+      ],
+      [
+        480,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        560,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        640,
+        2500,
+        7000,
+        7500,
+        7000
+      ]
+    ],
+    "expected": 3
+  },
+  {
+    "name": "holding a pose cannot farm",
+    "rules": {
+      "duration_seconds": 10,
+      "countdown_seconds": 5,
+      "reaction_seconds": 3,
+      "instructions": "Hands in the boxes. Up, down, repeat!",
+      "score_unit": "points",
+      "accent": "#FFB84D",
+      "mechanic": "pose_sequence",
+      "steps": [
+        {
+          "prompt": "Hands up!",
+          "hold_ms": 160,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 5500,
+              "y_max": 8500
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 5500,
+              "y_max": 8500
+            }
+          ]
+        },
+        {
+          "prompt": "Hands down!",
+          "hold_ms": 160,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 1500,
+              "y_max": 4500
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 1500,
+              "y_max": 4500
+            }
+          ]
+        }
+      ],
+      "instruction_preset": "none",
+      "music_preset": "67-bounce",
+      "instruction_asset": null,
+      "music_asset": null
+    },
+    "samples": [
+      [
+        0,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        80,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        160,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        240,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        320,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        400,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        480,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        560,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        640,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        720,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        800,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        880,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        960,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        1040,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        1120,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        1200,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        1280,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        1360,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        1440,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        1520,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        1600,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        1680,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        1760,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        1840,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        1920,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        2000,
+        2500,
+        7000,
+        7500,
+        7000
+      ]
+    ],
+    "expected": 1
+  },
+  {
+    "name": "tracking loss does not release prior pose",
+    "rules": {
+      "duration_seconds": 10,
+      "countdown_seconds": 5,
+      "reaction_seconds": 3,
+      "instructions": "Hands in the boxes. Up, down, repeat!",
+      "score_unit": "points",
+      "accent": "#FFB84D",
+      "mechanic": "pose_sequence",
+      "steps": [
+        {
+          "prompt": "Hands up!",
+          "hold_ms": 160,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 5500,
+              "y_max": 8500
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 5500,
+              "y_max": 8500
+            }
+          ]
+        },
+        {
+          "prompt": "Hands down!",
+          "hold_ms": 160,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 1500,
+              "y_max": 4500
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 1500,
+              "y_max": 4500
+            }
+          ]
+        }
+      ],
+      "instruction_preset": "none",
+      "music_preset": "67-bounce",
+      "instruction_asset": null,
+      "music_asset": null
+    },
+    "samples": [
+      [
+        0,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        80,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        160,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        240
+      ],
+      [
+        800,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        880,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        960,
+        2500,
+        7000,
+        7500,
+        7000
+      ]
+    ],
+    "expected": 1
+  },
+  {
+    "name": "tracking gap breaks an unfinished hold",
+    "rules": {
+      "duration_seconds": 10,
+      "countdown_seconds": 5,
+      "reaction_seconds": 3,
+      "instructions": "Hands in the boxes. Up, down, repeat!",
+      "score_unit": "points",
+      "accent": "#FFB84D",
+      "mechanic": "pose_sequence",
+      "steps": [
+        {
+          "prompt": "Hands up!",
+          "hold_ms": 160,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 5500,
+              "y_max": 8500
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 5500,
+              "y_max": 8500
+            }
+          ]
+        },
+        {
+          "prompt": "Hands down!",
+          "hold_ms": 160,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 1500,
+              "y_max": 4500
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 1500,
+              "y_max": 4500
+            }
+          ]
+        }
+      ],
+      "instruction_preset": "none",
+      "music_preset": "67-bounce",
+      "instruction_asset": null,
+      "music_asset": null
+    },
+    "samples": [
+      [
+        0,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        600,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        680,
+        2500,
+        7000,
+        7500,
+        7000
+      ]
+    ],
+    "expected": 0
+  },
+  {
+    "name": "hands must stay inside for full hold",
+    "rules": {
+      "duration_seconds": 10,
+      "countdown_seconds": 5,
+      "reaction_seconds": 3,
+      "instructions": "Hands in the boxes. Up, down, repeat!",
+      "score_unit": "points",
+      "accent": "#FFB84D",
+      "mechanic": "pose_sequence",
+      "steps": [
+        {
+          "prompt": "Hands up!",
+          "hold_ms": 160,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 5500,
+              "y_max": 8500
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 5500,
+              "y_max": 8500
+            }
+          ]
+        },
+        {
+          "prompt": "Hands down!",
+          "hold_ms": 160,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 1500,
+              "y_max": 4500
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 1500,
+              "y_max": 4500
+            }
+          ]
+        }
+      ],
+      "instruction_preset": "none",
+      "music_preset": "67-bounce",
+      "instruction_asset": null,
+      "music_asset": null
+    },
+    "samples": [
+      [
+        0,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        80,
+        2500,
+        3000,
+        7500,
+        3000
+      ],
+      [
+        160,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        240,
+        2500,
+        7000,
+        7500,
+        7000
+      ]
+    ],
+    "expected": 0
+  },
+  {
+    "name": "scuba anchor and wave",
+    "rules": {
+      "duration_seconds": 10,
+      "countdown_seconds": 5,
+      "reaction_seconds": 3,
+      "instructions": "Left hand stays up. Wave your right hand between the boxes.",
+      "score_unit": "points",
+      "accent": "#49C7FF",
+      "mechanic": "pose_sequence",
+      "steps": [
+        {
+          "prompt": "Wave in",
+          "hold_ms": 160,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 1500,
+              "x_max": 4500,
+              "y_min": 6000,
+              "y_max": 8500
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5000,
+              "x_max": 6800,
+              "y_min": 3000,
+              "y_max": 6000
+            }
+          ]
+        },
+        {
+          "prompt": "Wave out",
+          "hold_ms": 160,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 1500,
+              "x_max": 4500,
+              "y_min": 6000,
+              "y_max": 8500
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 7500,
+              "x_max": 9800,
+              "y_min": 3000,
+              "y_max": 6000
+            }
+          ]
+        }
+      ],
+      "instruction_preset": "none",
+      "music_preset": "67-bounce",
+      "instruction_asset": null,
+      "music_asset": null
+    },
+    "samples": [
+      [
+        0,
+        3000,
+        7500,
+        6000,
+        4500
+      ],
+      [
+        80,
+        3000,
+        7500,
+        6000,
+        4500
+      ],
+      [
+        160,
+        3000,
+        7500,
+        6000,
+        4500
+      ],
+      [
+        240,
+        3000,
+        7500,
+        8500,
+        4500
+      ],
+      [
+        320,
+        3000,
+        7500,
+        8500,
+        4500
+      ],
+      [
+        400,
+        3000,
+        7500,
+        8500,
+        4500
+      ]
+    ],
+    "expected": 2
+  },
+  {
+    "name": "scuba missing anchor",
+    "rules": {
+      "duration_seconds": 10,
+      "countdown_seconds": 5,
+      "reaction_seconds": 3,
+      "instructions": "Left hand stays up. Wave your right hand between the boxes.",
+      "score_unit": "points",
+      "accent": "#49C7FF",
+      "mechanic": "pose_sequence",
+      "steps": [
+        {
+          "prompt": "Wave in",
+          "hold_ms": 160,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 1500,
+              "x_max": 4500,
+              "y_min": 6000,
+              "y_max": 8500
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5000,
+              "x_max": 6800,
+              "y_min": 3000,
+              "y_max": 6000
+            }
+          ]
+        },
+        {
+          "prompt": "Wave out",
+          "hold_ms": 160,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 1500,
+              "x_max": 4500,
+              "y_min": 6000,
+              "y_max": 8500
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 7500,
+              "x_max": 9800,
+              "y_min": 3000,
+              "y_max": 6000
+            }
+          ]
+        }
+      ],
+      "instruction_preset": "none",
+      "music_preset": "67-bounce",
+      "instruction_asset": null,
+      "music_asset": null
+    },
+    "samples": [
+      [
+        0,
+        3000,
+        2500,
+        6000,
+        4500
+      ],
+      [
+        80,
+        3000,
+        2500,
+        6000,
+        4500
+      ],
+      [
+        160,
+        3000,
+        2500,
+        6000,
+        4500
+      ],
+      [
+        240,
+        3000,
+        2500,
+        8500,
+        4500
+      ],
+      [
+        320,
+        3000,
+        2500,
+        8500,
+        4500
+      ],
+      [
+        400,
+        3000,
+        2500,
+        8500,
+        4500
+      ]
+    ],
+    "expected": 0
+  },
+  {
+    "name": "single target requires exit and return",
+    "rules": {
+      "duration_seconds": 10,
+      "countdown_seconds": 5,
+      "reaction_seconds": 3,
+      "instructions": "Hands in the boxes. Up, down, repeat!",
+      "score_unit": "points",
+      "accent": "#FFB84D",
+      "mechanic": "pose_sequence",
+      "steps": [
+        {
+          "prompt": "Hands up!",
+          "hold_ms": 160,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 5500,
+              "y_max": 8500
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 5500,
+              "y_max": 8500
+            }
+          ]
+        }
+      ],
+      "instruction_preset": "none",
+      "music_preset": "67-bounce",
+      "instruction_asset": null,
+      "music_asset": null
+    },
+    "samples": [
+      [
+        0,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        80,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        160,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        240,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        320,
+        2500,
+        3000,
+        7500,
+        3000
+      ],
+      [
+        400,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        480,
+        2500,
+        7000,
+        7500,
+        7000
+      ],
+      [
+        560,
+        2500,
+        7000,
+        7500,
+        7000
+      ]
+    ],
+    "expected": 2
+  },
+  {
+    "name": "target boundaries included",
+    "rules": {
+      "duration_seconds": 10,
+      "countdown_seconds": 5,
+      "reaction_seconds": 3,
+      "instructions": "Hands in the boxes. Up, down, repeat!",
+      "score_unit": "points",
+      "accent": "#FFB84D",
+      "mechanic": "pose_sequence",
+      "steps": [
+        {
+          "prompt": "Hands up!",
+          "hold_ms": 160,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 5500,
+              "y_max": 8500
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 5500,
+              "y_max": 8500
+            }
+          ]
+        },
+        {
+          "prompt": "Hands down!",
+          "hold_ms": 160,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 1500,
+              "y_max": 4500
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 1500,
+              "y_max": 4500
+            }
+          ]
+        }
+      ],
+      "instruction_preset": "none",
+      "music_preset": "67-bounce",
+      "instruction_asset": null,
+      "music_asset": null
+    },
+    "samples": [
+      [
+        0,
+        500,
+        5500,
+        5500,
+        8500
+      ],
+      [
+        80,
+        500,
+        5500,
+        5500,
+        8500
+      ],
+      [
+        160,
+        500,
+        5500,
+        5500,
+        8500
+      ]
+    ],
+    "expected": 1
+  },
+  {
+    "name": "arm jacks full cycles",
+    "rules": {
+      "duration_seconds": 10,
+      "countdown_seconds": 5,
+      "reaction_seconds": 3,
+      "instructions": "Hands down. Reach up. Back down.",
+      "score_unit": "jacks",
+      "accent": "#95F16C",
+      "mechanic": "pose_cycle",
+      "steps": [
+        {
+          "prompt": "Hands down!",
+          "hold_ms": 80,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 0,
+              "y_max": 4000
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 0,
+              "y_max": 4000
+            }
+          ]
+        },
+        {
+          "prompt": "Hands up!",
+          "hold_ms": 80,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 7000,
+              "y_max": 10000
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 7000,
+              "y_max": 10000
+            }
+          ]
+        },
+        {
+          "prompt": "Hands down!",
+          "hold_ms": 80,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 0,
+              "y_max": 4000
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 0,
+              "y_max": 4000
+            }
+          ]
+        }
+      ],
+      "instruction_preset": "none",
+      "music_preset": "67-bounce",
+      "instruction_asset": null,
+      "music_asset": null
+    },
+    "samples": [
+      [
+        0,
+        2500,
+        3000,
+        7500,
+        3000
+      ],
+      [
+        80,
+        2500,
+        3000,
+        7500,
+        3000
+      ],
+      [
+        200,
+        2500,
+        8000,
+        7500,
+        8000
+      ],
+      [
+        280,
+        2500,
+        8000,
+        7500,
+        8000
+      ],
+      [
+        400,
+        2500,
+        3000,
+        7500,
+        3000
+      ],
+      [
+        480,
+        2500,
+        3000,
+        7500,
+        3000
+      ],
+      [
+        600,
+        2500,
+        8000,
+        7500,
+        8000
+      ],
+      [
+        680,
+        2500,
+        8000,
+        7500,
+        8000
+      ],
+      [
+        800,
+        2500,
+        3000,
+        7500,
+        3000
+      ],
+      [
+        880,
+        2500,
+        3000,
+        7500,
+        3000
+      ]
+    ],
+    "expected": 2
+  },
+  {
+    "name": "arm jacks half cycle",
+    "rules": {
+      "duration_seconds": 10,
+      "countdown_seconds": 5,
+      "reaction_seconds": 3,
+      "instructions": "Hands down. Reach up. Back down.",
+      "score_unit": "jacks",
+      "accent": "#95F16C",
+      "mechanic": "pose_cycle",
+      "steps": [
+        {
+          "prompt": "Hands down!",
+          "hold_ms": 80,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 0,
+              "y_max": 4000
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 0,
+              "y_max": 4000
+            }
+          ]
+        },
+        {
+          "prompt": "Hands up!",
+          "hold_ms": 80,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 7000,
+              "y_max": 10000
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 7000,
+              "y_max": 10000
+            }
+          ]
+        },
+        {
+          "prompt": "Hands down!",
+          "hold_ms": 80,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 0,
+              "y_max": 4000
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 0,
+              "y_max": 4000
+            }
+          ]
+        }
+      ],
+      "instruction_preset": "none",
+      "music_preset": "67-bounce",
+      "instruction_asset": null,
+      "music_asset": null
+    },
+    "samples": [
+      [
+        0,
+        2500,
+        3000,
+        7500,
+        3000
+      ],
+      [
+        80,
+        2500,
+        3000,
+        7500,
+        3000
+      ],
+      [
+        200,
+        2500,
+        8000,
+        7500,
+        8000
+      ],
+      [
+        280,
+        2500,
+        8000,
+        7500,
+        8000
+      ]
+    ],
+    "expected": 0
+  },
+  {
+    "name": "arm jacks held pose",
+    "rules": {
+      "duration_seconds": 10,
+      "countdown_seconds": 5,
+      "reaction_seconds": 3,
+      "instructions": "Hands down. Reach up. Back down.",
+      "score_unit": "jacks",
+      "accent": "#95F16C",
+      "mechanic": "pose_cycle",
+      "steps": [
+        {
+          "prompt": "Hands down!",
+          "hold_ms": 80,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 0,
+              "y_max": 4000
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 0,
+              "y_max": 4000
+            }
+          ]
+        },
+        {
+          "prompt": "Hands up!",
+          "hold_ms": 80,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 7000,
+              "y_max": 10000
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 7000,
+              "y_max": 10000
+            }
+          ]
+        },
+        {
+          "prompt": "Hands down!",
+          "hold_ms": 80,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 0,
+              "y_max": 4000
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 0,
+              "y_max": 4000
+            }
+          ]
+        }
+      ],
+      "instruction_preset": "none",
+      "music_preset": "67-bounce",
+      "instruction_asset": null,
+      "music_asset": null
+    },
+    "samples": [
+      [
+        0,
+        2500,
+        3000,
+        7500,
+        3000
+      ],
+      [
+        80,
+        2500,
+        3000,
+        7500,
+        3000
+      ],
+      [
+        200,
+        2500,
+        3000,
+        7500,
+        3000
+      ],
+      [
+        280,
+        2500,
+        3000,
+        7500,
+        3000
+      ],
+      [
+        400,
+        2500,
+        3000,
+        7500,
+        3000
+      ],
+      [
+        480,
+        2500,
+        3000,
+        7500,
+        3000
+      ]
+    ],
+    "expected": 0
+  },
+  {
+    "name": "arm jacks must begin down",
+    "rules": {
+      "duration_seconds": 10,
+      "countdown_seconds": 5,
+      "reaction_seconds": 3,
+      "instructions": "Hands down. Reach up. Back down.",
+      "score_unit": "jacks",
+      "accent": "#95F16C",
+      "mechanic": "pose_cycle",
+      "steps": [
+        {
+          "prompt": "Hands down!",
+          "hold_ms": 80,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 0,
+              "y_max": 4000
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 0,
+              "y_max": 4000
+            }
+          ]
+        },
+        {
+          "prompt": "Hands up!",
+          "hold_ms": 80,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 7000,
+              "y_max": 10000
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 7000,
+              "y_max": 10000
+            }
+          ]
+        },
+        {
+          "prompt": "Hands down!",
+          "hold_ms": 80,
+          "targets": [
+            {
+              "hand": "screen_left",
+              "x_min": 500,
+              "x_max": 4500,
+              "y_min": 0,
+              "y_max": 4000
+            },
+            {
+              "hand": "screen_right",
+              "x_min": 5500,
+              "x_max": 9500,
+              "y_min": 0,
+              "y_max": 4000
+            }
+          ]
+        }
+      ],
+      "instruction_preset": "none",
+      "music_preset": "67-bounce",
+      "instruction_asset": null,
+      "music_asset": null
+    },
+    "samples": [
+      [
+        0,
+        2500,
+        8000,
+        7500,
+        8000
+      ],
+      [
+        80,
+        2500,
+        8000,
+        7500,
+        8000
+      ],
+      [
+        200,
+        2500,
+        3000,
+        7500,
+        3000
+      ],
+      [
+        280,
+        2500,
+        3000,
+        7500,
+        3000
+      ],
+      [
+        400,
+        2500,
+        8000,
+        7500,
+        8000
+      ],
+      [
+        480,
+        2500,
+        8000,
+        7500,
+        8000
+      ],
+      [
+        600,
+        2500,
+        3000,
+        7500,
+        3000
+      ],
+      [
+        680,
+        2500,
+        3000,
+        7500,
+        3000
+      ]
+    ],
+    "expected": 1
+  },
+  {
+    "name": "30hz-fast-crossings",
+    "rules": {
+      "duration_seconds": 10,
+      "countdown_seconds": 5,
+      "reaction_seconds": 3,
+      "instructions": "Just do this on video.",
+      "score_unit": "points",
+      "accent": "#00E5C4",
+      "mechanic": "height_crossings",
+      "steps": [],
+      "instruction_preset": "67-cat",
+      "music_preset": "67-bounce",
+      "instruction_asset": null,
+      "music_asset": null
+    },
+    "samples": [
+      [
+        0,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        33,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        67,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        100,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        133,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        167,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        200,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        233,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        267,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        300,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        333,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        367,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        400,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        433,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        467,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        500,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        533,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        567,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        600,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        633,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        667,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        700,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        733,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        767,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        800,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        833,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        867,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        900,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        933,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        967,
+        2500,
+        3000,
+        7500,
+        7000
+      ]
+    ],
+    "expected": 29
+  },
+  {
+    "name": "30hz-tracking-reset",
+    "rules": {
+      "duration_seconds": 10,
+      "countdown_seconds": 5,
+      "reaction_seconds": 3,
+      "instructions": "Just do this on video.",
+      "score_unit": "points",
+      "accent": "#00E5C4",
+      "mechanic": "height_crossings",
+      "steps": [],
+      "instruction_preset": "67-cat",
+      "music_preset": "67-bounce",
+      "instruction_asset": null,
+      "music_asset": null
+    },
+    "samples": [
+      [
+        0,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        33,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        67,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        100,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        133,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        167,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        200,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        233,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        267,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        300,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        333
+      ],
+      [
+        367,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        400,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        433,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        467,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        500,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        533,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        567,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        600,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        633,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        667,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        700,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        733,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        767,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        800,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        833,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        867,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        900,
+        2500,
+        3000,
+        7500,
+        7000
+      ],
+      [
+        933,
+        2500,
+        7000,
+        7500,
+        3000
+      ],
+      [
+        967,
+        2500,
+        3000,
+        7500,
+        7000
+      ]
+    ],
+    "expected": 27
+  }
+]

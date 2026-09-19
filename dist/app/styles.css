@@ -1794,3 +1794,10 @@ body.detail-screen-open { overflow: hidden; }
 .question-image-placeholder svg { width: 32px; height: 32px; }
 .question-image-placeholder strong { font-size: 15px; }
 .question-aura-value img { order: 1; }
+
+.weekly-game-entry { display:flex; align-items:center; gap:14px; width:100%; padding:14px 16px; margin:4px 0 16px; border:1px solid var(--outline); border-radius:20px; background:var(--surface-secondary); color:var(--ink); text-align:left; cursor:pointer; }
+.weekly-game-entry-art { display:grid; place-items:center; flex:none; width:52px; height:52px; border-radius:15px; background:#00e5c4; color:#00342d; font:30px Jua,system-ui,sans-serif; transform:rotate(-5deg); }
+.weekly-game-entry>span:nth-child(2) { flex:1; min-width:0; }
+.weekly-game-entry small { display:block; color:var(--muted); font-size:10px; letter-spacing:1.3px; margin-bottom:4px; }
+.weekly-game-entry strong { display:block; font:20px Jua,system-ui,sans-serif; }
+.weekly-game-entry-arrow { color:var(--muted); font-size:30px; }

@@ -174,6 +174,20 @@ export class ValidAPI {
         }
     }
 
+    getWeeklyGame(options = {}) {
+        return this.request('/easter-egg/featured', {
+            ...options, headers: { 'X-Easter-Egg-Camera-Modes': 'hand-package-v1' },
+        });
+    }
+
+    unlockWeeklyGame(options = {}) {
+        return this.request('/easter-egg/unlock', { ...options, method: 'POST' });
+    }
+
+    getWeeklyGameLeaderboard(releaseId, options = {}) {
+        return this.request(`/easter-egg/releases/${encodeURIComponent(releaseId)}/leaderboard`, options);
+    }
+
     getPasskeyChallenge() {
         return this.request("/auth/passkey/authenticate/challenge", { auth: false });
     }

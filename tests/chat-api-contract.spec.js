@@ -74,7 +74,12 @@ test('unintercepted upload transport preserves signed headers and exact bytes', 
         expect(uploads[0].body).toBe('photo bytes');
         expect(uploads[0].headers['content-type']).toBe('image/jpeg');
         expect(uploads[0].headers['cache-control']).toBe('private, max-age=900');
-    } finally { await new Promise(resolve => server.close(resolve)); }
+    } finally {
+        // Assertions above cover the completed upload. Browsers can keep an
+        // idle HTTP connection alive beyond the test's teardown deadline.
+        server.closeAllConnections();
+        await new Promise(resolve => server.close(resolve));
+    }
 });
 
 test('both Memento photos upload through real XHR under the production CSP', async ({ page }) => {

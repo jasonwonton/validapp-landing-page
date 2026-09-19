@@ -23,6 +23,7 @@ const CONTENT_TYPES = new Map([
     [".webmanifest", "application/manifest+json; charset=utf-8"],
     [".webp", "image/webp"],
     [".woff2", "font/woff2"],
+    [".wasm", "application/wasm"],
 ]);
 
 async function readAppHeaders(root) {

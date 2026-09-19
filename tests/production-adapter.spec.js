@@ -813,6 +813,8 @@ test("real adapter signs in, authenticates API calls, and revokes logout", async
         clientDataJSON: "CQo=",
         correlationId: "contract-correlation",
     });
+    // The signed-in shell appears before its asynchronous profile read starts.
+    await expect.poll(() => requests.some((request) => request.path.endsWith("/profile"))).toBe(true);
     const profileRequest = requests.find((request) => request.path.endsWith("/profile"));
     expect(profileRequest.authorization).toBe("Bearer session-token");
 
