@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 async function mount(page, { host = 'validapp.lol', capabilities = true, ua = '' } = {}) {
     await page.route(`https://${host}/**`, async route => {
         const path = new URL(route.request().url()).pathname;
-        if (['/app/auth-route-recovery.js', '/app/auth-reliability.js', '/app/auth-diagnostics.js', '/app/passkeys.js', '/app/api.js', '/app/session-recovery.js'].includes(path)) return route.fulfill({ contentType: 'text/javascript', body: await readFile(new URL(`../${path.slice(1)}`, import.meta.url), 'utf8') });
+        if (['/app/auth-route-recovery.js', '/app/auth-reliability.js', '/app/auth-diagnostics.js', '/app/passkeys.js', '/app/api.js', '/app/session-recovery.js', '/app/phone-verification.js'].includes(path)) return route.fulfill({ contentType: 'text/javascript', body: await readFile(new URL(`../${path.slice(1)}`, import.meta.url), 'utf8') });
         if (path === '/api/v1/client-logs') return route.fulfill({ status: 201, json: {} });
         return route.fulfill({ contentType: 'text/html', body: '<meta name="valid-app-version" content="web-v82"><title>Auth fixture</title>' });
     });

@@ -27,11 +27,34 @@ for (const mode of ['network', 'unexpected401', 'serverError']) test(`startup ${
 });
 
 test('confirmed missing cookie still permits normal signup', async ({ page }) => {
+    // Test session recovery with an explicitly supported authenticator. Linux
+    // WebKit does not expose the host's native WebAuthn implementation.
+    await page.addInitScript(() => {
+        Object.defineProperty(window, 'PublicKeyCredential', { configurable: true, value: class {} });
+        Object.defineProperty(navigator, 'credentials', { configurable: true, value: {
+            get: async () => { throw new Error('No ceremony expected'); },
+            create: async () => { throw new Error('No ceremony expected'); },
+        } });
+    });
     await page.route('**/api/v1/**', route => route.fulfill({ status: 401,
         headers: { 'WWW-Authenticate': 'Bearer' }, json: { detail: 'Authentication required' } }));
     await page.goto('/app/');
     await expect(page.locator('#signupDialog')).toBeVisible();
     await expect(page.locator('#retrySessionButton')).toBeHidden();
+});
+
+test('missing cookie on an unsupported browser shows help without starting signup', async ({ page }) => {
+    await page.addInitScript(() => {
+        Object.defineProperty(window, 'PublicKeyCredential', { configurable: true, value: undefined });
+    });
+    await page.route('**/api/v1/**', route => route.fulfill({ status: 401,
+        headers: { 'WWW-Authenticate': 'Bearer' }, json: { detail: 'Authentication required' } }));
+    await page.goto('/app/');
+    await expect(page.locator('#authBrowserHelp')).toBeVisible();
+    await expect(page.locator('#authStatus')).toContainText('cannot use passkeys');
+    await expect(page.locator('#signupDialog')).toBeHidden();
+    await expect(page.locator('#retrySessionButton')).toBeHidden();
+    await expect(page.locator('#createAccountButton')).toBeVisible();
 });
 
 test('signup setup retry obtains a fresh challenge after browser SecurityError', async ({ page }) => {
