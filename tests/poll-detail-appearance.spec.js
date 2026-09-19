@@ -46,7 +46,7 @@ for (const theme of ['light', 'dark']) for (const width of [320, 393, 440]) {
         const secondRow = await detail.locator('.feed-detail-option').nth(2).boundingBox();
         expect(badge.y + badge.height + 4).toBeLessThanOrEqual(secondRow.y);
         const art = await detail.locator('.feed-detail-art').boundingBox();
-        expect(art.height).toBeLessThanOrEqual(281);
+        expect(art.width).toBeCloseTo(width - 48, 0);
         expect(art.width).toBeCloseTo(art.height, 0);
         expect(await detail.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
         for (const name of ['Close', 'More poll actions', 'Share poll to Snapchat', 'Share poll to Instagram', 'Share poll to TikTok']) {

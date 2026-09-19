@@ -4311,6 +4311,11 @@ function renderPlay() {
             <button class="play-action-button" data-skip="${question.id}" type="button" ${remainingSkips < 1 ? "disabled" : ""}>${uiIcon("forward")} Skip (${remainingSkips})</button>
         </div>
     </article>`;
+    // Short screens scroll the full poll; each new question starts at its prompt.
+    if (card.dataset.questionId !== String(question.id)) {
+        card.scrollTop = 0;
+        card.dataset.questionId = String(question.id);
+    }
 }
 
 async function loadPlay() {

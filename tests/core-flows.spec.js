@@ -692,7 +692,7 @@ test("play answers a poll and advances", async ({ page }) => {
         const button = page.getByRole("button", { name });
         await expect(button).toBeVisible();
     }
-    const playCardBox = await page.locator("#playCard .play-card").boundingBox();
+    const playCardBox = await page.locator("#playCard").boundingBox();
     const bottomNavBox = await page.locator("#bottomNav").boundingBox();
     expect(playCardBox.y + playCardBox.height).toBeLessThanOrEqual(bottomNavBox.y + 1);
     await expect(page.getByText("Who would survive longest on a deserted island?")).toBeVisible();
