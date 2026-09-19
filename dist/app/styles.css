@@ -1687,7 +1687,7 @@ body.detail-screen-open { overflow: hidden; }
 .activity-settings-dialog input:disabled { opacity: .5; cursor: wait; }
 
 /* Inbox and opened-content geometry from native Feed / Ask / TBH views. */
-#feedList { gap: 0; }
+#feedList { gap: 8px; }
 #feedList > .feed-card, #feedList > .tbh-row, #feedList > .anonymous-question-row, #feedList > .anonymous-reply-row { padding: 12px; border: 3px solid var(--outline); border-radius: 12px; background: var(--white); box-shadow: 0 2px 4px rgba(0,0,0,.1); }
 #feedList > .feed-card { gap: 8px; min-height: 80px; }
 #feedList .reaction-control { top: 8px; right: 0; }
@@ -1809,3 +1809,8 @@ body.detail-screen-open { overflow: hidden; }
 #activityStatusButton .settings-icon { color: var(--dark-teal); }
 #activityStatusButton .settings-icon .ui-icon { width: 25px; height: 25px; }
 #activityStatusButton small { font-size: 12px; }
+/* WebKit can reposition content-visibility:auto cards between pointerdown and
+   pointerup after scrolling. Keep feed hit targets stable on Apple browsers. */
+@supports (-webkit-touch-callout: none) or (background: -webkit-named-image(i)) {
+    #feedList > [data-list-key] { content-visibility: visible; contain-intrinsic-size: none; }
+}

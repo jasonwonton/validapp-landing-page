@@ -660,3 +660,28 @@
 .chat-ephemeral-progress::-webkit-progress-value { background: #fff; }
 .chat-ephemeral-progress::-moz-progress-bar { background: #fff; }
 .chat-media-viewer [hidden] { display: none; }
+
+/* Native rhythm: grouped messages 2pt, new sequences 10pt; reaction footer 4pt. */
+.chat-timeline { gap: 0; }
+.chat-timeline > .chat-message { margin-top: 2px; row-gap: 4px; }
+.chat-timeline > .chat-message.starts-sequence { margin-top: 10px; }
+.chat-timeline > .chat-message:first-child { margin-top: 0; }
+.chat-message-meta:empty { display: none; }
+.chat-message-meta { font-size: 12px; line-height: 1.2; }
+.chat-reaction-summary { align-items: center; justify-content: center; gap: 3px; min-height: 25px; margin: 0 4px; padding: 0 7px; color: var(--muted); font: 600 11px/1 var(--chat-appearance-font); box-shadow: none; }
+.chat-reaction-cluster { display: flex; align-items: center; }
+.chat-reaction-cluster > span { flex: none; padding: 3px 4px; font: 400 13px/1 "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+.chat-reaction-cluster > span + span { margin-left: -4px; }
+.chat-reaction-count { font-size: 11px; line-height: 1; }
+.chat-reaction-summary.has-own-reaction { border-width: 1.5px; border-color: var(--chat-appearance-color); color: var(--chat-appearance-color); }
+.chat-read-receipt { padding-top: 0; padding-bottom: 0; }
+.chat-list { gap: 12px; }
+/* Include the existing 3px border in iOS's 16×12 card content inset. */
+.chat-row-main { grid-template-columns: 60px minmax(0, 1fr) auto; padding: 9px 13px; }
+.chat-row .chat-avatar-wrap, .chat-row .chat-avatar { width: 60px; height: 60px; }
+.chat-row-copy { gap: 6px; }
+.chat-row-trailing { min-height: 60px; }
+
+/* Native keeps sent times outside normal row flow; expose them in actions. */
+.chat-message.sent .chat-bubble > time { display: none; }
+.chat-action-time { color: var(--muted); font-size: 11px; text-align: center; }

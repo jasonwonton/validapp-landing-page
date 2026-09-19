@@ -137,7 +137,8 @@ test("Memento gallery can reply, react, and safely reshare its authoritative ent
     await page.locator("[data-open-memento-gallery]").click();
     await page.getByRole("button", { name: /Jules Rivera's Memento/ }).click();
     await viewer.getByRole("button", { name: /React/ }).click();
-    await expect(page.locator('[data-message-id="msg-n2"] .chat-reaction-summary')).toContainText("❤️ 1");
+    await expect(page.locator('[data-message-id="msg-n2"] .chat-reaction-cluster')).toContainText("❤️");
+    await expect(page.locator('[data-message-id="msg-n2"] .chat-reaction-count')).toHaveText("2");
     const before = await page.locator(".memento-label").count();
     await page.locator("[data-open-memento-gallery]").click();
     await page.getByRole("button", { name: /Jules Rivera's Memento/ }).click();
@@ -388,7 +389,8 @@ test("an exact message deep link restores the requested conversation and target"
     const target = page.locator('[data-message-id="msg-n3"]');
     await expect(target).toContainText("That was hilarious 😂");
     await expect(target).toHaveClass(/deep-linked/);
-    await target.getByRole("button", { name: "Read" }).click();
+    await target.getByRole("button", { name: "Message actions" }).click();
+    await target.getByRole("button", { name: "Read receipts", exact: true }).click();
     const receipts = page.getByRole("dialog", { name: "Read receipts" });
     await expect(receipts).toContainText("Noah Williams");
     await receipts.getByRole("button", { name: "Done" }).click();
