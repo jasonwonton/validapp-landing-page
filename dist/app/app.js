@@ -11,6 +11,8 @@ import { clearRuntimeStyles, setRuntimeStyles } from "./runtime-style.js";
 
 const demoMode = localDemoAllowed();
 const api = demoMode ? new DemoAPI() : new ValidAPI();
+let chatPresence = null;
+let presenceLifecycle = null;
 const DEFAULT_FULL_REVEAL_AURA_COST = 1000;
 const TURNSTILE_ACTION = "phone_otp_request";
 const FEED_REACTIONS = [
@@ -564,6 +566,8 @@ function toggleDetailActionMenu(button) {
 }
 
 function showSignedOut(message = "") {
+    void presenceLifecycle?.stop();
+    document.querySelectorAll(".activity-settings-dialog").forEach(dialog => dialog.close());
     clearInterval(state.playLockTimer);
     state.playLockTimer = null;
     stopStripeCheckoutPolling();
@@ -621,6 +625,25 @@ async function showSignedIn() {
         state.classmatesStatus = classmatesStatus;
         state.config = config;
         const chatsEnabled = config.enable_chats === true && config.enable_web_chats === true;
+        if (chatsEnabled && !chatPresence) {
+            const { createChatPresence, bindPresenceLifecycle } = await import('./chat/presence.js');
+            chatPresence = createChatPresence({ api });
+            presenceLifecycle = bindPresenceLifecycle(chatPresence);
+            const button = document.createElement('button');
+            button.id = 'activityStatusButton';
+            button.type = 'button';
+            button.className = 'settings-row';
+            button.innerHTML = `<span class="settings-icon" aria-hidden="true">${uiIcon('person-circle')}</span><span><strong>Activity status</strong></span><span aria-hidden="true">›</span>`;
+            button.addEventListener('click', async () => {
+                try {
+                    const { openActivitySettings } = await import('./chat/activity-settings.js');
+                    if (api.user?.id) await openActivitySettings({ api, userId: api.user.id, presence: chatPresence });
+                } catch (_) { showToast("Activity status couldn’t be loaded. Please try again."); }
+            });
+            $('.profile-actions').append(button);
+        }
+        presenceLifecycle?.setUser(chatsEnabled ? api.user.id : null);
+        $("#activityStatusButton")?.classList.toggle("hidden", !chatsEnabled);
         $('.nav-item[data-panel="chats"]').classList.toggle("hidden", !chatsEnabled);
         $("#bottomNav").classList.toggle("chats-enabled", chatsEnabled);
         writeAppCache("profile", profile);
@@ -5805,6 +5828,7 @@ async function requestAccountDeletion(event) {
     try {
         await preloadRoute("chats").then((route) => route?.beforeSessionEnd?.()).catch(() => null);
         const result = await api.requestAccountDeletion(api.user.id);
+        await presenceLifecycle?.stop();
         const scheduled = new Intl.DateTimeFormat(undefined, { dateStyle: "long", timeStyle: "short" }).format(new Date(result.scheduled_for));
         $("#deleteAccountDialog").close();
         await import("./chat/outbox.js")
@@ -5849,6 +5873,7 @@ async function cancelAccountDeletion() {
 async function logoutAndReset() {
     const userId = api.user?.id;
     clearCachedAppState();
+    await presenceLifecycle?.stop();
     await preloadRoute("chats").then((route) => route?.beforeSessionEnd?.()).catch(() => null);
     await detachWebPushSubscription().catch(() => null);
     await api.logout().catch(() => null);
@@ -5867,6 +5892,7 @@ function switchPanel(panel, { historyMode = "push", restoreScroll = true } = {})
     if (previousPanel !== panel) state.tabScrollPositions[previousPanel] = window.scrollY;
     else if (historyMode === "push") state.tabScrollPositions[panel] = 0;
     state.activePanel = panel;
+    if (panel !== "chats") chatPresence?.setWatched([]);
     document.body.classList.toggle("play-active", panel === "play");
     const direction = ["feed", "play", "chats", "profile"].indexOf(panel) >= ["feed", "play", "chats", "profile"].indexOf(previousPanel) ? "forward" : "back";
     $("#appView").dataset.navigationDirection = direction;
@@ -5910,7 +5936,7 @@ function activatePanelRoute(panel) {
     });
     if (panel === "play") context.load = loadPlay;
     if (panel === "chats") Object.assign(context, {
-        root: $("#chatsRoot"), api,
+        root: $("#chatsRoot"), api, presence: chatPresence,
         getUser: () => api.user,
         getConfig: () => state.config,
         softHaptic, successHaptic, showToast,

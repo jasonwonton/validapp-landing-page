@@ -38,7 +38,7 @@ Additional references: `Views/Play/StreakCounterView.swift`, `Views/Feed/StoryVi
 ### Confirmed remaining differences
 
 - iOS Play and Profile use the system flame emoji; the PWA retains a portable filled vector under its existing artwork policy. Shared vector controls are visual equivalents of SF Symbols, not identical Apple glyphs.
-- Green activity dots and Active now / Active recently labels are absent. Native presence uses a separate heartbeat service, server-clock expiry, foreground lifecycle and privacy rules. Recent conversation timestamps are not evidence of a person's online presence.
+- Follow-up resolved: green dots, Active now / Active recently labels, group counts and the account activity privacy setting are now implemented using the native presence API. See `PWA_ACTIVE_NOW.md` for lifecycle and validation. Recent timestamps remain separate from presence.
 - Story playback still uses explicit previous/next controls and browser media controls instead of native timed progress, tap zones, pause and dismissal gestures. Story creation uses the browser file/capture flow rather than the native camera/editor.
 - Chats still presents its search field persistently; native reveals search from the toolbar. Inbox rows also remain bordered cards with smaller preview text; native uses flatter rows, 14px preview text and a lighter attention highlight.
 

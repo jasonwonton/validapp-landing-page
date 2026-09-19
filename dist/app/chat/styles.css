@@ -588,3 +588,11 @@
 .chat-avatar-mosaic[data-member-count="4"] .chat-avatar-member { left: 32%; top: 32%; }
 .chat-avatar-mosaic[data-member-count="4"] .chat-avatar-member:nth-child(even) { left: 68%; }
 .chat-avatar-mosaic[data-member-count="4"] .chat-avatar-member:nth-child(n+3) { top: 68%; }
+
+.chat-avatar-wrap { position: relative; display: block; width: 52px; height: 52px; }
+.chat-presence-dot { position: absolute; right: 1px; bottom: 1px; width: 14px; height: 14px; border: 2px solid var(--aqua); border-radius: 50%; background: #38c879; }
+.chat-presence-dot[hidden], .chat-presence-label[hidden] { display: none; }
+.chat-recent-avatar .chat-presence-dot { right: 3px; bottom: 3px; }
+.chat-presence-label { width: 78px; margin-top: -4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 10px; line-height: 1.3; text-align: center; }
+.chat-presence-label.is-active, .chat-room-title small.is-active, .chat-settings-member small.is-active { color: var(--dark-teal); }
+.chat-room-title small.is-active::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 4px; border-radius: 50%; background: #38c879; }

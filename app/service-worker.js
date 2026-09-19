@@ -27,6 +27,8 @@ const APP_SHELL = [
     "./routes/chats.js",
     "./routes/profile.js",
     "./chat/styles.css",
+    "./chat/presence.js",
+    "./chat/activity-settings.js",
     "./chat/index.js",
     "./chat/appearance.js",
     "./chat/sticker-maker.js",

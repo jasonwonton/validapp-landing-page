@@ -1,3 +1,4 @@
+import { presenceLabel } from "./presence.js";
 import { reconcileKeyedElements } from "../keyed-list.js";
 import { prepareChatMedia, prepareMementoImages } from "./media.js";
 import { createPhotoStickers } from './photo-stickers.js';
@@ -65,7 +66,7 @@ function localLedgerDate(date = new Date()) {
     return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 }
 
-export function createChatsView({ root, api, getUser, getConfig, softHaptic, successHaptic, showToast, onUnreadChange }) {
+export function createChatsView({ root, api, getUser, getConfig, presence, softHaptic, successHaptic, showToast, onUnreadChange }) {
     const attentionPriority = chat => chatAttentionPriority(chat, {
         dailyLedgerEnabled: dailyLedgerEnabled(),
         callsEnabled: getConfig()?.enable_calls === true && getConfig()?.enable_web_calls === true,
@@ -413,6 +414,59 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         void retryPendingMediaUploads();
     });
 
+    const visiblePresenceNodes = new Set();
+    const presenceObserver = new IntersectionObserver(entries => {
+        for (const entry of entries) {
+            if (entry.isIntersecting) visiblePresenceNodes.add(entry.target);
+            else visiblePresenceNodes.delete(entry.target);
+        }
+        updatePresenceAudience();
+    }, { threshold: 0.1 });
+    const isGroupChat = chat => chat?.name != null || Number(chat?.accepted_count) + Number(chat?.pending_count) >= 3;
+    function eligibleForPresence(chat) {
+        return chat?.membership_status === 'accepted' && chat.status === 'active' && chat.has_viewer_blocked_member !== true;
+    }
+    function updatePresenceAudience() {
+        if (!activation?.isCurrent?.()) return;
+        const ids = [];
+        const chat = store.state.detail?.chat;
+        if (!$("[data-chat-screen=room]").classList.contains('hidden') && eligibleForPresence(chat)) ids.push(chat.id);
+        for (const node of visiblePresenceNodes) {
+            if (node.isConnected && node.getClientRects().length) ids.push(node.dataset.presenceWatch);
+        }
+        presence?.setWatched(ids);
+    }
+    function observePresence() {
+        presenceObserver.disconnect();
+        visiblePresenceNodes.clear();
+        $$('[data-presence-watch]').forEach(node => presenceObserver.observe(node));
+        updatePresenceAudience();
+        renderPresence();
+    }
+    function renderPresence() {
+        if (!presence) return;
+        $$('[data-presence-dot]').forEach(node => {
+            const active = presence.status(node.dataset.presenceDot).active;
+            if (node.hidden === active) node.hidden = !active;
+        });
+        $$('[data-presence-label]').forEach(node => {
+            const chat = store.state.chats.find(chat => chat.id === node.dataset.presenceLabel);
+            const value = eligibleForPresence(chat) ? presence.status(chat.id, isGroupChat(chat)) : { label: '', active: false };
+            if (node.textContent !== value.label) node.textContent = value.label;
+            if (node.hidden === !!value.label) node.hidden = !value.label;
+            if (node.classList.contains('is-active') !== value.active) node.classList.toggle('is-active', value.active);
+        });
+        if (store.state.detail?.chat) renderRoomPresence(store.state.detail.chat);
+        $$('[data-presence-member]').forEach(node => {
+            const member = presence.members(store.state.activeChatId).find(member => String(member.user_id) === node.dataset.presenceMember);
+            const label = presenceLabel(member, presence.serverNow());
+            const text = label || node.dataset.presenceFallback;
+            if (node.textContent !== text) node.textContent = text;
+            if (node.classList.contains('is-active') !== (label === 'Active now')) node.classList.toggle('is-active', label === 'Active now');
+        });
+    }
+    presence?.subscribe(renderPresence);
+
     async function activate(context) {
         activation = context;
         if (!(getConfig()?.enable_chats === true && getConfig()?.enable_web_chats === true)) {
@@ -443,6 +497,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (name !== 'room' && voiceMode) resetChatMediaComposer();
         $$('[data-chat-screen]').forEach((screen) => screen.classList.toggle("hidden", screen.dataset.chatScreen !== name));
         root.closest(".panel")?.classList.toggle("chat-room-open", name === "room");
+        observePresence();
     }
 
     async function loadChats({ quiet = false } = {}) {
@@ -474,6 +529,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         }
         const unread = store.state.chats.reduce((total, chat) => total + Number(chat.unread_count || 0), 0);
         onUnreadChange?.(unread);
+        observePresence();
     }
 
     function conversationAvatarMarkup(chat) {
@@ -504,7 +560,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             if (current.get('demo') === '1') url.searchParams.set('demo', '1');
             url.searchParams.set('tab', 'chats');
             url.searchParams.set('chat', chat.id);
-            const html = `<a class="chat-recent-link ${attentionPriority(chat) > 0 ? "attention" : ""}" data-list-key="${escapeChatHTML(chat.id)}" data-open-chat="${escapeChatHTML(chat.id)}" href="${escapeChatHTML(url.pathname + url.search)}" aria-label="${escapeChatHTML(chat.display_name)}${hint ? `, ${escapeChatHTML(hint)}` : ""}"><span class="chat-recent-avatar">${conversationAvatarMarkup(chat)}${needsMemento ? `<i class="chat-recent-camera" aria-hidden="true">${uiIcon('camera-filled')}</i>` : unread ? '<i class="chat-recent-unread" aria-hidden="true"></i>' : ''}</span><span class="chat-recent-name">${escapeChatHTML(name)}</span></a>`;
+            const html = `<a class="chat-recent-link ${attentionPriority(chat) > 0 ? "attention" : ""}" aria-describedby="chat-presence-${escapeChatHTML(chat.id)}" data-presence-watch="${escapeChatHTML(chat.id)}" data-list-key="${escapeChatHTML(chat.id)}" data-open-chat="${escapeChatHTML(chat.id)}" href="${escapeChatHTML(url.pathname + url.search)}" aria-label="${escapeChatHTML(chat.display_name)}${hint ? `, ${escapeChatHTML(hint)}` : ""}"><span class="chat-recent-avatar">${conversationAvatarMarkup(chat)}<i class="chat-presence-dot" role="img" data-presence-dot="${escapeChatHTML(chat.id)}" aria-label="Active now" hidden></i>${needsMemento ? `<i class="chat-recent-camera" aria-hidden="true">${uiIcon('camera-filled')}</i>` : unread ? '<i class="chat-recent-unread" aria-hidden="true"></i>' : ''}</span><span class="chat-recent-name">${escapeChatHTML(name)}</span><small id="chat-presence-${escapeChatHTML(chat.id)}" class="chat-presence-label" data-presence-label="${escapeChatHTML(chat.id)}" hidden></small></a>`;
             return { key: chat.id, html };
         }));
     }
@@ -553,7 +609,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             return `<article class="chat-row invitation attention" data-list-key="${escapeChatHTML(chat.id)}"><button class="chat-row-main" type="button" data-open-chat="${escapeChatHTML(chat.id)}"><span class="chat-avatar">${avatar}</span><span class="chat-row-copy"><strong>${escapeChatHTML(chat.display_name)}</strong><small>${escapeChatHTML(chatPreview(chat))}</small></span></button><div class="chat-invite-actions"><button type="button" data-decline-chat="${escapeChatHTML(chat.membership_id)}">Decline</button><button type="button" data-accept-chat="${escapeChatHTML(chat.membership_id)}">Accept</button></div></article>`;
         }
         const needsMemento = chatNeedsMemento(chat, dailyLedgerEnabled());
-        return `<article class="chat-row ${attentionPriority(chat) > 0 ? "attention" : ""}" data-list-key="${escapeChatHTML(chat.id)}"><button class="chat-row-main" type="button" data-open-chat="${escapeChatHTML(chat.id)}"><span class="chat-avatar">${avatar}</span><span class="chat-row-copy"><span><strong>${escapeChatHTML(chat.display_name)}</strong>${streakMarkup(chat)}<time>${escapeChatHTML(relativeChatTime(chat.last_message_at || chat.updated_at))}</time></span><small>${escapeChatHTML(needsMemento ? "Take today's Memento" : chatPreview(chat))}</small></span>${chat.regular_unread_count && !needsMemento ? `<b class="chat-unread">${Math.min(chat.regular_unread_count, 99)}</b>` : ""}</button></article>`;
+        return `<article class="chat-row ${attentionPriority(chat) > 0 ? "attention" : ""}" data-list-key="${escapeChatHTML(chat.id)}"><button class="chat-row-main" type="button" data-open-chat="${escapeChatHTML(chat.id)}"><span class="chat-avatar-wrap" ${eligibleForPresence(chat) ? `data-presence-watch="${escapeChatHTML(chat.id)}"` : ""}><span class="chat-avatar">${avatar}</span>${eligibleForPresence(chat) ? `<i class="chat-presence-dot" role="img" data-presence-dot="${escapeChatHTML(chat.id)}" aria-label="Active now" hidden></i>` : ""}</span><span class="chat-row-copy"><span><strong>${escapeChatHTML(chat.display_name)}</strong>${streakMarkup(chat)}<time>${escapeChatHTML(relativeChatTime(chat.last_message_at || chat.updated_at))}</time></span><small>${escapeChatHTML(needsMemento ? "Take today's Memento" : chatPreview(chat))}</small></span>${chat.regular_unread_count && !needsMemento ? `<b class="chat-unread">${Math.min(chat.regular_unread_count, 99)}</b>` : ""}</button></article>`;
     }
 
     async function openChat(chatId, { updateHistory = true, force = false, latest = false } = {}) {
@@ -633,6 +689,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         if (savedAnchor) timelineScroll.restore(savedPosition);
         focusDeepLinkedMessage(chatId);
         renderSettings();
+        updatePresenceAudience();
         if (!savedAnchor) await markRoomRead();
         await loadChats({ quiet: true });
         if (!chatAccessUnavailable()) void retryPendingMessages(chatId);
@@ -643,16 +700,25 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     function renderRoomHeader(chat) {
         $(".chat-room-title strong").textContent = chat?.display_name || "Chat";
         const acceptedCount = Number(chat?.accepted_count || 0);
-        const pendingCount = Number(chat?.pending_count || 0);
-        const totalCount = acceptedCount + pendingCount;
-        $(".chat-room-title small").textContent = totalCount > 2
-            ? `${totalCount} people${pendingCount ? ` · ${pendingCount} invited` : ""}`
-            : (store.state.typingUserIds.size ? "typing…" : "");
+        renderRoomPresence(chat);
         const callsAvailable = calls.enabled()
             && acceptedCount >= 2
             && chat?.membership_status !== "invited"
             && chat?.has_viewer_blocked_member !== true;
         $(".chat-call-actions").classList.toggle("hidden", !callsAvailable);
+    }
+
+    function renderRoomPresence(chat) {
+        const pendingCount = Number(chat?.pending_count || 0);
+        const totalCount = Number(chat?.accepted_count || 0) + pendingCount;
+        const activity = eligibleForPresence(chat) ? presence?.status(chat.id, isGroupChat(chat)) : null;
+        const subtitle = $(".chat-room-title small");
+        const label = store.state.typingUserIds.size ? 'typing…' : isGroupChat(chat)
+            ? `${totalCount} people${pendingCount ? ` · ${pendingCount} invited` : ''}${activity?.label ? ` · ${activity.label}` : ''}`
+            : activity?.label || '';
+        if (subtitle.textContent !== label) subtitle.textContent = label;
+        const active = !!activity?.active && !store.state.typingUserIds.size;
+        if (subtitle.classList.contains('is-active') !== active) subtitle.classList.toggle('is-active', active);
     }
 
     function renderDailyRow() {
@@ -2049,11 +2115,12 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             const isSelf = String(member.user_id) === String(userId());
             const remove = canManage && !isSelf && member.role !== "owner" ? `<button type="button" data-remove-chat-member="${escapeChatHTML(member.user_id)}" aria-label="Remove ${escapeChatHTML(displayMember(member))}">Remove</button>` : "";
             const block = !isSelf ? `<button type="button" data-block-chat-member="${escapeChatHTML(member.user_id)}" aria-label="Block ${escapeChatHTML(displayMember(member))}">Block</button>` : "";
-            return `<div class="chat-settings-member"><span>${escapeChatHTML(displayMember(member))}</span><small>${escapeChatHTML(member.role === "owner" ? "Owner" : member.status === "invited" ? "Invited" : "Member")}</small>${remove || block ? `<span class="chat-member-actions">${remove}${block}</span>` : ""}</div>`;
+            return `<div class="chat-settings-member"><span>${escapeChatHTML(displayMember(member))}</span><small ${!isSelf && member.status === "accepted" && member.is_blocked_by_viewer !== true ? `data-presence-member="${escapeChatHTML(member.user_id)}" data-presence-fallback="${member.role === "owner" ? "Owner" : "Member"}"` : ""}>${escapeChatHTML(member.role === "owner" ? "Owner" : member.status === "invited" ? "Invited" : "Member")}</small>${remove || block ? `<span class="chat-member-actions">${remove}${block}</span>` : ""}</div>`;
         }).join("")}${canManage ? `<button class="chat-add-people" type="button" data-add-current-chat>${uiIcon("plus")} Add people</button>` : ""}</section><section class="chat-appearance-setting"><h3>Appearance</h3><label>Chat font<select aria-label="Chat font">${CHAT_FONT_STYLES.map(({ value, label }) => `<option value="${value}" ${appearance.font === value ? "selected" : ""}>${label}</option>`).join("")}</select></label><div class="chat-color-options" role="group" aria-label="Chat color">${CHAT_COLOR_STYLES.map(({ value, label }) => `<button type="button" data-chat-appearance-color="${value}" aria-label="${label} chat color" aria-pressed="${appearance.color === value}" class="${appearance.color === value ? "selected" : ""}"><span></span></button>`).join("")}</div><p class="chat-appearance-preview">This is how your chat will look.</p><small>Only you see these choices. They stay on this device and are never sent to the chat.</small></section><label class="chat-notification-setting">Notifications<select>${[["all", "All messages"], ["daily_only", "Mementos only"], ["muted", "Muted"]].map(([value, label]) => `<option value="${value}" ${chat.notification_level === value ? "selected" : ""}>${label}</option>`).join("")}</select></label><button class="chat-danger-action" type="button" data-report-current-chat>Report chat</button><button class="chat-danger-action" type="button" data-leave-current-chat>Leave chat</button>`;
         $(".chat-notification-setting select").addEventListener("change", updateNotificationLevel, { once: true });
         $(".chat-appearance-setting select").addEventListener("change", (event) => updateChatAppearance({ font: event.target.value }));
         $(".chat-photo-setting input")?.addEventListener("change", updateChatPhoto);
+        renderPresence();
     }
 
     async function updateChatPhoto(event) {
@@ -2509,7 +2576,9 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         }
         if (target.dataset.removeChatMember && confirm("Remove this person from the group?")) {
             try {
+                presence?.invalidate();
                 await api.removeChatMember(userId(), store.state.activeChatId, target.dataset.removeChatMember);
+                presence?.invalidate();
                 await openChat(store.state.activeChatId, { updateHistory: false, force: true });
                 renderSettings();
             } catch (error) { showToast?.(error.message || "Could not remove that person."); }
@@ -2517,7 +2586,9 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         }
         if (target.dataset.blockChatMember && confirm("Block this person? Their content and contact will be restricted across Valid.")) {
             try {
+                presence?.invalidate();
                 await api.blockUser(userId(), target.dataset.blockChatMember);
+                presence?.invalidate();
                 showToast?.("Person blocked");
                 await loadChats({ quiet: true });
                 renderSettings();
@@ -2541,7 +2612,9 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             if (reason?.trim().length >= 3) await api.reportChat(userId(), store.state.activeChatId, reason.trim()).then(() => showToast?.("Report submitted")).catch((error) => showToast?.(error.message));
         }
         if (target.matches("[data-leave-current-chat]") && confirm("Leave this chat? You will stop receiving new messages.")) {
+        presence?.invalidate();
             await api.leaveChat(userId(), store.state.activeChatId).then(async () => {
+                presence?.invalidate();
                 $("[data-chat-settings-dialog]").close();
                 await loadChats({ quiet: true });
                 showChatList();

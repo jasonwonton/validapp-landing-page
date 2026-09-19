@@ -857,6 +857,24 @@ export class DemoAPI {
     async deleteStory(_userId, storyId) { for (const author of this.storyAuthors()) author.items = author.items.filter((item) => item.id !== storyId); }
     async reportStory(_userId, storyId) { for (const author of this.storyAuthors()) author.items = author.items.filter((item) => item.id !== storyId); return { story_id: storyId, reported: true }; }
 
+    async updateChatPresence(userId, payload) {
+        const enabled = this.demoActivityEnabled ?? (new URLSearchParams(location.search).get('presence') === '1');
+        const now = Date.now() / 1000;
+        return { enabled, server_now: now, chats: payload.active ? payload.chat_ids.map(chatId => ({
+            chat_id: chatId, members: enabled ? (this.chats.find(chat => chat.id === chatId)?.member_previews || [])
+                .map(member => ({ user_id: member.user_id, active_until: now + 60, last_active_at: now })) : [],
+        })) : [] };
+    }
+
+    async getActivityStatus() {
+        return { enabled: this.demoActivityEnabled ?? (new URLSearchParams(location.search).get('presence') === '1') };
+    }
+
+    async setActivityStatus(userId, enabled) {
+        this.demoActivityEnabled = enabled;
+        return { enabled };
+    }
+
     async getChats() { return { items: structuredClone(this.chats) }; }
     async getChatUnreadCount() { return { unread_count: this.chats.reduce((sum, chat) => sum + Number(chat.unread_count || 0), 0) }; }
     async getChat(_userId, chatId) {

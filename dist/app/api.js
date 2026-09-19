@@ -917,6 +917,23 @@ export class ValidAPI {
         });
     }
 
+    updateChatPresence(userId, payload, { signal, keepalive = false } = {}) {
+        return this.request(`/users/${userId}/chat-presence`, {
+            method: "POST", body: JSON.stringify(payload), signal, keepalive,
+            timeoutMs: 10_000,
+        });
+    }
+
+    getActivityStatus(userId) {
+        return this.request(`/users/${userId}/activity-status`, {});
+    }
+
+    setActivityStatus(userId, enabled) {
+        return this.request(`/users/${userId}/activity-status`, {
+            method: "PUT", body: JSON.stringify({ enabled }),
+        });
+    }
+
     setChatTyping(userId, chatId, isTyping) {
         return this.request(`/users/${userId}/chats/${chatId}/typing`, {
             method: "POST",
