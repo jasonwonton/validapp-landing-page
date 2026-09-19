@@ -10,3 +10,5 @@ Compared native PlayGameView, QuestionArtworkView, and QuestionCardCoreView. Pla
 - Fill the square with the image, matching native scaledToFill. Keep selection controls and existing voting behavior.
 
 Validation: 36 existing browser cases pass across Android Chrome, desktop Chrome, Firefox and WebKit, covering light/dark feed details at 320/393/440px, voting and advancement, shuffle, nominations and moderation. Four additional runs of existing Play flows pass on 320×568 Chrome and 375×667 WebKit. Built preview visually inspected in Play and feed detail at 390×844. Runtime contracts, performance budget, all 63 built asset hashes, four-browser startup, offline startup and retained previous-release assets pass. Estimated shell transfer: 730,143 bytes.
+
+Production: web-v101 deployed as `18b5dc7d-e587-4760-964e-2a65fac0d27a`, ACTIVE 43/43, frontend `03b3516169c15796b2a3ff8e4cd4bcb47b3c1a78`, with all 12 other component revisions preserved. Public asset/startup/offline/health checks passed. The user then clarified that fitting the poll on screen takes priority; see the subsequent pwa-poll-fit report.

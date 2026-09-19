@@ -2971,8 +2971,8 @@ function renderFeedDetail() {
     const firstLetterHint = firstLetter ? `<p class="feed-detail-first-letter-hint">Hint: starts with ${escapeHTML(firstLetter)}</p>` : "";
     $("#feedDetailDialog .detail-screen-header > strong").textContent = formatVoterStatement(item);
     $("#feedDetailBody").innerHTML = `<article class="feed-detail-card">
-        <h3>${escapeHTML(item.question_text)}</h3>
-        ${item.is_nomination ? "" : questionSubmitterMarkup(item)}
+        <div class="feed-detail-prompt"><h3>${escapeHTML(item.question_text)}</h3>
+        ${item.is_nomination ? "" : questionSubmitterMarkup(item)}</div>
         <div class="feed-detail-art">${artworkURL ? `<img loading="lazy" decoding="async" src="${escapeHTML(artworkURL)}" alt="">` : `<div class="artwork-placeholder"><img loading="lazy" decoding="async" src="../assets/app/pencil-clipboard.webp" alt=""><span>Image unavailable</span></div>`}</div>
         ${item.is_nomination ? `<div class="feed-nomination-card"><strong>${escapeHTML(selectedName)}</strong><p>got nominated${item.voter_gender ? ` by ${escapeHTML(formatVoterHint(item).replace(/^(from|by) /, ""))}` : item.voter_name ? ` by ${escapeHTML(item.voter_name)}` : ""}</p><span aria-hidden="true">🎉</span></div>` : options.length ? `<div class="feed-detail-options">${options.map((option, index) => {
             const name = option.name || option.contact_name || "A classmate";

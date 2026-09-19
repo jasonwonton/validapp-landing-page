@@ -853,10 +853,10 @@ body.play-active .topbar { display: none; }
 body.play-active main { height: var(--visual-viewport-height, 100dvh); min-height: 0; padding-top: max(10px, env(safe-area-inset-top)); padding-bottom: calc(72px + var(--safe-bottom)); }
 body.play-active #playPanel { height: calc(var(--visual-viewport-height, 100dvh) - max(10px, env(safe-area-inset-top)) - 72px - var(--safe-bottom)); min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
 body.play-active #playCard { height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; }
-body.play-active .play-card { width: min(100%, 430px); height: auto; min-height: 100%; display: grid; grid-template-rows: repeat(4, auto); align-content: start; gap: 12px; margin: 0 auto; padding: 0 0 16px; }
+body.play-active .play-card { width: min(100%, 430px); height: 100%; min-height: 0; container-type: inline-size; display: grid; grid-template-rows: auto minmax(120px, 1fr) auto auto; gap: 12px; margin: 0 auto; padding: 0 0 16px; }
 body.play-active .play-card h3 { margin: 0; }
 body.play-active .question-attribution { margin: 8px auto 0; }
-body.play-active .question-artwork { place-self: center; width: calc(100% - 18px); min-width: 0; max-width: none; height: auto; min-height: 0; max-height: none; margin: 0; }
+body.play-active .question-artwork { place-self: center; width: auto; min-width: 0; max-width: none; height: min(100%, calc(100cqw - 18px)); min-height: 0; max-height: none; margin: 0; }
 body.play-active .play-actions { margin: 0; }
 .play-question-copy { min-width: 0; }
 .play-loading-state { min-height: 52vh; display: grid; align-content: center; justify-items: center; gap: 12px; color: var(--muted); }
@@ -1242,9 +1242,10 @@ body.play-active .play-actions { margin: 0; }
 .contact-invite-extras .invite-reward-card small { font-size: .76rem; }
 .feed-detail-content { width: min(480px, 100%); display: grid; gap: 16px; margin: 0 auto; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); }
 #feedDetailStatus:empty { display: none; }
-.feed-detail-card { display: grid; gap: 16px; }
-.feed-detail-card > h3 { margin: 0; font-size: clamp(24px, 6vw, 28px); line-height: 1.2; text-align: center; text-wrap: balance; }
-.feed-detail-art { width: calc(100% - 16px); aspect-ratio: 1; display: grid; place-items: center; overflow: hidden; margin: 0 auto; border: 1px solid rgba(var(--surface-rgb),.2); border-radius: 18px; background: var(--mint); }
+.feed-detail-card { min-height: min-content; container-type: inline-size; display: grid; grid-template-rows: auto minmax(120px, 1fr) auto; grid-auto-rows: auto; gap: 16px; height: calc(var(--visual-viewport-height, 100svh) - 88px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+.feed-detail-prompt { display: grid; gap: 8px; }
+.feed-detail-prompt > h3 { margin: 0; font-size: clamp(24px, 6vw, 28px); line-height: 1.2; text-align: center; text-wrap: balance; }
+.feed-detail-art { place-self: center; width: auto; height: min(100%, calc(100cqw - 16px)); min-height: 0; aspect-ratio: 1; display: grid; place-items: center; overflow: hidden; margin: 0 auto; border: 1px solid rgba(var(--surface-rgb),.2); border-radius: 18px; background: var(--mint); }
 .feed-detail-art > img { width: 100%; height: 100%; object-fit: cover; }
 .feed-detail-options { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 26px 10px; padding: 4px 0 14px; }
 .feed-detail-option { position: relative; min-height: 88px; display: grid; place-items: center; padding: 12px; border: 3px solid #000; border-radius: 12px; background: #ffb15e; color: #000; font-size: 20px; line-height: 1.2; text-align: center; overflow-wrap: anywhere; }
@@ -1701,7 +1702,7 @@ body.detail-screen-open { overflow: hidden; }
 .inbox-content-badge.ask { background: #f7b2cd; color: #3d1828; }
 :root[data-theme="dark"] .inbox-content-badge.ask { background: #593246; color: #f2cbdd; }
 .tbh-avatar-shell .tbh-avatar-badge { background: var(--peach); color: #000; }
-.feed-detail-card > h3 { font-size: 26px; }
+.feed-detail-prompt > h3 { font-size: 26px; }
 .feed-detail-option { min-height: 100px; font-size: 22px; }
 .detail-engagement-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; }
 .detail-engagement-row .reaction-control { position: static; flex: 0 0 auto; }
@@ -1813,4 +1814,13 @@ body.detail-screen-open { overflow: hidden; }
    pointerup after scrolling. Keep feed hit targets stable on Apple browsers. */
 @supports (-webkit-touch-callout: none) or (background: -webkit-named-image(i)) {
     #feedList > [data-list-key] { content-visibility: visible; contain-intrinsic-size: none; }
+}
+
+/* Like native Play, recover artwork space with compact choices on short screens. */
+@media (max-height: 814px) {
+    body.play-active .choice-button { min-height: 85px; font-size: 19px; }
+}
+@media (max-height: 669px) {
+    body.play-active .choice-button { min-height: 65px; font-size: 18px; }
+    .feed-detail-option { min-height: 72px; font-size: 19px; }
 }

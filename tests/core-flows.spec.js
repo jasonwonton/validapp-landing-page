@@ -687,12 +687,15 @@ test("play answers a poll and advances", async ({ page }) => {
     await expect(page.locator("#auraCount")).toHaveText("1,280");
     const artworkBox = await page.locator("#playCard .question-artwork").boundingBox();
     expect(Math.abs(artworkBox.width - artworkBox.height)).toBeLessThan(1);
-    await expect(page.locator("#playCard .choice-button").first()).toHaveCSS("min-height", "90px");
+    const choiceHeight = page.viewportSize().height < 670 ? 65 : page.viewportSize().height < 815 ? 85 : 90;
+    await expect(page.locator("#playCard .choice-button").first()).toHaveCSS("min-height", `${choiceHeight}px`);
     for (const name of [/Shuffle/, /Nominate/, /Skip \(3\)/]) {
         const button = page.getByRole("button", { name });
         await expect(button).toBeVisible();
     }
-    const playCardBox = await page.locator("#playCard").boundingBox();
+    const playCardBox = await page.locator("#playCard .play-card").boundingBox();
+    const contentFits = await page.locator("#playCard").evaluate(el => el.scrollHeight <= el.clientHeight + 1);
+    expect(contentFits).toBe(true);
     const bottomNavBox = await page.locator("#bottomNav").boundingBox();
     expect(playCardBox.y + playCardBox.height).toBeLessThanOrEqual(bottomNavBox.y + 1);
     await expect(page.getByText("Who would survive longest on a deserted island?")).toBeVisible();
