@@ -48,7 +48,10 @@ test('holding media opens actions without viewing or consuming it; replay keeps 
     await room(page);
     const card = page.getByRole('button', { name: 'Photo · Tap to view', exact: true });
     await press(page, card);
-    await expect(menu(page)).toBeVisible(); await page.mouse.up();
+    await expect(menu(page)).toBeVisible();
+    // The release remains suppressed even if the finger stays down for seconds.
+    await page.waitForTimeout(1700); await page.mouse.up();
+    await expect(menu(page)).toBeVisible();
     await expect(page.getByRole('dialog', { name: 'Chat media', exact: true })).toBeHidden();
     await expect(menu(page).getByRole('button', { name: 'Save in chat', exact: true })).toHaveCount(0);
     await expect(menu(page).getByRole('button', { name: 'Unsend for everyone' })).toHaveCount(0);

@@ -75,13 +75,16 @@ export function bindMessageActions(root, { onOpen } = {}) {
             pending = null;
             if (!bubble.isConnected) return;
             toggle(bubble.dataset.messageBubble, true, point);
-            suppressClickUntil = performance.now() + 1500;
+            suppressClickUntil = Infinity;
         }, 360) };
     });
     root.addEventListener('pointermove', event => {
         if (pending && (event.pointerId !== pending.pointerId || Math.hypot(event.clientX - pending.x, event.clientY - pending.y) > 10)) cancelHold();
     });
     for (const name of ['pointerup', 'pointercancel', 'pointerleave']) root.addEventListener(name, cancelHold);
+    root.addEventListener('pointerup', () => {
+        if (suppressClickUntil === Infinity) suppressClickUntil = performance.now() + 200;
+    });
     root.querySelector('.chat-timeline')?.addEventListener('scroll', cancelHold, { passive: true });
     root.addEventListener('click', event => {
         if (performance.now() < suppressClickUntil) {
@@ -101,6 +104,7 @@ export function bindMessageActions(root, { onOpen } = {}) {
         cancelHold();
     });
     root.addEventListener('keydown', event => {
+        suppressClickUntil = 0;
         if (event.key !== 'Tab' || !active) return;
         const buttons = [...active.querySelectorAll('button:not(:disabled)')];
         const first = buttons[0], last = buttons.at(-1);

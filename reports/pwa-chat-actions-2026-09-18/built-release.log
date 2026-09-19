@@ -1,4 +1,4 @@
-PASS release ee7b22e9f8c3637258d6: manifest, entry points, worker, headers, 63 exact asset hashes
+PASS release 53b1efbc53307b5a5e3e: manifest, entry points, worker, headers, 63 exact asset hashes
 PASS previous-release lazy modules remain available
 PASS android: signed-out startup, correct offline shell, no API responses cached
 PASS desktop: signed-out startup, correct offline shell, no API responses cached
