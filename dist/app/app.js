@@ -24,7 +24,7 @@ async function refreshWeeklyGame() {
         const result = await api.getWeeklyGame();
         if (generation !== weeklyGameGeneration || !api.user?.id) return;
         // Follow the selected weekly release. No separate web feature flag.
-        const available = result.release?.runtime === 'camera-v1';
+        const available = ['camera-v1','web-v1'].includes(result.release?.runtime);
         if (!available) { document.querySelector('#weeklyGameButton')?.remove(); return; }
         let button = document.querySelector('#weeklyGameButton');
         if (!button) {
@@ -35,7 +35,7 @@ async function refreshWeeklyGame() {
             document.querySelector('#storiesRoot').insertAdjacentElement('afterend', button);
         }
         document.querySelector('#weeklyGameTitle').textContent = result.release?.title || 'Weekly game';
-        button.querySelector('.weekly-game-entry-art').innerHTML = result.release?.game_id === '67-challenge' ? '67' : uiIcon('camera');
+        button.querySelector('.weekly-game-entry-art').innerHTML = result.release?.game_id === '67-challenge' ? '67' : result.release?.game_id === 'rose-flight' ? '<img src="/assets/weekly-game/rose.png" alt="" width="48" height="48" decoding="async">' : uiIcon('camera');
     } catch (_) { /* Feed remains usable if the optional game request fails. */ }
 }
 
@@ -46,7 +46,7 @@ async function openWeeklyGame() {
     try {
         const { createWeeklyGame } = await import('./weekly-game/index.js');
         if (api.user?.id !== userId) return;
-        weeklyGame ||= createWeeklyGame({ api });
+        weeklyGame ||= createWeeklyGame({ api, getProfilePhoto: () => state.profile?.profile_picture_url });
         await weeklyGame.open();
     } catch (error) { showToast(error.message || 'Could not open the weekly game.'); }
     finally { weeklyGameOpening = false; }

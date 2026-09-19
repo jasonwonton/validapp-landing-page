@@ -1,0 +1,20 @@
+{
+  "age_rating": 4,
+  "bundle": {
+    "byte_size": 3019456,
+    "sha256": "529da2385e5c772909c9b808b1f3c4038ce56a08668f343b88abdb88733ee6f8",
+    "url": "https://validappcdn.com/games/rose-flight-529da2385e5c772909c9b808b1f3c4038ce56a08668f343b88abdb88733ee6f8.six7game.json"
+  },
+  "character": null,
+  "description": "One rose. Endless pipes. How far can you fly?",
+  "game_id": "rose-flight",
+  "id": "afc30d8ab1ad945fccff7c6fb106bd2d879074e56df174c69ee0098f01568399",
+  "renderer_version": 1,
+  "rules": {
+    "pipe_gap": 100
+  },
+  "runtime": "web-v1",
+  "score_validator": "rose-flight-endless-v1",
+  "title": "Rose Flight",
+  "uses_profile_photo": true
+}

@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "valid-web-";
-const CACHE_NAME = `${CACHE_PREFIX}v95`;
+const CACHE_NAME = `${CACHE_PREFIX}v96`;
 const APP_SHELL = [
     "./",
     "./styles.css",
@@ -85,6 +85,9 @@ self.addEventListener("fetch", (event) => {
     if (url.pathname.startsWith("/api/")) return;
 
     if (event.request.mode === "navigate") {
+        // Embedded game documents must receive their own HTML, never the PWA
+        // shell. This also keeps non-app navigations out of offline routing.
+        if (event.request.destination !== "document" || !url.pathname.startsWith("/app/")) return;
         event.respondWith(caches.open(CACHE_NAME).then((cache) => cache.match("./")).then((cached) => cached || fetch(event.request)));
         return;
     }

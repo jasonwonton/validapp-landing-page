@@ -184,6 +184,14 @@ export class ValidAPI {
         return this.request('/easter-egg/unlock', { ...options, method: 'POST' });
     }
 
+    startWeeklyGameRun(releaseId, options = {}) {
+        return this.request(`/easter-egg/releases/${encodeURIComponent(releaseId)}/runs`, { ...options, method: 'POST' });
+    }
+
+    finishWeeklyGameRun(releaseId, runId, evidence, options = {}) {
+        return this.request(`/easter-egg/releases/${encodeURIComponent(releaseId)}/results`, { ...options, method: 'POST', body: JSON.stringify({ run_id: runId, evidence }) });
+    }
+
     getWeeklyGameLeaderboard(releaseId, options = {}) {
         return this.request(`/easter-egg/releases/${encodeURIComponent(releaseId)}/leaderboard`, options);
     }

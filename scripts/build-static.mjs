@@ -6,6 +6,7 @@ import { versionStaticAssets } from "./version-static-assets.mjs";
 
 // Keep the lazy worker's content hash and source in sync before packaging.
 await import('./weekly-game/build-tracker.mjs');
+await import('./weekly-game/build-web-host.mjs');
 
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
 const outputRoot = path.join(repositoryRoot, "dist");

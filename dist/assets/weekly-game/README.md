@@ -26,3 +26,19 @@ add its hash to `MIRRORED_PACKAGES`. Existing artwork/rules can change with the
 same reviewed script. A new script requires an explicit implementation review
 and fixture parity before its fingerprint is accepted. Unsupported runtimes
 show an update message and never request camera access.
+
+## Love Flap / Rose Flight
+
+The regular web game uses the exact published package
+`529da2385e5c772909c9b808b1f3c4038ce56a08668f343b88abdb88733ee6f8`.
+`build-web-host.mjs` verifies its bytes and generates an immutable HTML host in
+`web/`, with hashed scripts and an opaque-origin iframe sandbox. The native
+package's Phaser engine, physics, rose, Jua font and score poster are unchanged.
+No game script executes in the authenticated parent. Only the selected release's
+seed/rules and optional small profile image enter the sandbox; the parent owns
+API calls and native sharing. Keep old host directories for already-open clients.
+
+For future regular packages, explicitly verify/register the new package and
+its host mapping. The initial mapping supports the latest endless-flight release
+with the Love Flap poster, not historical 20-pipe builds. No upload or Admin
+selection is performed by the frontend build.
