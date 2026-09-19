@@ -6063,6 +6063,11 @@ function activatePanelRoute(panel) {
         getConfig: () => state.config,
         softHaptic, successHaptic, showToast,
         onUnreadChange: renderChatUnreadBadge,
+        onPlay: async () => {
+            if (!state.profile?.school_id) return showToast('Join a school to play the Game of the Week.');
+            await openWeeklyGame();
+            void refreshWeeklyGame();
+        },
     });
     if (panel === "profile") context.load = loadProfilePanel;
     return activateRoute(panel, context).catch(() => {

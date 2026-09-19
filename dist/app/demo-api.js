@@ -24,6 +24,18 @@ export function localDemoAllowed() {
 }
 
 export class DemoAPI {
+    async getWeeklyGame() {
+        assertLocalDemo();
+        const { DEMO_RELEASE } = await import('./weekly-game/demo-release.js');
+        return { release: structuredClone(DEMO_RELEASE), discovery_required: false };
+    }
+
+    async getWeeklyGameLeaderboard() {
+        return { unlocked: true, entries: [{ rank: 1, name: 'Maya Chen', score: 67 }] };
+    }
+
+    async unlockWeeklyGame() { return { unlocked: true }; }
+
     constructor() {
         assertLocalDemo();
         const demoParams = new URLSearchParams(window.location.search);

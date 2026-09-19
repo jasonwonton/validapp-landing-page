@@ -69,7 +69,7 @@ function localLedgerDate(date = new Date()) {
     return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 }
 
-export function createChatsView({ root, api, getUser, getConfig, presence, softHaptic, successHaptic, showToast, onUnreadChange }) {
+export function createChatsView({ root, api, getUser, getConfig, presence, softHaptic, successHaptic, showToast, onUnreadChange, onPlay }) {
     const attentionPriority = chat => chatAttentionPriority(chat, {
         dailyLedgerEnabled: dailyLedgerEnabled(),
         callsEnabled: getConfig()?.enable_calls === true && getConfig()?.enable_web_calls === true,
@@ -1145,6 +1145,16 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         event?.preventDefault?.();
         if (chatAccessUnavailable()) return;
         const textarea = $(".chat-composer textarea");
+        if (!retryRequestId && !automatic && textarea.value.trim().toLowerCase() === '/play') {
+            // Match iOS: a local command never enters the outbox or clears replies/media.
+            textarea.value = '';
+            textarea.blur();
+            stopTyping();
+            closeMessageActions();
+            if (onPlay) await onPlay();
+            else showToast?.('The weekly game is unavailable. Please reopen Valid.');
+            return;
+        }
         const pendingRecords = retryRequestId ? await listChatTextOutbox(userId()).catch(() => []) : [];
         const persisted = pendingRecords.find((record) => record.client_request_id === retryRequestId);
         const pendingChatId = persisted?.chat_id || store.state.activeChatId;
