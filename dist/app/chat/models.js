@@ -21,6 +21,16 @@ export function normalizeChat(chat = {}) {
     };
 }
 
+// Native Recent means recent conversations, not a claim about anyone's presence.
+export function recentConversations(chats) {
+    const activity = chat => Math.max(...[chat.last_message_at, chat.unacknowledged_missed_call_at, chat.updated_at]
+        .map(value => Date.parse(value) || 0));
+    return chats.filter(chat => chat.membership_status === 'accepted' && chat.status === 'active'
+        && (chat.last_message_at || Number(chat.last_room_sequence) > 0))
+        .sort((a, b) => activity(b) - activity(a) || String(a.id).localeCompare(String(b.id)))
+        .slice(0, 12);
+}
+
 export function normalizeMessage(message = {}) {
     return {
         ...message,

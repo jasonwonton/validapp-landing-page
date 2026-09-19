@@ -15,7 +15,7 @@ export function createFeedView(context) {
         tbhRequestsEnabled, renderTabBadges, showToast, commentControlMarkup,
     } = context;
     const storiesView = state.config?.enable_stories === true && state.config?.enable_web_stories === true
-        ? createStoriesView({ root: $("#storiesRoot"), api, getUser: () => api.user, escapeHTML, showToast })
+        ? createStoriesView({ root: $("#storiesRoot"), api, getUser: () => api.user, getProfile: () => state.profile, escapeHTML, showToast })
         : null;
 
     const reactionControlMarkup = (item, targetType, targetId) => {

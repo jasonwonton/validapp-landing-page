@@ -25,3 +25,21 @@ Compared with the current Six7 iOS source: `Utilities/Six7Theme.swift`, `Views/M
 Local before/after review: `output/ios-design/preview.html`. Test logs and responsive measurements: `output/ios-design/`. Extended built-output captures: `artifacts/ui-audit/`.
 
 This is a source-based design comparison and browser verification, not a pixel-perfect native screenshot comparison or physical-device acceptance. Nothing has been published.
+
+## Follow-up: streaks, Stories and Recent chats
+
+Additional references: `Views/Play/StreakCounterView.swift`, `Views/Feed/StoryViews.swift`, `Views/Chats/ChatListView.swift` (Recent and conversation avatars), and `Services/Networking/ChatPresenceStore.swift`.
+
+- Replaced the leaf-like streak path with a filled flame with an inner cutout. Play uses the native 18px size, 18px count and 16px corner radius; Profile uses 14px; Chats uses a small orange flame and secondary-colored count. Story navigation and classmate search now use the shared vector controls.
+- Story avatars now follow the native 68px ring / 60px photo, 14px spacing, 12px names, peach unread rings and gray viewed rings. Your Story is always first, with a plus badge and a separate add action when a Story already exists. The old separate Stories heading/add toolbar is removed. The overlapping add target is circular so it does not intercept the main Story button's center.
+- Added the native-style Recent conversation rail: accepted active conversations with message history, newest activity first, capped at twelve; first names for direct chats and full group names, Memento camera or unread badges, and attention rings. These shortcuts preserve the full inbox and support keyboard activation and normal link navigation.
+- Groups without a custom photo use a collage of up to four members instead of borrowing one member's photo; groups without previews use a group symbol.
+
+### Confirmed remaining differences
+
+- iOS Play and Profile use the system flame emoji; the PWA retains a portable filled vector under its existing artwork policy. Shared vector controls are visual equivalents of SF Symbols, not identical Apple glyphs.
+- Green activity dots and Active now / Active recently labels are absent. Native presence uses a separate heartbeat service, server-clock expiry, foreground lifecycle and privacy rules. Recent conversation timestamps are not evidence of a person's online presence.
+- Story playback still uses explicit previous/next controls and browser media controls instead of native timed progress, tap zones, pause and dismissal gestures. Story creation uses the browser file/capture flow rather than the native camera/editor.
+- Chats still presents its search field persistently; native reveals search from the toolbar. Inbox rows also remain bordered cards with smaller preview text; native uses flatter rows, 14px preview text and a lighter attention highlight.
+
+All 180 follow-up Playwright checks passed across Android Chromium, desktop Chromium, Firefox and WebKit, covering Stories, Chats/Mementos, interface assets and Recent selection/navigation. Follow-up responsive verification covers Stories, Chats and Play in both themes at 320/390/430px: all 18 combinations fit without horizontal overflow or displaced navigation. Production build, runtime checks, performance budgets and five static-origin/versioned-asset checks pass; shell transfer estimate is 708,910 bytes. Before/after captures use the same fixtures and are available at `output/ios-design/followup-preview.html`.

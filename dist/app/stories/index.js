@@ -29,7 +29,7 @@ function displayName(author = {}) {
     return [author.first_name, author.last_name].filter(Boolean).join(" ").trim() || author.username || "Student";
 }
 
-export function createStoriesView({ root, api, getUser, escapeHTML, showToast }) {
+export function createStoriesView({ root, api, getUser, getProfile = getUser, escapeHTML, showToast }) {
     let authors = [];
     let authorIndex = 0;
     let itemIndex = 0;
@@ -52,16 +52,16 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
 
     root.innerHTML = `
         <section class="stories-shell" aria-label="Stories">
-            <header><strong>Stories</strong><span class="stories-status" role="status"></span><button type="button" data-create-story aria-label="Add Story">${uiIcon("plus")}</button></header>
+            <p class="stories-status" role="status"></p>
             <div class="stories-rail"></div>
         </section>
         <dialog class="story-viewer" aria-label="Story viewer">
             <div class="story-progress" aria-hidden="true"></div>
-            <header><div class="story-author"></div><button type="button" data-close-story aria-label="Close Story">×</button></header>
+            <header><div class="story-author"></div><button type="button" data-close-story aria-label="Close Story">${uiIcon("close")}</button></header>
             <div class="story-media"><img alt="" decoding="async" hidden><video playsinline controls hidden></video><span class="story-text-overlay" hidden></span></div>
             <div class="story-copy"><p></p><small></small></div>
-            <button class="story-previous" type="button" data-previous-story aria-label="Previous Story">‹</button>
-            <button class="story-next" type="button" data-next-story aria-label="Next Story">›</button>
+            <button class="story-previous" type="button" data-previous-story aria-label="Previous Story">${uiIcon("back")}</button>
+            <button class="story-next" type="button" data-next-story aria-label="Next Story">${uiIcon("next")}</button>
             <form class="story-reply"><input type="text" maxlength="2000" placeholder="Reply to Story" aria-label="Reply to Story"><button type="submit">Send</button></form>
             <footer><button type="button" data-share-story>Share</button><button type="button" data-story-viewers hidden>Viewers</button><button type="button" data-delete-story hidden>Delete Story</button><button type="button" data-report-story hidden>Report Story</button></footer>
         </dialog>
@@ -113,16 +113,25 @@ export function createStoriesView({ root, api, getUser, escapeHTML, showToast })
 
     function renderRail() {
         const visibleAuthors = authors.filter((author) => author.items?.length);
-        // Feature gates own visibility. An empty feed must still let its first
-        // author create a Story, and a failed refresh must not hide that action.
-        $(".stories-rail").innerHTML = visibleAuthors.map((author) => {
-            const index = authors.indexOf(author);
-            const name = author.is_owner ? "Your Story" : displayName(author);
-            const avatar = safeURL(author.profile_picture_url, api);
-            const label = `${name}'s Story${author.has_unviewed ? ", new" : ""}`.replace("Your Story's Story", "Your Story");
-            return `<button type="button" data-story-author="${index}" class="${author.has_unviewed ? "unviewed" : ""}" aria-label="${escapeHTML(label)}"><span>${avatar ? `<img src="${escapeHTML(avatar)}" alt="" loading="lazy" decoding="async">` : escapeHTML(name.slice(0, 1))}</span><small>${escapeHTML(name)}</small></button>`;
+        const owner = visibleAuthors.find((author) => author.is_owner);
+        const profile = getProfile() || {};
+        const avatarMarkup = (name, url) => {
+            const avatar = safeURL(url, api);
+            return `<span class="story-avatar">${avatar ? `<img src="${escapeHTML(avatar)}" alt="" loading="lazy" decoding="async">` : `<span>${escapeHTML(name.slice(0, 1).toUpperCase())}</span>`}</span>`;
+        };
+        const addBadge = `<span class="story-add-badge" aria-hidden="true">${uiIcon("plus")}</span>`;
+        // Always reserve the first position for the viewer, even on an empty or
+        // unavailable feed. The additional-story action is a sibling, not a nested button.
+        const ownStory = owner
+            ? `<div class="own-story"><button type="button" data-story-author="${authors.indexOf(owner)}" class="story-author-button unviewed" aria-label="Your Story">${avatarMarkup("Your Story", owner.profile_picture_url || profile.profile_picture_url)}<small>Your Story</small></button><button class="story-add-another" type="button" data-create-story aria-label="Add Story" title="Add another Story">${addBadge}</button></div>`
+            : `<div class="own-story"><button class="story-author-button" type="button" data-create-story aria-label="Add Story"><span class="story-avatar-wrap">${avatarMarkup(displayName(profile), profile.profile_picture_url)}${addBadge}</span><small>Your Story</small></button></div>`;
+        $(".stories-rail").innerHTML = ownStory + visibleAuthors.filter(author => !author.is_owner).map((author) => {
+            const name = displayName(author);
+            const label = `${name}'s Story${author.has_unviewed ? ", new" : ""}`;
+            return `<button type="button" data-story-author="${authors.indexOf(author)}" class="story-author-button ${author.has_unviewed ? "unviewed" : ""}" aria-label="${escapeHTML(label)}">${avatarMarkup(name, author.profile_picture_url)}<small>${escapeHTML(name)}</small></button>`;
         }).join("");
     }
+    renderRail();
 
     async function activate({ force = false } = {}) {
         if (loading || (!force && lastLoaded && Date.now() - lastLoaded < REFRESH_MS)) return;

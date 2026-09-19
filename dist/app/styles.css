@@ -47,7 +47,8 @@
 .ui-icon[data-ui-icon="heart"] { fill: currentColor; }
 .profile-poll-copy .ui-icon, .classmate-row-meta .ui-icon, .poll-summary-votes .ui-icon { width: 16px; height: 16px; }
 .photo-edit-badge .ui-icon { width: 17px; height: 17px; }
-.profile-streak .ui-icon, .play-streak-chip .ui-icon { width: 20px; height: 20px; }
+.profile-streak .ui-icon { width: 14px; height: 14px; }
+.play-streak-chip .ui-icon { width: 18px; height: 18px; }
 .feed-notification-icon { object-fit: contain; }
 .feed-nomination-icon { display: inline-block; vertical-align: middle; object-fit: contain; }
 .signup-photo-benefit .ui-icon { width: 20px; height: 20px; }
@@ -383,6 +384,8 @@ h3 { font-size: 1.45rem; }
 .play-progress { color: var(--muted); font-size: .9rem; text-align: center; white-space: nowrap; }
 .play-live-stats { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .play-streak-chip, .play-aura-chip { min-height: 38px; display: inline-flex; align-items: center; gap: 5px; padding: 6px 10px; border: 2px solid var(--outline); border-radius: 999px; background: rgba(var(--surface-rgb),.92); box-shadow: 0 2px 3px rgba(0,0,0,.08); }
+.play-streak-chip { border-radius: 16px; }
+.play-streak-chip strong { font-size: 18px; font-weight: 400; }
 .play-streak-chip small { color: var(--muted); font-size: .72rem; }
 .play-streak-chip .ui-icon, .streak-celebration-fire .ui-icon { color: #ff3b30; fill: currentColor; stroke-width: 1; }
 .play-aura-chip img { width: 20px; height: 22px; object-fit: contain; }

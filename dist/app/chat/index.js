@@ -4,7 +4,7 @@ import { createPhotoStickers } from './photo-stickers.js';
 import { bindVoiceGesture, createVoiceWaveform } from './voice-interaction.js';
 import {
     CHAT_REACTIONS, chatAttentionPriority, chatNeedsMemento, chatPreview, displayMember, escapeChatHTML,
-    messageTime, normalizeMessage, relativeChatTime, safeMediaURL,
+    messageTime, normalizeMessage, recentConversations, relativeChatTime, safeMediaURL,
 } from "./models.js";
 import { createChatStore } from "./store.js";
 import {
@@ -136,13 +136,14 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
                 <form class="chat-search-form" role="search"><label><span aria-hidden="true">${uiIcon('search')}</span><input type="search" minlength="2" maxlength="100" placeholder="Search chats and messages" aria-label="Search chats and messages" autocomplete="off"></label><button type="submit">Search</button></form>
                 <div class="chat-list-status" role="status"></div>
                 <div class="chat-search-results hidden" aria-label="Chat search results"></div>
+                <section class="chat-recent hidden" aria-label="Recent conversations"><h2>Recent</h2><div class="chat-recent-rail"></div></section>
                 <div class="chat-list" aria-label="Conversations"></div>
             </section>
             <section class="chat-create-screen hidden" data-chat-screen="create">
                 <header class="chat-room-header"><button class="chat-back" type="button" data-chat-list aria-label="Back to chats">${uiIcon("back")}</button><strong>New chat</strong><button class="chat-create-submit" type="button" data-create-submit disabled>Create</button></header>
                 <div class="chat-create-body">
                     <label class="chat-group-name hidden">Group name<input type="text" maxlength="40" placeholder="Name your group"></label>
-                    <label class="chat-person-search"><span>⌕</span><input type="search" placeholder="Search classmates" autocomplete="off"></label>
+                    <label class="chat-person-search"><span aria-hidden="true">${uiIcon("search")}</span><input type="search" placeholder="Search classmates" autocomplete="off"></label>
                     <p class="chat-create-hint">Choose one person for a private chat or several for a group.</p>
                     <div class="chat-people-list"></div><p class="chat-create-status" role="status"></p>
                 </div>
@@ -462,6 +463,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     }
 
     function renderChatList() {
+        renderRecentConversations();
         const list = $(".chat-list");
         $(".chat-list-status").textContent = "";
         const entries = store.state.chats.map((chat) => ({ key: chat.id, html: chatRowMarkup(chat) }));
@@ -472,6 +474,39 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         }
         const unread = store.state.chats.reduce((total, chat) => total + Number(chat.unread_count || 0), 0);
         onUnreadChange?.(unread);
+    }
+
+    function conversationAvatarMarkup(chat) {
+        const isGroup = chat.name != null || chat.accepted_count + chat.pending_count >= 3;
+        const photo = safeMediaURL(isGroup ? chat.chat_photo_url : chat.pair_profile_picture_url || chat.member_previews?.[0]?.profile_picture_url, api);
+        if (photo) return `<img src="${escapeChatHTML(photo)}" alt="" loading="lazy" decoding="async">`;
+        if (!isGroup) return `<span>${escapeChatHTML(chat.display_name.slice(0, 1).toUpperCase())}</span>`;
+        const members = (chat.member_previews || []).slice(0, 4);
+        return `<span class="chat-avatar-mosaic" data-member-count="${members.length}" aria-hidden="true">${members.length ? members.map(member => {
+            const image = safeMediaURL(member.profile_picture_url, api);
+            return `<i class="chat-avatar-member">${image ? `<img src="${escapeChatHTML(image)}" alt="" loading="lazy" decoding="async">` : escapeChatHTML(displayMember(member).slice(0, 1).toUpperCase())}</i>`;
+        }).join('') : uiIcon('group')}</span>`;
+    }
+
+    function renderRecentConversations() {
+        const chats = recentConversations(store.state.chats);
+        $(".chat-recent").classList.toggle("hidden", !chats.length || !$(".chat-search-results").classList.contains("hidden"));
+        reconcileKeyedElements($(".chat-recent-rail"), chats.map(chat => {
+            const isGroup = chat.name != null || chat.accepted_count + chat.pending_count >= 3;
+            const name = isGroup ? chat.display_name : (chat.pair_display_name || chat.display_name).split(/\s+/)[0];
+            const needsMemento = chatNeedsMemento(chat, dailyLedgerEnabled());
+            const unread = Math.max(0, Number(chat.unread_count) || 0);
+            const hint = [needsMemento ? "Today's Memento needed" : "", unread ? `${unread} unread` : ""].filter(Boolean).join(", ");
+            const url = new URL(location.href);
+            url.search = "";
+            // Preserve the local demo context; deployed URLs only contain the route.
+            const current = new URLSearchParams(location.search);
+            if (current.get('demo') === '1') url.searchParams.set('demo', '1');
+            url.searchParams.set('tab', 'chats');
+            url.searchParams.set('chat', chat.id);
+            const html = `<a class="chat-recent-link ${attentionPriority(chat) > 0 ? "attention" : ""}" data-list-key="${escapeChatHTML(chat.id)}" data-open-chat="${escapeChatHTML(chat.id)}" href="${escapeChatHTML(url.pathname + url.search)}" aria-label="${escapeChatHTML(chat.display_name)}${hint ? `, ${escapeChatHTML(hint)}` : ""}"><span class="chat-recent-avatar">${conversationAvatarMarkup(chat)}${needsMemento ? `<i class="chat-recent-camera" aria-hidden="true">${uiIcon('camera-filled')}</i>` : unread ? '<i class="chat-recent-unread" aria-hidden="true"></i>' : ''}</span><span class="chat-recent-name">${escapeChatHTML(name)}</span></a>`;
+            return { key: chat.id, html };
+        }));
     }
 
     async function searchChats(event) {
@@ -492,10 +527,12 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             results.innerHTML = `${chatRows ? `<section><h2>Chats</h2>${chatRows}</section>` : ""}${messageRows ? `<section><h2>Messages</h2>${messageRows}</section>` : ""}${!chatRows && !messageRows ? `<p>No chat results for “${escapeChatHTML(response.query || query)}”.</p>` : ""}`;
             results.classList.remove("hidden");
             $(".chat-list").classList.add("hidden");
+            $(".chat-recent").classList.add("hidden");
             $(".chat-list-status").textContent = `${chats.length + messages.length} result${chats.length + messages.length === 1 ? "" : "s"}`;
         } catch (error) {
             results.classList.add("hidden");
             $(".chat-list").classList.remove("hidden");
+            renderRecentConversations();
             $(".chat-list-status").textContent = error.message || "Could not search chats.";
         }
     }
@@ -511,8 +548,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     }
 
     function chatRowMarkup(chat) {
-        const photo = safeMediaURL(chat.chat_photo_url || chat.pair_profile_picture_url || chat.member_previews?.[0]?.profile_picture_url, api);
-        const avatar = photo ? `<img src="${escapeChatHTML(photo)}" alt="" loading="lazy" decoding="async">` : `<span>${escapeChatHTML(chat.display_name.slice(0, 1).toUpperCase())}</span>`;
+        const avatar = conversationAvatarMarkup(chat);
         if (chat.membership_status === "invited") {
             return `<article class="chat-row invitation attention" data-list-key="${escapeChatHTML(chat.id)}"><button class="chat-row-main" type="button" data-open-chat="${escapeChatHTML(chat.id)}"><span class="chat-avatar">${avatar}</span><span class="chat-row-copy"><strong>${escapeChatHTML(chat.display_name)}</strong><small>${escapeChatHTML(chatPreview(chat))}</small></span></button><div class="chat-invite-actions"><button type="button" data-decline-chat="${escapeChatHTML(chat.membership_id)}">Decline</button><button type="button" data-accept-chat="${escapeChatHTML(chat.membership_id)}">Accept</button></div></article>`;
         }
@@ -2366,7 +2402,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     }
 
     async function handleClick(event) {
-        const target = event.target.closest("button, [data-view-memento]");
+        const target = event.target.closest("button, a[data-open-chat], [data-view-memento]");
         if (!target) { closeMessageActions(); return; }
         if (!target.closest(".chat-message-actions") && !target.matches("[data-message-menu]")) closeMessageActions();
         if (target.matches("[data-new-chat]")) return openCreateChat();
@@ -2379,7 +2415,13 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         }
         if (target.matches("[data-create-submit]")) return createChat();
         if (target.dataset.searchChat) return openSearchResult(target.dataset.searchChat, target.dataset.searchMessage || null);
-        if (target.dataset.openChat) return openChat(target.dataset.openChat);
+        if (target.dataset.openChat) {
+            if (target.tagName === 'A') {
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                event.preventDefault();
+            }
+            return openChat(target.dataset.openChat);
+        }
         if (target.dataset.acceptChat) return acceptInvitation(target.dataset.acceptChat);
         if (target.dataset.declineChat) return declineInvitation(target.dataset.declineChat);
         if (target.matches("[data-history-direction]")) return advanceHistory(target.dataset.historyDirection, { retry: true });

@@ -50,7 +50,7 @@ test("Chats lazy-loads its feature bundle and shows unread conversations and inv
     expect(await chatResources()).toEqual([]);
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await page.getByRole("button", { name: "Chats", exact: true }).click();
-    await expect(page.getByText("Weekend Crew", { exact: true })).toBeVisible();
+    await expect(page.locator(".chat-list").getByText("Weekend Crew", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Accept" })).toBeVisible();
     await expect(page.locator("#chatsTabBadge")).toHaveText("2");
     await expect.poll(chatResources).toContain("/app/routes/chats.js");
@@ -426,7 +426,7 @@ test("Chats and Mementos honor the system dark color scheme", async ({ page }) =
         composer: getComputedStyle(document.querySelector(".chat-composer")).backgroundColor,
     }));
     expect(colors.scheme).toBe("dark");
-    expect(colors.page).toBe("rgb(11, 37, 40)");
+    expect(colors.page).toBe("rgb(7, 24, 26)");
     expect(colors.card).not.toBe("rgb(255, 255, 255)");
     expect(colors.composer).not.toBe("rgb(255, 255, 255)");
 
