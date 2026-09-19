@@ -1,0 +1,37 @@
+{
+  "mode": "sequential 30 Hz recorded-video replay",
+  "clipSha256": "d4bbe53939c246f85a53464f1ec13eb9a8e220bf7a2e09ffbbd7cae87c120946",
+  "startSeconds": 0,
+  "durationSeconds": 2,
+  "sources": {
+    "app/weekly-game/tracker.js": "f3d194249fd6321aa6e6436f9615d369fa8a43576c23776dbab1e00cd3235524",
+    "app/weekly-game/scoring.js": "2003ce0be1f4cb25ea342c75183e40cbeb767756b24b0661a6891667576b1ee4",
+    "assets/weekly-game/tracker-24804bbbdae85e2a5ff4.js": "24804bbbdae85e2a5ff4f437f1d4e3270cfa72d30bd644496d511e13ecc2e115",
+    "assets/weekly-game/mediapipe-0.10.32/pose_landmarker_lite.task": "59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a"
+  },
+  "summary": {
+    "score": 0,
+    "expectedCrossings": 0,
+    "countDifference": 0,
+    "analyzedFrames": 60,
+    "validPairs": 60,
+    "hardBreaks": 0,
+    "evidenceRows": 60
+  },
+  "score": 0,
+  "events": [],
+  "failures": [],
+  "elapsedMs": 1873.800000000745,
+  "video": {
+    "width": 1000,
+    "height": 668,
+    "duration": 2
+  },
+  "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+  "limitations": [
+    "Replay waits for inference; elapsed time is not live phone performance.",
+    "Rendered/compressed recordings differ from original camera frames.",
+    "Matching totals can hide compensating misses and extra counts; inspect event timestamps against manual annotations.",
+    "Native fast-run scores are comparison data, not independent ground truth."
+  ]
+}
