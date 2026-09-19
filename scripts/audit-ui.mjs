@@ -47,7 +47,7 @@ try {
         await camera.locator('[data-camera-shutter]').click();
         await page.locator('.chat-media-publish:enabled').waitFor();
         await page.screenshot({ path: `${output}${colorScheme}-chat-photo-review.png` });
-        await page.locator('[data-close-chat-media]').click();
+        await page.getByRole('button', { name: 'Close photo', exact: true }).click();
         await page.getByRole('button', { name: 'Back to chats' }).click();
         await page.getByRole('button', { name: /Weekend Crew/ }).click();
         await page.locator('.chat-daily-row > button').waitFor({ state: 'visible' });

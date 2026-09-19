@@ -28,7 +28,7 @@ assert.doesNotMatch(serviceWorker, /cache\.put\(/, "The service worker must not 
 const appVersion = indexHTML.match(/name="valid-app-version" content="web-v(\d+)"/)?.[1];
 const workerVersion = serviceWorker.match(/CACHE_NAME = `\$\{CACHE_PREFIX\}v(\d+)`/)?.[1];
 assert.equal(appVersion, workerVersion, "App telemetry and service-worker cache versions must advance together");
-assert.match(indexHTML, /name="theme-color" content="#0b2528" media="\(prefers-color-scheme: dark\)"/, "Installed dark mode needs a matching browser chrome color");
+assert.match(indexHTML, /name="theme-color" content="#07181a" media="\(prefers-color-scheme: dark\)"/, "Installed dark mode needs a matching browser chrome color");
 
 const appArtwork = [
     "anonymous", "aura", "crown", "letter_aligned", "lock", "magnifying_glass",

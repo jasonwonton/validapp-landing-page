@@ -3,25 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-    <meta name="valid-app-version" content="web-v93">
+    <meta name="valid-app-version" content="web-v94">
     <base href="/app/">
     <meta name="theme-color" content="#ccf7f4" media="(prefers-color-scheme: light)">
-    <meta name="theme-color" content="#0b2528" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#07181a" media="(prefers-color-scheme: dark)">
     <meta name="application-name" content="Valid">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="referrer" content="no-referrer">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'self'; connect-src 'self' https://9472d27fa2e1a3762bd91728bb7d9437.r2.cloudflarestorage.com https://api.six7.lol https://api.validappcdn.com https://validappcdn.com wss://livekit.six7.lol wss://livekit-staging-150-136-43-223.sslip.io wss://livekit-prod-150-136-43-223.sslip.io; font-src 'self'; form-action 'self'; frame-src https://challenges.cloudflare.com; img-src 'self' blob: data: https:; manifest-src 'self'; media-src 'self' blob: https:; object-src 'none'; script-src 'self' https://challenges.cloudflare.com; style-src 'self'; worker-src 'self'">
     <meta name="description" content="Answer polls, see your feed, and share your anonymous Valid link from any device.">
     <title>Valid</title>
-    <script src="/app/_static/5b1cbf7a502f29649a0e/preferences.js"></script>
+    <script src="/app/_static/685f627f5af25c55fab8/preferences.js"></script>
     <link rel="icon" type="image/png" href="../assets/AppIconV2.png">
     <link rel="apple-touch-icon" href="../assets/AppIconV2.png">
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="stylesheet" href="/app/_static/5b1cbf7a502f29649a0e/styles.css">
-    <link rel="stylesheet" href="/app/_static/5b1cbf7a502f29649a0e/chat/styles.css">
-    <link rel="stylesheet" href="/app/_static/5b1cbf7a502f29649a0e/stories/styles.css">
-    <link rel="stylesheet" href="/app/_static/5b1cbf7a502f29649a0e/calls/styles.css">
-    <link rel="stylesheet" href="/app/_static/5b1cbf7a502f29649a0e/comments/styles.css">
+    <link rel="stylesheet" href="/app/_static/685f627f5af25c55fab8/styles.css">
+    <link rel="stylesheet" href="/app/_static/685f627f5af25c55fab8/chat/styles.css">
+    <link rel="stylesheet" href="/app/_static/685f627f5af25c55fab8/stories/styles.css">
+    <link rel="stylesheet" href="/app/_static/685f627f5af25c55fab8/calls/styles.css">
+    <link rel="stylesheet" href="/app/_static/685f627f5af25c55fab8/comments/styles.css">
 </head>
 <body>
     <header class="topbar">
@@ -200,7 +200,7 @@
 
     <nav id="bottomNav" class="bottom-nav hidden" aria-label="App navigation">
         <button class="nav-item active" data-panel="feed" type="button" aria-current="page" aria-label="Feed"><span class="nav-icon-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h11a2 2 0 0 1 2 2V19H6a2 2 0 0 1-2-2V5.5Z"/><path d="M17 8h3v9a2 2 0 0 1-2 2h-1M7 9h7M7 12h7M7 15h4"/></svg><span id="feedTabBadge" class="tab-badge hidden" aria-hidden="true"></span></span><span>Feed</span></button>
-        <button class="nav-item" data-panel="play" type="button" aria-label="Play"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path class="nav-icon-fill" d="m10 8 6 4-6 4Z"/></svg><span>Play</span></button>
+        <button class="nav-item" data-panel="play" type="button" aria-label="Play"><span class="nav-icon-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path class="nav-icon-fill" d="m10 8 6 4-6 4Z"/></svg></span><span>Play</span></button>
         <button class="nav-item hidden" data-panel="chats" type="button" aria-label="Chats"><span class="nav-icon-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h11a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3H9l-4.5 3 .8-3.7A3 3 0 0 1 4 13.5v-8Z"/><path d="M8 9h6M8 12h4"/></svg><span id="chatsTabBadge" class="tab-badge hidden" aria-hidden="true"></span></span><span>Chats</span></button>
         <button class="nav-item" data-panel="profile" type="button" aria-label="Profile"><span class="nav-icon-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.25"/><path d="M5.5 20c.4-4.1 2.6-6.2 6.5-6.2s6.1 2.1 6.5 6.2"/><circle cx="12" cy="12" r="9.5"/></svg><span id="profileTabBadge" class="tab-badge profile-tab-badge hidden" aria-hidden="true">!</span></span><span>Profile</span></button>
     </nav>
@@ -873,8 +873,8 @@
     </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="/app/_static/5b1cbf7a502f29649a0e/local-config.js"></script>
+    <script src="/app/_static/685f627f5af25c55fab8/local-config.js"></script>
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
-    <script type="module" src="/app/_static/5b1cbf7a502f29649a0e/app.js"></script>
+    <script type="module" src="/app/_static/685f627f5af25c55fab8/app.js"></script>
 </body>
 </html>

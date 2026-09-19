@@ -13,7 +13,7 @@
         document.documentElement.dataset.appearance = theme;
         document.querySelectorAll('meta[name="theme-color"]').forEach(meta => {
             meta.removeAttribute('media');
-            meta.content = resolved === 'dark' ? '#0b2528' : '#ccf7f4';
+            meta.content = resolved === 'dark' ? '#07181a' : '#ccf7f4';
         });
         const select = document.getElementById('appearanceSelect');
         if (select) select.value = theme;

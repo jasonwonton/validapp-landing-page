@@ -4166,9 +4166,9 @@ function renderPlay() {
         <div class="question-artwork">${artworkURL ? `<img loading="lazy" decoding="async" src="${escapeHTML(artworkURL)}" alt="">` : `<div class="artwork-placeholder"><img loading="lazy" decoding="async" src="../assets/app/pencil-clipboard.webp" alt=""><span>Question artwork</span></div>`}</div>
         <div class="choice-grid">${choices.map(choiceMarkup).join("")}</div>
         <div class="play-actions">
-            <button class="play-action-button" data-shuffle type="button"><span aria-hidden="true">↻</span> Shuffle</button>
+            <button class="play-action-button" data-shuffle type="button">${uiIcon("shuffle-circle")} Shuffle</button>
             <button class="play-action-button nominate" data-nominate type="button"><img loading="lazy" decoding="async" src="../assets/app/crown.webp" alt="">Nominate</button>
-            <button class="play-action-button" data-skip="${question.id}" type="button" ${remainingSkips < 1 ? "disabled" : ""}>Skip (${remainingSkips})</button>
+            <button class="play-action-button" data-skip="${question.id}" type="button" ${remainingSkips < 1 ? "disabled" : ""}>${uiIcon("forward")} Skip (${remainingSkips})</button>
         </div>
     </article>`;
 }
@@ -6577,7 +6577,9 @@ function bindEvents() {
     document.addEventListener("click", (event) => {
         if (!event.target.closest(".detail-overflow")) closeDetailActionMenus();
     });
+    const tabIcons = { feed: "newspaper", play: "play-circle", chats: "chat-pair", profile: "person-circle" };
     $$(".nav-item").forEach((button) => {
+        button.querySelector("svg").outerHTML = uiIcon(tabIcons[button.dataset.panel]);
         const preload = () => { void preloadRoute(button.dataset.panel); };
         button.addEventListener("pointerenter", preload, { passive: true });
         button.addEventListener("focus", preload);
