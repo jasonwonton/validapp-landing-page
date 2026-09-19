@@ -9,6 +9,12 @@ assert(origin==='https://validapp.lol'||/^http:\/\/127\.0\.0\.1:\d+$/.test(origi
 const root=new URL('../',import.meta.url),release=JSON.parse(await readFile(new URL('tests/fixtures/love-flap/release.json',root)));
 const local=JSON.parse(await readFile(new URL('dist/app/build-manifest.json',root)));
 const manifest=await(await fetch(`${origin}/app/build-manifest.json`)).json();assert.equal(manifest.release,local.release);
+// DigitalOcean static hosting ignores _headers; check the actual edge policy.
+// A correct HTML meta policy cannot loosen a stale response-header policy.
+const shell=await fetch(`${origin}/app/`);assert.equal(shell.status,200);
+const csp=shell.headers.get('content-security-policy')||'';
+const frameSources=csp.split(';').map(s=>s.trim().split(/\s+/)).find(parts=>parts[0]==='frame-src');
+assert(frameSources?.includes("'self'"),'Live PWA response CSP must allow self-hosted game frames; update the existing Cloudflare PWA response-header rule');
 const{WEB_PACKAGE}=await import('../app/weekly-game/web-assets.js');
 const response=await fetch(origin+WEB_PACKAGE.host);assert.equal(response.status,200);const bytes=Buffer.from(await response.arrayBuffer());const sha=v=>createHash('sha256').update(v).digest('hex');assert.equal(sha(bytes),sha(await readFile(new URL(`dist${WEB_PACKAGE.host}`,root))));
 for(const [name,type] of [['chromium',chromium],['firefox',firefox],['webkit',webkit]].filter(([name])=>!process.env.PWA_GAME_BROWSER||name===process.env.PWA_GAME_BROWSER)){

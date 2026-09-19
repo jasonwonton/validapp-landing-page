@@ -80,7 +80,37 @@ app imports and physical-device Safari/Android behavior are not claimed.
 
 ## Deployment
 
-Pending final production-build verification and frontend-only activation.
+Production deployment `b0ccbc59-621d-463b-82b0-8fbb8818634c` is ACTIVE, with
+43/43 steps complete. Frontend branch `codex/pwa-love-flap-release-20260918`,
+source `e9351d98954e595ec4e5f4975b38d85428e93d87`, app release
+`18bdda6bc2b7de7754e5` (web-v96). The complete app spec differs only in the
+frontend branch; all 12 backend/admin/worker/job source revisions are unchanged.
+
+The first live game check caught a stale Cloudflare response CSP: DigitalOcean
+static hosting ignores `_headers`, so updating the file and HTML meta policy
+alone did not permit the sandboxed game frame. Updated only `frame-src` in the
+existing **Valid PWA security headers** rule
+`9fbb992c74c7445dbe04f04a00dc9f4c` to include `'self'`. Verified the deployed
+response against its captured baseline: all other CSP directives and all seven
+other response headers are identical. Rule filter and order are unchanged.
+The release checker now fails immediately if the actual response omits this
+frame permission, and the deployment runbook documents the edge dependency.
+
+Final live checks pass:
+
+- All 60 app asset hashes, manifest, worker, retained prior lazy modules, startup
+  and offline shell checks.
+- Current 67 package, model/worker hashes, instructions and real wrist inference.
+- Full Love Flap round and one evidence submission to a local API stub, native
+  1080×1920 PNG, and clean close on Chromium, Firefox and WebKit using the exact
+  production assets and real edge CSP. Chromium/Firefox have active controlling
+  service workers; the WebKit registration limitation above still applies.
+- Production shell/security, manifest/service worker, related-origin passkeys,
+  API health and CORS checks after the edge change.
+
+The public selection remains 67 Challenge; Admin schedule and discovery are
+unchanged. These checks did not create real production runs, scores or posts.
+
 Previous deployment: `b9df9fb8-665d-43b1-a204-c75260e734ef`, frontend branch
 `codex/pwa-weekly-game-release-20260918`, source
 `8e857b93621a8716a50919de0e4d999bbf4c0648`, app release

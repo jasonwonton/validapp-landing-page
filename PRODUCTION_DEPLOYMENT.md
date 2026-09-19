@@ -116,13 +116,22 @@ regressions; use `WEB_RATE_LIMIT_MODE=off` for limiter-only regressions.
 
 ## 2. Static site and routing
 
-The current live topology (audited September 5, 2026) serves `validapp.lol`
+The current live topology (reverified September 18, 2026) serves `validapp.lol`
 from the `validapp-landing-page` **static-site component inside the production
-Six7 backend DigitalOcean app**, sourced from this repository's `main` branch.
+Six7 backend DigitalOcean app**, sourced from the reviewed frontend release branch.
 DigitalOcean serves `_headers` as a plain file and does not apply it to static
-responses; that is why the live framing check currently fails.
+responses. Cloudflare's existing **Valid PWA security headers** response-header
+rule (`9fbb992c74c7445dbe04f04a00dc9f4c`) supplies the real headers for
+`validapp.lol` and `staging.validapp.lol` paths beginning `/app/`.
+Any policy change must update both the repository and that rule, preserving its
+other headers, filter and order. In particular, weekly web games require
+`frame-src https://challenges.cloudflare.com 'self'`; the game iframe retains
+its opaque sandbox and hash-pinned script policy. App documents still use
+`frame-ancestors 'none'` and `X-Frame-Options: DENY`.
+Run `node scripts/check-love-flap-release.mjs` against production after rollout;
+it verifies the real response CSP before exercising the deployed game.
 
-The candidate deploy target is the header-emitting `npm start` web service.
+The alternative deploy target below is the header-emitting `npm start` web service.
 It serves only files from `dist/`, accepts only GET/HEAD, returns 404 for API
 paths, applies `no-cache` to `/app/*`, and uses `dist/_headers` as the single
 security-policy source. Its contract is checked with:
