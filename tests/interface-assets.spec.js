@@ -10,10 +10,11 @@ test('interface source has no decorative emoji; product reactions remain intact'
         // Explicit native product labels requested in the feed follow-up, not
         // decorative interface emoji. Keep this exception exact and file-scoped.
         if (path === 'feed-sender.js') source = source.replace(/👦💙|👧💗|🧑💛|🫵/gu, '');
-        // The selected-poll finger is explicitly part of both result and share UI.
+        // The selected-poll finger and nomination celebration are native product artwork.
         if (path === 'app.js') source = source
             .replace('aria-label="Picked">👆</span>', 'aria-label="Picked"></span>')
-            .replace('context.fillText("👆", selectedPointer.x, selectedPointer.y);', '');
+            .replace('context.fillText("👆", selectedPointer.x, selectedPointer.y);', '')
+            .replace('<span aria-hidden="true">🎉</span></div>', '<span aria-hidden="true"></span></div>');
         // Allow only the existing reaction enum definitions, never arbitrary UI text.
         const withoutReactions = source
             .replace(/\{ type: "(?:thumbs_down|surprised|fire|eyes|funny|love|legacy_agree)", emoji: "[^"]+", label: "[^"]+" \}/g, '')

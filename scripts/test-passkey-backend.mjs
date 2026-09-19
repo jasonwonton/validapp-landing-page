@@ -45,7 +45,8 @@ function backendRequest(req, res) {
 }
 
 function createTlsServer() {
-    const passkeyModule = readFileSync(path.join(repoRoot, "app", "passkeys.js"));
+    const modules = new Map(['passkeys.js', 'auth-reliability.js', 'auth-route-recovery.js', 'auth-diagnostics.js']
+        .map(file => [`/app/${file}`, readFileSync(path.join(repoRoot, 'app', file))]));
     return https.createServer(
         { cert: readFileSync(certificatePath), key: readFileSync(keyPath) },
         (req, res) => {
@@ -67,12 +68,12 @@ function createTlsServer() {
                 backendRequest(req, res);
                 return;
             }
-            if (req.url === "/app/passkeys.js") {
+            if (modules.has(req.url)) {
                 res.writeHead(200, {
                     "content-type": "text/javascript; charset=utf-8",
                     "cache-control": "no-store",
                 });
-                res.end(passkeyModule);
+                res.end(modules.get(req.url));
                 return;
             }
             if (req.url === "/test") {
@@ -306,6 +307,7 @@ try {
         env: {
             ...process.env,
             PYTHONUNBUFFERED: "1",
+            PYTHONPATH: six7Root,
             S3_BUCKET: "valid-integration-test",
             S3_BUCKET_ENDPOINT: "http://127.0.0.1:9",
             S3_PUBLIC_BASE_URL: "https://validapp.lol/test-assets",
@@ -364,6 +366,7 @@ try {
     console.log("PASS real WebAuthn signup → backup passkey → logout → passkey sign-in → profile");
     console.log(`     RP six7.lol related origin validapp.lol; credential count ${result.credentialCount}`);
 } catch (error) {
+    await new Promise(resolve => setTimeout(resolve, 100));
     if (backendOutput) console.error(backendOutput.trim());
     throw error;
 } finally {
