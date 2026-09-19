@@ -534,6 +534,14 @@ export class ValidAPI {
         return this.request(`/users/${userId}/blocks/${blockedUserId}`, { method: "POST" });
     }
 
+    getBlockedUsers(userId) {
+        return this.request(`/users/${userId}/blocks/profiles`);
+    }
+
+    unblockUser(userId, blockedUserId) {
+        return this.request(`/users/${userId}/blocks/${blockedUserId}`, { method: "DELETE" });
+    }
+
     getPlayQuestions(userId) {
         return this.request(`/users/${userId}/questions/unanswered`);
     }

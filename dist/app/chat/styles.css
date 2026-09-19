@@ -78,7 +78,7 @@
 .chat-page-header .chat-icon-button { border: 0; background: transparent; color: var(--dark-teal); border-radius: 12px; }
 .chat-icon-button { min-width: 44px; height: 44px; padding: 0 10px; border: 2px solid var(--outline); border-radius: 50%; background: var(--white); font-size: 1.55rem; line-height: 1; }
 .chat-list-status, .chat-room-status, .chat-create-status { min-height: 1.35em; color: var(--muted); font-size: .83rem; text-align: center; }
-.chat-search-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin: 8px 0; }
+.chat-search-form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; margin: 8px 0; }
 .chat-search-form label { display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: center; min-height: 44px; padding: 0 11px; border: 1px solid var(--outline); border-radius: 14px; background: var(--white); }
 .chat-search-form input { min-width: 0; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; }
 .chat-search-form button { min-height: 44px; padding: 0 14px; border: 0; border-radius: 14px; background: var(--ink); color: var(--white); font-weight: 800; }

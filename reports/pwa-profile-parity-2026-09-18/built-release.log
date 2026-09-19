@@ -1,0 +1,6 @@
+PASS release b7a7f5198557d2fed11f: manifest, entry points, worker, headers, 65 exact asset hashes
+PASS previous-release lazy modules remain available
+PASS android: signed-out startup, correct offline shell, no API responses cached
+PASS desktop: signed-out startup, correct offline shell, no API responses cached
+PASS firefox: signed-out startup
+PASS webkit: signed-out startup

@@ -683,7 +683,7 @@ async function showSignedIn() {
                     if (api.user?.id) await openActivitySettings({ api, userId: api.user.id, presence: chatPresence });
                 } catch (_) { showToast("Activity status couldn’t be loaded. Please try again."); }
             });
-            $('#notificationButton').after(button);
+            $('#blockedUsersButton').before(button);
         }
         presenceLifecycle?.setUser(chatsEnabled ? api.user.id : null);
         $("#activityStatusButton")?.classList.toggle("hidden", !chatsEnabled);
@@ -6910,6 +6910,12 @@ function bindEvents() {
     $("#profilePictureInput").addEventListener("change", changeProfilePicture);
     $("#addPasskeyButton").addEventListener("click", () => addBackupPasskey($("#addPasskeyButton")));
     $("#enrollPasskeyButton").addEventListener("click", () => addBackupPasskey($("#enrollPasskeyButton")));
+    $('#blockedUsersButton').addEventListener('click', async () => {
+        try {
+            const { openBlockedUsers } = await import('./blocked-users.js');
+            if (api.user?.id) openBlockedUsers({ api, userId: api.user.id });
+        } catch (_) { showToast('Blocked users could not be loaded. Please try again.'); }
+    });
     $("#feedbackButton").addEventListener("click", () => openFeedbackDialog());
     $("#feedbackForm").addEventListener("submit", submitFeedback);
     $("#feedbackPhoto").addEventListener("change", (event) => {

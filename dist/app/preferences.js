@@ -15,8 +15,9 @@
             meta.removeAttribute('media');
             meta.content = resolved === 'dark' ? '#07181a' : '#ccf7f4';
         });
-        const select = document.getElementById('appearanceSelect');
-        if (select) select.value = theme;
+        document.querySelectorAll('button[data-appearance]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.appearance === theme)));
+        const hint = document.getElementById('appearanceHint');
+        if (hint) hint.textContent = theme === 'system' ? 'Matches your device and changes automatically.' : 'This choice stays on until you change it.';
     }
     function haptic(pattern = 8) {
         if (!haptics || !supported() || document.hidden || navigator.userActivation?.hasBeenActive === false) return false;
@@ -28,7 +29,6 @@
     }
     function renderHaptics() {
         for (const id of ['hapticsToggle', 'testHaptics', 'hapticsStatus']) document.getElementById(id).hidden = !supported();
-        document.getElementById('devicePreferencesHeading').textContent = supported() ? 'Appearance & feedback' : 'Appearance';
         const toggle = document.getElementById('hapticsToggle');
         toggle.disabled = !supported();
         toggle.setAttribute('aria-checked', String(supported() && haptics));
@@ -45,9 +45,9 @@
     });
     document.addEventListener('DOMContentLoaded', () => {
         applyTheme(); renderHaptics();
-        document.getElementById('appearanceSelect').addEventListener('change', event => {
-            theme = ['light', 'dark'].includes(event.target.value) ? event.target.value : 'system'; save(themeKey, theme); applyTheme();
-        });
+        document.querySelectorAll('button[data-appearance]').forEach(button => button.addEventListener('click', () => {
+            theme = button.dataset.appearance; save(themeKey, theme); applyTheme();
+        }));
         document.getElementById('hapticsToggle').addEventListener('click', () => {
             haptics = !haptics; save(hapticsKey, haptics ? 'on' : 'off'); renderHaptics();
             if (!haptics) { try { navigator.vibrate?.(0); } catch {} }

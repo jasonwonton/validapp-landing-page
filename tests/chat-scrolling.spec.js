@@ -214,3 +214,20 @@ test('keyed updates keep unchanged focused controls connected', async ({ page })
     });
     expect(result).toEqual({ same: true, focused: true, blurCount: 0 });
 });
+
+test('reopening a cached room is at latest on its first frame while refresh waits', async ({page}) => {
+    await mount(page, 750);
+    await page.locator('.chat-timeline').evaluate(el => {el.scrollTop=500;});
+    await page.getByRole('button',{name:'Back to chats'}).click();
+    const gap = await page.evaluate(async()=>{
+        scrollFixture.hold=new Promise(resolve=>scrollFixture.release=resolve);
+        scrollFixture.opening=scrollFixture.view.openChat('scroll-chat',{updateHistory:false});
+        return new Promise(resolve=>requestAnimationFrame(()=>{
+            const el=document.querySelector('.chat-timeline');
+            resolve(el.scrollHeight-el.clientHeight-el.scrollTop);
+        }));
+    });
+    expect(gap).toBeLessThan(2);
+    await page.evaluate(async()=>{scrollFixture.release();await scrollFixture.opening;});
+    await expect.poll(()=>page.locator('.chat-timeline').evaluate(el=>el.scrollHeight-el.clientHeight-el.scrollTop)).toBeLessThan(2);
+});

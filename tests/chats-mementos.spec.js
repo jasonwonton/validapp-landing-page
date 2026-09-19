@@ -445,6 +445,7 @@ test("Chats and Mementos honor the system dark color scheme", async ({ page }) =
 test("explicit chat search opens the exact authoritative message", async ({ page }) => {
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
+    await page.getByRole("button", { name: "Search chats", exact: true }).click();
     await page.getByRole("searchbox", { name: "Search chats and messages" }).fill("hilarious");
     await page.getByRole("button", { name: "Search", exact: true }).click();
     const result = page.getByRole("button", { name: /Noah Williams.*That was hilarious/ });

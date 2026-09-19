@@ -93,7 +93,7 @@ for (const theme of ['light', 'dark']) test(`${theme}: profile and native chat c
     const plus = await page.locator('.profile-add-bio-icon').evaluate(el => ({ ink: getComputedStyle(el).color, background: getComputedStyle(el).backgroundColor }));
     expect(plus.ink).not.toBe(plus.background);
     for (const id of ['hapticsToggle', 'testHaptics', 'hapticsStatus']) await expect(page.locator(`#${id}`)).toBeHidden();
-    await expect(page.locator('#appearanceSelect')).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Appearance', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Chats', exact: true }).click();
     await expect(page.locator('.chat-row.attention').first()).toHaveCSS('background-image', 'none');
     await page.getByRole('button', { name: /Weekend Crew/ }).click();

@@ -788,8 +788,20 @@ export class DemoAPI {
     }
 
     async blockUser(_userId, blockedUserId) {
+        this.blockedUsers ||= [];
+        const profile = this.classmates.find(classmate => String(classmate.user_id) === String(blockedUserId));
+        if (profile && !this.blockedUsers.some(p => p.user_id === profile.user_id)) this.blockedUsers.push(profile);
         this.classmates = this.classmates.filter((classmate) => String(classmate.user_id) !== String(blockedUserId));
         return { blocked_user_id: blockedUserId };
+    }
+
+    async getBlockedUsers() { return structuredClone(this.blockedUsers || []); }
+
+    async unblockUser(_userId, blockedUserId) {
+        const profile = this.blockedUsers?.find(p => p.user_id === blockedUserId);
+        if (profile) this.classmates.push(profile);
+        this.blockedUsers = (this.blockedUsers || []).filter(p => p.user_id !== blockedUserId);
+        return { success: true };
     }
 
     async getPlayQuestions() {

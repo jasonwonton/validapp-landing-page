@@ -149,8 +149,8 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     root.innerHTML = `
         <div class="chat-shell">
             <section class="chat-list-screen" data-chat-screen="list">
-                <header class="chat-page-header"><button class="chat-icon-button" type="button" data-focus-chat-search aria-label="Search chats">${uiIcon('search')}</button><h1>Chats</h1><button class="chat-icon-button" type="button" data-new-chat aria-label="Start a chat">${uiIcon('compose')}</button></header>
-                <form class="chat-search-form" role="search"><label><span aria-hidden="true">${uiIcon('search')}</span><input type="search" minlength="2" maxlength="100" placeholder="Search chats and messages" aria-label="Search chats and messages" autocomplete="off"></label><button type="submit">Search</button></form>
+                <header class="chat-page-header"><button class="chat-icon-button" type="button" data-focus-chat-search aria-label="Search chats" aria-expanded="false">${uiIcon('search')}</button><h1>Chats</h1><button class="chat-icon-button" type="button" data-new-chat aria-label="Start a chat">${uiIcon('compose')}</button></header>
+                <form class="chat-search-form hidden" role="search"><label><span aria-hidden="true">${uiIcon('search')}</span><input type="search" minlength="2" maxlength="100" placeholder="Search chats and messages" aria-label="Search chats and messages" autocomplete="off"></label><button type="submit">Search</button><button type="button" data-cancel-chat-search>Cancel</button></form>
                 <div class="chat-list-status" role="status"></div>
                 <div class="chat-search-results hidden" aria-label="Chat search results"></div>
                 <section class="chat-recent hidden" aria-label="Recent conversations"><h2>Recent</h2><div class="chat-recent-rail"></div></section>
@@ -337,7 +337,27 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         mementoCamera.open();
     }
     $('[data-retake-memento]').addEventListener('click', startMementoCamera);
-    $('[data-focus-chat-search]').addEventListener('click', () => $('.chat-search-form input').focus());
+    let searchGeneration = 0;
+    function closeSearch() {
+        searchGeneration++;
+        $('.chat-search-form').classList.add('hidden');
+        $('.chat-search-form input').value = '';
+        $('.chat-search-results').classList.add('hidden');
+        $('.chat-list').classList.remove('hidden');
+        $('.chat-list-status').textContent = '';
+        $('[data-focus-chat-search]').setAttribute('aria-expanded', 'false');
+        renderRecentConversations();
+        $('[data-focus-chat-search]').focus({ preventScroll: true });
+    }
+    $('[data-focus-chat-search]').addEventListener('click', () => {
+        $('.chat-search-form').classList.remove('hidden');
+        $('[data-focus-chat-search]').setAttribute('aria-expanded', 'true');
+        $('.chat-search-form input').focus();
+    });
+    $('[data-cancel-chat-search]').addEventListener('click', closeSearch);
+    $('.chat-search-form').addEventListener('keydown', event => {
+        if (event.key === 'Escape') { event.preventDefault(); closeSearch(); }
+    });
     const stickerMaker = createStickerMaker({
         dialog: $("[data-sticker-maker-dialog]"),
         saveSticker: (file) => api.createSticker(file),
@@ -629,10 +649,12 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             $(".chat-list-status").textContent = "Enter at least two characters.";
             return;
         }
+        const generation = ++searchGeneration;
         const results = $(".chat-search-results");
         $(".chat-list-status").textContent = "Searching…";
         try {
             const response = await api.searchChats(userId(), query, 8);
+            if (generation !== searchGeneration) return;
             const chats = response.chats?.items || [];
             const messages = response.messages?.items || [];
             const chatRows = chats.map((item) => `<button type="button" data-search-chat="${escapeChatHTML(item.chat_id)}"><strong>${escapeChatHTML(item.title)}</strong><small>${escapeChatHTML(item.subtitle || "Conversation")}</small></button>`).join("");
@@ -643,6 +665,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             $(".chat-recent").classList.add("hidden");
             $(".chat-list-status").textContent = `${chats.length + messages.length} result${chats.length + messages.length === 1 ? "" : "s"}`;
         } catch (error) {
+            if (generation !== searchGeneration) return;
             results.classList.add("hidden");
             $(".chat-list").classList.remove("hidden");
             renderRecentConversations();
@@ -706,15 +729,16 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         store.state.activeChatId = String(chatId);
         store.state.loadingRoom = true;
         renderDailyRow();
-        renderMessages(false);
         applyChatAppearance();
         store.state.typingUserIds.clear();
         showScreen("room");
         $(".chat-room-status").textContent = "Loading conversation…";
         renderRoomHeader(chat || { display_name: "Chat", accepted_count: 0 });
         if (updateHistory) pushRoomHistory(chatId);
-        const cached = store.messages(chatId);
-        if (cached.length && !force) renderMessages(false);
+        // Establish the initial viewport synchronously before the first paint.
+        // Only an already-open room being refreshed retains a reading anchor.
+        renderMessages(!savedAnchor);
+        if (savedAnchor) timelineScroll.restore(savedPosition);
         const [detailResult, messagesResult, dailyResult] = await Promise.allSettled([
             api.getChat(userId(), chatId),
             api.getChatMessages(userId(), chatId, savedAnchor ? { limit: 100, afterSequence: Math.max(0, Math.floor(savedAnchor.room_sequence) - 1) } : { limit: 50 }),

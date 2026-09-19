@@ -1824,3 +1824,31 @@ body.detail-screen-open { overflow: hidden; }
     body.play-active .choice-button { min-height: 65px; font-size: 18px; }
     .feed-detail-option { min-height: 72px; font-size: 19px; }
 }
+
+/* Match the native Appearance and Privacy & Safety cards. */
+.device-preferences, .privacy-settings { display: grid; gap: 14px; margin-top: 20px; padding: 16px; border: 3px solid var(--outline); border-radius: 18px; background: rgba(var(--surface-rgb),.75); }
+.device-preferences h3, .privacy-settings h3 { display: flex; align-items: center; gap: 9px; margin: 0; font-size: 22px; }
+.device-preferences svg, .privacy-settings svg { width: 22px; height: 22px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.device-preferences h3 svg, .privacy-settings h3 svg { color: var(--dark-teal); }
+.appearance-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.appearance-options button { display: grid; justify-items: center; align-content: center; gap: 7px; min-height: 66px; padding: 8px; border: 1px solid color-mix(in srgb, var(--outline) 20%, transparent); border-radius: 14px; background: rgba(var(--surface-rgb),.65); color: var(--ink); font: inherit; font-size: 14px; cursor: pointer; }
+.appearance-options button svg { width: 18px; height: 18px; }
+.appearance-options button[aria-pressed="true"] { border: 2px solid var(--outline); background: var(--peach); color: #000; }
+#appearanceHint { font-size: 14px; line-height: 1.35; color: var(--muted); }
+.privacy-settings .settings-row { grid-template-columns: 28px minmax(0,1fr) auto; padding: 14px; gap: 12px; border: 0; border-radius: 14px; background: rgba(var(--surface-rgb),.65); }
+.privacy-settings .settings-icon { width: 28px; height: 28px; color: var(--dark-teal); }
+.privacy-settings .settings-row strong { font-size: 17px; }
+.privacy-settings .settings-row small { font-size: 13px; }
+.profile-feedback { display: block; width: 100%; min-height: 54px; margin: 20px 0 0; padding: 16px; border: 0; border-radius: 16px; background: rgba(var(--surface-rgb),.9); color: var(--ink); font: inherit; font-size: 16px; cursor: pointer; }
+.profile-sign-out { display: block; margin-top: 20px; border-radius: 16px; font-size: 16px; }
+.blocked-users-dialog { position: fixed; inset: 0; margin: 0 auto; width: min(650px,100%); max-width: none; height: 100dvh; max-height: none; padding: max(16px, env(safe-area-inset-top)) 16px 24px; border: 0; background: var(--aqua); color: var(--ink); }
+.blocked-users-dialog > header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.blocked-users-dialog h2 { font-size: 20px; margin: 0; }
+.blocked-users-dialog [data-close] { width: 44px; height: 44px; border: 0; background: transparent; color: var(--ink); font-size: 32px; }
+.blocked-users-list { display: grid; gap: 12px; }
+.blocked-user-row { display: flex; align-items: center; gap: 12px; padding: 14px; border: 2px solid var(--outline); border-radius: 18px; background: var(--white); }
+.blocked-user-row strong { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.blocked-user-row button { flex: 0 0 auto; width: auto; }
+.blocked-user-avatar { display: grid; place-items: center; flex: 0 0 46px; width: 46px; height: 46px; overflow: hidden; border: 2px solid var(--outline); border-radius: 50%; background: var(--aqua); }
+.blocked-user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.blocked-users-dialog > [role="status"] { text-align: center; color: var(--muted); }

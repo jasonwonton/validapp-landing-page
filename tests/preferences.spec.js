@@ -24,17 +24,17 @@ test('manual appearance overrides the system, survives reload and returns to Sys
     await page.emulateMedia({ colorScheme: 'dark' });
     await profile(page);
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await page.getByRole('combobox', { name: /^Appearance/ }).selectOption('light');
+    await page.getByRole('button', { name: 'Use light appearance' }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     await expect(page.locator('meta[name="theme-color"]').first()).toHaveAttribute('content', '#ccf7f4');
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     await page.getByRole('button', { name: /^sign in$/i }).click();
     await page.getByRole('button', { name: 'Profile', exact: true }).click();
-    await page.locator('#appearanceSelect').selectOption('dark');
+    await page.getByRole('button', { name: 'Use dark appearance' }).click();
     await page.emulateMedia({ colorScheme: 'light' });
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await page.locator('#appearanceSelect').selectOption('system');
+    await page.getByRole('button', { name: 'Use system appearance' }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     await page.emulateMedia({ colorScheme: 'dark' });
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
@@ -43,8 +43,8 @@ test('manual appearance overrides the system, survives reload and returns to Sys
 test('dark text and surface pairs remain readable across Profile, Feed and Play', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'light' });
     await profile(page);
-    await page.locator('#appearanceSelect').selectOption('dark');
-    for (const selector of ['.full-profile-card h3', '.profile-identity-line', '.profile-bio-button', '.profile-school-meta', '.profile-stat-card strong', '.profile-stat-card > span', '.ask-link-heading > div > span', '.appearance-control small', '.profile-share-button.snapchat', '.profile-share-button.messages']) {
+    await page.getByRole('button', { name: 'Use dark appearance' }).click();
+    for (const selector of ['.full-profile-card h3', '.profile-identity-line', '.profile-bio-button', '.profile-school-meta', '.profile-stat-card strong', '.profile-stat-card > span', '.ask-link-heading > div > span', '#appearanceHint', '.appearance-options button[aria-pressed="true"]', '.profile-share-button.snapchat', '.profile-share-button.messages']) {
         expect(await contrast(page, selector), selector).toBeGreaterThanOrEqual(4.5);
     }
     await page.getByRole('button', { name: 'Feed', exact: true }).click();
@@ -91,7 +91,7 @@ test('missing vibration and denied preference storage never block the app', asyn
     for (const id of ['hapticsToggle', 'testHaptics', 'hapticsStatus']) await expect(page.locator(`#${id}`)).toBeHidden();
     await expect(page.getByRole('switch', { name: /Haptic feedback/ })).toHaveCount(0);
     await expect(page.locator('#hapticsHint')).toContainText('unavailable');
-    await page.locator('#appearanceSelect').selectOption('dark');
+    await page.getByRole('button', { name: 'Use dark appearance' }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await page.getByRole('button', { name: 'Chats', exact: true }).click();
     await expect(page.locator('.chat-page-header')).toBeVisible();
