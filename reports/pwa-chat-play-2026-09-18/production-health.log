@@ -1,0 +1,9 @@
+
+> test:production
+> node scripts/check-production.mjs
+
+✓ app shell and security headers
+✓ PWA manifest and service worker
+✓ related-origin passkeys
+✓ API health and CORS
+Production preflight passed.
