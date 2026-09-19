@@ -404,13 +404,13 @@ test("hide-for-me removes only the local row while unsend renders a tombstone", 
     const incoming = page.locator('[data-message-id="msg-n1"]');
     await incoming.getByRole("button", { name: "Message actions" }).click();
     page.once("dialog", (dialog) => dialog.accept());
-    await incoming.getByRole("button", { name: "Hide for me" }).click();
+    await incoming.getByRole("button", { name: "Delete for me" }).click();
     await expect(incoming).toHaveCount(0);
 
     const mine = page.locator('[data-message-id="msg-n3"]');
     await mine.getByRole("button", { name: "Message actions" }).click();
     page.once("dialog", (dialog) => dialog.accept());
-    await mine.getByRole("button", { name: "Unsend" }).click();
+    await mine.getByRole("button", { name: "Unsend for everyone" }).click();
     await expect(mine).toHaveCount(0);
     await expect(page.getByText("Message removed", { exact: true })).toBeVisible();
 });

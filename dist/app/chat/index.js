@@ -1,3 +1,4 @@
+import { bindMessageActions, messageActionsMarkup } from './actions.js';
 import { HISTORY_MODES, canSaveMessage, historyVisible, createHistoryReceipts } from './history.js';
 import { viewOncePresentation } from './view-once.js';
 import { presenceLabel } from "./presence.js";
@@ -140,7 +141,6 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     let pendingRealtimeEvent = null;
     let readWatermark = { chatId: null, sequence: 0 };
     let inviteMode = false;
-    let messageActionHoldTimer = null;
     let outboxRetrying = false;
     let outboxRetryTimer = null;
     let mediaOutboxRetrying = false;
@@ -403,13 +403,13 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     mediaViewer.addEventListener('pointercancel', () => { ephemeralPointer = null; setEphemeralPaused(false); });
     $('.chat-timeline').addEventListener('scroll', () => requestAnimationFrame(recordVisibleHistory), { passive: true });
     document.addEventListener('visibilitychange', () => {
-        if (document.hidden) { void historyReceipts?.leave(store.state.activeChatId); closeMediaViewer(); }
+        if (document.hidden) { void historyReceipts?.leave(store.state.activeChatId); closeMediaViewer(); closeMessageActions(); }
         else { void refreshSharedHistory(); requestAnimationFrame(recordVisibleHistory); }
     });
-    addEventListener('pagehide', () => { void historyReceipts?.leave(); closeMediaViewer(); });
+    addEventListener('pagehide', () => { void historyReceipts?.leave(); closeMediaViewer(); closeMessageActions(); });
     addEventListener('online', () => { void historyReceipts?.flush(); void refreshSharedHistory(); });
     if (panel) new MutationObserver(() => {
-        if (panel.classList.contains('hidden')) { void historyReceipts?.leave(); closeMediaViewer(); }
+        if (panel.classList.contains('hidden')) { void historyReceipts?.leave(); closeMediaViewer(); closeMessageActions(); }
         else { void refreshSharedHistory(); requestAnimationFrame(recordVisibleHistory); }
     }).observe(panel, { attributes: true, attributeFilter: ['class'] });
     setInterval(() => {
@@ -433,10 +433,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     });
     root.addEventListener("click", handleClick);
     root.addEventListener("dblclick", handleMessageDoubleClick);
-    root.addEventListener("pointerdown", beginMessageActionHold);
-    root.addEventListener("pointerup", cancelMessageActionHold);
-    root.addEventListener("pointercancel", cancelMessageActionHold);
-    root.addEventListener("pointermove", cancelMessageActionHold);
+    const messageActions = bindMessageActions(root, { onOpen: () => softHaptic?.() });
     const timelineScroll = createTimelineScroll($('.chat-timeline'), {
         onEdge: direction => void advanceHistory(direction),
         onPosition: updateLatestButton,
@@ -994,7 +991,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         const acceptedOthers = (store.state.detail?.members || []).filter((member) => member.status === "accepted" && String(member.user_id) !== String(userId()));
         const receipt = readers.length && message.id === latestOutgoing?.id ? `<button type="button" class="chat-read-receipt" data-view-readers="${escapeChatHTML(message.id)}">${acceptedOthers.length > 1 ? `Read by ${readers.length}` : "Read"}</button>` : "";
         const viewReceipt = mine && message.view_once ? `<button type="button" class="chat-read-receipt" data-view-once-receipts="${escapeChatHTML(message.id)}">View receipts</button>` : "";
-        return `<article class="chat-message ${mine ? "mine" : "theirs"} ${startsSequence ? "starts-sequence" : ""} ${endsSequence ? "ends-sequence" : ""} ${message.delivery_state || ""} ${message.view_once ? "ephemeral" : ""}" ${position} data-list-key="${escapeChatHTML(message.id)}" data-message-id="${escapeChatHTML(message.id)}"><div class="chat-message-meta">${!mine && startsSequence ? `<strong>${escapeChatHTML(message.sender_first_name || "Student")}</strong>` : ""}</div><div class="chat-bubble" data-message-bubble="${escapeChatHTML(message.id)}">${replyMarkup}${media}${message.saved_in_chat ? `<small class="chat-saved-label">Saved by ${escapeChatHTML(message.saved_by?.first_name || "a member")}</small>` : ""}${message.kind === "memento" ? `<small class="memento-label">Memento</small>` : message.kind === "story" ? `<small class="memento-label">${message.story_share_context === "reply" ? "Story reply" : "Shared Story"}</small>` : ""}${body}<time>${escapeChatHTML(message.delivery_state === "sending" ? "Sending…" : message.delivery_state === "failed" ? "Not sent" : messageTime(message.created_at))}</time><button class="chat-message-menu-button" type="button" data-message-menu="${escapeChatHTML(message.id)}" aria-label="Message actions" aria-expanded="false">${uiIcon("more")}</button></div>${message.delivery_state === "failed" ? `<button class="chat-retry" type="button" data-retry-message="${escapeChatHTML(message.client_request_id)}">Retry</button>` : ""}<div class="chat-message-actions"><time class="chat-action-time">${escapeChatHTML(messageTime(message.created_at))}</time><div class="chat-reaction-picker">${CHAT_REACTIONS.map(([type, emoji]) => `<button type="button" aria-label="React ${type}" data-react-message="${escapeChatHTML(message.id)}" data-reaction="${type}" class="${message.current_user_reaction === type ? "active" : ""}">${emoji}</button>`).join("")}</div><div class="chat-action-list">${readers.length && message.id !== latestOutgoing?.id && !message.view_once ? `<button type="button" data-view-readers="${escapeChatHTML(message.id)}">Read receipts</button>` : ''}${canSaveMessage(message) ? `<button type="button" data-save-message="${escapeChatHTML(message.id)}">${uiIcon("chat")} ${message.saved_in_chat ? "Unsave from chat" : "Save in chat"}</button>` : ""}<button type="button" data-reply-message="${escapeChatHTML(message.id)}">${uiIcon("reply")} Reply</button>${message.body ? `<button type="button" data-copy-message="${escapeChatHTML(message.id)}">${uiIcon("copy")} Copy</button>` : ""}<button type="button" data-delete-message="${escapeChatHTML(message.id)}">Hide for me</button>${mine && message.delivery_state === "sent" ? `<button class="danger" type="button" data-unsend-message="${escapeChatHTML(message.id)}">Unsend</button>` : ""}</div></div>${reactions ? `<button type="button" class="chat-reaction-summary ${message.current_user_reaction ? 'has-own-reaction' : ''}" data-view-reactions="${escapeChatHTML(message.id)}" aria-label="View reactions">${reactions}</button>` : ""}${viewReceipt || receipt}</article>`;
+        return `<article class="chat-message ${mine ? "mine" : "theirs"} ${startsSequence ? "starts-sequence" : ""} ${endsSequence ? "ends-sequence" : ""} ${message.delivery_state || ""} ${message.view_once ? "ephemeral" : ""}" ${position} data-list-key="${escapeChatHTML(message.id)}" data-message-id="${escapeChatHTML(message.id)}"><div class="chat-message-meta">${!mine && startsSequence ? `<strong>${escapeChatHTML(message.sender_first_name || "Student")}</strong>` : ""}</div><div class="chat-bubble" data-message-bubble="${escapeChatHTML(message.id)}">${replyMarkup}${media}${message.saved_in_chat ? `<small class="chat-saved-label">Saved by ${escapeChatHTML(message.saved_by?.first_name || "a member")}</small>` : ""}${message.kind === "memento" ? `<small class="memento-label">Memento</small>` : message.kind === "story" ? `<small class="memento-label">${message.story_share_context === "reply" ? "Story reply" : "Shared Story"}</small>` : ""}${body}<time>${escapeChatHTML(message.delivery_state === "sending" ? "Sending…" : message.delivery_state === "failed" ? "Not sent" : messageTime(message.created_at))}</time><button class="chat-message-menu-button" type="button" data-message-menu="${escapeChatHTML(message.id)}" aria-label="Message actions" aria-expanded="false">${uiIcon("more")}</button></div>${message.delivery_state === "failed" ? `<button class="chat-retry" type="button" data-retry-message="${escapeChatHTML(message.client_request_id)}">Retry</button>` : ""}${messageActionsMarkup(message, { mine, olderReaders: readers.length && message.id !== latestOutgoing?.id && !message.view_once })}${reactions ? `<button type="button" class="chat-reaction-summary ${message.current_user_reaction ? 'has-own-reaction' : ''}" data-view-reactions="${escapeChatHTML(message.id)}" aria-label="View reactions">${reactions}</button>` : ""}${viewReceipt || receipt}</article>`;
     }
 
     function readReceiptMembers(message) {
@@ -2446,13 +2443,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         }
     }
 
-    function closeMessageActions(except = null) {
-        $$(".chat-message.actions-open").forEach((message) => {
-            if (message === except) return;
-            message.classList.remove("actions-open");
-            message.querySelector("[data-message-menu]")?.setAttribute("aria-expanded", "false");
-        });
-    }
+    function closeMessageActions() { messageActions.close(); }
 
     function scrollMessageWithinTimeline(message, behavior = "auto") {
         const timeline = $(".chat-timeline");
@@ -2480,31 +2471,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         renderMessages(false, { preservePosition: true });
     }
 
-    function toggleMessageActions(messageId, forceOpen = null) {
-        const message = $(`[data-message-id="${CSS.escape(messageId)}"]`);
-        if (!message) return;
-        const shouldOpen = forceOpen ?? !message.classList.contains("actions-open");
-        closeMessageActions(shouldOpen ? message : null);
-        message.classList.toggle("actions-open", shouldOpen);
-        message.querySelector("[data-message-menu]")?.setAttribute("aria-expanded", String(shouldOpen));
-        if (shouldOpen) {
-            softHaptic?.();
-            requestAnimationFrame(() => scrollMessageWithinTimeline(message, "smooth"));
-        }
-    }
-
-    function beginMessageActionHold(event) {
-        if (event.pointerType === "mouse" || event.target.closest("button, textarea, input")) return;
-        const message = event.target.closest(".chat-message");
-        if (!message) return;
-        cancelMessageActionHold();
-        messageActionHoldTimer = setTimeout(() => toggleMessageActions(message.dataset.messageId, true), 420);
-    }
-
-    function cancelMessageActionHold() {
-        clearTimeout(messageActionHoldTimer);
-        messageActionHoldTimer = null;
-    }
+    function toggleMessageActions(messageId, forceOpen = null) { messageActions.toggle(messageId, forceOpen); }
 
     function handleMessageDoubleClick(event) {
         if (event.target.closest("button")) return;
@@ -2674,6 +2641,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     }
 
     function showChatList() {
+        closeMessageActions();
         void historyReceipts?.leave(store.state.activeChatId);
         viewOnceSessionByMessage.clear(); viewOnceStates.clear();
         closeMediaViewer();
@@ -2702,8 +2670,8 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
 
     async function handleClick(event) {
         const target = event.target.closest("button, a[data-open-chat], [data-view-memento]");
-        if (!target) { closeMessageActions(); return; }
-        if (!target.closest(".chat-message-actions") && !target.matches("[data-message-menu]")) closeMessageActions();
+        if (!target) { if (!event.target.closest(".chat-message-actions")) closeMessageActions(); return; }
+        if (!target.matches("[data-message-menu]")) closeMessageActions();
         if (target.matches("[data-new-chat]")) return openCreateChat();
         if (target.matches("[data-chat-list]")) {
             if (inviteMode && store.state.activeChatId) {
@@ -2878,5 +2846,5 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         }
     }
 
-    return { activate, refresh, openChat, store, beforeSessionEnd: async () => { await historyReceipts?.close(); historyReceipts = null; receiptUser = null; closeMediaViewer(); roomGeneration++; historyLoading = null; pendingRealtimeEvent = null; timelineScroll.reset(); mementoCamera.close(); resetChatMediaComposer(); $('[data-chat-media-dialog]').close(); return calls.beforeSessionEnd(); } };
+    return { activate, refresh, openChat, store, beforeSessionEnd: async () => { closeMessageActions(); await historyReceipts?.close(); historyReceipts = null; receiptUser = null; closeMediaViewer(); roomGeneration++; historyLoading = null; pendingRealtimeEvent = null; timelineScroll.reset(); mementoCamera.close(); resetChatMediaComposer(); $('[data-chat-media-dialog]').close(); return calls.beforeSessionEnd(); } };
 }

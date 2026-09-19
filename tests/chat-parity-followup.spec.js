@@ -29,7 +29,7 @@ test('shared history setting saves only after confirmation, reconciles, and supp
  await message.getByRole('button',{name:'Save in chat',exact:true}).click();
  await expect(message.locator('.chat-saved-label')).toHaveText('Saved by Jules');
  await message.getByRole('button',{name:'Message actions'}).click();
- await message.getByRole('button',{name:'Unsave from chat',exact:true}).click();
+ await message.getByRole('button',{name:'Unsave',exact:true}).click();
  await expect(message.locator('.chat-saved-label')).toHaveCount(0);
 });
 

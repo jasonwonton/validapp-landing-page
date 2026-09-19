@@ -2,6 +2,11 @@
 // Portable drawings for the same semantic symbols used by MainTabView.
 // Keep every silhouette inside the 24-point grid (including its stroke).
 const paths = {
+    bookmark: '<path d="M6 3h12v19l-6-4-6 4Z"/>',
+    'bookmark-slash': '<path d="m3 3 18 18M8 3h10v12M6 8v14l6-4 6 4"/>',
+    trash: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',
+    'trash-filled': '<path d="M3 6h18M9 6V3h6v3"/><path d="m5 8 1 13h12l1-13Z" fill="currentColor" stroke="none"/>',
+
     newspaper: '<path d="M19 19.5H5a2.5 2.5 0 0 1-2.5-2.5V4.5h16V17a2.5 2.5 0 0 0 2.5 2.5 2 2 0 0 0 .5-2V8h-3M6 8h9M11 11.5h4M11 15h4M6 11.5h2v4H6Z"/>',
     'shuffle-circle': '<circle cx="12" cy="12" r="9.5"/><path d="M7 8.5h1.5c3 0 4 7 7 7H17m-2-2 2 2-2 2M7 15.5h1.5c1 0 1.7-.8 2.5-2M13 10.5c.8-1.2 1.5-2 2.5-2H17m-2-2 2 2-2 2" stroke-width="1.5"/>',
     forward: '<path d="m3 5 9 7-9 7Zm9 0 9 7-9 7Z" fill="currentColor" stroke="none"/>',
