@@ -51,7 +51,7 @@ test('signed chat storage PUT is allowed by both CSPs and sends no app credentia
 
 test('unintercepted upload transport preserves signed headers and exact bytes', async ({ page }) => {
     const uploads = [];
-    const sources = new Map(await Promise.all(['api.js', 'auth-route-recovery.js', 'auth-reliability.js', 'auth-diagnostics.js', 'session-recovery.js'].map(async name => [`/app/${name}`, await readFile(new URL(`../app/${name}`, import.meta.url))])));
+    const sources = new Map(await Promise.all(['api.js', 'auth-route-recovery.js', 'auth-reliability.js', 'auth-diagnostics.js', 'session-recovery.js', 'phone-verification.js'].map(async name => [`/app/${name}`, await readFile(new URL(`../app/${name}`, import.meta.url))])));
     const server = createServer(async (request, response) => {
         if (sources.has(request.url)) { response.writeHead(200, { 'content-type': 'text/javascript' }); response.end(sources.get(request.url)); return; }
         if (request.method === 'PUT') {
