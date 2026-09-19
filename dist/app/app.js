@@ -143,6 +143,8 @@ const state = {
     signupSchoolLookupGeneration: 0,
     signupPhoneVerified: false,
     signupVerifiedPhone: null,
+    signupVerificationExpiresAt: null,
+    signupResumeAfterVerification: false,
     signupCompletionUncertain: false,
     turnstileWidgetId: null,
     turnstileToken: null,
@@ -2036,9 +2038,12 @@ async function openSignupDialog() {
     setRuntimeStyles($("#signupDialog"), { "--signup-layout-height": `${window.innerHeight}px` });
     $("#signupStatus").textContent = "";
     resetSignupPhotoPreview();
+    $("#signupPicture").value = "";
+    state.signupResumeAfterVerification = false;
     resetSignupSchoolPicker();
     state.signupPhoneVerified = false;
     state.signupVerifiedPhone = null;
+    state.signupVerificationExpiresAt = null;
     resetSignupTurnstile({ remove: true });
     $("#signupPhoneCode").value = "";
     selectSignupAge($("#signupAge").value || 13, { scroll: false });
@@ -2260,10 +2265,6 @@ function setSignupStep(index) {
     });
     $(".signup-back-button").classList.toggle("hidden", state.signupStep === 0);
     if (state.signupStep === 2) renderSignupGradeOptions();
-    if (state.signupStep === 9) {
-        resetSignupPhotoPreview();
-        $("#signupPicture").value = "";
-    }
 }
 
 async function advanceSignup(button) {
@@ -2288,6 +2289,7 @@ async function advanceSignup(button) {
         $("#signupPhone").value = formatSignupPhone(phoneNumber);
         state.signupPhoneVerified = false;
         state.signupVerifiedPhone = null;
+        state.signupVerificationExpiresAt = null;
         $("#signupPhoneCode").value = "";
         // Keep this transition inside the tap gesture so mobile Safari and
         // Chrome can open the numeric code keyboard without requiring a second tap.
@@ -2340,7 +2342,10 @@ async function advanceSignup(button) {
             }
             state.signupPhoneVerified = true;
             state.signupVerifiedPhone = phoneNumber;
-            setSignupStep(5);
+            state.signupVerificationExpiresAt = verification.clientExpiresAt ?? null;
+            const nextStep = state.signupResumeAfterVerification ? 9 : 5;
+            state.signupResumeAfterVerification = false;
+            setSignupStep(nextStep);
         } catch (error) {
             $("#signupStatus").textContent = error.message || "Could not verify that code.";
         } finally { setButtonLoading(button, false); }
@@ -2396,6 +2401,21 @@ async function resendSignupPhoneCode(button) {
     }
 }
 
+function signupVerificationExpired() {
+    return !demoMode && state.signupVerificationExpiresAt !== null
+        && Date.now() >= state.signupVerificationExpiresAt;
+}
+
+function requestSignupReverification() {
+    state.signupPhoneVerified = false;
+    state.signupVerifiedPhone = null;
+    state.signupVerificationExpiresAt = null;
+    state.signupResumeAfterVerification = true;
+    $("#signupPhoneCode").value = "";
+    setSignupStep(3);
+    $("#signupStatus").textContent = "Your phone verification expired. Request a new code to finish signup. Your other details are still here.";
+}
+
 async function createAccount(event) {
     event.preventDefault();
     if (state.signupCompletionUncertain) return;
@@ -2411,6 +2431,10 @@ async function createAccount(event) {
     if (!demoMode && (!state.signupPhoneVerified || state.signupVerifiedPhone !== signupPhone)) {
         setSignupStep(3);
         $("#signupStatus").textContent = "Verify your phone number before creating your account.";
+        return;
+    }
+    if (signupVerificationExpired()) {
+        requestSignupReverification();
         return;
     }
     const profilePicture = $("#signupPicture").files[0];
@@ -2448,6 +2472,11 @@ async function createAccount(event) {
         if (demoMode) {
             login = await api.demoSignup({ profile, school_name: school.name });
         } else {
+            // School resolution may have outlasted the verification window.
+            if (signupVerificationExpired()) {
+                requestSignupReverification();
+                return;
+            }
             const credential = await createSignupPasskey(api, username);
             login = await completeSignupSafely(api, {
                 ...credential,
@@ -2469,6 +2498,8 @@ async function createAccount(event) {
         selectSignupGender("");
         state.signupPhoneVerified = false;
         state.signupVerifiedPhone = null;
+        state.signupVerificationExpiresAt = null;
+        state.signupResumeAfterVerification = false;
         resetSignupSchoolPicker();
         resetSignupPhotoPreview();
         $("#signupDialog").close();
@@ -2478,11 +2509,7 @@ async function createAccount(event) {
     } catch (error) {
         reportAuthFailure(error);
         if (needsPhoneReverification(error)) {
-            state.signupPhoneVerified = false;
-            state.signupVerifiedPhone = null;
-            $("#signupPhoneCode").value = "";
-            setSignupStep(3);
-            $("#signupStatus").textContent = "Your phone verification expired. Request a new code to finish signup. Your other details are still here.";
+            requestSignupReverification();
             return;
         }
         showAuthBrowserHelp(error, true);
@@ -6355,6 +6382,7 @@ function bindEvents() {
         if (state.signupVerifiedPhone !== digits) {
             state.signupPhoneVerified = false;
             state.signupVerifiedPhone = null;
+            state.signupVerificationExpiresAt = null;
             $("#signupPhoneCode").value = "";
         }
         $("#signupStatus").textContent = "";

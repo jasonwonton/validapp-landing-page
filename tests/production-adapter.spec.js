@@ -6,14 +6,16 @@ const USER_ID = "11111111-1111-1111-1111-111111111111";
 
 async function installTurnstileStub(page) {
     await page.addInitScript(() => {
+        let challengeCallback;
         window.turnstile = {
             render(_selector, options) {
-                setTimeout(() => options.callback("verified-browser-token"), 0);
+                challengeCallback = options.callback;
+                setTimeout(() => challengeCallback?.("verified-browser-token"), 0);
                 return "widget-1";
             },
             getResponse() { return ""; },
-            reset() {},
-            remove() {},
+            reset() { setTimeout(() => challengeCallback?.("verified-browser-token"), 0); },
+            remove() { challengeCallback = null; },
         };
     });
     await page.route("https://challenges.cloudflare.com/turnstile/v0/api.js?*", (route) => (
@@ -37,7 +39,7 @@ async function attachAndCropQuestionArtwork(page, questionDialog) {
     await expect(questionDialog.getByRole("button", { name: "Adjust crop" })).toBeVisible();
 }
 
-async function fillProductionSignupThroughGrade(dialog) {
+async function fillProductionSignupThroughGrade(dialog, { fallback = false } = {}) {
     await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
     await dialog.locator('[data-signup-age="16"]').click();
     await expect(dialog.locator("#signupAge")).toHaveValue("16");
@@ -45,14 +47,21 @@ async function fillProductionSignupThroughGrade(dialog) {
     await expect(dialog.getByLabel("ZIP code")).toBeVisible();
     await expect(dialog.locator("#signupAge")).toHaveValue("16");
     await dialog.getByLabel("ZIP code").fill("90210");
-    await dialog.getByRole("option", { name: /Westview High School/ }).click();
+    if (fallback) {
+        await dialog.getByRole("button", { name: "Can't find your school?" }).click();
+        await dialog.getByLabel('School name', { exact: true }).fill('Westview High School');
+        await dialog.getByLabel('City', { exact: true }).fill('Los Angeles');
+        await dialog.getByLabel('State', { exact: true }).fill('CA');
+    } else {
+        await dialog.getByRole("option", { name: /Westview High School/ }).click();
+    }
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByRole("radio", { name: /Senior/ }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
 }
 
-async function fillProductionSignup(dialog) {
-    await fillProductionSignupThroughGrade(dialog);
+async function fillProductionSignup(dialog, options) {
+    await fillProductionSignupThroughGrade(dialog, options);
     await dialog.getByLabel("Phone number").fill("4155550123");
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("Verification code").fill("123456");
@@ -1340,24 +1349,76 @@ test("ambiguous question retries reuse one idempotency key and never double-char
     expect(key(submissions[1].body)).toBe(key(submissions[0].body));
 });
 
-test('expired verification returns to phone step without losing profile or resending automatically', async ({ page }) => {
-    await installCredentialStub(page, 'create');
-    await installTurnstileStub(page);
-    const requests = await interceptProductionAPI(page, { signup: true });
-    let completions = 0;
-    await page.route(`${API_ORIGIN}/api/v1/auth/passkey/signup/complete`, route => {
-        completions++; return route.fulfill({status:400,json:{detail:'Phone verification has expired. Request a new code.'}});
+for (const expiryStage of ['before passkey', 'during school lookup', 'during passkey', 'without server timing']) {
+    test(`expired verification ${expiryStage} resumes at the final step with profile and photo intact`, async ({ page }) => {
+        // Deliberately wrong device clock: expiry must be relative to the server.
+        const deviceTime = new Date('2028-01-01T00:00:00Z');
+        const serverTime = new Date('2026-09-18T12:00:00Z');
+        await page.clock.install({ time: deviceTime });
+        await installCredentialStub(page, 'create');
+        await installTurnstileStub(page);
+        const requests = await interceptProductionAPI(page, { signup: true });
+        await page.route(`${API_ORIGIN}/api/v1/auth/phone/confirm`, route => route.fulfill({
+            status: 200,
+            headers: expiryStage === 'without server timing' ? {} : { Date: serverTime.toUTCString(), 'Access-Control-Expose-Headers': 'Date' },
+            json: { is_approved: true, expires_at: new Date(+serverTime + 120_000).toISOString() },
+        }));
+        const expiresBeforeCredential = ['before passkey', 'during school lookup'].includes(expiryStage);
+        let schoolResolutions = 0;
+        await page.route(`${API_ORIGIN}/api/v1/highschools/request`, async route => {
+            if (expiryStage === 'during school lookup' && ++schoolResolutions === 1) {
+                await page.clock.setSystemTime(await page.evaluate(() => Date.now()) + 121_000);
+            }
+            return route.fallback();
+        });
+        let completions = 0;
+        const completionKeys = [];
+        await page.route(`${API_ORIGIN}/api/v1/auth/passkey/signup/complete`, async route => {
+            completions++;
+            completionKeys.push(route.request().postDataJSON().idempotencyKey);
+            if (!expiresBeforeCredential && completions === 1) {
+                return route.fulfill({ status: 400, json: { detail: 'Phone verification has expired. Request a new code.' } });
+            }
+            return route.fallback();
+        });
+        await page.goto('/app/?signin=1');
+        await page.getByRole('button', { name: 'Create an account' }).click();
+        const dialog = page.locator('#signupDialog');
+        await fillProductionSignup(dialog, { fallback: expiryStage === 'during school lookup' });
+        await dialog.getByLabel('Profile photo').setInputFiles('assets/valid_logo.png');
+        await expect(dialog.locator('#signupPhotoPreview img')).toBeVisible();
+        const sendsBefore = requests.filter(r => r.path === '/api/v1/auth/phone/request/web').length;
+        if (expiryStage === 'before passkey') await page.clock.setSystemTime(await page.evaluate(() => Date.now()) + 121_000);
+        await dialog.getByRole('button', { name: 'Continue', exact: true }).click();
+        await expect(dialog.getByLabel('Phone number')).toBeVisible();
+        await expect(dialog.locator('#signupStatus')).toContainText('verification expired');
+        await expect(dialog.locator('#signupFirstName')).toHaveValue('Taylor');
+        await expect(dialog.locator('#signupPhone')).toHaveValue('(415) 555-0123');
+        const firstAttempts = expiresBeforeCredential ? 0 : 1;
+        expect(completions).toBe(firstAttempts);
+        expect(requests.filter(r => r.path === '/api/v1/auth/passkey/signup/challenge')).toHaveLength(firstAttempts);
+        expect(requests.filter(r => r.path === '/api/v1/auth/phone/request/web')).toHaveLength(sendsBefore);
+
+        // Both SMS and creation need explicit taps; no automatic write replay.
+        if (expiryStage === 'without server timing') await dialog.getByLabel('Phone number').fill('4155550144');
+        await dialog.getByRole('button', { name: 'Continue', exact: true }).click();
+        await expect.poll(() => requests.filter(r => r.path === '/api/v1/auth/phone/request/web').length).toBe(sendsBefore + 1);
+        await dialog.getByLabel('Verification code').fill('654321');
+        await dialog.getByRole('button', { name: 'Continue', exact: true }).click();
+        await expect(dialog.getByLabel('Profile photo')).toBeAttached();
+        await expect(dialog.locator('[data-signup-step="9"]')).toBeVisible();
+        await expect(dialog.locator('#signupPhotoPreview img')).toBeVisible();
+        expect(await dialog.locator('#signupPicture').evaluate(input => input.files[0]?.name)).toBe('valid_logo.png');
+        expect(completions).toBe(firstAttempts);
+        expect(requests.filter(r => r.path === '/api/v1/auth/phone/request/web')).toHaveLength(sendsBefore + 1);
+        await dialog.getByRole('button', { name: 'Continue', exact: true }).click();
+        await expect(page.getByRole('button', { name: 'Feed', exact: true })).toBeVisible();
+        expect(completions).toBe(firstAttempts + 1);
+        expect(new Set(completionKeys).size).toBe(completions);
+        expect(requests.filter(r => r.path === '/api/v1/auth/passkey/signup/challenge')).toHaveLength(firstAttempts + 1);
+        const completion = requests.find(r => r.path === '/api/v1/auth/passkey/signup/complete');
+        expect(completion.body.phoneNumber).toBe(expiryStage === 'without server timing' ? '4155550144' : '4155550123');
+        expect(completion.body.profile).toMatchObject({ first_name: 'Taylor', last_name: 'Jordan', username: 'taylor_j', school_id: 77, grade: 'Senior', gender: 'non-binary' });
+        expect(requests.filter(r => r.path.endsWith('/profile-picture'))).toHaveLength(1);
     });
-    await page.goto('/app/?signin=1');
-    await page.getByRole('button', {name:'Create an account'}).click();
-    const dialog = page.locator('#signupDialog');
-    await fillProductionSignup(dialog);
-    const sendsBefore = requests.filter(r => r.path === '/api/v1/auth/phone/request/web').length;
-    await dialog.getByRole('button', {name:'Continue',exact:true}).click();
-    await expect(dialog.getByLabel('Phone number')).toBeVisible();
-    await expect(page.locator('#signupStatus')).toContainText('verification expired');
-    await expect(dialog.locator('#signupFirstName')).toHaveValue('Taylor');
-    await expect(dialog.locator('#signupPhone')).toHaveValue('(415) 555-0123');
-    expect(completions).toBe(1);
-    expect(requests.filter(r => r.path === '/api/v1/auth/phone/request/web').length).toBe(sendsBefore);
-});
+}

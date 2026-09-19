@@ -1,3 +1,4 @@
+import { phoneVerificationDeadline } from './phone-verification.js';
 import { confirmsInvalidSession, fetchSessionRequest } from './session-recovery.js';
 import { permitsAuthRouteRecovery, fetchAuthWithRecovery } from './auth-route-recovery.js';
 import { reportAuthFailure } from './auth-reliability.js';
@@ -221,12 +222,17 @@ export class ValidAPI {
         });
     }
 
-    confirmPhoneVerification(phoneNumber, code) {
-        return this.request("/auth/phone/confirm", {
+    async confirmPhoneVerification(phoneNumber, code) {
+        const started = performance.now();
+        const { data, headers } = await this.request("/auth/phone/confirm", {
             method: "POST",
             auth: false,
+            includeResponseHeaders: true,
             body: JSON.stringify({ phone_number: phoneNumber, code }),
         });
+        return { ...data, clientExpiresAt: phoneVerificationDeadline(data, headers.get('Date'), {
+            elapsedMs: performance.now() - started,
+        }) };
     }
 
     completeWebSignup(payload) {
