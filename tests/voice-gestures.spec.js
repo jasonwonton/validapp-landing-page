@@ -19,7 +19,11 @@ async function openRoom(page) {
     await page.getByRole('button', {name:/Noah Williams/}).click();
 }
 async function hold(page) {
-    const box = await page.locator('.chat-mic-button').boundingBox();
+    const mic = page.locator('.chat-mic-button');
+    await expect(mic).toBeVisible();
+    await expect(mic).toBeEnabled();
+    const box = await mic.boundingBox();
+    expect(box).not.toBeNull();
     const point = {x:box.x + box.width / 2,y:box.y + box.height / 2};
     await page.mouse.move(point.x,point.y); await page.mouse.down();
     await expect(page.getByRole('button', {name:'Stop recording and preview'})).toBeVisible();
