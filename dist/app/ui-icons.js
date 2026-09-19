@@ -49,6 +49,9 @@ const paths = {
     copy: '<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V3H3v13h5"/>',
     smile: '<circle cx="12" cy="12" r="9"/><path d="M8 15c2 3 6 3 8 0M8 8h.01M16 8h.01"/>',
     more: '<circle cx="4" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="20" cy="12" r="1"/>',
+    'activity': '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5" fill="currentColor" stroke="none"/>',
+    leave: '<path d="M13 4H4v16h9M10 12h12m-4-4 4 4-4 4"/>',
+    'memento': '<path d="m5 15-3-1L5 2l13 3-1 3"/><rect x="7" y="8" width="15" height="13" rx="2"/><circle cx="12" cy="12" r="1" fill="currentColor"/><path d="m8 19 4-4 3 3 3-4 3 5"/>',
     photo: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="2"/><path d="m3 17 6-6 4 4 3-3 5 5"/>',
 };
 export function uiIcon(name) {

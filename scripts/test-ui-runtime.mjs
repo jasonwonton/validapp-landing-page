@@ -19,7 +19,7 @@ assert.deepEqual(ids(), ['call', 'media', 'invite', 'memento', 'normal', 'unread
 inbox.replaceChats([summary('gone', { membership_status: 'left' })]);
 assert.deepEqual(ids(), [], 'Removed membership and its activity history must not remain visible');
 const skipped = summary('skip', { has_posted_today_memento: false, has_skipped_today_memento: true });
-assert.equal(chatNeedsMemento(skipped, true), false, 'Skip grants access, not a posted Memento');
+assert.equal(chatNeedsMemento(skipped, true), true, 'iOS keeps the camera indicator after skipping; access and posting attention are separate');
 assert.equal(chatAttentionPriority(skipped, { dailyLedgerEnabled: true }), 1);
 assert.equal(chatAttentionPriority(initial.at(-1), { callsEnabled: false }), 0, 'Disabled web calls do not claim attention');
 assert.equal(chatAttentionPriority(summary('read', { unread_count: 3, regular_unread_count: 0 })), 0, 'Memento unread counts are not regular conversation unread');
@@ -87,7 +87,7 @@ const appRuntime = await readFile(new URL("../app/app.js", import.meta.url), "ut
 const callRuntime = await readFile(new URL("../app/calls/index.js", import.meta.url), "utf8");
 const serviceWorker = await readFile(new URL("../app/service-worker.js", import.meta.url), "utf8");
 assert.match(chatRuntime, /addEventListener\("chat", consumeEvent\)/, "Chat SSE must consume the backend's named event stream");
-assert.match(chatRuntime, /\["resync", "ready", "message_updated", "message_deleted"\]\.includes\(event\.type\)/, "Reconnects and moderation hints must repair mutations with an authoritative resync");
+assert.match(chatRuntime, /\["resync", "ready", "message_updated", "message_deleted", "chat_history_changed"\]\.includes\(event\.type\)/, "Reconnects and moderation hints must repair mutations with an authoritative resync");
 assert.match(appRuntime, /config\.enable_chats === true && config\.enable_web_chats === true/, "PWA Chats must require its independent web rollout flag");
 assert.match(chatRuntime, /enable_web_mementos === true/, "PWA Mementos must require its independent web rollout flag");
 assert.match(callRuntime, /enable_calls === true && getConfig\(\)\?\.enable_web_calls === true/, "PWA calls must require native availability and their independent web rollout flag");

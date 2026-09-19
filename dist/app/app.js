@@ -673,16 +673,17 @@ async function showSignedIn() {
             presenceLifecycle = bindPresenceLifecycle(chatPresence);
             const button = document.createElement('button');
             button.id = 'activityStatusButton';
+            button.setAttribute('aria-label', 'Activity status');
             button.type = 'button';
             button.className = 'settings-row';
-            button.innerHTML = `<span class="settings-icon" aria-hidden="true">${uiIcon('person-circle')}</span><span><strong>Activity status</strong></span><span aria-hidden="true">›</span>`;
+            button.innerHTML = `<span class="settings-icon" aria-hidden="true">${uiIcon('activity')}</span><span><strong>Activity status</strong><small>Choose whether people see when you’re active</small></span><span aria-hidden="true">›</span>`;
             button.addEventListener('click', async () => {
                 try {
                     const { openActivitySettings } = await import('./chat/activity-settings.js');
                     if (api.user?.id) await openActivitySettings({ api, userId: api.user.id, presence: chatPresence });
                 } catch (_) { showToast("Activity status couldn’t be loaded. Please try again."); }
             });
-            $('.profile-actions').append(button);
+            $('#notificationButton').after(button);
         }
         presenceLifecycle?.setUser(chatsEnabled ? api.user.id : null);
         $("#activityStatusButton")?.classList.toggle("hidden", !chatsEnabled);

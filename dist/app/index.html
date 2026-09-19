@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-    <meta name="valid-app-version" content="web-v96">
+    <meta name="valid-app-version" content="web-v97">
     <base href="/app/">
     <meta name="theme-color" content="#ccf7f4" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#07181a" media="(prefers-color-scheme: dark)">
@@ -13,15 +13,15 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'self'; connect-src 'self' https://9472d27fa2e1a3762bd91728bb7d9437.r2.cloudflarestorage.com https://api.six7.lol https://api.validappcdn.com https://validappcdn.com wss://livekit.six7.lol wss://livekit-staging-150-136-43-223.sslip.io wss://livekit-prod-150-136-43-223.sslip.io; font-src 'self'; form-action 'self'; frame-src https://challenges.cloudflare.com 'self'; img-src 'self' blob: data: https:; manifest-src 'self'; media-src 'self' blob: https:; object-src 'none'; script-src 'self' https://challenges.cloudflare.com; style-src 'self'; worker-src 'self'">
     <meta name="description" content="Answer polls, see your feed, and share your anonymous Valid link from any device.">
     <title>Valid</title>
-    <script src="/app/_static/18bdda6bc2b7de7754e5/preferences.js"></script>
+    <script src="/app/_static/609e7e4f4d1bb89ded80/preferences.js"></script>
     <link rel="icon" type="image/png" href="../assets/AppIconV2.png">
     <link rel="apple-touch-icon" href="../assets/AppIconV2.png">
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="stylesheet" href="/app/_static/18bdda6bc2b7de7754e5/styles.css">
-    <link rel="stylesheet" href="/app/_static/18bdda6bc2b7de7754e5/chat/styles.css">
-    <link rel="stylesheet" href="/app/_static/18bdda6bc2b7de7754e5/stories/styles.css">
-    <link rel="stylesheet" href="/app/_static/18bdda6bc2b7de7754e5/calls/styles.css">
-    <link rel="stylesheet" href="/app/_static/18bdda6bc2b7de7754e5/comments/styles.css">
+    <link rel="stylesheet" href="/app/_static/609e7e4f4d1bb89ded80/styles.css">
+    <link rel="stylesheet" href="/app/_static/609e7e4f4d1bb89ded80/chat/styles.css">
+    <link rel="stylesheet" href="/app/_static/609e7e4f4d1bb89ded80/stories/styles.css">
+    <link rel="stylesheet" href="/app/_static/609e7e4f4d1bb89ded80/calls/styles.css">
+    <link rel="stylesheet" href="/app/_static/609e7e4f4d1bb89ded80/comments/styles.css">
 </head>
 <body>
     <header class="topbar">
@@ -186,7 +186,7 @@
                     <button id="testHaptics" class="secondary-button" type="button" hidden>Test vibration</button>
                     <p id="hapticsStatus" class="form-hint" role="status" hidden></p>
                 </section>
-                <section class="profile-actions" aria-label="Profile actions">
+                <section class="profile-actions" aria-label="System settings"><h3>System settings</h3>
                     <button id="addPasskeyButton" class="settings-row" type="button"><span class="settings-icon passkey-settings-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="7.7" cy="12" r="4.3"/><path d="m11.1 9.4 8-6.2 1.7 1.7-2 2 1.5 1.5-2.2 2.2-1.5-1.5-5.5 4.2"/></svg></span><span><strong>Add another passkey</strong><small id="passkeyStatusText">Add another secure way to sign in</small></span><span aria-hidden="true">›</span></button>
                     <button id="notificationButton" class="settings-row hidden" type="button" role="switch" aria-checked="false"><span class="settings-icon notification-settings-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M10 21h4"/></svg></span><span><strong>Notifications</strong><small id="notificationStatusText" class="visually-hidden">Get updates from Valid</small></span><span class="settings-switch" aria-hidden="true"><span></span></span></button>
                     <button id="feedbackButton" class="settings-row" type="button"><span class="settings-icon feedback-settings-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m4 16-.8 4.8 4.8-.8L19.2 7.8l-4-4L4 16Z"/><path d="m13.8 5.2 4 4M4 16l4 4"/></svg></span><span><strong>Leave feedback</strong></span><span aria-hidden="true">›</span></button>
@@ -869,8 +869,8 @@
     </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="/app/_static/18bdda6bc2b7de7754e5/local-config.js"></script>
+    <script src="/app/_static/609e7e4f4d1bb89ded80/local-config.js"></script>
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
-    <script type="module" src="/app/_static/18bdda6bc2b7de7754e5/app.js"></script>
+    <script type="module" src="/app/_static/609e7e4f4d1bb89ded80/app.js"></script>
 </body>
 </html>

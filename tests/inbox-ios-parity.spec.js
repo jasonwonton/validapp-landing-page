@@ -10,7 +10,7 @@ test('inbox badges and TBH detail reactions stay consistent when returning', asy
     await expect(page.locator('[data-feed-detail="9001"] .inbox-content-badge')).toHaveText('POLL');
     const row = page.locator('[data-tbh-detail^="received:"]').first();
     await expect(row.locator('.tbh-avatar-badge')).toHaveText('TBH');
-    await expect(row).toHaveCSS('border-top-width', '0px');
+    await expect(row).toHaveCSS('border-top-width', '3px');
     await row.click();
     const detail = page.locator('#tbhDetailDialog');
     await expect(detail.locator('h2')).toContainText('Noah Williams sent you a TBH');

@@ -914,6 +914,20 @@ export class DemoAPI {
     async disableCallCamera(_userId, callId) { const call = this.demoCalls.get(callId); call.viewer_has_camera_slot = false; call.camera_publisher_count = 0; return { call: structuredClone(call), camera_slot_reserved: false, camera_slot_reservation_id: null }; }
     async endCall(_userId, callId) { const call = this.demoCalls.get(callId); Object.assign(call, { state: "ended", ended_at: new Date().toISOString() }); return structuredClone(call); }
     async leaveCall(_userId, callId) { return this.endCall(_userId, callId); }
+    async getChatHistory(_userId, chatId) {
+        return { mode: this.chats.find(chat => chat.id === chatId)?.history_mode || 'save', next_after_sequence: null,
+            items: (this.chatMessages[chatId] || []).filter(message => message.kind !== 'memento' && (message.saved_in_chat || message.history_expires_at || message.history_cleared_at)).map(message => ({
+                room_sequence: message.room_sequence, saved_in_chat: !!message.saved_in_chat, saved_by: message.saved_by,
+                history_expires_at: message.history_expires_at || null, cleared: !!message.history_cleared_at,
+            })) };
+    }
+    async setChatHistory(userId, chatId, mode) { this.chats.find(chat => chat.id === chatId).history_mode = mode; return this.getChatHistory(userId, chatId); }
+    async recordChatHistoryViews() { return { ok: true, history_changed: false }; }
+    async saveChatMessage(_userId, chatId, messageId, saved) {
+        const message = this.chatMessages[chatId].find(message => message.id === messageId);
+        Object.assign(message, { saved_in_chat: saved, saved_by: saved ? { user_id: 'demo-user', first_name: 'Jules' } : null });
+        return structuredClone(message);
+    }
     async getChatMessages(_userId, chatId, options = {}) { const items = this.chatMessages[chatId] || []; const filtered = options.afterSequence === null || options.afterSequence === undefined ? items : items.filter((item) => item.room_sequence > options.afterSequence); return { items: structuredClone(filtered), next_before_sequence: null, latest_sequence: items.at(-1)?.room_sequence || 0 }; }
     async searchChats(_userId, query, limitPerType = 8) {
         const needle = String(query || "").trim().toLowerCase();

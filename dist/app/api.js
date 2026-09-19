@@ -973,6 +973,24 @@ export class ValidAPI {
         });
     }
 
+    getChatHistory(userId, chatId, afterSequence = 0) {
+        return this.request(`/users/${userId}/chats/${chatId}/history?after_sequence=${afterSequence}`);
+    }
+
+    setChatHistory(userId, chatId, mode) {
+        return this.request(`/users/${userId}/chats/${chatId}/history`, { method: "PUT", body: JSON.stringify({ mode }) });
+    }
+
+    recordChatHistoryViews(userId, chatId, sequences, ended) {
+        return this.request(`/users/${userId}/chats/${chatId}/history/viewed`, { method: "POST", keepalive: true,
+            body: JSON.stringify({ sequences, ended, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC" }) });
+    }
+
+    saveChatMessage(userId, chatId, messageId, saved) {
+        return this.request(`/users/${userId}/chats/${chatId}/messages/${messageId}/saved`, { method: "PUT",
+            body: JSON.stringify({ saved, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC" }) });
+    }
+
     getChatMessages(userId, chatId, { limit = 50, beforeSequence = null, afterSequence = null } = {}) {
         const params = new URLSearchParams({
             limit: String(limit),

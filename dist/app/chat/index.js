@@ -1,3 +1,5 @@
+import { HISTORY_MODES, canSaveMessage, historyVisible, createHistoryReceipts } from './history.js';
+import { viewOncePresentation } from './view-once.js';
 import { presenceLabel } from "./presence.js";
 import { reconcileKeyedElements } from "../keyed-list.js";
 import { prepareChatMedia, prepareMementoImages } from "./media.js";
@@ -101,6 +103,20 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     let voiceRecordingTimer = null;
     let discardVoiceRecording = false;
     const viewOnceSessionByMessage = new Map();
+    const viewOnceStates = new Map();
+    let replayHoldTimer = null;
+    let replayHoldTarget = null;
+    let replaySuppressClick = false;
+    let mediaOpenGeneration = 0;
+    let ephemeralTimer = null;
+    let ephemeralPaused = false;
+    let ephemeralPointer = null;
+    let historyReceipts = null;
+    let receiptUser = null;
+    let sharedHistoryLoading = false;
+    let sharedHistoryError = '';
+    let sharedHistorySaving = false;
+    let sharedHistoryRevision = 0;
     const viewOnceRequestByMessage = new Map();
     const stickerRequestById = new Map();
     let stickerLibraryGeneration = 0;
@@ -231,7 +247,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         <dialog class="chat-sheet" data-chat-settings-dialog aria-label="Chat settings"><div class="chat-settings-content"></div></dialog>
         <dialog class="chat-sheet" data-chat-reactors-dialog aria-label="Message reactions"><div class="chat-reactors-content"></div></dialog>
         <dialog class="chat-sheet" data-chat-readers-dialog aria-label="Read receipts"><div class="chat-readers-content"></div></dialog>
-        <dialog class="chat-media-viewer" data-chat-media-viewer aria-label="Chat media"><button type="button" data-close-media aria-label="Close">×</button><img alt="" hidden><video playsinline controls hidden></video><div class="chat-viewer-overlay" hidden></div><p></p><div class="chat-viewer-actions"><button type="button" data-swap-viewed-memento aria-label="Swap front and back photos" hidden>⇄ Swap views</button><button type="button" data-share-viewed-memento hidden>Share</button><button type="button" data-reply-viewed-media hidden>Reply</button><button type="button" data-react-viewed-media hidden>${uiIcon("heart")} React</button></div></dialog>`;
+        <dialog class="chat-media-viewer" data-chat-media-viewer aria-label="Chat media"><button type="button" data-close-media aria-label="Close">×</button><img alt="" hidden><video playsinline controls hidden></video><div class="chat-viewer-overlay" hidden></div><progress class="chat-ephemeral-progress" max="1" value="0" aria-label="Media time remaining" hidden></progress><button type="button" data-pause-ephemeral aria-label="Pause media" hidden>${uiIcon("pause")}</button><p></p><div class="chat-viewer-actions"><button type="button" data-swap-viewed-memento aria-label="Swap front and back photos" hidden>⇄ Swap views</button><button type="button" data-share-viewed-memento hidden>Share</button><button type="button" data-reply-viewed-media hidden>Reply</button><button type="button" data-react-viewed-media hidden>${uiIcon("heart")} React</button></div></dialog>`;
 
     const $ = (selector) => root.querySelector(selector);
     const $$ = (selector) => [...root.querySelectorAll(selector)];
@@ -372,6 +388,49 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         softHaptic?.();
     }
 
+    const mediaViewer = $('[data-chat-media-viewer]');
+    mediaViewer.addEventListener('pointerdown', event => {
+        if (!ephemeralTimer || event.target.closest('button')) return;
+        ephemeralPointer = { x: event.clientX, y: event.clientY, at: performance.now() };
+        setEphemeralPaused(true);
+    });
+    mediaViewer.addEventListener('pointerup', event => {
+        if (!ephemeralPointer) return;
+        const point = ephemeralPointer; ephemeralPointer = null;
+        if (event.clientY - point.y > 90 || (performance.now() - point.at < 220 && event.clientX > innerWidth / 2)) closeMediaViewer();
+        else setEphemeralPaused(false);
+    });
+    mediaViewer.addEventListener('pointercancel', () => { ephemeralPointer = null; setEphemeralPaused(false); });
+    $('.chat-timeline').addEventListener('scroll', () => requestAnimationFrame(recordVisibleHistory), { passive: true });
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) { void historyReceipts?.leave(store.state.activeChatId); closeMediaViewer(); }
+        else { void refreshSharedHistory(); requestAnimationFrame(recordVisibleHistory); }
+    });
+    addEventListener('pagehide', () => { void historyReceipts?.leave(); closeMediaViewer(); });
+    addEventListener('online', () => { void historyReceipts?.flush(); void refreshSharedHistory(); });
+    if (panel) new MutationObserver(() => {
+        if (panel.classList.contains('hidden')) { void historyReceipts?.leave(); closeMediaViewer(); }
+        else { void refreshSharedHistory(); requestAnimationFrame(recordVisibleHistory); }
+    }).observe(panel, { attributes: true, attributeFilter: ['class'] });
+    setInterval(() => {
+        if (!store.state.activeChatId || root.closest('.hidden')) return;
+        if (store.messages().some(message => !historyVisible(message))) renderMessages(false, { preservePosition: true });
+    }, 1000);
+    root.addEventListener('pointerdown', event => {
+        const target = event.target.closest('[data-replay]');
+        if (!target || target.disabled || viewOnceStates.get(target.dataset.openViewOnce)?.armed) return;
+        replaySuppressClick = false; replayHoldTarget = target;
+        replayHoldTimer = setTimeout(() => {
+            if (!target.isConnected) return;
+            viewOnceStates.set(target.dataset.openViewOnce, { armed: true });
+            target.classList.add('armed'); target.querySelector('strong').textContent = 'Tap to replay';
+            target.setAttribute('aria-label', `${target.classList.contains('video') ? 'Video' : 'Photo'} · Tap to replay`);
+            replaySuppressClick = true; softHaptic?.();
+        }, 450);
+    });
+    for (const event of ['pointerup', 'pointercancel', 'pointerleave']) root.addEventListener(event, () => {
+        clearTimeout(replayHoldTimer); replayHoldTimer = null; replayHoldTarget = null;
+    });
     root.addEventListener("click", handleClick);
     root.addEventListener("dblclick", handleMessageDoubleClick);
     root.addEventListener("pointerdown", beginMessageActionHold);
@@ -408,7 +467,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         $('.chat-media-option span').textContent = $('[data-chat-view-once]').checked ? 'View once' : 'Keep in chat';
         resetChatMediaRequestIds();
     });
-    $("[data-chat-media-viewer]").addEventListener("close", resetMediaViewerContents);
+    $("[data-chat-media-viewer]").addEventListener("close", () => { if (!$("[data-chat-media-viewer]").open) { mediaOpenGeneration++; resetMediaViewerContents(); } });
     window.addEventListener("online", () => {
         void retryPendingMessages(store.state.activeChatId);
         void retryPendingMediaUploads();
@@ -468,6 +527,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     presence?.subscribe(renderPresence);
 
     async function activate(context) {
+        ensureHistoryReceipts();
         activation = context;
         if (!(getConfig()?.enable_chats === true && getConfig()?.enable_web_chats === true)) {
             $(".chat-list-status").textContent = "Chats are not available yet.";
@@ -608,8 +668,13 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         if (chat.membership_status === "invited") {
             return `<article class="chat-row invitation attention" data-list-key="${escapeChatHTML(chat.id)}"><button class="chat-row-main" type="button" data-open-chat="${escapeChatHTML(chat.id)}"><span class="chat-avatar">${avatar}</span><span class="chat-row-copy"><strong>${escapeChatHTML(chat.display_name)}</strong><small>${escapeChatHTML(chatPreview(chat))}</small></span></button><div class="chat-invite-actions"><button type="button" data-decline-chat="${escapeChatHTML(chat.membership_id)}">Decline</button><button type="button" data-accept-chat="${escapeChatHTML(chat.membership_id)}">Accept</button></div></article>`;
         }
+
         const needsMemento = chatNeedsMemento(chat, dailyLedgerEnabled());
-        return `<article class="chat-row ${attentionPriority(chat) > 0 ? "attention" : ""}" data-list-key="${escapeChatHTML(chat.id)}"><button class="chat-row-main" type="button" data-open-chat="${escapeChatHTML(chat.id)}"><span class="chat-avatar-wrap" ${eligibleForPresence(chat) ? `data-presence-watch="${escapeChatHTML(chat.id)}"` : ""}><span class="chat-avatar">${avatar}</span>${eligibleForPresence(chat) ? `<i class="chat-presence-dot" role="img" data-presence-dot="${escapeChatHTML(chat.id)}" aria-label="Active now" hidden></i>` : ""}</span><span class="chat-row-copy"><span><strong>${escapeChatHTML(chat.display_name)}</strong>${streakMarkup(chat)}<time>${escapeChatHTML(relativeChatTime(chat.last_message_at || chat.updated_at))}</time></span><small>${escapeChatHTML(needsMemento ? "Take today's Memento" : chatPreview(chat))}</small></span>${chat.regular_unread_count && !needsMemento ? `<b class="chat-unread">${Math.min(chat.regular_unread_count, 99)}</b>` : ""}</button></article>`;
+        const pending = Number(chat.unopened_view_once_count) > 0 && chat.next_view_once_room_sequence != null;
+        const missed = getConfig()?.enable_calls === true && getConfig()?.enable_web_calls === true && chat.unacknowledged_missed_call_id;
+        const trailing = missed ? `<button type="button" class="chat-inbox-action missed" data-return-missed-call="${escapeChatHTML(chat.id)}">${uiIcon('phone')} Call back</button>`
+            : pending ? `<button type="button" class="chat-inbox-action" data-pending-media="${escapeChatHTML(chat.id)}" aria-label="View ${Number(chat.unopened_view_once_count)} unopened media ${Number(chat.unopened_view_once_count) === 1 ? 'item' : 'items'}"><i class="${chat.next_view_once_kind === 'video' ? 'video' : 'photo'}"></i>View ${Number(chat.unopened_view_once_count)}</button>` : '';
+        return `<article class="chat-row ${attentionPriority(chat) > 0 ? "attention" : ""} ${trailing ? 'has-inbox-action' : ''}" data-list-key="${escapeChatHTML(chat.id)}"><button class="chat-row-main" type="button" data-open-chat="${escapeChatHTML(chat.id)}"><span class="chat-avatar-wrap" ${eligibleForPresence(chat) ? `data-presence-watch="${escapeChatHTML(chat.id)}"` : ""}><span class="chat-avatar">${avatar}</span>${eligibleForPresence(chat) ? `<i class="chat-presence-dot" role="img" data-presence-dot="${escapeChatHTML(chat.id)}" aria-label="Active now" hidden></i>` : ""}</span><span class="chat-row-copy"><span><strong>${escapeChatHTML(chat.display_name)}</strong>${streakMarkup(chat)}</span><small>${escapeChatHTML(needsMemento ? "Take today's Memento" : chatPreview(chat))}</small></span><span class="chat-row-trailing">${!trailing && needsMemento ? `<span class="chat-needs-memento" aria-label="Take today's Memento">${uiIcon('camera-filled')}</span>` : !trailing ? `${chat.regular_unread_count ? `<b class="chat-unread">${Math.min(chat.regular_unread_count, 99)}</b>` : ''}<time>${escapeChatHTML(relativeChatTime(chat.last_message_at || chat.updated_at))}</time>` : ''}</span></button>${trailing}</article>`;
     }
 
     async function openChat(chatId, { updateHistory = true, force = false, latest = false } = {}) {
@@ -619,6 +684,9 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         const savedAnchor = savedPosition && !savedPosition.bottom
             ? savedPosition.anchors.map(anchor => store.messages().find(item => item.id === anchor.key)).find(Boolean) : null;
         if (store.state.activeChatId !== String(chatId)) {
+            void historyReceipts?.leave(store.state.activeChatId);
+            viewOnceSessionByMessage.clear(); viewOnceStates.clear();
+            closeMediaViewer();
             resetChatMediaComposer();
             $('[data-chat-media-dialog]').close();
             stopTyping();
@@ -684,6 +752,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         await restorePendingMessages(chatId);
         if (generation !== roomGeneration || store.state.activeChatId !== String(chatId)) return;
         store.state.loadingRoom = false;
+        void refreshSharedHistory();
         renderDailyRow();
         renderMessages(!savedAnchor);
         if (savedAnchor) timelineScroll.restore(savedPosition);
@@ -752,7 +821,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         const posted = Math.min(eligible, Math.max(0, Math.floor(Number(row.posted_count) || 0)));
         const chat = store.state.chats.find(c => c.id === store.state.activeChatId) || store.state.detail?.chat;
         const waiting = (row.entries || []).filter(entry => !entry.has_posted).map(entry => entry.first_name || 'a member').join(', ');
-        button.innerHTML = `<span class="chat-memento-toolbar-pill">${uiIcon('photo')}<span>${posted}/${eligible}</span>${streakMarkup(chat)}</span>`;
+        button.innerHTML = `<span class="chat-memento-toolbar-pill">${uiIcon('memento')}<span>${posted}/${eligible}</span><span class="chat-moment-streak" aria-label="${Math.max(0, Number(chat.moment_streak) || 0)} day moment streak">${uiIcon('fire')}<span>${Math.max(0, Number(chat.moment_streak) || 0)}</span></span></span>`;
         button.classList.toggle('complete', eligible > 0 && posted === eligible);
         button.setAttribute('aria-label', `Mementos, ${posted} of ${eligible} captured. ${waiting ? `Waiting for ${waiting}` : 'Everyone is done'}${Number(chat?.moment_streak) > 0 ? `, ${chat.moment_streak} day streak` : ''}`);
     }
@@ -823,6 +892,13 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             return;
         }
         timeline.classList.remove("chat-content-locked");
+        if (viewedMessageId) {
+            const viewed = store.messages().find(message => message.id === viewedMessageId);
+            if (!viewed || viewed.status !== 'active' || !historyVisible(viewed)) closeMediaViewer();
+        }
+        // Expired content cannot survive in a mounted room while offline.
+        const visibleHistory = store.messages().filter(message => historyVisible(message));
+        if (visibleHistory.length !== store.messages().length) store.replaceMessages(store.state.activeChatId, visibleHistory, store.state.messagePageByChat.get(store.state.activeChatId));
         const items = store.messages();
         const byId = new Map(items.map((message) => [message.id, message]));
         const visible = messageWindow.range(store.state.activeChatId, items, {
@@ -856,6 +932,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         renderReplyDraft();
         timelineScroll.restore(position, { bottom: scrollToBottom || (!preservePosition && !focusMessageId && position.bottom && !visible.hiddenAfter && !historyHasNewer) });
         timelineScroll.observe();
+        requestAnimationFrame(recordVisibleHistory);
     }
 
     function historyEdgeMarkup(direction) {
@@ -864,6 +941,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     }
 
     function updateLatestButton() {
+        requestAnimationFrame(recordVisibleHistory);
         const visible = messageWindow.range(store.state.activeChatId, store.messages());
         $('[data-jump-latest]').classList.toggle('hidden', !store.state.activeChatId || chatAccessUnavailable()
             || (!historyHasNewer && !visible.hiddenAfter && timelineScroll.atBottom()));
@@ -901,10 +979,10 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         const persistentMedia = mediaURL ? `<button class="chat-message-media ${message.kind === "sticker" ? "sticker" : ""}" type="button" ${message.kind === "memento" ? `data-view-memento="${escapeChatHTML(mediaURL)}" ${mementoSwappedURL ? `data-memento-swapped="${escapeChatHTML(mementoSwappedURL)}"` : ""} data-memento-owner="${escapeChatHTML(message.sender_first_name || "Memento")}" data-memento-entry="${escapeChatHTML(message.daily_entry_id || "")}"` : `data-open-chat-media-message="${escapeChatHTML(message.id)}"`}><img src="${escapeChatHTML(mediaURL)}" alt="${message.kind === "memento" ? "Memento" : message.kind === "video" ? "Video thumbnail" : message.kind === "sticker" ? "Sticker" : "Photo"}" loading="lazy" decoding="async">${mediaOverlay}${message.kind === "video" ? `<span class="chat-video-play" aria-hidden="true">${uiIcon("play")}</span>` : ""}</button>` : "";
         const audioURL = safeMediaURL(message.audio_url, api);
         const audioMedia = message.kind === "audio" ? (audioURL ? `<div class="chat-audio-message"><strong>Voice message</strong><audio src="${escapeChatHTML(audioURL)}" controls preload="metadata" aria-label="Voice message"></audio><small>${Math.max(1, Math.round(Number(message.audio_duration_ms || 0) / 1000))}s</small></div>` : `<div class="chat-audio-message unavailable">Voice message unavailable</div>`) : "";
-        const viewOnceMedia = message.view_once ? (mine
-            ? `<div class="chat-view-once-card"><strong>View once ${message.kind}</strong><small>${Number(message.view_once_opened_count || 0)} of ${Number(message.view_once_recipient_count || 0)} opened</small></div>`
-            : `<button class="chat-view-once-card" type="button" data-open-view-once="${escapeChatHTML(message.id)}" ${message.view_once_available === false ? "disabled" : ""}><strong>${message.view_once_available === false ? "Opened" : `View once ${message.kind}`}</strong><small>${message.view_once_available === false ? "No views left" : `${Number(message.view_once_remaining_views || 1)} view${Number(message.view_once_remaining_views || 1) === 1 ? "" : "s"} left`}</small></button>`)
-            : "";
+        const once = viewOncePresentation(message, { canReplay: viewOnceSessionByMessage.has(message.id), ...viewOnceStates.get(message.id) });
+        const marker = once.mine ? `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 19 9-19 9 4-9Z"/></svg>`
+            : once.expired ? uiIcon('clock') : `<span>${once.kind === 'video' ? uiIcon('play') : ''}</span>`;
+        const viewOnceMedia = message.view_once ? `<button class="chat-view-once-card ${once.kind} ${once.hollow ? 'opened' : ''} ${once.mine ? 'outgoing' : ''} ${once.label.length > 16 ? 'compact-label' : ''} ${viewOnceStates.get(message.id)?.armed ? 'armed' : ''}" type="button" data-open-view-once="${escapeChatHTML(message.id)}" ${once.replay ? 'data-replay="true"' : ''} ${once.disabled ? 'disabled' : ''} aria-label="${escapeChatHTML(`${once.kind === 'video' ? 'Video' : 'Photo'} · ${once.label}`)}"><i class="chat-media-marker" aria-hidden="true">${marker}</i><strong>${escapeChatHTML(once.label)}</strong></button>` : '';
         const media = audioMedia || (message.view_once ? viewOnceMedia : persistentMedia);
         const body = message.body && message.body !== "Sent a Memento" ? `<p>${escapeChatHTML(message.body)}</p>` : "";
         const reactions = Object.entries(message.reaction_summary || {}).filter(([, count]) => Number(count) > 0).map(([type, count]) => `<span>${CHAT_REACTIONS.find(([key]) => key === type)?.[1] || uiIcon("smile")} ${count}</span>`).join("");
@@ -912,7 +990,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         const acceptedOthers = (store.state.detail?.members || []).filter((member) => member.status === "accepted" && String(member.user_id) !== String(userId()));
         const receipt = readers.length ? `<button type="button" class="chat-read-receipt" data-view-readers="${escapeChatHTML(message.id)}">${acceptedOthers.length > 1 ? `Read by ${readers.length}` : "Read"}</button>` : "";
         const viewReceipt = mine && message.view_once ? `<button type="button" class="chat-read-receipt" data-view-once-receipts="${escapeChatHTML(message.id)}">View receipts</button>` : "";
-        return `<article class="chat-message ${mine ? "mine" : "theirs"} ${startsSequence ? "starts-sequence" : ""} ${endsSequence ? "ends-sequence" : ""} ${message.delivery_state || ""}" ${position} data-list-key="${escapeChatHTML(message.id)}" data-message-id="${escapeChatHTML(message.id)}"><div class="chat-message-meta">${!mine && startsSequence ? `<strong>${escapeChatHTML(message.sender_first_name || "Student")}</strong>` : ""}</div><div class="chat-bubble" data-message-bubble="${escapeChatHTML(message.id)}">${replyMarkup}${media}${message.kind === "memento" ? `<small class="memento-label">Memento</small>` : message.kind === "story" ? `<small class="memento-label">${message.story_share_context === "reply" ? "Story reply" : "Shared Story"}</small>` : ""}${body}<time>${escapeChatHTML(message.delivery_state === "sending" ? "Sending…" : message.delivery_state === "failed" ? "Not sent" : messageTime(message.created_at))}</time><button class="chat-message-menu-button" type="button" data-message-menu="${escapeChatHTML(message.id)}" aria-label="Message actions" aria-expanded="false">${uiIcon("more")}</button></div>${message.delivery_state === "failed" ? `<button class="chat-retry" type="button" data-retry-message="${escapeChatHTML(message.client_request_id)}">Retry</button>` : ""}<div class="chat-message-actions"><div class="chat-reaction-picker">${CHAT_REACTIONS.map(([type, emoji]) => `<button type="button" aria-label="React ${type}" data-react-message="${escapeChatHTML(message.id)}" data-reaction="${type}" class="${message.current_user_reaction === type ? "active" : ""}">${emoji}</button>`).join("")}</div><div class="chat-action-list"><button type="button" data-reply-message="${escapeChatHTML(message.id)}">${uiIcon("reply")} Reply</button>${message.body ? `<button type="button" data-copy-message="${escapeChatHTML(message.id)}">${uiIcon("copy")} Copy</button>` : ""}<button type="button" data-delete-message="${escapeChatHTML(message.id)}">Hide for me</button>${mine && message.delivery_state === "sent" ? `<button class="danger" type="button" data-unsend-message="${escapeChatHTML(message.id)}">Unsend</button>` : ""}</div></div>${reactions ? `<button type="button" class="chat-reaction-summary" data-view-reactions="${escapeChatHTML(message.id)}" aria-label="View reactions">${reactions}</button>` : ""}${viewReceipt || receipt}</article>`;
+        return `<article class="chat-message ${mine ? "mine" : "theirs"} ${startsSequence ? "starts-sequence" : ""} ${endsSequence ? "ends-sequence" : ""} ${message.delivery_state || ""} ${message.view_once ? "ephemeral" : ""}" ${position} data-list-key="${escapeChatHTML(message.id)}" data-message-id="${escapeChatHTML(message.id)}"><div class="chat-message-meta">${!mine && startsSequence ? `<strong>${escapeChatHTML(message.sender_first_name || "Student")}</strong>` : ""}</div><div class="chat-bubble" data-message-bubble="${escapeChatHTML(message.id)}">${replyMarkup}${media}${message.saved_in_chat ? `<small class="chat-saved-label">Saved by ${escapeChatHTML(message.saved_by?.first_name || "a member")}</small>` : ""}${message.kind === "memento" ? `<small class="memento-label">Memento</small>` : message.kind === "story" ? `<small class="memento-label">${message.story_share_context === "reply" ? "Story reply" : "Shared Story"}</small>` : ""}${body}<time>${escapeChatHTML(message.delivery_state === "sending" ? "Sending…" : message.delivery_state === "failed" ? "Not sent" : messageTime(message.created_at))}</time><button class="chat-message-menu-button" type="button" data-message-menu="${escapeChatHTML(message.id)}" aria-label="Message actions" aria-expanded="false">${uiIcon("more")}</button></div>${message.delivery_state === "failed" ? `<button class="chat-retry" type="button" data-retry-message="${escapeChatHTML(message.client_request_id)}">Retry</button>` : ""}<div class="chat-message-actions"><div class="chat-reaction-picker">${CHAT_REACTIONS.map(([type, emoji]) => `<button type="button" aria-label="React ${type}" data-react-message="${escapeChatHTML(message.id)}" data-reaction="${type}" class="${message.current_user_reaction === type ? "active" : ""}">${emoji}</button>`).join("")}</div><div class="chat-action-list">${canSaveMessage(message) ? `<button type="button" data-save-message="${escapeChatHTML(message.id)}">${uiIcon("chat")} ${message.saved_in_chat ? "Unsave from chat" : "Save in chat"}</button>` : ""}<button type="button" data-reply-message="${escapeChatHTML(message.id)}">${uiIcon("reply")} Reply</button>${message.body ? `<button type="button" data-copy-message="${escapeChatHTML(message.id)}">${uiIcon("copy")} Copy</button>` : ""}<button type="button" data-delete-message="${escapeChatHTML(message.id)}">Hide for me</button>${mine && message.delivery_state === "sent" ? `<button class="danger" type="button" data-unsend-message="${escapeChatHTML(message.id)}">Unsend</button>` : ""}</div></div>${reactions ? `<button type="button" class="chat-reaction-summary" data-view-reactions="${escapeChatHTML(message.id)}" aria-label="View reactions">${reactions}</button>` : ""}${viewReceipt || receipt}</article>`;
     }
 
     function readReceiptMembers(message) {
@@ -1971,14 +2049,22 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     }
 
     function closeMediaViewer() {
+        mediaOpenGeneration++;
+        for (const [id, state] of viewOnceStates) if (state.loading) viewOnceStates.delete(id);
         const dialog = $("[data-chat-media-viewer]");
         dialog.close();
+        resetMediaViewerContents();
     }
 
     function resetMediaViewerContents() {
+        clearInterval(ephemeralTimer); ephemeralTimer = null; ephemeralPaused = false;
+        $('[data-pause-ephemeral]').hidden = true;
+        $('.chat-ephemeral-progress').hidden = true;
         const dialog = $("[data-chat-media-viewer]");
         const video = dialog.querySelector("video");
         video.pause();
+        video.controls = true;
+        video.onended = null;
         video.removeAttribute("src");
         video.load();
         const image = dialog.querySelector("img");
@@ -2041,55 +2127,82 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         void showMediaViewer(url, { kind, label: isStory ? `${message.story_owner_first_name || "Student"} · Story` : `${message.sender_first_name || "Student"} · ${kind}`, overlay }).catch((error) => showToast?.(error.message));
     }
 
-    function rememberedViewOnceSession(messageId) {
-        if (viewOnceSessionByMessage.has(messageId)) return viewOnceSessionByMessage.get(messageId);
+    async function openViewOnceMessage(messageId, { accessible = false } = {}) {
+        const message = store.messages().find(item => item.id === messageId);
+        if (!message) return;
+        const state = viewOnceStates.get(messageId) || {};
+        const once = viewOncePresentation(message, { canReplay: viewOnceSessionByMessage.has(messageId), ...state });
+        if (once.disabled || (once.replay && !state.armed && !accessible)) return;
+        if (replaySuppressClick && !accessible) { replaySuppressClick = false; return; }
+        const chatId = store.state.activeChatId, uid = userId(), generation = ++mediaOpenGeneration;
+        const current = () => generation === mediaOpenGeneration && chatId === store.state.activeChatId && uid === userId();
+        viewOnceStates.set(messageId, { loading: true }); renderMessages(false);
         try {
-            const entries = JSON.parse(sessionStorage.getItem("valid:view-once-sessions") || "[]");
-            const entry = entries.find((item) => item.user_id === String(userId()) && item.chat_id === String(store.state.activeChatId) && item.message_id === String(messageId));
-            if (entry?.session_id) viewOnceSessionByMessage.set(messageId, entry.session_id);
-            return entry?.session_id || null;
-        } catch (_) { return null; }
-    }
-
-    function rememberViewOnceSession(messageId, sessionId) {
-        viewOnceSessionByMessage.set(messageId, sessionId);
-        try {
-            const entries = JSON.parse(sessionStorage.getItem("valid:view-once-sessions") || "[]").filter((item) => !(item.user_id === String(userId()) && item.chat_id === String(store.state.activeChatId) && item.message_id === String(messageId)));
-            entries.push({ user_id: String(userId()), chat_id: String(store.state.activeChatId), message_id: String(messageId), session_id: String(sessionId) });
-            sessionStorage.setItem("valid:view-once-sessions", JSON.stringify(entries.slice(-20)));
-        } catch (_) { /* Session-only replay hints are optional. */ }
-    }
-
-    async function openViewOnceMessage(messageId) {
-        const message = store.messages().find((item) => item.id === messageId);
-        if (!message || message.viewer_is_sender || message.view_once_available === false) return;
-        try {
-            const replayOfSessionId = rememberedViewOnceSession(messageId);
+            const replayOfSessionId = viewOnceSessionByMessage.get(messageId);
             const clientRequestId = viewOnceRequestByMessage.get(messageId) || crypto.randomUUID();
             viewOnceRequestByMessage.set(messageId, clientRequestId);
-            const session = await api.beginChatMediaViewSession(userId(), store.state.activeChatId, {
-                messageId: replayOfSessionId ? null : messageId,
-                replayOfSessionId,
-                clientRequestId,
+            const session = await api.beginChatMediaViewSession(uid, chatId, {
+                messageId: replayOfSessionId ? null : messageId, replayOfSessionId, clientRequestId,
             });
+            if (!current()) return;
             const revealed = session.message;
-            const kind = revealed.kind === "video" ? "video" : "photo";
-            const url = safeMediaURL(kind === "video" ? revealed.video_url : revealed.photo_image_url, api);
-            await showMediaViewer(url, {
-                kind,
-                label: `View once · ${Number(revealed.view_once_remaining_views || message.view_once_remaining_views || 1)} view${Number(revealed.view_once_remaining_views || message.view_once_remaining_views || 1) === 1 ? "" : "s"} available`,
-                overlay: revealed.media_text_overlay,
-            });
-            await api.startChatMediaViewSession(userId(), store.state.activeChatId, session.session_id);
+            const kind = revealed.kind === 'video' ? 'video' : 'photo';
+            viewedMessageId = messageId;
+            const url = safeMediaURL(kind === 'video' ? revealed.video_url : revealed.photo_image_url, api);
+            await showMediaViewer(url, { kind, label: kind === 'video' ? 'Video · View once' : 'Photo · View once', overlay: revealed.media_text_overlay });
+            if (!current() || !$('[data-chat-media-viewer]').open) return;
+            if (kind === 'video') {
+                const video = $('[data-chat-media-viewer] video');
+                video.controls = false;
+                await video.play();
+                if (!current()) return;
+            }
+            await api.startChatMediaViewSession(uid, chatId, session.session_id);
+            if (!current()) return;
             viewOnceRequestByMessage.delete(messageId);
-            rememberViewOnceSession(messageId, session.session_id);
-            const remaining = Math.max(0, Number(revealed.view_once_remaining_views ?? message.view_once_remaining_views ?? 1) - 1);
-            store.updateMessage(store.state.activeChatId, { ...message, view_once_remaining_views: remaining, view_once_available: remaining > 0, view_once_consumed: remaining === 0 });
+            viewOnceSessionByMessage.set(messageId, session.session_id);
+            const remaining = Math.max(0, Number(revealed.view_once_remaining_views ?? message.view_once_remaining_views ?? 2) - 1);
+            // Keep no revealed media URLs in the message store.
+            store.updateMessage(chatId, { ...message, view_once_remaining_views: remaining, view_once_available: true, view_once_consumed: remaining === 0 });
+            viewOnceStates.delete(messageId);
+            beginEphemeralPlayback(kind);
             renderMessages(false);
+            void loadChats({ quiet: true });
         } catch (error) {
+            if (!current()) return;
             closeMediaViewer();
-            showToast?.(error.message || "That view-once media is no longer available.");
+            viewOnceStates.set(messageId, { failed: true }); renderMessages(false);
+            showToast?.(error.message || 'That view-once media is no longer available.');
         }
+    }
+
+    function setEphemeralPaused(paused) {
+        if (!ephemeralTimer) return;
+        ephemeralPaused = paused;
+        const button = $('[data-pause-ephemeral]');
+        button.setAttribute('aria-label', paused ? 'Resume media' : 'Pause media');
+        button.innerHTML = uiIcon(paused ? 'play' : 'pause');
+        const video = $('[data-chat-media-viewer] video');
+        if (!video.hidden) { if (paused) video.pause(); else void video.play().catch(() => setEphemeralPaused(true)); }
+    }
+
+    function beginEphemeralPlayback(kind) {
+        clearInterval(ephemeralTimer); ephemeralPaused = false;
+        const progress = $('.chat-ephemeral-progress'), video = $('[data-chat-media-viewer] video');
+        progress.hidden = false; progress.value = 0;
+        $('[data-pause-ephemeral]').hidden = false;
+        $('[data-pause-ephemeral]').setAttribute('aria-label', 'Pause media');
+        $('[data-pause-ephemeral]').innerHTML = uiIcon('pause');
+        video.onended = kind === 'video' ? closeMediaViewer : null;
+        if (kind === 'video' && video.ended) { closeMediaViewer(); return; }
+        let elapsed = 0, previous = performance.now();
+        ephemeralTimer = setInterval(() => {
+            const now = performance.now();
+            if (!ephemeralPaused) elapsed += now - previous;
+            previous = now;
+            progress.value = kind === 'video' ? (video.duration > 0 ? video.currentTime / video.duration : 0) : elapsed / 5000;
+            if (kind === 'photo' && elapsed >= 5000) closeMediaViewer();
+        }, 50);
     }
 
     async function showViewOnceReceipts(messageId) {
@@ -2104,6 +2217,116 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         }
     }
 
+    function ensureHistoryReceipts() {
+        if (receiptUser === userId() && historyReceipts) return;
+        void historyReceipts?.close();
+        receiptUser = userId();
+        historyReceipts = receiptUser ? createHistoryReceipts({ api, userId: receiptUser,
+            onChange: chatId => { if (chatId === store.state.activeChatId) void handleRealtimeEvent({ type: 'chat_history_changed', chat_id: chatId }); },
+        }) : null;
+    }
+
+    function recordVisibleHistory() {
+        if (!store.state.activeChatId || store.state.loadingRoom || document.hidden || root.closest('.hidden') || chatAccessUnavailable()) return;
+        ensureHistoryReceipts();
+        const bounds = $('.chat-timeline').getBoundingClientRect();
+        if (bounds.height <= 0) return;
+        const messages = new Map(store.messages().map(m => [m.id, m]));
+        const sequences = $$('.chat-timeline [data-message-id]').filter(node => {
+            const box = node.getBoundingClientRect();
+            return box.bottom > bounds.top && box.top < bounds.bottom && box.bottom > 0 && box.top < innerHeight;
+        }).map(node => messages.get(node.dataset.messageId)).filter(m => m && m.kind !== 'memento'
+            && m.status === 'active' && m.delivery_state === 'sent' && historyVisible(m)).map(m => m.room_sequence);
+        if (sequences.length) historyReceipts?.viewed(store.state.activeChatId, sequences);
+    }
+
+    async function refreshSharedHistory() {
+        const chatId = store.state.activeChatId, uid = userId(), generation = roomGeneration;
+        if (!chatId || !uid || store.state.detail?.chat.membership_status !== 'accepted') return;
+        const revision = ++sharedHistoryRevision;
+        const current = () => revision === sharedHistoryRevision && generation === roomGeneration && chatId === store.state.activeChatId && uid === userId();
+        sharedHistoryLoading = true; sharedHistoryError = ''; renderHistorySettings();
+        try {
+            const messages = store.messages(chatId).filter(m => Number.isSafeInteger(m.room_sequence));
+            const capturedIds = new Set(messages.map(m => m.id));
+            const max = Math.max(0, ...messages.map(m => m.room_sequence));
+            let after = Math.max(0, Math.min(...messages.map(m => m.room_sequence), 1 + max) - 1);
+            const metadata = new Map();
+            let mode;
+            do {
+                const page = await api.getChatHistory(uid, chatId, after);
+                if (!current()) return;
+                if (!HISTORY_MODES.some(item => item.value === page.mode) || !Array.isArray(page.items)) throw new Error('Invalid chat history response');
+                mode = page.mode;
+                for (const item of page.items) if (item.room_sequence <= max) metadata.set(item.room_sequence, item);
+                const next = page.next_after_sequence;
+                if (next == null || next >= max) break;
+                if (!Number.isSafeInteger(next) || next <= after) throw new Error('Chat history did not advance');
+                after = next;
+            } while (true);
+            store.state.detail.chat.history_mode = mode;
+            store.state.detail.chat.history_loaded = true;
+            store.replaceMessages(chatId, store.messages(chatId).map(message => {
+                if (message.kind === 'memento' || !capturedIds.has(message.id)) return message;
+                const meta = metadata.get(message.room_sequence);
+                if (!meta) return { ...message, history_expires_at: null, saved_in_chat: false, saved_by: null };
+                if (meta.cleared) return { id: message.id, chat_id: chatId, room_sequence: message.room_sequence,
+                    kind: message.kind, status: 'history_cleared', history_cleared_at: new Date().toISOString(), created_at: message.created_at };
+                return { ...message, history_expires_at: meta.history_expires_at, saved_in_chat: meta.saved_in_chat, saved_by: meta.saved_by };
+            }), store.state.messagePageByChat.get(chatId));
+            renderMessages(false, { preservePosition: true });
+        } catch (_) {
+            if (current()) sharedHistoryError = 'Chat history settings couldn’t be loaded. Try again.';
+        } finally {
+            if (current()) { sharedHistoryLoading = false; renderHistorySettings(); }
+        }
+    }
+
+    function renderHistorySettings() {
+        const options = $('[data-history-options]');
+        if (!options) return;
+        const chat = store.state.detail?.chat;
+        const disabled = !chat?.history_loaded || !!sharedHistoryError || sharedHistoryLoading || sharedHistorySaving || chat.membership_status !== 'accepted';
+        options.innerHTML = HISTORY_MODES.map(mode => `<button type="button" class="chat-history-choice ${chat?.history_mode === mode.value ? 'selected' : ''}" data-history-mode="${mode.value}" aria-pressed="${chat?.history_mode === mode.value}" ${disabled ? 'disabled' : ''}><i>${uiIcon(mode.icon)}</i><span><strong>${mode.title}</strong><small>${mode.subtitle}</small></span><span class="chat-choice-check" aria-hidden="true">${chat?.history_mode === mode.value ? uiIcon('check') : ''}</span></button>`).join('');
+        $('[data-history-status]').textContent = sharedHistorySaving ? 'Saving…' : sharedHistoryLoading ? 'Loading…' : sharedHistoryError;
+        $('[data-retry-history]').hidden = !sharedHistoryError;
+    }
+
+    async function changeHistoryMode(mode) {
+        const chatId = store.state.activeChatId, uid = userId(), chat = store.state.detail?.chat;
+        if (sharedHistorySaving || !chat?.history_loaded || !HISTORY_MODES.some(item => item.value === mode) || chat.history_mode === mode) return;
+        const description = mode === 'after24Hours' ? 'Unsaved messages clear 24 hours after everyone views them.' : 'Unsaved messages clear after everyone views them and leaves the chat.';
+        if (mode !== 'save' && !window.confirm(`${description} This changes chat history for everyone. Saved messages and Mementos stay. Continue?`)) return;
+        sharedHistorySaving = true; sharedHistoryError = ''; renderHistorySettings();
+        try {
+            await api.setChatHistory(uid, chatId, mode);
+            if (chatId !== store.state.activeChatId || uid !== userId()) return;
+            await refreshSharedHistory();
+            void handleRealtimeEvent({ type: 'chat_history_changed', chat_id: chatId });
+        } catch (_) {
+            if (chatId === store.state.activeChatId && uid === userId()) {
+                await refreshSharedHistory();
+                sharedHistoryError = 'The change couldn’t be confirmed. Check the current setting and try again.';
+            }
+        } finally { sharedHistorySaving = false; renderHistorySettings(); }
+    }
+
+    async function toggleSavedMessage(messageId) {
+        const chatId = store.state.activeChatId, uid = userId();
+        const message = store.messages().find(m => m.id === messageId);
+        if (!message || !canSaveMessage(message)) return;
+        const button = $(`[data-save-message="${CSS.escape(messageId)}"]`);
+        if (button?.disabled) return;
+        if (button) button.disabled = true;
+        try {
+            const updated = await api.saveChatMessage(uid, chatId, messageId, !message.saved_in_chat);
+            if (uid !== userId() || chatId !== store.state.activeChatId) return;
+            store.updateMessage(chatId, updated); renderMessages(false);
+            void refreshSharedHistory();
+        } catch (_) { showToast?.('Could not change the saved message. Try again.'); }
+        finally { if (button?.isConnected) button.disabled = false; }
+    }
+
     function renderSettings() {
         const detail = store.state.detail;
         if (!detail) return;
@@ -2116,11 +2339,12 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             const remove = canManage && !isSelf && member.role !== "owner" ? `<button type="button" data-remove-chat-member="${escapeChatHTML(member.user_id)}" aria-label="Remove ${escapeChatHTML(displayMember(member))}">Remove</button>` : "";
             const block = !isSelf ? `<button type="button" data-block-chat-member="${escapeChatHTML(member.user_id)}" aria-label="Block ${escapeChatHTML(displayMember(member))}">Block</button>` : "";
             return `<div class="chat-settings-member"><span>${escapeChatHTML(displayMember(member))}</span><small ${!isSelf && member.status === "accepted" && member.is_blocked_by_viewer !== true ? `data-presence-member="${escapeChatHTML(member.user_id)}" data-presence-fallback="${member.role === "owner" ? "Owner" : "Member"}"` : ""}>${escapeChatHTML(member.role === "owner" ? "Owner" : member.status === "invited" ? "Invited" : "Member")}</small>${remove || block ? `<span class="chat-member-actions">${remove}${block}</span>` : ""}</div>`;
-        }).join("")}${canManage ? `<button class="chat-add-people" type="button" data-add-current-chat>${uiIcon("plus")} Add people</button>` : ""}</section><section class="chat-appearance-setting"><h3>Appearance</h3><label>Chat font<select aria-label="Chat font">${CHAT_FONT_STYLES.map(({ value, label }) => `<option value="${value}" ${appearance.font === value ? "selected" : ""}>${label}</option>`).join("")}</select></label><div class="chat-color-options" role="group" aria-label="Chat color">${CHAT_COLOR_STYLES.map(({ value, label }) => `<button type="button" data-chat-appearance-color="${value}" aria-label="${label} chat color" aria-pressed="${appearance.color === value}" class="${appearance.color === value ? "selected" : ""}"><span></span></button>`).join("")}</div><p class="chat-appearance-preview">This is how your chat will look.</p><small>Only you see these choices. They stay on this device and are never sent to the chat.</small></section><label class="chat-notification-setting">Notifications<select>${[["all", "All messages"], ["daily_only", "Mementos only"], ["muted", "Muted"]].map(([value, label]) => `<option value="${value}" ${chat.notification_level === value ? "selected" : ""}>${label}</option>`).join("")}</select></label><button class="chat-danger-action" type="button" data-report-current-chat>Report chat</button><button class="chat-danger-action" type="button" data-leave-current-chat>Leave chat</button>`;
+        }).join("")}${canManage ? `<button class="chat-add-people" type="button" data-add-current-chat>${uiIcon("plus")} Add people</button>` : ""}</section><section class="chat-history-setting"><h3>Chat history</h3><div data-history-options></div><p data-history-status role="status"></p><button type="button" data-retry-history hidden>Try again</button><small>Hold a message, then tap Save in chat. Saved messages and Mementos stay.</small></section><section class="chat-appearance-setting"><h3>Appearance</h3><label>Chat font<select aria-label="Chat font">${CHAT_FONT_STYLES.map(({ value, label }) => `<option value="${value}" ${appearance.font === value ? "selected" : ""}>${label}</option>`).join("")}</select></label><div class="chat-color-options" role="group" aria-label="Chat color">${CHAT_COLOR_STYLES.map(({ value, label }) => `<button type="button" data-chat-appearance-color="${value}" aria-label="${label} chat color" aria-pressed="${appearance.color === value}" class="${appearance.color === value ? "selected" : ""}"><span></span></button>`).join("")}</div><p class="chat-appearance-preview">This is how your chat will look.</p><small>Only you see these choices. They stay on this device and are never sent to the chat.</small></section><label class="chat-notification-setting">Notifications<select>${[["all", "All messages"], ["daily_only", "Mementos only"], ["muted", "Muted"]].map(([value, label]) => `<option value="${value}" ${chat.notification_level === value ? "selected" : ""}>${label}</option>`).join("")}</select></label><button class="chat-danger-action" type="button" data-report-current-chat>Report chat</button><button class="chat-danger-action" type="button" data-leave-current-chat>Leave chat</button>`;
         $(".chat-notification-setting select").addEventListener("change", updateNotificationLevel, { once: true });
         $(".chat-appearance-setting select").addEventListener("change", (event) => updateChatAppearance({ font: event.target.value }));
         $(".chat-photo-setting input")?.addEventListener("change", updateChatPhoto);
         renderPresence();
+        renderHistorySettings();
     }
 
     async function updateChatPhoto(event) {
@@ -2351,6 +2575,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         store.state.lastEventId = event.id || store.state.lastEventId;
         void calls.handleRealtimeEvent(event);
         const chatId = String(event.chat_id || "");
+        if (event.type === 'chat_history_changed' && chatId === store.state.activeChatId) void refreshSharedHistory();
         const callHistoryChanged = ['call_started', 'call_updated', 'call_answered', 'call_declined', 'call_ended', 'call_history_changed'].includes(event.type);
         if (["typing_started", "typing_stopped"].includes(event.type) && chatId === store.state.activeChatId && String(event.actor_user_id) !== String(userId())) {
             if (event.type === "typing_started") store.state.typingUserIds.add(String(event.actor_user_id));
@@ -2359,7 +2584,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             renderRoomHeader(store.state.detail?.chat);
             return;
         }
-        if (chatId && chatId === store.state.activeChatId && (callHistoryChanged || ["message_created", "message_updated", "message_deleted", "memento_created", "resync", "ready"].includes(event.type))) {
+        if (chatId && chatId === store.state.activeChatId && (callHistoryChanged || ["message_created", "message_updated", "message_deleted", "memento_created", "chat_history_changed", "resync", "ready"].includes(event.type))) {
             // One active repair and one coalesced hint, never a growing SSE queue.
             if (realtimeRefreshing) {
                 pendingRealtimeEvent = { ...event, type: 'resync' };
@@ -2372,7 +2597,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             const position = timelineScroll.capture();
             const away = historyHasNewer || messageWindow.range(chatId, store.messages()).hiddenAfter > 0 || !position.bottom;
             const anchor = away ? position.anchors.map(item => store.messages().find(message => message.id === item.key)).find(Boolean) : null;
-            const needsFullResync = !!anchor || callHistoryChanged || ["resync", "ready", "message_updated", "message_deleted"].includes(event.type);
+            const needsFullResync = !!anchor || callHistoryChanged || ["resync", "ready", "message_updated", "message_deleted", "chat_history_changed"].includes(event.type);
             try {
                 const response = await api.getChatMessages(userId(), chatId, { limit: 100, afterSequence: anchor ? Math.max(0, Math.floor(anchor.room_sequence) - 1) : needsFullResync ? null : Math.floor(latest) });
                 if (generation !== roomGeneration || chatId !== store.state.activeChatId) return;
@@ -2445,6 +2670,9 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     }
 
     function showChatList() {
+        void historyReceipts?.leave(store.state.activeChatId);
+        viewOnceSessionByMessage.clear(); viewOnceStates.clear();
+        closeMediaViewer();
         stopTyping();
         clearSharedMementoDraft();
         roomGeneration += 1;
@@ -2482,6 +2710,26 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         }
         if (target.matches("[data-create-submit]")) return createChat();
         if (target.dataset.searchChat) return openSearchResult(target.dataset.searchChat, target.dataset.searchMessage || null);
+        if (target.dataset.returnMissedCall) {
+            const chat = store.state.chats.find(item => item.id === target.dataset.returnMissedCall);
+            await openChat(target.dataset.returnMissedCall);
+            if (chat && !chatAccessUnavailable()) return calls.start('audio', chat);
+            return;
+        }
+        if (target.dataset.pendingMedia) {
+            const chat = store.state.chats.find(item => item.id === target.dataset.pendingMedia);
+            await openChat(target.dataset.pendingMedia);
+            if (chatAccessUnavailable() || store.state.activeChatId !== target.dataset.pendingMedia) return;
+            let message = store.messages().find(item => item.room_sequence === Number(chat?.next_view_once_room_sequence));
+            if (!message && chat?.next_view_once_room_sequence) {
+                const response = await api.getChatMessages(userId(), chat.id, { afterSequence: Math.max(0, Number(chat.next_view_once_room_sequence) - 1), limit: 1 }).catch(() => null);
+                if (store.state.activeChatId !== chat.id) return;
+                message = response?.items?.find(item => item.room_sequence === Number(chat.next_view_once_room_sequence));
+                if (message) store.mergeMessages(chat.id, [message]);
+            }
+            if (message) return openViewOnceMessage(message.id);
+            return;
+        }
         if (target.dataset.openChat) {
             if (target.tagName === 'A') {
                 if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -2545,14 +2793,18 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             return;
         }
         if (target.dataset.deleteSticker) return deleteSticker(target.dataset.deleteSticker);
-        if (target.dataset.openViewOnce) return openViewOnceMessage(target.dataset.openViewOnce);
+        if (target.dataset.openViewOnce) return openViewOnceMessage(target.dataset.openViewOnce, { accessible: event.detail === 0 });
+        if (target.dataset.historyMode) return changeHistoryMode(target.dataset.historyMode);
+        if (target.matches('[data-retry-history]')) return refreshSharedHistory();
+        if (target.dataset.saveMessage) return toggleSavedMessage(target.dataset.saveMessage);
+        if (target.matches('[data-pause-ephemeral]')) return setEphemeralPaused(!ephemeralPaused);
         if (target.dataset.viewOnceReceipts) return showViewOnceReceipts(target.dataset.viewOnceReceipts);
         if (target.matches("[data-share-viewed-memento]")) return shareViewedMemento();
         if (target.matches("[data-swap-viewed-memento]")) return void swapViewedMemento();
         if (target.matches("[data-reply-viewed-media]")) return replyToViewedMedia();
         if (target.matches("[data-react-viewed-media]")) return reactToViewedMedia();
         if (target.matches("[data-close-media]")) return closeMediaViewer();
-        if (target.matches("[data-chat-settings]")) { renderSettings(); return $("[data-chat-settings-dialog]").showModal(); }
+        if (target.matches("[data-chat-settings]")) { void refreshSharedHistory(); renderSettings(); return $("[data-chat-settings-dialog]").showModal(); }
         if (target.dataset.chatAppearanceColor) return updateChatAppearance({ color: target.dataset.chatAppearanceColor });
         if (target.matches("[data-close-settings]")) return $("[data-chat-settings-dialog]").close();
         if (target.matches("[data-close-reactors]")) return $("[data-chat-reactors-dialog]").close();
@@ -2622,5 +2874,5 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         }
     }
 
-    return { activate, refresh, openChat, store, beforeSessionEnd: async () => { roomGeneration++; historyLoading = null; pendingRealtimeEvent = null; timelineScroll.reset(); mementoCamera.close(); resetChatMediaComposer(); $('[data-chat-media-dialog]').close(); return calls.beforeSessionEnd(); } };
+    return { activate, refresh, openChat, store, beforeSessionEnd: async () => { await historyReceipts?.close(); historyReceipts = null; receiptUser = null; closeMediaViewer(); roomGeneration++; historyLoading = null; pendingRealtimeEvent = null; timelineScroll.reset(); mementoCamera.close(); resetChatMediaComposer(); $('[data-chat-media-dialog]').close(); return calls.beforeSessionEnd(); } };
 }

@@ -1688,7 +1688,7 @@ body.detail-screen-open { overflow: hidden; }
 
 /* Inbox and opened-content geometry from native Feed / Ask / TBH views. */
 #feedList { gap: 0; }
-#feedList > .feed-card, #feedList > .tbh-row, #feedList > .anonymous-question-row, #feedList > .anonymous-reply-row { padding: 8px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+#feedList > .feed-card, #feedList > .tbh-row, #feedList > .anonymous-question-row, #feedList > .anonymous-reply-row { padding: 12px; border: 3px solid var(--outline); border-radius: 12px; background: var(--white); box-shadow: 0 2px 4px rgba(0,0,0,.1); }
 #feedList > .feed-card { gap: 8px; min-height: 80px; }
 #feedList .reaction-control { top: 8px; right: 0; }
 #feedList .feed-meta, #feedList .tbh-feed-title, #feedList .anonymous-row-title > strong { font-size: 14px; }
@@ -1801,3 +1801,11 @@ body.detail-screen-open { overflow: hidden; }
 .weekly-game-entry small { display:block; color:var(--muted); font-size:10px; letter-spacing:1.3px; margin-bottom:4px; }
 .weekly-game-entry strong { display:block; font:20px Jua,system-ui,sans-serif; }
 .weekly-game-entry-arrow { color:var(--muted); font-size:30px; }
+
+.profile-actions { padding: 16px; border: 3px solid var(--outline); border-radius: 18px; background: var(--white); gap: 0; }
+.profile-actions h3 { margin: 0 0 10px; font-size: 22px; }
+.profile-actions .settings-row { border: 0; border-radius: 0; background: transparent; padding: 12px 0; }
+.profile-actions .settings-row + .settings-row { border-top: 1px solid color-mix(in srgb, var(--outline) 15%, transparent); }
+#activityStatusButton .settings-icon { color: var(--dark-teal); }
+#activityStatusButton .settings-icon .ui-icon { width: 25px; height: 25px; }
+#activityStatusButton small { font-size: 12px; }

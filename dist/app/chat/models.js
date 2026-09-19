@@ -50,8 +50,6 @@ export function chatNeedsMemento(chat, dailyLedgerEnabled) {
     return Boolean(dailyLedgerEnabled
         && chat?.membership_status === "accepted"
         && Number(chat?.accepted_count || 0) >= 2
-        && chat?.is_memento_eligible_today !== false
-        && !chat?.has_skipped_today_memento
         && !chat?.has_posted_today_memento);
 }
 

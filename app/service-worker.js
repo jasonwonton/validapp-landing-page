@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "valid-web-";
-const CACHE_NAME = `${CACHE_PREFIX}v96`;
+const CACHE_NAME = `${CACHE_PREFIX}v97`;
 const APP_SHELL = [
     "./",
     "./styles.css",

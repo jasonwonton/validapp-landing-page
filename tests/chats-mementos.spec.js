@@ -596,18 +596,19 @@ test("view-once media starts each server session only after reveal and stops aft
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
     const message = page.locator('[data-message-id="msg-n4"]');
-    await expect(message.getByRole("button", { name: /View once photo.*2 views left/ })).toBeVisible();
-    await message.getByRole("button", { name: /View once photo/ }).click();
+    await expect(message.getByRole("button", { name: /Photo · Tap to view/ })).toBeVisible();
+    await message.getByRole("button", { name: /Photo · Tap to view/ }).click();
     const viewer = page.getByRole("dialog", { name: "Chat media" });
     await expect(viewer).toBeVisible();
     await expect(viewer).toContainText("View once");
     await expect(viewer).toContainText("Game night");
     await viewer.getByRole("button", { name: "Close" }).click();
-    await expect(message.getByRole("button", { name: /View once photo.*1 view left/ })).toBeVisible();
-    await message.getByRole("button", { name: /View once photo/ }).click();
+    await expect(message.getByRole("button", { name: /Photo · Hold to replay/ })).toBeVisible();
+    await message.getByRole("button", { name: /Photo · Hold to replay/ }).focus();
+    await page.keyboard.press("Enter");
     await expect(viewer).toBeVisible();
     await viewer.getByRole("button", { name: "Close" }).click();
-    await expect(message.getByRole("button", { name: /Opened.*No views left/ })).toBeDisabled();
+    await expect(message.getByRole("button", { name: /Photo · Opened/ })).toBeDisabled();
 });
 
 test("view-once senders can inspect authoritative recipient receipts", async ({ page }) => {
