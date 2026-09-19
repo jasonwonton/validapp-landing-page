@@ -40,7 +40,9 @@ async function openPoll(page, { missing = false, imageURL = cdnURL } = {}) {
     }, imageURL);
     await page.getByRole('button', { name: /^sign in$/i }).click();
     await page.locator('[data-feed-detail="9001"]').click();
-    await page.locator('#feedDetailBody .feed-detail-art img').evaluate(img => img.decode());
+    // Opening detail can replace the image during rendering. Observe the live
+    // element's decoded dimensions instead of holding a stale decode() promise.
+    await expect(page.locator('#feedDetailBody .feed-detail-art img')).toHaveJSProperty('naturalWidth', 256);
 }
 
 for (const platform of ['Snapchat', 'Instagram', 'TikTok']) {
