@@ -246,6 +246,7 @@ function mountUIRoot(root) {
 }
 
 function initializeParkedUI() {
+    document.querySelectorAll("#anonymousAnswerDetailDialog").forEach(parkUIRoot);
     document.querySelectorAll("dialog:not(#deleteAccountDialog)").forEach((dialog) => {
         dialog.addEventListener("close", () => requestAnimationFrame(() => {
             if (!dialog.open) parkUIRoot(dialog);
@@ -1494,18 +1495,14 @@ async function openTbhDetail(value) {
     const [kind, id] = String(value).split(":");
     let item = (kind === "received" ? state.tbhInboxItems : kind === "sent" ? state.tbhSentItems : state.schoolTbhItems).find((candidate) => String(candidate.id) === String(id));
     if (!item) return;
-    const name = kind === "received" ? item.author_first_name : item.subject_first_name;
-    const title = kind === "received" ? `TBH from ${name}` : kind === "sent" ? `TBH sent to ${name}` : `${name} got a TBH`;
-    const subject = { first_name: item.subject_first_name, last_name: item.subject_last_name, profile_picture_url: item.subject_profile_picture_url };
-    const hero = kind === "school"
-        ? avatarMarkup(subject, "row-avatar tbh-detail-avatar")
-        : `<span class="tbh-detail-quote" aria-hidden="true">❞</span>`;
-    const footer = kind === "school"
-        ? tbhAuthorLine(item)
-        : kind === "sent"
-            ? `${name} sees your name. School sees your TBH without your name.`
-            : "";
-    $("#tbhDetailBody").innerHTML = `<article class="tbh-detail-card"><div class="tbh-detail-hero">${hero}<h2 id="tbhDetailTitle">${escapeHTML(title)}</h2><p>${escapeHTML(promptForKey(item.prompt_key).title)}</p></div><blockquote>${escapeHTML(item.body)}</blockquote>${footer ? `<small>${escapeHTML(footer)}</small>` : ""}</article>${commentDetailButtonMarkup(item, "activity", item.activity_id, "tbh-detail-comment-button")}`;
+    await prepareFeedView();
+    state.selectedTbhItem = { kind, id };
+    const received = kind === 'received';
+    const profile = { first_name: received ? item.author_first_name : item.subject_first_name, last_name: received ? item.author_last_name : item.subject_last_name, profile_picture_url: received ? item.author_profile_picture_url : item.subject_profile_picture_url };
+    const name = displayName(profile);
+    const title = received ? `${name} sent you a TBH` : kind === 'sent' ? `You sent ${name} a TBH` : `${name} got a TBH`;
+    const footer = kind === 'school' ? tbhAuthorLine(item) : kind === 'sent' ? `${profile.first_name} sees your name. School sees your TBH without your name.` : '';
+    $("#tbhDetailBody").innerHTML = `<article class="tbh-detail-card"><div class="tbh-detail-hero">${avatarMarkup(profile, "row-avatar tbh-detail-avatar")}<div><div class="tbh-detail-title-row"><h2 id="tbhDetailTitle">${escapeHTML(title)}</h2><time>${escapeHTML(relativeTime(item.created_at))}</time></div><p>${escapeHTML(promptForKey(item.prompt_key).title)}</p></div></div><blockquote>${escapeHTML(item.body)}</blockquote>${footer ? `<small>${escapeHTML(footer)}</small>` : ''}</article><div class="detail-engagement-row">${feedView.reactionControlMarkup(item, "activity", item.activity_id)}${commentDetailButtonMarkup(item, "activity", item.activity_id, "tbh-detail-comment-button")}${detailSendButton("activity", item.activity_id)}</div><div class="share-platform-row detail-share-row tbh-share-row">${['snapchat','instagram','tiktok'].map(platform => `<button class="share-platform-button ${platform} ${platform === 'snapchat' ? 'expanded' : ''}" type="button" data-share-tbh="${platform}" aria-label="Share TBH to ${platform === 'tiktok' ? 'TikTok' : platform[0].toUpperCase()+platform.slice(1)}">${shareIconMarkup(platform)}${platform === 'snapchat' ? '<span>Share on Snapchat</span>' : ''}</button>`).join('')}</div><p id="tbhShareStatus" class="status-message" role="status"></p>`;
     openDetailScreen($("#tbhDetailDialog"));
     if (kind === "received" && !item.opened_at) {
         try {
@@ -1515,6 +1512,35 @@ async function openTbhDetail(value) {
             renderFeed();
         } catch (_) { /* Detail remains readable from the inbox payload. */ }
     }
+}
+
+let tbhShareBusy = false;
+async function shareTbhDetail(platform) {
+    if (tbhShareBusy) return;
+    const selected = state.selectedTbhItem;
+    if (!selected) return;
+    const { kind, id } = selected;
+    const item = (kind === 'received' ? state.tbhInboxItems : kind === 'sent' ? state.tbhSentItems : state.schoolTbhItems).find(item => String(item.id) === String(id));
+    if (!item) return;
+    tbhShareBusy = true;
+    const status = $('#tbhShareStatus');
+    const buttons = $$('[data-share-tbh]');
+    buttons.forEach(button => { button.disabled = true; });
+    status.textContent = 'Preparing TBH image…';
+    try {
+        const { tbhShareContent, createTbhShareFile } = await import('./tbh-share.js');
+        const content = tbhShareContent(kind, item, promptForKey(item.prompt_key).title, tbhAuthorLine(item));
+        const file = await createTbhShareFile(content, { loadArtwork: loadShareArtwork, assetURL: url => api.assetURL(url) });
+        if (navigator.share && navigator.canShare?.({ files: [file] })) {
+            await navigator.share({ files: [file], title: 'A TBH on Valid' });
+            status.textContent = '';
+        } else {
+            downloadShareFile(file);
+            status.textContent = `TBH image saved. Add it to your ${platform === 'tiktok' ? 'TikTok' : platform[0].toUpperCase()+platform.slice(1)} story.`;
+        }
+    } catch (error) {
+        status.textContent = error.name === 'AbortError' ? '' : 'Couldn’t share this TBH. Please try again.';
+    } finally { tbhShareBusy = false; buttons.forEach(button => { button.disabled = false; }); }
 }
 
 function openTopPoll(pollKey) {
@@ -2560,7 +2586,7 @@ function commentControlMarkup(item, targetType, targetId) {
 function commentDetailButtonMarkup(item, targetType, targetId, className) {
     if (!commentsEnabled() || !targetId) return "";
     const count = Math.max(0, Number(item.comment_count || 0));
-    return `<button class="secondary-button ${className}" type="button" data-comments-target="${escapeHTML(`${targetType}:${targetId}`)}">${commentBubbleMarkup()}<span>Comments</span><strong data-comment-count>${count}</strong></button>`;
+    return `<button class="secondary-button ${className}" type="button" data-comments-target="${escapeHTML(`${targetType}:${targetId}`)}" aria-label="Open ${count} comments">${commentBubbleMarkup()}<span class="visually-hidden">Comments</span><strong data-comment-count>${count}</strong></button>`;
 }
 
 let feedView = null;
@@ -2844,6 +2870,51 @@ async function openReactorList(target) {
     }
 }
 
+function detailSendButton(type, id) {
+    return `<button class="detail-send-button" type="button" data-send-content="${escapeHTML(`${type}:${id}`)}" aria-label="Send ${type === 'poll' ? 'poll' : 'TBH'}" ${id == null ? 'disabled' : ''}>${uiIcon('paperplane')}<span>Send</span></button>`;
+}
+
+async function sendContentLink(button) {
+    const [type, id] = button.dataset.sendContent.split(':');
+    button.disabled = true;
+    try {
+        const result = await api.createFeedShareLink(api.user.id, type, id);
+        if (navigator.share) await navigator.share({ url: result.share_url });
+        else { await navigator.clipboard.writeText(result.share_url); showToast('Link copied'); }
+    } catch (error) {
+        if (error.name !== 'AbortError') showToast(error.message || 'Could not share. Please try again.');
+    } finally { button.disabled = false; }
+}
+
+function questionSubmitterMarkup(item) {
+    if (item.question_school_id == null || item.question_is_user_submitted === false) return '';
+    const anonymous = (item.question_is_anonymous ?? !item.question_submitted_by_display_name) && !item.question_submitter_revealed;
+    const name = anonymous ? 'Someone at your school' : item.question_submitted_by_display_name || 'A classmate';
+    const content = `${avatarMarkup({ first_name: name, profile_picture_url: anonymous ? '../assets/app/anonymous.webp' : item.question_submitted_by_profile_picture_url }, 'attribution-avatar')}<span><small>Question submitted by</small><strong>${escapeHTML(name)}</strong></span>`;
+    return anonymous && item.can_reveal_question_submitter ? `<button class="poll-submitter-row" data-reveal-question-submitter type="button">${content}<span class="submitter-reveal-label">Reveal</span></button>` : `<div class="poll-submitter-row">${content}</div>`;
+}
+
+async function revealQuestionSubmitter(button) {
+    const item = selectedFeedItem();
+    if (!item?.can_reveal_question_submitter || item.question_submitter_revealed) return;
+    if (api.user?.subscribed_user !== true) return openGodModePitch();
+    const remaining = Number(state.profile?.remaining_reveals || 0);
+    const cost = Number(state.config?.full_reveal_aura_cost ?? DEFAULT_FULL_REVEAL_AURA_COST);
+    if (remaining <= 0 && Number(state.profile?.aura_points || 0) < cost) return showToast('You need another reveal or more aura to do that.');
+    if (!confirm(`Reveal who submitted this question? ${remaining > 0 ? 'Use 1 reveal.' : `Spend ${cost.toLocaleString()} aura.`}`)) return;
+    button.disabled = true;
+    try {
+        const result = await api.revealQuestionSubmitter(api.user.id, item.question_id);
+        for (const match of state.feedItems.filter(candidate => String(candidate.question_id) === String(item.question_id))) Object.assign(match, {
+            question_submitter_revealed: true, question_submitted_by_user_id: result.submitted_by_user_id,
+            question_submitted_by_display_name: result.full_name, question_submitted_by_profile_picture_url: result.profile_picture_url,
+        });
+        state.profile.remaining_reveals = Number(result.remaining_reveals || 0);
+        state.profile.aura_points = Number(result.total_aura_points ?? state.profile.aura_points);
+        renderProfileHeader(); renderProfilePanel(); renderFeed(); renderFeedDetail();
+    } catch (error) { showToast(error.message || 'Could not reveal question author.'); button.disabled = false; }
+}
+
 function renderFeedDetail() {
     const item = selectedFeedItem();
     if (!item) return;
@@ -2859,15 +2930,17 @@ function renderFeedDetail() {
     $("#feedDetailDialog .detail-screen-header > strong").textContent = formatVoterStatement(item);
     $("#feedDetailBody").innerHTML = `<article class="feed-detail-card">
         <h3>${escapeHTML(item.question_text)}</h3>
+        ${item.is_nomination ? "" : questionSubmitterMarkup(item)}
         <div class="feed-detail-art">${artworkURL ? `<img loading="lazy" decoding="async" src="${escapeHTML(artworkURL)}" alt="">` : `<div class="artwork-placeholder"><img loading="lazy" decoding="async" src="../assets/app/pencil-clipboard.webp" alt=""><span>Image unavailable</span></div>`}</div>
-        ${options.length ? `<div class="feed-detail-options">${options.map((option) => {
+        ${item.is_nomination ? `<div class="feed-nomination-card"><strong>${escapeHTML(selectedName)}</strong><p>got nominated${item.voter_gender ? ` by ${escapeHTML(formatVoterHint(item).replace(/^(from|by) /, ""))}` : item.voter_name ? ` by ${escapeHTML(item.voter_name)}` : ""}</p><span aria-hidden="true">🎉</span></div>` : options.length ? `<div class="feed-detail-options">${options.map((option, index) => {
             const name = option.name || option.contact_name || "A classmate";
-            const selected = name === selectedName;
+            const explicit = options.findIndex(candidate => candidate.is_selected === true);
+            const selected = index === (explicit >= 0 ? explicit : options.findIndex(candidate => (candidate.name || candidate.contact_name) === selectedName));
             return `<div class="feed-detail-option ${selected ? "selected" : ""}"><strong>${escapeHTML(name)}</strong>${selected ? `<span class="feed-detail-selection-indicator" aria-label="Picked">👆</span>` : ""}</div>`;
         }).join("")}</div>` : `<div class="feed-detail-legacy-selection"><strong>Selected: ${escapeHTML(selectedName)}</strong><small>Options not available for this older vote</small></div>`}
         ${firstLetterHint}
         ${revealed}
-    </article>${commentDetailButtonMarkup(item, "poll", item.question_answer_id, "feed-detail-comment-button")}`;
+    </article><div class="detail-engagement-row">${feedView?.reactionControlMarkup(item, "poll", item.question_answer_id) || ""}${commentDetailButtonMarkup(item, "poll", item.question_answer_id, "feed-detail-comment-button")}${detailSendButton("poll", item.question_answer_id)}</div>`;
     $("#blockFeedSubmitterButton").classList.toggle("hidden", !item.question_submitted_by_user_id || item.question_is_anonymous === true);
     const revealButton = $("#revealFeedSenderButton");
     const canRevealThisVote = item.item_type === "received_vote" && !item.voter_name;
@@ -2885,7 +2958,8 @@ function renderFeedDetail() {
     $("#feedDetailStatus").textContent = "";
 }
 
-function openFeedDetail(answerId) {
+async function openFeedDetail(answerId) {
+    await prepareFeedView();
     state.selectedFeedItemId = answerId;
     renderFeedDetail();
     openDetailScreen($("#feedDetailDialog"));
@@ -3651,7 +3725,7 @@ function openAnonymousAnswerDialog(answerId) {
     $("#anonymousOriginalMessage").textContent = answer.question_body;
     $("#anonymousReceivedReply").textContent = answer.answer_text;
     $("#anonymousAnswerReceivedAt").textContent = relativeTime(answer.answered_at);
-    $("#anonymousAnswerDetailDialog").showModal();
+    openDetailScreen($("#anonymousAnswerDetailDialog"));
 }
 
 async function loadAnonymousInbox() {
@@ -3718,7 +3792,7 @@ function selectedAnonymousQuestion() {
 function renderAnonymousQuestionDialog() {
     const question = selectedAnonymousQuestion();
     if (!question) return;
-    $("#anonymousQuestionBody").innerHTML = `<blockquote>${escapeHTML(question.body)}</blockquote><div><strong>${escapeHTML(question.provenance_label)}</strong></div>`;
+    $("#anonymousQuestionBody").innerHTML = `<blockquote>${escapeHTML(question.body)}</blockquote><div>${uiIcon(question.sender_type === "valid_member" ? "shield-check" : question.sender_type === "snap_viewer" ? "camera-filled" : "person-question")}<strong>${escapeHTML(question.provenance_label)}</strong></div>`;
     const answered = question.status === "answered";
     const restricted = Boolean(state.askAccess && state.askAccess.status !== "allowed");
     $("#anonymousReportButton").textContent = question.sender_type === "valid_member"
@@ -5216,7 +5290,7 @@ function resetQuestionArtworkPreview() {
     state.questionArtworkFile = null;
     state.questionArtworkSourceFile = null;
     state.questionArtworkProcessing = false;
-    $("#questionImagePreview").innerHTML = `<span class="question-image-placeholder"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"></rect><circle cx="9" cy="10" r="2"></circle><path d="m5.5 17 4.5-4 3 2.5 2.5-2 3 3.5"></path></svg><strong>Tap to add an image</strong></span>`;
+    $("#questionImagePreview").innerHTML = `<span class="question-image-placeholder"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"></rect><circle cx="9" cy="10" r="2"></circle><path d="m5.5 17 4.5-4 3 2.5 2.5-2 3 3.5"></path></svg><strong>Tap to add an image</strong><small>Square artwork works best.</small></span>`;
     $("#adjustQuestionCrop").classList.add("hidden");
     $(".question-image-change").textContent = "Choose image";
 }
@@ -6514,6 +6588,19 @@ function bindEvents() {
         if (classmate) selectFeedClassmate(classmate.dataset.feedClassmate);
     });
     $("#loadMoreFeed").addEventListener("click", () => loadFeed(false));
+    for (const root of [$('#feedDetailDialog'), $('#tbhDetailDialog')]) root.addEventListener('click', event => {
+        const send = event.target.closest('[data-send-content]');
+        if (send) void sendContentLink(send);
+        const reveal = event.target.closest('[data-reveal-question-submitter]');
+        if (reveal) void revealQuestionSubmitter(reveal);
+        const picker = event.target.closest('[data-reaction-picker]');
+        const reactors = event.target.closest('[data-reactors]');
+        if (picker) openReactionPicker(picker.dataset.reactionPicker, picker);
+        if (reactors) openReactorList(reactors.dataset.reactors);
+        const share = event.target.closest('[data-share-tbh]');
+        if (share) void shareTbhDetail(share.dataset.shareTbh);
+    });
+    $('[data-close-ask-reply]').addEventListener('click', () => closeDetailScreen($('#anonymousAnswerDetailDialog')));
     $("#feedList").addEventListener("click", (event) => {
         const commentsTarget = event.target.closest("[data-comments-target]");
         if (commentsTarget) return void openCommentsFromValue(commentsTarget.dataset.commentsTarget);

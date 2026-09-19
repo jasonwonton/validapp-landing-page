@@ -480,6 +480,16 @@ export class ValidAPI {
         });
     }
 
+    createFeedShareLink(userId, type, id) {
+        return this.request(`/users/${userId}/feed/${type === 'poll' ? 'polls' : 'activities'}/${id}/share-link`, {
+            method: 'POST', ...(type === 'poll' ? {} : { body: JSON.stringify({ channel: 'native_share' }) }),
+        });
+    }
+
+    revealQuestionSubmitter(userId, questionId) {
+        return this.request(`/users/${userId}/question-submitter-reveals/${questionId}`, { method: 'POST' });
+    }
+
     reportQuestion(userId, questionId, reason = "inappropriate") {
         const params = new URLSearchParams({ reason });
         return this.request(`/users/${userId}/questions/${questionId}/report-question?${params}`, { method: "POST" });

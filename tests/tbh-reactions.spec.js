@@ -152,7 +152,7 @@ test("notification routes open the exact TBH request", async ({ page }) => {
 
 test("notification routes open exact TBH responses and reacted polls", async ({ page }) => {
     await signIn(page, "?demo=1&notification=tbh_response&tbh_response_id=tbh-response-1");
-    const tbhDetail = page.getByRole("dialog", { name: "TBH from Noah" });
+    const tbhDetail = page.getByRole("dialog", { name: "Noah Williams sent you a TBH" });
     await expect(tbhDetail).toBeVisible();
     await expect(tbhDetail.getByText(/every group project more fun/)).toBeVisible();
     await expect(page).not.toHaveURL(/tbh_response_id/);

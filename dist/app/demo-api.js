@@ -732,6 +732,13 @@ export class DemoAPI {
     async reportFeedActivityComment(_userId, targetId, commentId) { return this.hideDemoComment("activity", targetId, commentId, "reported_hidden"); }
     async deleteFeedActivityComment(_userId, targetId, commentId) { return this.hideDemoComment("activity", targetId, commentId, "author_deleted"); }
 
+    async createFeedShareLink(_userId, type, id) { return { share_url: `https://validapp.lol/${type === 'poll' ? 'poll' : 'tbh'}/demo-${id}` }; }
+    async revealQuestionSubmitter(_userId, questionId) {
+        if (!this.demoGodMode) throw new Error('God Mode subscription required for reveals.');
+        if (this.profile.remaining_reveals > 0) this.profile.remaining_reveals -= 1;
+        else this.profile.aura_points -= 1000;
+        return { question_id: questionId, submitted_by_user_id: 'classmate-1', full_name: 'Maya Chen', profile_picture_url: '../assets/app/anonymous.webp', remaining_reveals: this.profile.remaining_reveals, total_aura_points: this.profile.aura_points };
+    }
     async revealSender(_userId, answerId) {
         const item = this.personalFeed.find((candidate) => candidate.question_answer_id === answerId);
         if (!this.demoGodMode || !item) throw new Error("God Mode subscription required for reveals.");
