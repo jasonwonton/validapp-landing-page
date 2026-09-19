@@ -74,6 +74,12 @@ sandbox and does not implement the older Love Flap web runtime.
   Shell transfer estimate: 720,844 bytes across 55 precache entries, within the
   existing 750,000-byte budget. All 57 versioned app assets match their hashes;
   the previous deployed release's lazy modules remain available.
+- Broad browser run: **1,314 passed, 27 skipped, 3 initial failures**. Two failures
+  were existing test-fixture races (idle HTTP teardown and observing the shell
+  before the profile request). Both were fixed and all eight cross-browser
+  rechecks passed. The third was Playwright retaining a compatibility-test title
+  after that test was renamed during the run; the final weekly-game suite
+  independently passes the renamed compatibility test on Firefox and WebKit.
 - Final weekly-game suite: **30 passed, 14 intentionally skipped** across Android
   emulation, desktop Chromium, Firefox and WebKit. The skipped camera scenarios
   concern unsupported engines; their pre-permission compatibility UI is tested.
@@ -86,7 +92,28 @@ account was created, no game score was submitted, and no social post was sent.
 
 ## Deployment
 
-Pending final regression results and production activation. Rollback is the
+Production is active at https://validapp.lol/app/.
+
+- DigitalOcean deployment: `b9df9fb8-665d-43b1-a204-c75260e734ef` (**ACTIVE**, 43/43 steps).
+- Frontend source: `8e857b93621a8716a50919de0e4d999bbf4c0648`, branch
+  `codex/pwa-weekly-game-release-20260918`.
+- App release: `a24627fdbddd38022fe1` (`web-v95`).
+- Exactly the frontend branch changed. All 12 other component source revisions
+  and the rest of the complete app configuration match the captured baseline.
+- Live manifest, service worker, security headers and all 57 versioned app assets
+  match the reviewed build. Android emulation and desktop Chromium startup/offline
+  checks pass; no API responses enter offline caches. Firefox and WebKit
+  signed-out startup checks also pass.
+- Every live model/WASM/worker/game-package byte matches its local hash. The
+  production player loads the native instructions and runs actual wrist
+  inference in its worker under production CSP, without camera permissions or
+  production score writes.
+- Production preflight passes app shell, PWA manifest/worker, related-origin
+  passkeys, API health and CORS. Previous-release lazy modules remain available.
+- The selected Admin release/package still matched the verified fixture before
+  activation. No native game package, schedule, or rollout setting was changed.
+
+Rollback is the
 previous frontend branch `codex/pwa-ios-parity-release-20260918`, source
 `ea90b2ab05cc650ea8eb03806e30dfc17ac3c19a`, app release
 `24d7985dcc3fc0e34be2`. Use the latest full DigitalOcean spec and change only the
