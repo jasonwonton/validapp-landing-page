@@ -206,6 +206,7 @@
                     <input id="postUrl" name="post_url" type="url" inputmode="url" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="https://instagram.com/reel/..." required>
                 </div>
                 <button class="button" type="submit" id="submitButton">Submit</button>
+                <p class="hint">Posted more than one? Submit them one at a time &mdash; each link counts on its own.</p>
                 <p class="status" id="formStatus" role="status" aria-live="polite"></p>
             </form>
 
@@ -238,6 +239,7 @@
         var SUBMIT_FORM_URL = "";
 
         (function () {
+            var submitted = 0;
             var form = document.getElementById("submitForm");
             var button = document.getElementById("submitButton");
             var status = document.getElementById("formStatus");
@@ -291,9 +293,19 @@
                     body: JSON.stringify(payload)
                 }).then(function (response) {
                     if (response.ok) {
-                        form.hidden = true;
+                        // Keep the form up: creators post several reels, and
+                        // hiding it made a second link impossible without a
+                        // reload. Only the link is cleared - the identity
+                        // fields are the same person every time.
+                        submitted += 1;
                         note.hidden = false;
-                        note.textContent = "Got it. We'll check your views and reply within 48 hours.";
+                        note.textContent = submitted === 1
+                            ? "Got it. We'll check your views and reply within 48 hours. Got another? Paste the next link below."
+                            : submitted + " posts submitted. Paste another link whenever you like.";
+                        form.post_url.value = "";
+                        button.disabled = false;
+                        setStatus("");
+                        try { form.post_url.focus(); } catch (error) {}
                         return;
                     }
                     // The API explains what is wrong with the text that was
