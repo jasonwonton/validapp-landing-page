@@ -232,8 +232,10 @@
         //                    unauthenticated, so it needs CORS for
         //                    https://validapp.lol plus rate limiting.
         // ---------------------------------------------------------------
+        // validapp.lol routes /api/v1 to the same backend, so this is a
+        // same-origin POST: no CORS, no preflight, nothing to configure.
+        var SUBMIT_ENDPOINT = "/api/v1/creator-submissions";
         var SUBMIT_FORM_URL = "";
-        var SUBMIT_ENDPOINT = "";
 
         (function () {
             var form = document.getElementById("submitForm");
@@ -279,7 +281,7 @@
                     platform: form.platform.value,
                     handle: form.handle.value.trim().replace(/^@/, ""),
                     post_url: form.post_url.value.trim(),
-                    source: "web_creatorprogram"
+                    source: "web"
                 };
                 button.disabled = true;
                 setStatus("Sending…");
@@ -288,13 +290,23 @@
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(payload)
                 }).then(function (response) {
-                    if (!response.ok) { throw new Error(String(response.status)); }
-                    form.hidden = true;
-                    note.hidden = false;
-                    note.textContent = "Got it. We'll check your views and reply within 48 hours.";
-                }).catch(function () {
+                    if (response.ok) {
+                        form.hidden = true;
+                        note.hidden = false;
+                        note.textContent = "Got it. We'll check your views and reply within 48 hours.";
+                        return;
+                    }
+                    // The API explains what is wrong with the text that was
+                    // pasted; anything else stays generic on purpose.
+                    return response.json().catch(function () { return {}; }).then(function (body) {
+                        var detail = typeof body.detail === "string" ? body.detail : "";
+                        if (response.status === 422 && detail) { throw new Error(detail); }
+                        if (response.status === 429) { throw new Error("Too many submissions. Try again later."); }
+                        throw new Error("That didn't send. Please try again shortly.");
+                    });
+                }).catch(function (error) {
                     button.disabled = false;
-                    setStatus("That didn't send. Check the link and try again.", "error");
+                    setStatus(error && error.message ? error.message : "That didn't send. Please try again shortly.", "error");
                 });
             });
         })();
