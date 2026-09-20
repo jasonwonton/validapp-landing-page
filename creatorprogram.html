@@ -122,6 +122,43 @@
             border: 3px solid var(--text);
             border-radius: 12px;
         }
+        .field-label { font-size: 0.95rem; }
+
+        /* Two pills and three logo tiles, mirroring the in-app pickers. Radios
+           stay in the DOM so the form still posts without JavaScript and the
+           keyboard still works; only their box is hidden. */
+        .segmented, .platforms { display: grid; gap: 8px; }
+        .segmented { grid-template-columns: 1fr 1fr; }
+        .platforms { grid-template-columns: repeat(3, 1fr); }
+        .segment, .platform {
+            display: grid;
+            justify-items: center;
+            gap: 6px;
+            padding: 12px 8px;
+            border-radius: 12px;
+            background: var(--teal-surface);
+            border: 2px solid transparent;
+            cursor: pointer;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+        .segment input, .platform input { position: absolute; opacity: 0; pointer-events: none; }
+        /* .is-selected is set by script as well, so the highlight still shows
+           on browsers without :has() - an unhighlighted picker looks broken. */
+        .segment:has(input:checked), .platform:has(input:checked),
+        .segment.is-selected, .platform.is-selected {
+            background: rgba(255, 177, 94, 0.3);
+            border-color: var(--peach);
+        }
+        .segment:has(input:focus-visible), .platform:has(input:focus-visible) {
+            outline: 3px solid var(--text);
+            outline-offset: 3px;
+        }
+        .platform-logo { width: 32px; height: 32px; object-fit: contain; }
+        /* Instagram and TikTok ship as filled app icons; the Shorts mark is a
+           bare glyph, so only the first two get clipped to an icon shape. */
+        .platform-logo.is-app-icon { border-radius: 7px; }
+
         .status { margin: 0; min-height: 1.6em; font-size: 0.95rem; }
         .status[data-tone="error"] { color: #a4161a; }
         .note {
@@ -182,19 +219,19 @@
                     <input id="validUsername" name="valid_username" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="yourusername" required>
                 </div>
                 <div class="field">
-                    <label for="track">Kind of reel</label>
-                    <select id="track" name="track" required>
-                        <option value="face">Show your face</option>
-                        <option value="edits">Edits only</option>
-                    </select>
+                    <span class="field-label">Kind of reel</span>
+                    <div class="segmented">
+                        <label class="segment"><input type="radio" name="track" value="face" checked><span>Show your face</span></label>
+                        <label class="segment"><input type="radio" name="track" value="edits"><span>Edits only</span></label>
+                    </div>
                 </div>
                 <div class="field">
-                    <label for="platform">Where you posted it</label>
-                    <select id="platform" name="platform" required>
-                        <option value="instagram">Instagram</option>
-                        <option value="tiktok">TikTok</option>
-                        <option value="youtube">YouTube Shorts</option>
-                    </select>
+                    <span class="field-label">Where you posted it</span>
+                    <div class="platforms">
+                        <label class="platform"><input type="radio" name="platform" value="instagram" checked><img class="platform-logo is-app-icon" src="assets/instagram.png" alt="" width="32" height="32"><span>Instagram</span></label>
+                        <label class="platform"><input type="radio" name="platform" value="tiktok"><img class="platform-logo is-app-icon" src="assets/tiktok.png" alt="" width="32" height="32"><span>TikTok</span></label>
+                        <label class="platform"><input type="radio" name="platform" value="youtube"><img class="platform-logo" src="assets/youtube-shorts.svg" alt="" width="32" height="32"><span>YouTube</span></label>
+                    </div>
                 </div>
                 <div class="field">
                     <label for="handle">Your handle there</label>
@@ -240,6 +277,28 @@
 
         (function () {
             var submitted = 0;
+            var HINTS = {
+                instagram: "https://instagram.com/reel/...",
+                tiktok: "https://tiktok.com/@you/video/...",
+                youtube: "https://youtube.com/shorts/..."
+            };
+            function paintChoices(name) {
+                Array.prototype.forEach.call(document.querySelectorAll('input[name="' + name + '"]'), function (radio) {
+                    var tile = radio.closest(".segment, .platform");
+                    if (tile) { tile.classList.toggle("is-selected", radio.checked); }
+                });
+            }
+            Array.prototype.forEach.call(document.querySelectorAll('input[name="platform"], input[name="track"]'), function (radio) {
+                radio.addEventListener("change", function () {
+                    paintChoices(radio.name);
+                    if (radio.name === "platform") {
+                        var field = document.getElementById("postUrl");
+                        if (field) { field.placeholder = HINTS[radio.value] || ""; }
+                    }
+                });
+            });
+            paintChoices("platform");
+            paintChoices("track");
             var form = document.getElementById("submitForm");
             var button = document.getElementById("submitButton");
             var status = document.getElementById("formStatus");
