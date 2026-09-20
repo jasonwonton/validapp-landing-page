@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Creator Program | Valid</title>
+    <meta name="description" content="Post a reel about Valid. Hit 10k views, get a week of God Mode.">
+    <link rel="canonical" href="https://validapp.lol/creatorprogram.html">
+    <link rel="icon" type="image/png" href="assets/AppIconV2.png">
+    <link rel="apple-touch-icon" href="assets/AppIconV2.png">
+    <meta property="og:url" content="https://validapp.lol/creatorprogram.html">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Valid">
+    <meta property="og:title" content="Valid Creator Program">
+    <meta property="og:description" content="Post a reel about Valid. Hit 10k views, get a week of God Mode.">
+    <meta property="og:image" content="https://validapp.lol/assets/AppIconV2.png">
+    <meta property="og:image:secure_url" content="https://validapp.lol/assets/AppIconV2.png">
+    <meta property="og:image:width" content="1024">
+    <meta property="og:image:height" content="1024">
+    <meta property="og:image:alt" content="Valid App Icon">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Valid Creator Program">
+    <meta name="twitter:description" content="Post a reel about Valid. Hit 10k views, get a week of God Mode.">
+    <meta name="twitter:image" content="https://validapp.lol/assets/AppIconV2.png">
+    <meta name="theme-color" content="#ccf7f4">
+    <meta name="apple-mobile-web-app-title" content="Valid">
+    <style>
+        @font-face {
+            font-family: "Jua-Regular";
+            src: url("assets/Jua-Latin.woff2") format("woff2");
+            font-display: swap;
+        }
+        /* Matches the in-app palette: brandAqua / brandPeachMid / brandDarkTeal. */
+        :root {
+            color-scheme: light;
+            --bg: #ccf7f4;
+            --card: #ffffff;
+            --text: #050914;
+            --muted: #454a52;
+            --peach: #ffb15e;
+            --teal: #003f42;
+            --teal-surface: #d1eded;
+            --border: rgba(5, 9, 20, 0.16);
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: "Jua-Regular", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 1rem;
+            line-height: 1.6;
+            overflow-wrap: anywhere;
+        }
+        a { color: #0749ad; text-underline-offset: 3px; }
+        a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible {
+            outline: 3px solid var(--text);
+            outline-offset: 4px;
+        }
+
+        .nav, main, .footer-inner {
+            width: min(560px, calc(100% - 32px));
+            margin: 0 auto;
+        }
+        .site-header { border-bottom: 1px solid var(--border); }
+        .nav { min-height: 64px; display: flex; align-items: center; }
+        .brand { display: flex; }
+        .brand img { width: 68px; height: auto; }
+
+        main { padding: 32px 0 48px; text-align: center; }
+        .crown { width: 64px; height: 64px; }
+        h1 { margin: 12px 0 14px; font-weight: 400; font-size: clamp(2rem, 8vw, 2.5rem); line-height: 1.15; }
+        h2 { margin: 0 0 12px; font-weight: 400; font-size: 1.25rem; line-height: 1.3; }
+        p { color: var(--muted); margin: 0 0 12px; }
+        .lede { font-size: 1.15rem; color: var(--text); }
+        .sub { font-size: 0.95rem; }
+
+        .actions { display: grid; gap: 12px; margin: 24px 0 8px; }
+        .button {
+            display: block;
+            padding: 16px 24px;
+            border-radius: 30px;
+            border: none;
+            background: var(--peach);
+            color: var(--text);
+            font-family: "Jua-Regular", sans-serif;
+            font-size: 1.25rem;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .button.secondary {
+            background: var(--teal-surface);
+            border: 1px solid var(--border);
+        }
+        .button:hover { filter: brightness(0.96); }
+        .button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+        .card {
+            margin-top: 20px;
+            padding: 20px;
+            background: var(--card);
+            border-radius: 20px;
+            text-align: left;
+        }
+        .card p:last-child, .card ul:last-child { margin-bottom: 0; }
+        .card ul { margin: 0; padding-left: 20px; color: var(--muted); }
+        .card li { margin-bottom: 6px; }
+        .card li:last-child { margin-bottom: 0; }
+        .card .button { margin-top: 14px; font-size: 1.1rem; text-align: center; }
+
+        .form { margin-top: 12px; display: grid; gap: 14px; text-align: left; }
+        .field { display: grid; gap: 6px; }
+        .field label { font-size: 0.95rem; }
+        .field .hint { font-size: 0.85rem; margin: 0; }
+        input, select {
+            width: 100%;
+            padding: 13px 14px;
+            font-family: "Jua-Regular", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 1rem;
+            color: var(--text);
+            background: var(--card);
+            border: 3px solid var(--text);
+            border-radius: 12px;
+        }
+        .status { margin: 0; min-height: 1.6em; font-size: 0.95rem; }
+        .status[data-tone="error"] { color: #a4161a; }
+        .note {
+            margin: 14px 0 0;
+            padding: 14px 16px;
+            border-radius: 16px;
+            background: var(--teal-surface);
+            font-size: 0.95rem;
+            text-align: left;
+        }
+
+        .site-footer { border-top: 1px solid var(--border); }
+        .footer-inner {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 20px 0;
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <header class="site-header">
+        <nav class="nav" aria-label="Primary navigation">
+            <a class="brand" href="index.html" aria-label="Valid home"><img src="assets/valid_logo.png" alt="Valid"></a>
+        </nav>
+    </header>
+
+    <main>
+        <img class="crown" src="assets/crown.png" alt="" width="64" height="64">
+        <h1>Creator program</h1>
+        <p class="lede">Post a reel about Valid.<br>Hit 10k views, get a week of God Mode.</p>
+        <p class="sub">Every reel that hits 10k adds another week.</p>
+
+        <div class="actions">
+            <a class="button" href="#submit">Submit a post</a>
+            <a class="button secondary" href="https://drive.google.com/drive/folders/1hKS7mpdqjbTuxLGs4SoMdtq8faGVRhSU?usp=drive_link" target="_blank" rel="noopener">Get the content pack</a>
+        </div>
+
+        <section class="card" aria-labelledby="rules-title">
+            <h2 id="rules-title">Rules</h2>
+            <ul>
+                <li>Post it public &mdash; we can't see private accounts.</li>
+                <li>Tag <strong>@play_valid</strong> in the caption.</li>
+                <li>Leave it up for 7 days.</li>
+            </ul>
+        </section>
+
+        <section class="card" id="submit" aria-labelledby="submit-title">
+            <h2 id="submit-title">Submit your post</h2>
+            <p class="sub">No Valid account yet? <a href="https://apps.apple.com/us/app/valid-compliment-classmates/id6755367062">Get the app</a> first &mdash; God Mode lands on your account.</p>
+
+            <form id="submitForm" class="form" novalidate>
+                <div class="field">
+                    <label for="validUsername">Valid username</label>
+                    <input id="validUsername" name="valid_username" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="yourusername" required>
+                </div>
+                <div class="field">
+                    <label for="track">Kind of reel</label>
+                    <select id="track" name="track" required>
+                        <option value="face">Show your face</option>
+                        <option value="edits">Edits only</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="platform">Where you posted it</label>
+                    <select id="platform" name="platform" required>
+                        <option value="instagram">Instagram</option>
+                        <option value="tiktok">TikTok</option>
+                        <option value="youtube">YouTube Shorts</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="handle">Your handle there</label>
+                    <input id="handle" name="handle" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="@yourhandle" required>
+                    <p class="hint">One handle earns for one Valid account.</p>
+                </div>
+                <div class="field">
+                    <label for="postUrl">Link to the post</label>
+                    <input id="postUrl" name="post_url" type="url" inputmode="url" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="https://instagram.com/reel/..." required>
+                </div>
+                <button class="button" type="submit" id="submitButton">Submit</button>
+                <p class="status" id="formStatus" role="status" aria-live="polite"></p>
+            </form>
+
+            <p class="note" id="formClosedNote" hidden></p>
+            <p class="sub" style="margin-top:14px">We check your views by hand and reply within 48 hours.</p>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="footer-inner">
+            <span>Valid</span>
+            <span><a href="index.html">Home</a> &nbsp; <a href="privacy-policy.html">Privacy</a> &nbsp; <a href="terms.html">Terms</a></span>
+        </div>
+    </footer>
+
+    <script>
+        // ---------------------------------------------------------------
+        // Set ONE of these to open submissions. Until one is set the form is
+        // disabled on purpose: a form that silently drops a submission is
+        // worse than one that admits it is not open yet.
+        //
+        //   SUBMIT_FORM_URL  A Google Form. No backend, works today.
+        //   SUBMIT_ENDPOINT  POSTs JSON to your own API. Public and
+        //                    unauthenticated, so it needs CORS for
+        //                    https://validapp.lol plus rate limiting.
+        // ---------------------------------------------------------------
+        var SUBMIT_FORM_URL = "";
+        var SUBMIT_ENDPOINT = "";
+
+        (function () {
+            var form = document.getElementById("submitForm");
+            var button = document.getElementById("submitButton");
+            var status = document.getElementById("formStatus");
+            var note = document.getElementById("formClosedNote");
+
+            function setStatus(message, tone) {
+                status.textContent = message;
+                if (tone) { status.setAttribute("data-tone", tone); }
+                else { status.removeAttribute("data-tone"); }
+            }
+
+            if (!SUBMIT_ENDPOINT && SUBMIT_FORM_URL) {
+                form.hidden = true;
+                note.hidden = false;
+                note.innerHTML = 'Send it here: <a href="' + SUBMIT_FORM_URL +
+                    '" target="_blank" rel="noopener">open the submission form</a>.';
+                return;
+            }
+
+            if (!SUBMIT_ENDPOINT) {
+                Array.prototype.forEach.call(
+                    form.querySelectorAll("input, select, button"),
+                    function (node) { node.disabled = true; }
+                );
+                note.hidden = false;
+                note.textContent = "Submissions open shortly. Post your reel now and keep the link — " +
+                    "we count views from the day you posted.";
+                return;
+            }
+
+            form.addEventListener("submit", function (event) {
+                event.preventDefault();
+                if (!form.checkValidity()) {
+                    setStatus("Fill in every field, including the link.", "error");
+                    form.reportValidity();
+                    return;
+                }
+                var payload = {
+                    valid_username: form.valid_username.value.trim().replace(/^@/, ""),
+                    track: form.track.value,
+                    platform: form.platform.value,
+                    handle: form.handle.value.trim().replace(/^@/, ""),
+                    post_url: form.post_url.value.trim(),
+                    source: "web_creatorprogram"
+                };
+                button.disabled = true;
+                setStatus("Sending…");
+                fetch(SUBMIT_ENDPOINT, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                }).then(function (response) {
+                    if (!response.ok) { throw new Error(String(response.status)); }
+                    form.hidden = true;
+                    note.hidden = false;
+                    note.textContent = "Got it. We'll check your views and reply within 48 hours.";
+                }).catch(function () {
+                    button.disabled = false;
+                    setStatus("That didn't send. Check the link and try again.", "error");
+                });
+            });
+        })();
+    </script>
+</body>
+</html>

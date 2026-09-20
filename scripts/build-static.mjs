@@ -26,6 +26,7 @@ const staticFiles = [
     "parents.html",
     "community-guidelines.html",
     "contact.html",
+    "creatorprogram.html",
     "index.html",
     "privacy-policy.html",
     "terms.html",
