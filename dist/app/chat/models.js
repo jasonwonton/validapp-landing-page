@@ -110,3 +110,26 @@ export function safeMediaURL(value, api) {
         return "";
     }
 }
+
+// A browser is never handed the phone's HEVC master. While the H.264
+// rendition is being made the server sends no video_url and says whether to
+// wait ("processing") or send the viewer to the app ("unavailable").
+export function videoPlaybackState(message = {}) {
+    if (message.kind !== "video") return null;
+    if (message.video_url) return "ready";
+    if (message.video_state === "processing" || message.video_state === "unavailable") return message.video_state;
+    return null;
+}
+
+export const VIDEO_REFRESH_DELAYS_MS = [3_000, 5_000, 8_000, 13_000, 20_000, 30_000];
+export const VIDEO_REFRESH_GIVE_UP_MS = 4 * 60_000;
+
+// Backoff for re-reading a processing video, or null once it is time to stop.
+export function videoRefreshDelay(attempt, elapsedMs) {
+    if (elapsedMs >= VIDEO_REFRESH_GIVE_UP_MS) return null;
+    const delay = VIDEO_REFRESH_DELAYS_MS[Math.min(attempt, VIDEO_REFRESH_DELAYS_MS.length - 1)];
+    return Math.min(delay, VIDEO_REFRESH_GIVE_UP_MS - elapsedMs);
+}
+
+export const VIDEO_UNAVAILABLE_MESSAGE = "This video can't play on the web. Open it in the Valid app.";
+export const VIDEO_PROCESSING_MESSAGE = "This video is still processing. It will play in a moment.";
