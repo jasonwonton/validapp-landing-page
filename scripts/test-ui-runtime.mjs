@@ -92,4 +92,23 @@ assert.match(appRuntime, /config\.enable_chats === true && config\.enable_web_ch
 assert.match(chatRuntime, /enable_web_mementos === true/, "PWA Mementos must require its independent web rollout flag");
 assert.match(callRuntime, /enable_calls === true && getConfig\(\)\?\.enable_web_calls === true/, "PWA calls must require native availability and their independent web rollout flag");
 assert.doesNotMatch(serviceWorker, /livekit\.bundle\.js/, "Private call media code must stay lazy and outside the offline app shell");
+{
+    const { videoPlaybackState, videoRefreshDelay, VIDEO_REFRESH_GIVE_UP_MS } = await import('../app/chat/models.js');
+    assert.equal(videoPlaybackState({ kind: 'video', video_url: 'https://media.example/web.mp4', video_state: 'ready' }), 'ready');
+    assert.equal(videoPlaybackState({ kind: 'video', video_url: null, video_state: 'processing' }), 'processing');
+    assert.equal(videoPlaybackState({ kind: 'video', video_url: null, video_state: 'unavailable' }), 'unavailable');
+    assert.equal(videoPlaybackState({ kind: 'video', video_url: 'https://media.example/master.mp4' }), 'ready', 'An older server without video_state still plays');
+    assert.equal(videoPlaybackState({ kind: 'video', video_url: null }), null, 'A hidden view-once clip has no state');
+    assert.equal(videoPlaybackState({ kind: 'photo', video_state: 'processing' }), null);
+    const delays = [];
+    for (let attempt = 0, elapsed = 0; ; attempt += 1) {
+        const delay = videoRefreshDelay(attempt, elapsed);
+        if (delay === null) break;
+        delays.push(delay);
+        elapsed += delay;
+    }
+    assert.deepEqual(delays.slice(0, 6), [3_000, 5_000, 8_000, 13_000, 20_000, 30_000], 'Refreshes back off');
+    assert.equal(delays.reduce((sum, delay) => sum + delay, 0), VIDEO_REFRESH_GIVE_UP_MS, 'Refreshing stops after a few minutes');
+    assert.ok(delays.length < 15, 'A processing video is read a bounded number of times');
+}
 console.log("UI runtime tests passed");

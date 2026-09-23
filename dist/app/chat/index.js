@@ -5,6 +5,7 @@ import { bindVoiceGesture, createVoiceWaveform } from './voice-interaction.js';
 import {
     CHAT_REACTIONS, chatAttentionPriority, chatNeedsMemento, chatPreview, displayMember, escapeChatHTML,
     messageTime, normalizeMessage, relativeChatTime, safeMediaURL,
+    VIDEO_PROCESSING_MESSAGE, VIDEO_UNAVAILABLE_MESSAGE, videoPlaybackState, videoRefreshDelay,
 } from "./models.js";
 import { createChatStore } from "./store.js";
 import {
@@ -754,6 +755,100 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         renderReplyDraft();
         timelineScroll.restore(position, { bottom: scrollToBottom || (!preservePosition && !focusMessageId && position.bottom && !visible.hiddenAfter && !historyHasNewer) });
         timelineScroll.observe();
+        scheduleVideoRefreshes();
+    }
+
+    function videoBadgeMarkup(message) {
+        const state = videoPlaybackState(message);
+        if (state === "processing") return `<span class="chat-video-status" role="status"><span class="chat-video-spinner" aria-hidden="true"></span>Processing…</span>`;
+        if (state === "unavailable") return `<span class="chat-video-status unavailable">Open in the app to watch</span>`;
+        return `<span class="chat-video-play" aria-hidden="true">${uiIcon("play")}</span>`;
+    }
+
+    // A processing video is re-read with backoff until its rendition is ready,
+    // then plays like any other. After a few minutes it stops; opening the
+    // video asks once more.
+    const videoRefreshes = new Map();
+
+    function scheduleVideoRefreshes() {
+        const chatId = store.state.activeChatId;
+        for (const [key, refresh] of videoRefreshes) {
+            if (refresh.chatId !== chatId) {
+                clearTimeout(refresh.timer);
+                videoRefreshes.delete(key);
+            }
+        }
+        if (!chatId) return;
+        for (const message of store.messages(chatId)) {
+            if (videoPlaybackState(message) !== "processing" || String(message.id).startsWith("pending:")) continue;
+            const key = `${chatId}:${message.id}`;
+            if (videoRefreshes.has(key)) continue;
+            const refresh = { chatId, messageId: message.id, attempt: 0, startedAt: Date.now(), timer: null };
+            videoRefreshes.set(key, refresh);
+            queueVideoRefresh(key, refresh);
+        }
+    }
+
+    function queueVideoRefresh(key, refresh) {
+        const delay = videoRefreshDelay(refresh.attempt, Date.now() - refresh.startedAt);
+        refresh.timer = delay === null ? null : setTimeout(() => void refreshVideoMessage(key, refresh), delay);
+    }
+
+    async function fetchVideoMessage(chatId, message) {
+        try {
+            const response = await api.getChatMessages(userId(), chatId, {
+                limit: 1,
+                afterSequence: Math.max(0, Number(message.room_sequence) - 1),
+            });
+            return (response.items || []).find((item) => String(item.id) === String(message.id)) || null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    // Returns the updated message once it is no longer processing.
+    function applyVideoMessage(chatId, current, latest) {
+        if (!latest || videoPlaybackState(latest) === "processing") return null;
+        const key = `${chatId}:${current.id}`;
+        clearTimeout(videoRefreshes.get(key)?.timer);
+        videoRefreshes.delete(key);
+        store.updateMessage(chatId, { ...current, ...latest });
+        if (store.state.activeChatId === chatId) renderMessages(false, { preservePosition: true });
+        return store.messages(chatId).find((item) => item.id === current.id) || null;
+    }
+
+    async function refreshVideoMessage(key, refresh) {
+        if (videoRefreshes.get(key) !== refresh) return;
+        if (store.state.activeChatId !== refresh.chatId) {
+            videoRefreshes.delete(key);
+            return;
+        }
+        const current = store.messages(refresh.chatId).find((item) => item.id === refresh.messageId);
+        if (!current || videoPlaybackState(current) !== "processing") {
+            videoRefreshes.delete(key);
+            return;
+        }
+        const latest = await fetchVideoMessage(refresh.chatId, current);
+        if (videoRefreshes.get(key) !== refresh) return;
+        if (store.state.activeChatId !== refresh.chatId) {
+            videoRefreshes.delete(key);
+            return;
+        }
+        if (applyVideoMessage(refresh.chatId, current, latest)) return;
+        refresh.attempt += 1;
+        queueVideoRefresh(key, refresh);
+    }
+
+    async function openProcessingVideo(message) {
+        const chatId = store.state.activeChatId;
+        const updated = applyVideoMessage(chatId, message, await fetchVideoMessage(chatId, message));
+        if (updated && videoPlaybackState(updated) === "ready") return openPersistentChatMedia(updated.id);
+        if (updated) return void showToast?.(VIDEO_UNAVAILABLE_MESSAGE);
+        showToast?.(VIDEO_PROCESSING_MESSAGE);
+        // A refresh that already gave up starts over now someone is waiting.
+        const key = `${chatId}:${message.id}`;
+        if (videoRefreshes.has(key) && !videoRefreshes.get(key).timer) videoRefreshes.delete(key);
+        scheduleVideoRefreshes();
     }
 
     function historyEdgeMarkup(direction) {
@@ -796,7 +891,7 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
         const mementoSwappedURL = message.kind === "memento" ? safeMediaURL(message.memento_swapped_image_url, api) : null;
         const overlay = message.kind === "story" ? { text: message.story_text_overlay, x: message.story_text_overlay_x, y: message.story_text_overlay_y } : message.media_text_overlay;
         const mediaOverlay = overlay?.text ? `<span class="chat-media-text" data-overlay-x="${Number(overlay.x || 0.5)}" data-overlay-y="${Number(overlay.y || 0.5)}">${escapeChatHTML(overlay.text)}</span>` : "";
-        const persistentMedia = mediaURL ? `<button class="chat-message-media ${message.kind === "sticker" ? "sticker" : ""}" type="button" ${message.kind === "memento" ? `data-view-memento="${escapeChatHTML(mediaURL)}" ${mementoSwappedURL ? `data-memento-swapped="${escapeChatHTML(mementoSwappedURL)}"` : ""} data-memento-owner="${escapeChatHTML(message.sender_first_name || "Memento")}" data-memento-entry="${escapeChatHTML(message.daily_entry_id || "")}"` : `data-open-chat-media-message="${escapeChatHTML(message.id)}"`}><img src="${escapeChatHTML(mediaURL)}" alt="${message.kind === "memento" ? "Memento" : message.kind === "video" ? "Video thumbnail" : message.kind === "sticker" ? "Sticker" : "Photo"}" loading="lazy" decoding="async">${mediaOverlay}${message.kind === "video" ? `<span class="chat-video-play" aria-hidden="true">${uiIcon("play")}</span>` : ""}</button>` : "";
+        const persistentMedia = mediaURL ? `<button class="chat-message-media ${message.kind === "sticker" ? "sticker" : ""}" type="button" ${message.kind === "memento" ? `data-view-memento="${escapeChatHTML(mediaURL)}" ${mementoSwappedURL ? `data-memento-swapped="${escapeChatHTML(mementoSwappedURL)}"` : ""} data-memento-owner="${escapeChatHTML(message.sender_first_name || "Memento")}" data-memento-entry="${escapeChatHTML(message.daily_entry_id || "")}"` : `data-open-chat-media-message="${escapeChatHTML(message.id)}"`}><img src="${escapeChatHTML(mediaURL)}" alt="${message.kind === "memento" ? "Memento" : message.kind === "video" ? "Video thumbnail" : message.kind === "sticker" ? "Sticker" : "Photo"}" loading="lazy" decoding="async">${mediaOverlay}${message.kind === "video" ? videoBadgeMarkup(message) : ""}</button>` : "";
         const audioURL = safeMediaURL(message.audio_url, api);
         const audioMedia = message.kind === "audio" ? (audioURL ? `<div class="chat-audio-message"><strong>Voice message</strong><audio src="${escapeChatHTML(audioURL)}" controls preload="metadata" aria-label="Voice message"></audio><small>${Math.max(1, Math.round(Number(message.audio_duration_ms || 0) / 1000))}s</small></div>` : `<div class="chat-audio-message unavailable">Voice message unavailable</div>`) : "";
         const viewOnceMedia = message.view_once ? (mine
@@ -1932,6 +2027,9 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
     function openPersistentChatMedia(messageId) {
         const message = store.messages().find((item) => item.id === messageId);
         if (!message || message.view_once) return;
+        const videoState = videoPlaybackState(message);
+        if (videoState === "processing") return void openProcessingVideo(message);
+        if (videoState === "unavailable") return void showToast?.(VIDEO_UNAVAILABLE_MESSAGE);
         const isStory = message.kind === "story";
         const kind = isStory ? message.story_media_type : message.kind === "video" ? "video" : "photo";
         const url = safeMediaURL(isStory ? (message.story_is_available === false ? null : message.story_media_url) : kind === "video" ? message.video_url : message.sticker_image_url || message.photo_image_url, api);
@@ -1972,6 +2070,10 @@ export function createChatsView({ root, api, getUser, getConfig, softHaptic, suc
             });
             const revealed = session.message;
             const kind = revealed.kind === "video" ? "video" : "photo";
+            // Throwing here leaves the session unstarted, so no view is used up.
+            const videoState = videoPlaybackState(revealed);
+            if (videoState === "processing") throw new Error(VIDEO_PROCESSING_MESSAGE);
+            if (videoState === "unavailable") throw new Error(VIDEO_UNAVAILABLE_MESSAGE);
             const url = safeMediaURL(kind === "video" ? revealed.video_url : revealed.photo_image_url, api);
             await showMediaViewer(url, {
                 kind,

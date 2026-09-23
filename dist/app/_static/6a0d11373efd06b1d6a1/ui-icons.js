@@ -1,0 +1,45 @@
+// Interface symbols, not replacements for user content or product reactions.
+const paths = {
+    'mic-off': '<path d="m3 3 18 18M8 8v5a4 4 0 0 0 6.8 2.8M16 10V6a4 4 0 0 0-7-2.6M5 11v2a7 7 0 0 0 12 5M19 11v2M12 20v2M8 22h8"/>',
+    'video-off': '<path d="m3 3 18 18M15 9l7-4v14l-7-4M6 5h6a3 3 0 0 1 3 3v3M15 16v1a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7"/>',
+    hangup: '<path d="M3 15v-4c5-5 13-5 18 0v4l-5-1v-3a12 12 0 0 0-8 0v3z"/>',
+    stop: '<rect x="5" y="5" width="14" height="14" rx="3" fill="currentColor" stroke="none"/>',
+    speaker: '<path d="M3 9h4l5-5v16l-5-5H3zM16 8a6 6 0 0 1 0 8M19 5a10 10 0 0 1 0 14"/>',
+    play: '<path d="m8 4 12 8-12 8z" fill="currentColor"/>',
+    pause: '<path d="M8 5v14M16 5v14" stroke-width="4"/>',
+    mic: '<rect x="8" y="2" width="8" height="13" rx="4"/><path d="M5 11v2a7 7 0 0 0 14 0v-2M12 20v2M8 22h8"/>',
+    // Upright, open blades and round handles, matching the native scissors control.
+    scissors: '<g transform="translate(1.92 1.92) scale(.84)"><circle cx="6" cy="18" r="3.5"/><circle cx="18" cy="18" r="3.5"/><path d="M8.5 15.5 19 2M15.5 15.5 5 2"/></g>',
+    infinity: '<path d="M12 12C9 8 7.5 7 5.5 7a5 5 0 0 0 0 10c2 0 3.5-1 6.5-5s4.5-5 6.5-5a5 5 0 0 1 0 10c-2 0-3.5-1-6.5-5Z"/>',
+    'view-once': '<circle cx="12" cy="12" r="9" fill="currentColor" stroke="none"/><path d="m10 9 2-2v10" stroke="#ffb15e"/>',
+    'camera-filled': '<path fill="currentColor" stroke="none" fill-rule="evenodd" d="M8 4h8l2 3h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h3l2-3Zm4 5a5 5 0 1 0 0 10 5 5 0 0 0 0-10Zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z"/>',
+    camera: '<path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="4"/>',
+    flip: '<path d="M4 9a8 8 0 0 1 13-4l3 3M20 3v5h-5M20 15a8 8 0 0 1-13 4l-3-3M4 21v-5h5"/>',
+    chat: '<path d="M4 4h16v12H9l-5 4z"/><path d="M8 8h8M8 12h5"/>',
+    compose: '<path d="M12 4H4v16h16v-8M10 14l1-5L19 1l4 4-8 8z"/>',
+    search: '<circle cx="10" cy="10" r="6.5"/><path d="m15 15 6 6"/>',
+    back: '<path d="m15 4-8 8 8 8"/>',
+    close: '<path d="m6 6 12 12M6 18 18 6"/>',
+    plus: '<path d="M12 4v16M4 12h16"/>',
+    send: '<path d="M12 20V4m-7 7 7-7 7 7"/>',
+    down: '<path d="M12 4v16m-7-7 7 7 7-7"/>',
+    lock: '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v6l4 2"/>',
+    phone: '<path d="m7 3 3 5-3 3c2 3 3 4 6 6l3-3 5 3-1 4C10 22 2 14 3 4z"/>',
+    video: '<rect x="2" y="5" width="13" height="14" rx="3"/><path d="m15 9 7-4v14l-7-4"/>',
+    heart: '<path d="M12 21 3.5 12.5C-2 6 6 0 12 6 18 0 26 6 20.5 12.5z"/>',
+    fire: '<path d="M12 2c1 5-5 6-5 11 0 2 1 3 2 4-1-4 3-4 3-7 4 3 5 5 3 9 4-1 6-4 5-8-1-4-4-7-8-9Z"/>',
+    person: '<circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>',
+    check: '<path d="m5 12 4 4L19 6"/>',
+    edit: '<path d="m4 16-1 5 5-1L21 7l-4-4Z M14 6l4 4"/>',
+    reply: '<path d="m9 4-7 7 7 7M2 11h11a8 8 0 0 1 8 8"/>',
+    copy: '<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V3H3v13h5"/>',
+    play: '<path d="m7 3 14 9-14 9Z"/>',
+    smile: '<circle cx="12" cy="12" r="9"/><path d="M8 15c2 3 6 3 8 0M8 8h.01M16 8h.01"/>',
+    more: '<circle cx="4" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="20" cy="12" r="1"/>',
+    photo: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="2"/><path d="m3 17 6-6 4 4 3-3 5 5"/>',
+};
+export function uiIcon(name) {
+    if (!paths[name]) throw new Error(`Unknown interface icon: ${name}`);
+    return `<svg class="ui-icon" data-ui-icon="${name}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths[name]}</svg>`;
+}
