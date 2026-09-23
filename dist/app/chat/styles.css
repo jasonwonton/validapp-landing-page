@@ -225,6 +225,10 @@
 .chat-message-media.sticker img { width: min(44vw, 180px); height: min(44vw, 180px); object-fit: contain; }
 .chat-media-text, .chat-viewer-overlay { position: absolute; z-index: 1; max-width: 88%; padding: 5px 8px; border-radius: 8px; background: rgba(5,9,20,.64); color: #fff; font-weight: 800; text-align: center; overflow-wrap: anywhere; transform: translate(-50%, -50%); }
 .chat-video-play { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; display: grid; place-items: center; border-radius: 50%; background: rgba(5,9,20,.62); color: #fff; font-size: 1.2rem; transform: translate(-50%, -50%); }
+.chat-video-status { position: absolute; left: 50%; top: 50%; display: inline-flex; align-items: center; gap: 8px; max-width: calc(100% - 20px); padding: 8px 12px; border-radius: 999px; background: rgba(5,9,20,.72); color: #fff; font-size: .8rem; font-weight: 600; line-height: 1.2; text-align: center; transform: translate(-50%, -50%); }
+.chat-video-spinner { width: 14px; height: 14px; flex: none; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; animation: chat-video-spin .9s linear infinite; }
+@keyframes chat-video-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .chat-video-spinner { animation: none; } }
 .chat-view-once-card { min-width: min(62vw, 250px); display: grid; gap: 3px; margin: -4px -6px 4px; padding: 18px 16px; border: 1px solid rgba(5,9,20,.24); border-radius: 14px; background: linear-gradient(135deg, #dffdfa, #ffe9c8); color: var(--ink); text-align: left; }
 .chat-view-once-card small { color: var(--muted); }
 .chat-view-once-card:disabled { opacity: .66; }
