@@ -1128,6 +1128,12 @@ function handleServiceWorkerMessage(event) {
     if (message.type === "VALID_NOTIFICATION_CLICK") void routeToAppURL(message.url || "./");
     else if (message.type === "VALID_CALL_DECLINE" && api?.user?.id && message.callId) {
         api.declineCall(api.user.id, message.callId).catch(() => showToast("Could not decline the call."));
+    } else if (message.type === "VALID_INCOMING_CALL" && message.callId && callListenerStarted) {
+        // The worker skipped the system ringer because this page is visible;
+        // ring here even if the realtime stream has not delivered it yet.
+        void import("./calls/service.js").then(({ callService }) => callService({ api, getUser: () => api.user, getConfig: () => state.config, showToast }).calls.open(String(message.callId))).catch(() => null);
+    } else if (message.type === "VALID_CALL_ENDED" && message.callId && callListenerStarted) {
+        void import("./calls/service.js").then(({ callService }) => callService({ api, getUser: () => api.user, getConfig: () => state.config, showToast }).calls.handleRealtimeEvent({ type: "call_ended", call_id: String(message.callId) })).catch(() => null);
     } else if (message.type === "VALID_PUSH_IN_ACTIVE_CHAT") {
         // The open room already shows the message through realtime.
         dispatchEvent(new CustomEvent("valid:push-in-active-chat", { detail: message }));

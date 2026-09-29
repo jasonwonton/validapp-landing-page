@@ -466,7 +466,7 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         }
     }
 
-    function presentIncoming(call) {
+    function presentIncoming(call, { ring = true } = {}) {
         if (!enabled() || currentCall || operationInFlight || TERMINAL_STATES.has(call.state)) return;
         generation++;
         currentCall = call;
@@ -477,11 +477,15 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         setIncomingMode(true);
         renderParticipants();
         showDialog();
-        startIncomingAlert();
+        if (ring) startIncomingAlert();
         void acquireWakeLock();
     }
 
-    async function open(callId) {
+    // ?call=<id> (a call notification or chat link). `answer` comes from the
+    // notification's Answer action: accept at once instead of ringing again.
+    async function open(callId, { answer = false } = {}) {
+        // Answer tapped while this page already rings for the same call.
+        if (answer && currentCall && String(currentCall.id) === String(callId) && currentCall.viewer_invitation_state === "invited" && !operationInFlight && !ending) return accept();
         if (!enabled() || !callId || currentCall || operationInFlight || ending) return;
         const token = ++generation;
         operationInFlight = true;
@@ -501,7 +505,12 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
                 await preflightPermissions(call.media_type);
                 if (!isCurrent(token)) return;
                 await connectToCall(call, token);
-            } else { operationInFlight = false; presentIncoming(call); }
+            } else {
+                operationInFlight = false;
+                const answerNow = answer && call.viewer_invitation_state === "invited";
+                presentIncoming(call, { ring: !answerNow });
+                if (answerNow && currentCall && String(currentCall.id) === String(call.id)) await accept();
+            }
         } catch (error) {
             if (!isCurrent(token)) return;
             if (currentCall) await finish({ notifyBackend: true });
@@ -740,6 +749,11 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
             const call = await api.getCall(userId(), callId);
             if (!isCurrent(token)) return;
             if (!currentCall && event.type === "call_started" && String(event.actor_user_id) !== String(userId())) return presentIncoming(call);
+            // Still ringing here but answered or declined on another device.
+            const ringingHere = currentCall.viewer_invitation_state === "invited" && !operationInFlight;
+            if (ringingHere && ["accepted", "declined"].includes(call.viewer_invitation_state)) {
+                return finish({ notifyBackend: false, outcome: call.viewer_invitation_state === "accepted" ? "Answered on another device" : "Call declined" });
+            }
             currentCall = call;
             scheduleLifecycleCheck(call);
             if (TERMINAL_STATES.has(call.state)) return finish({ notifyBackend: false, outcome: callOutcome(call.state) });

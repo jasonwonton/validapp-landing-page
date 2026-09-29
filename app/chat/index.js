@@ -954,8 +954,18 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         if (!savedAnchor) await markRoomRead();
         scheduleChatRowRefresh(String(chatId), 0);
         if (!chatAccessUnavailable()) void retryPendingMessages(chatId);
-        const requestedCallId = new URLSearchParams(location.search).get("call");
-        if (requestedCallId) void calls.open(requestedCallId);
+        const deepLink = new URLSearchParams(location.search);
+        const requestedCallId = deepLink.get("call");
+        if (requestedCallId) {
+            const answer = deepLink.get("answer") === "1";
+            if (answer) {
+                // Answer once: a reload or Back must not join again.
+                const url = new URL(location.href);
+                url.searchParams.delete("answer");
+                history.replaceState(history.state, "", `${url.pathname}${url.search}${url.hash}`);
+            }
+            void calls.open(requestedCallId, { answer });
+        }
     }
 
     function renderRoomHeader(chat) {
@@ -3153,6 +3163,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         url.searchParams.set("chat", chatId);
         url.searchParams.delete("message");
         url.searchParams.delete("call");
+        url.searchParams.delete("answer");
         history.pushState({ validApp: true, panel: "chats", chatId }, "", `${url.pathname}${url.search}`);
     }
 
