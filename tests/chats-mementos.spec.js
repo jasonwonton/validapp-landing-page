@@ -64,8 +64,8 @@ test("declining an invitation removes it from the authoritative chat list", asyn
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await expect(page.getByText("Art Club", { exact: true })).toBeVisible();
-    page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Decline" }).click();
+    await page.getByRole("dialog", { name: "Decline this invitation?" }).getByRole("button", { name: "Decline" }).click();
     await expect(page.getByText("Art Club", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Accept" })).toHaveCount(0);
 });
@@ -235,8 +235,8 @@ test("group owners can remove a member and refresh the authoritative roster", as
     await page.getByRole("button", { name: /Weekend Crew/ }).click();
     await page.getByRole("button", { name: "Chat settings" }).click();
     const settings = page.getByRole("dialog", { name: "Chat settings" });
-    page.once("dialog", (dialog) => dialog.accept());
     await settings.getByRole("button", { name: "Remove Maya Chen" }).click();
+    await page.getByRole("dialog", { name: "Remove Maya Chen?" }).getByRole("button", { name: "Remove" }).click();
     await expect(settings.getByText("Maya Chen", { exact: true })).toHaveCount(0);
     await expect(page.locator(".chat-room-title")).toContainText("3 people");
 });
@@ -246,8 +246,8 @@ test("leaving a chat reloads the list without the ended membership", async ({ pa
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
     await page.getByRole("button", { name: "Chat settings" }).click();
-    page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("dialog", { name: "Chat settings" }).getByRole("button", { name: "Leave chat" }).click();
+    await page.getByRole("dialog", { name: "Leave & delete this chat?" }).getByRole("button", { name: "Leave & Delete" }).click();
     await expect(page.locator('[data-chat-screen="list"]')).toBeVisible();
     await expect(page.getByRole("button", { name: /Noah Williams/ })).toHaveCount(0);
 });
@@ -378,8 +378,8 @@ test("chat settings expose the authoritative account-wide block action", async (
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Weekend Crew/ }).click();
     await page.getByRole("button", { name: "Chat settings" }).click();
-    page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: /Block Maya Chen/ }).click();
+    await page.getByRole("dialog", { name: "Block Maya Chen?" }).getByRole("button", { name: "Block" }).click();
     await expect(page.getByText("Person blocked", { exact: true })).toBeVisible();
 });
 
@@ -403,14 +403,14 @@ test("hide-for-me removes only the local row while unsend renders a tombstone", 
 
     const incoming = page.locator('[data-message-id="msg-n1"]');
     await incoming.getByRole("button", { name: "Message actions" }).click();
-    page.once("dialog", (dialog) => dialog.accept());
     await incoming.getByRole("button", { name: "Delete for me" }).click();
+    await page.getByRole("dialog", { name: "Delete for you?" }).getByRole("button", { name: "Delete" }).click();
     await expect(incoming).toHaveCount(0);
 
     const mine = page.locator('[data-message-id="msg-n3"]');
     await mine.getByRole("button", { name: "Message actions" }).click();
-    page.once("dialog", (dialog) => dialog.accept());
     await mine.getByRole("button", { name: "Unsend for everyone" }).click();
+    await page.getByRole("dialog", { name: "Unsend this message?" }).getByRole("button", { name: "Unsend" }).click();
     await expect(mine).toHaveCount(0);
     await expect(page.getByText("Message removed", { exact: true })).toBeVisible();
 });

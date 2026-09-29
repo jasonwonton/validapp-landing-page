@@ -10,7 +10,8 @@ export function createTimelineScroll(timeline, { onEdge, onPosition } = {}) {
     const atBottom = () => timeline.scrollHeight - timeline.clientHeight - timeline.scrollTop < 48;
     function capture() {
         const top = timeline.getBoundingClientRect().top;
-        const anchors = rows().filter(row => !row.dataset.listKey.startsWith('window:') && row.getBoundingClientRect().bottom > top)
+        // Anchor on messages only: history edges and day separators come and go.
+        const anchors = rows().filter(row => !/^(window|sep):/.test(row.dataset.listKey) && row.getBoundingClientRect().bottom > top)
             .slice(0, 3).map(row => ({ key: row.dataset.listKey, offset: row.getBoundingClientRect().top - top }));
         return { anchors, top: timeline.scrollTop, bottom: following && atBottom() };
     }

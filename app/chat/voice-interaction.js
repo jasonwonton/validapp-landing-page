@@ -1,33 +1,45 @@
 // Hold gestures never send: release produces a preview; left cancels; up locks.
 // A normal click/keyboard activation remains the accessible toggle fallback.
-export function bindVoiceGesture(button, { canStart, begin, recording, stop, discard, hint }) {
+// iOS ChatVoiceGesturePolicy: 86 pt left arms "Release to cancel", 76 pt up locks.
+export const VOICE_CANCEL_DISTANCE = 86;
+export const VOICE_LOCK_DISTANCE = 76;
+const HOLD_HINT = 'Slide left to cancel · Up to lock';
+
+export function bindVoiceGesture(button, { canStart, begin, recording, stop, discard, hint, haptic = () => {} }) {
     let press = null, timer = null, suppressUntil = 0;
     const clear = () => { clearTimeout(timer); timer = null; press = null; hint(''); };
     button.addEventListener('pointerdown', event => {
         if (event.button !== 0 || !canStart()) return;
-        press = { id: event.pointerId, x: event.clientX, y: event.clientY, held: false, locked: false, pending: false };
+        press = { id: event.pointerId, x: event.clientX, y: event.clientY, held: false, locked: false, pending: false, cancelling: false };
         const active = press;
         timer = setTimeout(async () => {
             timer = null;
             if (press !== active) return;
             active.held = true; active.pending = true; suppressUntil = Date.now() + 1500;
             try { button.setPointerCapture(active.id); } catch { /* Pointer may have left while permission UI opened. */ }
-            hint('Slide left to cancel · Up to lock');
+            hint(HOLD_HINT);
+            haptic('light');
             await begin(); active.pending = false;
             if (press === active && !recording()) clear();
-            else if (press === active) hint(active.locked ? 'Recording locked' : 'Slide left to cancel · Up to lock');
+            else if (press === active) hint(active.locked ? 'Recording locked' : active.cancelling ? 'Release to cancel' : HOLD_HINT, active.cancelling);
         }, 250);
     });
     button.addEventListener('pointermove', event => {
         if (!press?.held || event.pointerId !== press.id || press.locked) return;
-        if (event.clientX - press.x < -80) { suppressUntil = Date.now() + 1500; clear(); discard(); }
-        else if (event.clientY - press.y < -64) { press.locked = true; hint('Recording locked'); }
+        const cancelling = event.clientX - press.x <= -VOICE_CANCEL_DISTANCE;
+        if (cancelling !== press.cancelling) {
+            press.cancelling = cancelling;
+            hint(cancelling ? 'Release to cancel' : HOLD_HINT, cancelling);
+            if (cancelling) haptic('selection');
+        }
+        if (!cancelling && event.clientY - press.y <= -VOICE_LOCK_DISTANCE) { press.locked = true; hint('Recording locked'); haptic('medium'); }
     });
     button.addEventListener('pointerup', event => {
         if (!press || event.pointerId !== press.id) return;
         const active = press; clearTimeout(timer); timer = null;
         if (active.held) {
             suppressUntil = Date.now() + 1500;
+            if (active.cancelling) { press = null; clear(); discard(); return; }
             if (!active.locked) { if (active.pending) discard(); else stop(); }
             hint(active.locked ? 'Recording locked' : '');
         }

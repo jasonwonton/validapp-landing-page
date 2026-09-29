@@ -149,8 +149,8 @@ test("saved sticker deletion is confirmed and leaves existing chat messages inta
     await expect(media.getByRole("button", { name: "Remove saved sticker" })).toHaveCount(0);
     await media.getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(media.getByRole("button", { name: "Remove saved sticker" })).toHaveCount(2);
-    page.once("dialog", (dialog) => dialog.accept());
     await media.getByRole("button", { name: "Remove saved sticker" }).first().click();
+    await page.getByRole("dialog", { name: "Remove from My Stickers?" }).getByRole("button", { name: "Remove" }).click();
     await expect(media.getByRole("button", { name: "Remove saved sticker" })).toHaveCount(1);
     await media.getByRole("button", { name: "Close" }).click();
     await expect(page.locator(".chat-message.mine").last().getByRole("img", { name: "Sticker" })).toBeVisible();

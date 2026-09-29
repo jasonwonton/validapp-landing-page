@@ -1,5 +1,6 @@
 import { uiIcon } from '../ui-icons.js';
-import { createRingback } from './ringback.js';
+import { confirmSheet } from '../ui-dialogs.js';
+import { createRingback, createRingtone } from './ringback.js';
 const TERMINAL_STATES = new Set(["ended", "declined", "missed", "cancelled", "failed"]);
 const callOutcome = state => ({ declined: 'Call declined', missed: 'No answer', cancelled: 'Call cancelled', failed: 'Could not connect' }[state] || 'Call ended');
 
@@ -39,16 +40,26 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
     let ringbackFinished = false;
     let mediaReady = false;
     let reconnecting = false;
+    let facingMode = 'user';
+    let cameraPausedForBackground = false;
+    let wakeLock = null, wantWakeLock = false;
+    let leavePromptOpen = false;
+    let minimized = false;
+    let vibrationTimer = null;
     const isCurrent = token => token === generation && !ending;
     const startRequestIds = new Map();
     const attachedMedia = new Map();
+    // Participant tiles are keyed and diffed, never rebuilt, so media keeps
+    // playing and "Tap to enable sound" does not reappear on every event.
+    const tiles = new Map();
+    let placeholderTile = null;
 
     const dialog = document.createElement("dialog");
     dialog.className = "call-overlay";
     dialog.setAttribute("aria-label", "Valid call");
     dialog.innerHTML = `
         <section class="call-card">
-            <header><span class="call-kind" aria-hidden="true">${uiIcon('phone')}</span><div><strong data-call-title>Valid call</strong><small data-call-status>Connecting…</small></div></header>
+            <header><span class="call-kind" aria-hidden="true">${uiIcon('phone')}</span><button class="call-minimize" type="button" data-call-minimize aria-label="Minimize call" hidden>${uiIcon('down')}</button><div><strong data-call-title>Valid call</strong><small data-call-status>Connecting…</small></div></header>
             <div class="call-media-grid" data-call-media aria-live="polite"></div>
             <div class="call-incoming-actions hidden" data-call-incoming-actions>
                 <button class="call-decline" type="button" data-call-decline aria-label="Decline call">${uiIcon('hangup')}</button>
@@ -58,13 +69,23 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
                 <button type="button" data-call-audio aria-label="Mute" aria-pressed="false">${uiIcon('mic')}</button>
                 <button type="button" data-call-output aria-label="Audio output" hidden>${uiIcon('speaker')}</button>
                 <button type="button" data-call-video aria-label="Turn camera on" aria-pressed="false">${uiIcon('video-off')}</button>
+                <button type="button" data-call-flip aria-label="Switch camera" hidden>${uiIcon('flip')}</button>
                 <button class="call-hangup" type="button" data-call-hangup aria-label="End call">${uiIcon('hangup')}</button>
             </div>
             <button class="call-enable-sound hidden" type="button" data-call-enable-sound>Tap to enable sound</button>
             <button class="call-enable-sound hidden" type="button" data-call-dismiss>Close</button>
-            <p class="call-note">Keep Six7 open during your call.</p>
+            <p class="call-note">Keep Valid open during your call.</p>
         </section>`;
     document.body.append(dialog);
+
+    // iOS CompactAudioCallBar: the call keeps going while the app is used.
+    const compactBar = document.createElement('div');
+    compactBar.className = 'call-compact-bar';
+    compactBar.hidden = true;
+    compactBar.setAttribute('role', 'region');
+    compactBar.setAttribute('aria-label', 'Ongoing call');
+    compactBar.innerHTML = `<button type="button" class="call-compact-return" data-call-restore><b class="call-participant-avatar" aria-hidden="true"></b><span><strong data-call-compact-title></strong><small data-call-compact-status></small></span>${uiIcon('down')}</button><button type="button" class="call-compact-mute" data-call-compact-mute aria-label="Mute">${uiIcon('mic')}</button><button type="button" class="call-compact-end" data-call-compact-end aria-label="End call">${uiIcon('hangup')}</button>`;
+    document.body.append(compactBar);
 
     const titleNode = dialog.querySelector("[data-call-title]");
     const statusNode = dialog.querySelector("[data-call-status]");
@@ -78,12 +99,76 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
     const ringback = createRingback({ onBlocked: () => soundButton.classList.remove('hidden') });
     const microphoneButton = dialog.querySelector("[data-call-audio]");
     const cameraButton = dialog.querySelector("[data-call-video]");
+    const flipButton = dialog.querySelector("[data-call-flip]");
+    const minimizeButton = dialog.querySelector("[data-call-minimize]");
+    const ringtone = createRingtone();
 
     const enabled = () => getConfig()?.enable_calls === true && getConfig()?.enable_web_calls === true;
     const userId = () => getUser()?.id;
 
     function setStatus(value) {
         statusNode.textContent = value;
+        compactBar.querySelector('[data-call-compact-status]').textContent = value;
+    }
+
+    async function acquireWakeLock() {
+        wantWakeLock = true;
+        if (wakeLock || document.hidden || !navigator.wakeLock?.request) return;
+        try {
+            const lock = await navigator.wakeLock.request('screen');
+            if (!wantWakeLock) { void lock.release?.().catch(() => {}); return; }
+            wakeLock = lock;
+            lock.addEventListener?.('release', () => { if (wakeLock === lock) wakeLock = null; });
+        } catch (_) { /* Battery saver or an unsupported browser: the call still works. */ }
+    }
+
+    function releaseWakeLock() {
+        wantWakeLock = false;
+        const lock = wakeLock;
+        wakeLock = null;
+        void lock?.release?.().catch(() => {});
+    }
+
+    // Incoming ring: always visual; a tone and Android vibration when the browser allows.
+    function startIncomingAlert() {
+        dialog.classList.add('is-ringing');
+        ringtone.play();
+        const vibrate = () => { try { navigator.vibrate?.([450, 250, 450]); } catch (_) { /* Needs a prior tap. */ } };
+        vibrate();
+        clearInterval(vibrationTimer);
+        vibrationTimer = setInterval(vibrate, 2600);
+    }
+
+    function stopIncomingAlert() {
+        dialog.classList.remove('is-ringing');
+        ringtone.stop();
+        clearInterval(vibrationTimer);
+        vibrationTimer = null;
+        try { navigator.vibrate?.(0); } catch (_) { /* Nothing to cancel. */ }
+    }
+
+    function showCompactBar() {
+        if (!currentCall || currentCall.viewer_invitation_state === 'invited') return;
+        minimized = true;
+        const title = titleNode.textContent.trim();
+        compactBar.querySelector('[data-call-compact-title]').textContent = title;
+        compactBar.querySelector('.call-participant-avatar').textContent = title.slice(0, 1).toUpperCase();
+        compactBar.querySelector('[data-call-compact-status]').textContent = statusNode.textContent;
+        compactBar.querySelector('[data-call-restore]').setAttribute('aria-label', `Return to call with ${title}`);
+        compactBar.hidden = false;
+        document.body.classList.add('call-minimized');
+        if (dialog.open) dialog.close();
+    }
+
+    function hideCompactBar() {
+        minimized = false;
+        compactBar.hidden = true;
+        document.body.classList.remove('call-minimized');
+    }
+
+    function restoreCall() {
+        hideCompactBar();
+        showDialog();
     }
 
     function scheduleLifecycleCheck(call) {
@@ -115,6 +200,7 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
     }
 
     function showDialog() {
+        if (minimized) return;
         if (!dialog.open) dialog.showModal();
     }
 
@@ -123,6 +209,8 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         dialog.querySelector('.call-note').hidden = false;
         incomingActions.classList.toggle("hidden", !incoming);
         activeActions.classList.toggle("hidden", incoming);
+        minimizeButton.hidden = incoming;
+        if (!incoming) stopIncomingAlert();
     }
 
     function updateControls() {
@@ -138,6 +226,12 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         const output = dialog.querySelector('[data-call-output]');
         output.hidden = !(navigator.mediaDevices?.selectAudioOutput && HTMLMediaElement.prototype.setSinkId);
         output.disabled = operationInFlight || !room;
+        flipButton.hidden = !cameraEnabled;
+        flipButton.disabled = operationInFlight || !room;
+        const compactMute = compactBar.querySelector('[data-call-compact-mute]');
+        compactMute.innerHTML = uiIcon(muted ? 'mic-off' : 'mic');
+        compactMute.setAttribute('aria-label', muted ? 'Unmute' : 'Mute');
+        compactMute.disabled = operationInFlight || !room;
     }
 
     async function preflightPermissions(mediaType) {
@@ -151,12 +245,26 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         for (const track of stream.getTracks()) track.stop();
     }
 
+    function detachElement(element) {
+        const track = attachedMedia.get(element);
+        try { track?.detach?.(element); } catch (_) { /* The room is already closing. */ }
+        element.remove();
+        attachedMedia.delete(element);
+    }
+
+    function removeTile(key) {
+        const tile = tiles.get(key);
+        if (!tile) return;
+        for (const element of tile.tracks.values()) detachElement(element);
+        tile.card.remove();
+        tiles.delete(key);
+    }
+
     function clearAttachedMedia() {
-        for (const [element, track] of attachedMedia) {
-            try { track.detach?.(element); } catch (_) { /* The room is already closing. */ }
-            element.remove();
-        }
-        attachedMedia.clear();
+        for (const key of [...tiles.keys()]) removeTile(key);
+        for (const element of [...attachedMedia.keys()]) detachElement(element);
+        placeholderTile?.remove();
+        placeholderTile = null;
         mediaNode.replaceChildren();
     }
 
@@ -171,21 +279,44 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         attachedMedia.set(element, track);
         if (outputDeviceId && element.setSinkId) void element.setSinkId(outputDeviceId).catch(() => { outputDeviceId = ''; });
         element.play?.().catch(() => soundButton.classList.remove("hidden"));
+        return element;
     }
 
-    function participantCard(participant, isLocal = false) {
-        const card = document.createElement("article");
-        card.className = "call-participant";
-        const name = isLocal ? "You" : participant.name || "Student";
-        const avatar = document.createElement('b'); avatar.className = 'call-participant-avatar'; avatar.textContent = name.slice(0, 1).toUpperCase(); card.append(avatar);
-        const label = document.createElement("span");
-        label.textContent = name;
-        card.append(label);
-        const publications = participant.trackPublications?.values?.() || [];
-        for (const publication of publications) {
-            if (publication.track) { attachTrack(publication.track, card, isLocal); if (publication.track.kind === 'video') avatar.hidden = true; }
+    function syncTile(key, participant, isLocal) {
+        let tile = tiles.get(key);
+        if (!tile) {
+            const card = document.createElement("article");
+            card.className = "call-participant";
+            const avatar = document.createElement('b'); avatar.className = 'call-participant-avatar';
+            const label = document.createElement("span");
+            card.append(avatar, label);
+            tile = { card, avatar, label, tracks: new Map() };
+            tiles.set(key, tile);
         }
-        return card;
+        const name = isLocal ? "You" : participant.name || "Student";
+        if (tile.label.textContent !== name) tile.label.textContent = name;
+        if (tile.avatar.textContent !== name.slice(0, 1).toUpperCase()) tile.avatar.textContent = name.slice(0, 1).toUpperCase();
+        const present = new Set();
+        for (const publication of participant.trackPublications?.values?.() || []) {
+            const track = publication.track;
+            if (!track) continue;
+            present.add(track);
+            if (!tile.tracks.has(track)) tile.tracks.set(track, attachTrack(track, tile.card, isLocal));
+        }
+        for (const [track, element] of [...tile.tracks]) {
+            if (present.has(track)) continue;
+            detachElement(element);
+            tile.tracks.delete(track);
+        }
+        let showsVideo = false;
+        for (const [track, element] of tile.tracks) {
+            if (track.kind !== 'video') continue;
+            showsVideo = true;
+            // The front-camera self view is mirrored, like every camera app.
+            element.classList.toggle('mirrored', isLocal && facingMode === 'user');
+        }
+        tile.avatar.hidden = showsVideo;
+        return tile.card;
     }
 
     function renderParticipants() {
@@ -194,16 +325,30 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         else ringback.stop();
         const count = room?.remoteParticipants.size || 0;
         const connectionStatus = reconnecting ? 'Reconnecting…' : !mediaReady ? 'Connecting…' : count > 0 ? 'Connected' : currentCall?.state === 'active' ? 'Connecting audio…' : 'Waiting for an answer…';
-        clearAttachedMedia();
         if (!room || (!room.remoteParticipants.size && !cameraEnabled)) {
-            const card = document.createElement('div'), avatar = document.createElement('b');
-            card.className = 'call-avatar'; avatar.className = 'call-participant-avatar';
-            avatar.textContent = titleNode.textContent.trim().slice(0, 1).toUpperCase(); card.append(avatar); mediaNode.append(card);
+            for (const key of [...tiles.keys()]) removeTile(key);
+            if (!placeholderTile) {
+                placeholderTile = document.createElement('div');
+                placeholderTile.className = 'call-avatar';
+                placeholderTile.append(Object.assign(document.createElement('b'), { className: 'call-participant-avatar' }));
+            }
+            const initial = titleNode.textContent.trim().slice(0, 1).toUpperCase();
+            if (placeholderTile.firstChild.textContent !== initial) placeholderTile.firstChild.textContent = initial;
+            if (mediaNode.firstChild !== placeholderTile || mediaNode.childNodes.length !== 1) mediaNode.replaceChildren(placeholderTile);
             if (room || outgoing) setStatus(connectionStatus);
             return;
         }
-        mediaNode.append(participantCard(room.localParticipant, true));
-        for (const participant of room.remoteParticipants.values()) mediaNode.append(participantCard(participant));
+        if (placeholderTile) { placeholderTile.remove(); placeholderTile = null; }
+        const order = [syncTile('local', room.localParticipant, true)];
+        const keys = new Set(['local']);
+        for (const [key, participant] of room.remoteParticipants.entries()) {
+            const tileKey = `remote:${participant.identity || participant.sid || key}`;
+            keys.add(tileKey);
+            order.push(syncTile(tileKey, participant, false));
+        }
+        for (const key of [...tiles.keys()]) if (!keys.has(key)) removeTile(key);
+        // Moving a playing element can pause it: only reorder when the order changed.
+        if (order.some((card, index) => mediaNode.children[index] !== card) || mediaNode.children.length !== order.length) mediaNode.replaceChildren(...order);
         setStatus(connectionStatus);
     }
 
@@ -273,6 +418,7 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         updateControls();
         renderParticipants();
         void enableAudioPlayback();
+        void acquireWakeLock();
     }
 
     async function start(mediaType, chat) {
@@ -286,6 +432,7 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         const token = ++generation, callerId = userId();
         titleNode.textContent = chat.display_name || 'Call';
         setStatus('Connecting…'); setIncomingMode(false); renderParticipants(); showDialog(); updateControls();
+        void acquireWakeLock();
         const key = `${chat.id}:${mediaType}`;
         const requestId = startRequestIds.get(key) || crypto.randomUUID();
         startRequestIds.set(key, requestId);
@@ -326,9 +473,12 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         scheduleLifecycleCheck(call);
         titleNode.textContent = call.caller_name || "Incoming call";
         setStatus(`Incoming ${call.media_type === "video" ? "video" : "voice"} call`);
+        hideCompactBar();
         setIncomingMode(true);
         renderParticipants();
         showDialog();
+        startIncomingAlert();
+        void acquireWakeLock();
     }
 
     async function open(callId) {
@@ -361,6 +511,7 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
 
     async function accept() {
         if (!currentCall || operationInFlight) return;
+        stopIncomingAlert();
         operationInFlight = true;
         const token = generation, call = currentCall;
         updateControls();
@@ -386,6 +537,7 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
 
     async function decline() {
         if (!currentCall || operationInFlight) return;
+        stopIncomingAlert();
         const token = generation;
         operationInFlight = true;
         let declined = false;
@@ -418,7 +570,7 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
                 }
                 if (!slot.camera_slot_reserved || !slot.camera_slot_reservation_id) throw new Error("Video is full. Try again when someone turns off their camera.");
                 cameraReservationId = slot.camera_slot_reservation_id;
-                await room.localParticipant.setCameraEnabled(true, { facingMode: "user" });
+                await room.localParticipant.setCameraEnabled(true, { facingMode });
                 if (!isCurrent(token)) { await cameraRoom.localParticipant.setCameraEnabled(false); return; }
                 cameraEnabled = true;
                 cameraRequestId = null;
@@ -446,6 +598,71 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         }
     }
 
+    function localCameraTrack() {
+        for (const publication of room?.localParticipant?.trackPublications?.values?.() || []) {
+            if (publication.track?.kind === 'video' && (!publication.source || publication.source === 'camera')) return publication.track;
+        }
+        return null;
+    }
+
+    async function flipCamera() {
+        if (!room || !cameraEnabled || operationInFlight) return;
+        const token = generation, next = facingMode === 'user' ? 'environment' : 'user';
+        operationInFlight = true;
+        updateControls();
+        try {
+            const track = localCameraTrack();
+            if (track?.restartTrack) await track.restartTrack({ facingMode: next });
+            else {
+                await room.localParticipant.setCameraEnabled(false);
+                await room.localParticipant.setCameraEnabled(true, { facingMode: next });
+            }
+            if (!isCurrent(token)) return;
+            facingMode = next;
+            renderParticipants();
+        } catch (_) {
+            if (isCurrent(token)) showToast?.('Could not switch cameras.');
+        } finally {
+            if (isCurrent(token)) { operationInFlight = false; updateControls(); }
+        }
+    }
+
+    // A hidden page cannot keep the camera running on most phones; release it
+    // (keeping the server's video slot) and bring it back on return.
+    async function handleVisibility() {
+        if (!currentCall) return;
+        if (document.hidden) {
+            if (cameraEnabled && room && !operationInFlight) {
+                cameraPausedForBackground = true;
+                try { await room.localParticipant.setCameraEnabled(false); } catch (_) { /* Already stopped. */ }
+            }
+            return;
+        }
+        if (wantWakeLock) void acquireWakeLock();
+        if (cameraPausedForBackground && room) {
+            cameraPausedForBackground = false;
+            try { await room.localParticipant.setCameraEnabled(true, { facingMode }); } catch (_) { /* Permission revoked meanwhile. */ }
+            renderParticipants();
+        }
+        if (room) void enableAudioPlayback();
+    }
+    document.addEventListener('visibilitychange', () => { void handleVisibility(); });
+
+    async function confirmLeave() {
+        if (leavePromptOpen || !currentCall) return;
+        leavePromptOpen = true;
+        try {
+            const leave = await confirmSheet({
+                title: 'Leave call?',
+                message: 'Everyone else can keep talking. To keep the call going while you use Valid, minimize it instead.',
+                confirmLabel: 'Leave', cancelLabel: 'Stay', destructive: true,
+            });
+            if (leave && currentCall) void finish();
+        } finally {
+            leavePromptOpen = false;
+        }
+    }
+
     async function toggleMute() {
         if (!room || operationInFlight) return;
         const token = generation;
@@ -463,6 +680,11 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         if (ending) return;
         generation++;
         ending = true;
+        stopIncomingAlert();
+        releaseWakeLock();
+        hideCompactBar();
+        facingMode = 'user';
+        cameraPausedForBackground = false;
         ringback.dispose(); outgoing = false; ringbackFinished = false;
         mediaReady = false; reconnecting = false;
         soundButton.classList.add('hidden');
@@ -527,10 +749,19 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         }
     }
 
+    compactBar.addEventListener('click', (event) => {
+        const button = event.target.closest('button');
+        if (!button) return;
+        if (button.matches('[data-call-restore]')) restoreCall();
+        if (button.matches('[data-call-compact-mute]')) void toggleMute();
+        if (button.matches('[data-call-compact-end]')) void finish();
+    });
     dialog.addEventListener("click", (event) => {
         const button = event.target.closest("button");
         if (!button) return;
         if (button.matches('[data-call-dismiss]')) { dialog.close(); return; }
+        if (button.matches('[data-call-minimize]')) { showCompactBar(); return; }
+        if (button.matches('[data-call-flip]')) { void flipCamera(); return; }
         void enableAudioPlayback();
         if (button.matches("[data-call-accept]")) void accept();
         if (button.matches("[data-call-decline]")) void decline();
@@ -540,10 +771,12 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         if (button.matches('[data-call-output]')) void chooseAudioOutput();
         if (button.matches("[data-call-enable-sound]")) void enableAudioPlayback();
     });
+    // Esc and Android Back never hang up by themselves.
     dialog.addEventListener("cancel", (event) => {
         event.preventDefault();
-        if (currentCall?.viewer_invitation_state === "invited") void decline();
-        else void finish();
+        if (!currentCall) { if (!operationInFlight && !ending) dialog.close(); return; }
+        if (currentCall.viewer_invitation_state === "invited") void decline();
+        else void confirmLeave();
     });
     window.addEventListener("pagehide", (event) => {
         if (currentCall || operationInFlight) void finish({ notifyBackend: true, keepalive: true });

@@ -1,4 +1,4 @@
-import { CHAT_REACTIONS, escapeChatHTML, messageTime } from './models.js';
+import { CHAT_REACTIONS, escapeChatHTML, messageDateTime } from './models.js';
 import { canSaveMessage } from './history.js';
 import { uiIcon } from '../ui-icons.js';
 import { setRuntimeStyles } from '../runtime-style.js';
@@ -15,7 +15,7 @@ export function messageActionsMarkup(message, { mine, olderReaders }) {
         ${sent ? `<hr>${button('delete', 'Delete for me', 'trash', 'class="danger"')}` : ''}
         ${canSaveMessage(message) ? `<button type="button" class="chat-save-action" data-save-message="${id}" aria-label="${message.saved_in_chat ? 'Unsave' : 'Save in chat'}"><span>${uiIcon(message.saved_in_chat ? 'bookmark-slash' : 'bookmark')} ${message.saved_in_chat ? 'Unsave' : 'Save in chat'}</span><small>${message.saved_in_chat ? 'Use this chat’s clearing setting' : 'Keep for everyone in this chat'}</small></button>` : ''}
         ${mine && sent && message.kind !== 'memento' ? button('unsend', 'Unsend for everyone', 'trash-filled', 'class="danger"') : ''}
-        <footer class="chat-action-footer"><time class="chat-action-time">${escapeChatHTML(messageTime(message.created_at))}</time>${olderReaders ? `<button type="button" data-view-readers="${id}">Read receipts</button>` : ''}</footer>
+        <footer class="chat-action-footer"><time class="chat-action-time" datetime="${escapeChatHTML(message.created_at || '')}">${escapeChatHTML(messageDateTime(message.created_at))}</time>${olderReaders ? `<button type="button" data-view-readers="${id}">Read receipts</button>` : ''}</footer>
     </dialog>`;
 }
 
