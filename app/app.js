@@ -7518,6 +7518,9 @@ function bindEvents() {
             refreshWebPushStatus();
             refreshAskSafetyState();
             void refreshBanner();
+            // Reset the worker's push counter to what the app shows now.
+            state.syncedBadgeCount = null;
+            if (document.body.classList.contains("authenticated")) renderTabBadges();
         }
     });
     $("#appView").addEventListener("touchstart", beginPullRefresh, { passive: true });

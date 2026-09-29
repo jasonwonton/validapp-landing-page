@@ -391,3 +391,26 @@ test("the app view is not one big live region; refresh progress has its own", as
     const copy = await (await page.request.get("/app/auth-reliability.js")).text();
     expect(copy).not.toContain("Six7 passkey");
 });
+
+test("the chat room and composer fill the real screen while the layout viewport is stale", async ({ page, context }, testInfo) => {
+    test.skip(testInfo.project.name !== "android", "Needs a phone-sized touch viewport and Chromium CDP");
+    await emulateInstalledApp(page);
+    await signInToDemo(page);
+    await page.locator("#bottomNav").getByRole("button", { name: "Chats", exact: true }).click();
+    await page.locator("[data-open-chat='chat-noah']").first().click();
+    const room = page.locator(".chat-room-screen");
+    await expect(room).toBeVisible();
+    const { width, height } = page.viewportSize();
+    const healthy = await room.evaluate((element) => Math.round(element.getBoundingClientRect().bottom));
+    const cdp = await context.newCDPSession(page);
+    const composer = page.locator(".chat-composer textarea");
+    await expect(composer).toBeEditable();
+    await composer.click();
+    await expect(composer).toBeFocused();
+    await cdp.send("Emulation.setDeviceMetricsOverride", { width, height: height - 330, deviceScaleFactor: await page.evaluate(() => devicePixelRatio), mobile: true });
+    await expect(page.locator("html")).toHaveClass(/keyboard-open/);
+    await composer.blur();
+    await expect(page.locator("html")).toHaveClass(/layout-viewport-stale/);
+    await expect.poll(async () => Math.abs(await room.evaluate((element) => element.getBoundingClientRect().bottom) - healthy) <= 4).toBe(true);
+    await expect.poll(async () => nearBottom(height)(await navBottom(page))).toBe(true);
+});
