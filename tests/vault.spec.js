@@ -152,6 +152,7 @@ test("PIN setup asks again after a mismatched confirmation", async ({ page }) =>
 });
 
 test("wrong PINs count down and then lock out per the server", async ({ page }) => {
+    test.slow(); // many PIN pad taps
     const screen = await openMemories(page, "&vaultpin=1");
     await screen.getByRole("tab", { name: "Vault" }).click();
     await expect(gate(page).getByRole("heading", { name: "Enter your Vault PIN" })).toBeVisible();
@@ -168,6 +169,7 @@ test("wrong PINs count down and then lock out per the server", async ({ page }) 
 });
 
 test("the Vault locks again when the tab is left, the page is hidden, or the screen closes", async ({ page }) => {
+    test.slow(); // many PIN pad taps
     const screen = await openMemories(page, "&vaultpin=1");
     const vaultTab = screen.getByRole("tab", { name: "Vault" });
     const unlock = async () => {
@@ -206,6 +208,7 @@ test("the Vault locks again when the tab is left, the page is hidden, or the scr
 });
 
 test("moving to the Vault without a PIN sets one up first and then finishes the move", async ({ page }) => {
+    test.slow(); // many PIN pad taps
     const screen = await openMemories(page);
     await expect(screen.locator("[data-vault-open]")).toHaveCount(36);
     const firstIds = await screen.locator("[data-vault-open]").evaluateAll((nodes) => nodes.slice(0, 2).map((node) => node.dataset.vaultOpen));
