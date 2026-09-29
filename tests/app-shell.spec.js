@@ -83,3 +83,42 @@ test.describe("installed-app viewport", () => {
         expect(await navBottom(page)).toBe(height - 330);
     });
 });
+
+test.describe("cold start", () => {
+    test.use({ serviceWorkers: "block" });
+
+    test("a returning user sees the launch splash, never the sign-in card, while the session is checked", async ({ page }) => {
+        let release;
+        const sessionGate = new Promise((resolve) => { release = resolve; });
+        await page.route("**/api/v1/**", async (route) => {
+            if (new URL(route.request().url()).pathname.endsWith("/auth/session")) {
+                await sessionGate;
+                return route.fulfill({ json: { user: { id: "test-user", first_name: "Test", username: "test" } } });
+            }
+            return route.fulfill({ json: {} });
+        });
+        await page.goto("/app/");
+        await expect(page.locator("#launchSplash")).toBeVisible();
+        await page.waitForTimeout(400);
+        await expect(page.locator("#authView")).toBeHidden();
+        await expect(page.getByText("Welcome Back")).toBeHidden();
+        release();
+        await expect(page.locator("#appView")).toBeVisible();
+        await expect(page.locator("#launchSplash")).toBeHidden();
+        await expect(page.locator("#authView")).toBeHidden();
+    });
+
+    test("an expired cookie shows Welcome Back without opening signup for a returning user", async ({ page }) => {
+        await page.addInitScript(() => localStorage.setItem("valid:signed-in-before", "1"));
+        await page.addInitScript(() => {
+            Object.defineProperty(window, "PublicKeyCredential", { configurable: true, value: class {} });
+        });
+        await page.route("**/api/v1/**", (route) => route.fulfill({ status: 401,
+            headers: { "WWW-Authenticate": "Bearer" }, json: { detail: "Authentication required" } }));
+        await page.goto("/app/");
+        await expect(page.getByText("Welcome Back")).toBeVisible();
+        await expect(page.locator("#launchSplash")).toBeHidden();
+        await page.waitForTimeout(300);
+        await expect(page.locator("#signupDialog")).not.toBeVisible();
+    });
+});

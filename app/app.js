@@ -16,8 +16,9 @@ import { userMessage } from "./user-message.js";
 // production module graph or the service-worker shell.
 const demoMode = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname)
     && new URLSearchParams(location.search).get("demo") === "1";
-const api = demoMode ? new (await import("./demo-api.js")).DemoAPI() : new ValidAPI();
-configureMediaFallback({ apiBase: api.baseURL });
+// No top-level await: production evaluates this module synchronously.
+let api = demoMode ? null : new ValidAPI();
+configureMediaFallback({ apiBase: api?.baseURL });
 installMediaImageFallback();
 let chatPresence = null;
 let presenceLifecycle = null;
@@ -708,7 +709,7 @@ function showSignedOut(message = "") {
     clearInterval(state.playLockTimer);
     state.playLockTimer = null;
     stopStripeCheckoutPolling();
-    $("#authView").classList.remove("hidden");
+    showAuthView();
     $("#appView").classList.add("hidden");
     $("#bottomNav").classList.add("hidden");
     $("#logoutButton").classList.add("hidden");
@@ -719,11 +720,33 @@ function showSignedOut(message = "") {
     $("#authStatus").textContent = friendlyErrorMessage(message, "");
 }
 
+const PRIOR_SESSION_KEY = "valid:signed-in-before";
+
+function hideLaunchSplash() {
+    clearTimeout(state.launchSplashTimer);
+    $("#launchSplash").classList.add("hidden");
+}
+
+function showAuthView() {
+    hideLaunchSplash();
+    $("#authView").classList.remove("hidden");
+}
+
+function isFirstVisit() {
+    try {
+        return localStorage.getItem(PRIOR_SESSION_KEY) !== "1" && !localStorage.getItem("valid.web.installation-id");
+    } catch (_) {
+        return true;
+    }
+}
+
 async function showSignedIn() {
     sessionRestorePending = false;
     $("#retrySessionButton").classList.add("hidden");
     $("#createAccountButton").classList.remove("hidden");
     $("#authView").classList.add("hidden");
+    hideLaunchSplash();
+    try { localStorage.setItem(PRIOR_SESSION_KEY, "1"); } catch (_) { /* First-visit detection falls back to the installation id. */ }
     $("#appView").classList.remove("hidden");
     $("#bottomNav").classList.remove("hidden");
     $("#logoutButton").classList.remove("hidden");
@@ -7214,57 +7237,67 @@ function bindEvents() {
     });
 }
 
-$$('[data-share-anonymous], [data-share-feed-platform]').forEach((button) => {
-    const platform = button.dataset.shareAnonymous || button.dataset.shareFeedPlatform;
-    const label = platform ? `${platform[0].toUpperCase()}${platform.slice(1)}` : "Share";
-    button.innerHTML = `${shareIconMarkup(platform)}${button.classList.contains("expanded") ? `<span>Share on ${escapeHTML(label)}</span>` : ""}`;
-});
-syncVisualViewport();
-window.visualViewport?.addEventListener("resize", scheduleVisualViewportSync);
-window.visualViewport?.addEventListener("scroll", scheduleVisualViewportSync);
-addEventListener("resize", scheduleVisualViewportSync);
-document.addEventListener("focusin", () => {
-    scheduleVisualViewportSync();
-    setTimeout(keepFocusedControlVisible, 250);
-});
-document.addEventListener("focusout", () => {
-    scheduleVisualViewportSync();
-    scheduleStaleViewportCheck();
-});
-window.visualViewport?.addEventListener("resize", scheduleStaleViewportCheck);
-window.visualViewport?.addEventListener("scroll", scheduleStaleViewportCheck);
-addEventListener("pageshow", scheduleStaleViewportCheck);
-addEventListener("orientationchange", scheduleStaleViewportCheck);
-document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") scheduleStaleViewportCheck();
-});
-bindEvents();
-installNativeSheetGestures();
-initializeParkedUI();
-if (!navigator.onLine) updateNetworkStatus();
-if ("serviceWorker" in navigator && !demoMode) {
-    registerAppServiceWorker();
-    navigator.serviceWorker.addEventListener("message", (event) => {
-        if (event.data?.type !== "VALID_NOTIFICATION_CLICK") return;
-        const target = new URL(event.data.url || "./", location.origin);
-        if (target.origin === location.origin && target.pathname.startsWith("/app/")) location.href = target.href;
-    });
-}
-if (!passkeysSupported() && !demoMode) {
-    $("#passkeyButton").disabled = true;
-    $("#authStatus").textContent = "This browser does not support passkeys. Try current Chrome, Safari, or Edge.";
-    showAuthBrowserHelp({ code: 'passkeys_unavailable' }, false);
-}
-
 let authFlowStarted = false;
 let sessionRestorePending = false;
 let sessionRestoreInFlight = false;
+
+function startApp() {
+    $$('[data-share-anonymous], [data-share-feed-platform]').forEach((button) => {
+        const platform = button.dataset.shareAnonymous || button.dataset.shareFeedPlatform;
+        const label = platform ? `${platform[0].toUpperCase()}${platform.slice(1)}` : "Share";
+        button.innerHTML = `${shareIconMarkup(platform)}${button.classList.contains("expanded") ? `<span>Share on ${escapeHTML(label)}</span>` : ""}`;
+    });
+    syncVisualViewport();
+    window.visualViewport?.addEventListener("resize", scheduleVisualViewportSync);
+    window.visualViewport?.addEventListener("scroll", scheduleVisualViewportSync);
+    addEventListener("resize", scheduleVisualViewportSync);
+    document.addEventListener("focusin", () => {
+        scheduleVisualViewportSync();
+        setTimeout(keepFocusedControlVisible, 250);
+    });
+    document.addEventListener("focusout", () => {
+        scheduleVisualViewportSync();
+        scheduleStaleViewportCheck();
+    });
+    window.visualViewport?.addEventListener("resize", scheduleStaleViewportCheck);
+    window.visualViewport?.addEventListener("scroll", scheduleStaleViewportCheck);
+    addEventListener("pageshow", scheduleStaleViewportCheck);
+    addEventListener("orientationchange", scheduleStaleViewportCheck);
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") scheduleStaleViewportCheck();
+    });
+    bindEvents();
+    installNativeSheetGestures();
+    initializeParkedUI();
+    if (!navigator.onLine) updateNetworkStatus();
+    if ("serviceWorker" in navigator && !demoMode) {
+        registerAppServiceWorker();
+        navigator.serviceWorker.addEventListener("message", (event) => {
+            if (event.data?.type !== "VALID_NOTIFICATION_CLICK") return;
+            const target = new URL(event.data.url || "./", location.origin);
+            if (target.origin === location.origin && target.pathname.startsWith("/app/")) location.href = target.href;
+        });
+    }
+    if (!passkeysSupported() && !demoMode) {
+        $("#passkeyButton").disabled = true;
+        $("#authStatus").textContent = "This browser does not support passkeys. Try current Chrome, Safari, or Edge.";
+        showAuthBrowserHelp({ code: 'passkeys_unavailable' }, false);
+    }
+    if (androidInstallRequested()) {
+        showAuthView();
+        showAndroidInstallGate();
+    } else restoreOrStartAuthFlow();
+}
 
 async function restoreOrStartAuthFlow() {
     if (sessionRestoreInFlight || (authFlowStarted && !sessionRestorePending)) return;
     authFlowStarted = true;
     if (!demoMode) {
         sessionRestoreInFlight = true;
+        // Keep the launch splash while the session is unknown; a very slow check
+        // falls back to the sign-in card with its "Checking your session" status.
+        clearTimeout(state.launchSplashTimer);
+        state.launchSplashTimer = setTimeout(showAuthView, 6_000);
         const revision = api.sessionRevision;
         $("#retrySessionButton").disabled = true;
         $("#createAccountButton").classList.add("hidden");
@@ -7280,6 +7313,7 @@ async function restoreOrStartAuthFlow() {
             return;
         } catch (error) {
             if (api.hasSession()) return;
+            showAuthView();
             if (!error.confirmedSessionInvalid) {
                 sessionRestorePending = true;
                 $("#retrySessionButton").classList.remove("hidden");
@@ -7297,11 +7331,18 @@ async function restoreOrStartAuthFlow() {
             $("#retrySessionButton").disabled = false;
         }
     }
+    showAuthView();
+    // Returning users whose cookie expired land on "Welcome Back"; only an
+    // explicit ?signup=1 or a first-ever visit opens account creation.
     const authParams = new URLSearchParams(window.location.search);
-    if (authParams.get("signup") === "1" || (!demoMode && authParams.get("signin") !== "1")) {
+    if (authParams.get("signup") === "1" || (!demoMode && authParams.get("signin") !== "1" && isFirstVisit())) {
         requestAnimationFrame(openSignupDialog);
     }
 }
 
-if (androidInstallRequested()) showAndroidInstallGate();
-else restoreOrStartAuthFlow();
+if (demoMode) {
+    import("./demo-api.js").then(({ DemoAPI }) => {
+        api = new DemoAPI();
+        startApp();
+    });
+} else startApp();

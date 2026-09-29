@@ -32,8 +32,11 @@
     </header>
     <div id="networkBanner" class="network-banner hidden" role="status">You're offline. We'll reconnect automatically.</div>
 
+    <div id="launchSplash" class="launch-splash" role="img" aria-label="Valid">
+        <img src="../assets/valid_logo.png" alt="" width="964" height="372" decoding="async" fetchpriority="high">
+    </div>
     <main>
-        <section id="authView" class="auth-view">
+        <section id="authView" class="auth-view hidden">
             <div class="passkey-card">
                 <span class="passkey-face-icon" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M18 28v-5a5 5 0 0 1 5-5h5M36 18h5a5 5 0 0 1 5 5v5M46 36v5a5 5 0 0 1-5 5h-5M28 46h-5a5 5 0 0 1-5-5v-5M25 28v5M39 28v5M25 39c4 3 10 3 14 0"/></svg></span>
                 <div class="passkey-copy"><h1>Welcome Back</h1><p>Sign in securely with the passkey saved on this device.</p></div>
