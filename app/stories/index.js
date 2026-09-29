@@ -11,10 +11,9 @@ import {
 } from "../chat/outbox.js";
 import { setRuntimeStyles } from "../runtime-style.js";
 import { createMediaOverlayPositioner } from "../media-overlay-positioner.js";
+import { userMessage } from "../user-message.js";
 
 const REFRESH_MS = 30_000;
-const MAX_RECORDED_VIEWS = 200;
-const MAX_STORY_VIEWERS = 500;
 
 function safeURL(value, api) {
     if (!value) return "";
@@ -30,15 +29,11 @@ function displayName(author = {}) {
     return [author.first_name, author.last_name].filter(Boolean).join(" ").trim() || author.username || "Student";
 }
 
-export function createStoriesView({ root, api, getUser, getProfile = getUser, escapeHTML, showToast }) {
+export function createStoriesView({ root, api, getUser, getProfile = getUser, getConfig = () => null, escapeHTML, showToast }) {
     let authors = [];
-    let authorIndex = 0;
-    let itemIndex = 0;
     let loading = false;
     let lastLoaded = 0;
-    let cancelMediaWait = null;
-    let viewerCursor = null;
-    let viewerRows = [];
+    let viewerPromise = null;
     let selectedStoryMedia = null;
     let selectedStoryPreview = null;
     let storyPreparationGeneration = 0;
@@ -46,46 +41,25 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, es
     let storyPublishRequestId = null;
     let storyRetrying = false;
     let storyRetryTimer = null;
-    let sharePeople = [];
-    const shareSelected = new Set();
-    const storyDeliveryIntents = new Map();
-    const recordedViews = new Set();
 
     root.innerHTML = `
         <section class="stories-shell" aria-label="Stories">
             <p class="stories-status" role="status"></p>
             <div class="stories-rail"></div>
         </section>
-        <dialog class="story-viewer" aria-label="Story viewer">
-            <div class="story-progress" aria-hidden="true"></div>
-            <header><div class="story-author"></div><button type="button" data-close-story aria-label="Close Story">${uiIcon("close")}</button></header>
-            <div class="story-media"><img alt="" decoding="async" hidden><video playsinline controls hidden></video><span class="story-text-overlay" hidden></span></div>
-            <div class="story-copy"><p></p><small></small></div>
-            <button class="story-previous" type="button" data-previous-story aria-label="Previous Story">${uiIcon("back")}</button>
-            <button class="story-next" type="button" data-next-story aria-label="Next Story">${uiIcon("next")}</button>
-            <form class="story-reply"><input type="text" maxlength="2000" placeholder="Reply to Story" aria-label="Reply to Story"><button type="submit">Send</button></form>
-            <footer><button type="button" data-share-story>Share</button><button type="button" data-story-viewers hidden>Viewers</button><button type="button" data-delete-story hidden>Delete Story</button><button type="button" data-report-story hidden>Report Story</button></footer>
-        </dialog>
-        <dialog class="story-viewers-sheet" aria-label="Story viewers"><header><strong>Story viewers</strong><button type="button" data-close-story-viewers>Done</button></header><div></div></dialog>
         <dialog class="story-composer" aria-label="Create Story">
             <form>
                 <header><button type="button" data-close-story-composer>Cancel</button><strong>New Story</strong><span></span></header>
                 <div class="story-composer-preview"><span aria-hidden="true">${uiIcon("plus")}</span><p>Choose a photo or an MP4 video.</p></div>
-                <input class="story-file-input" type="file" accept="image/*,video/mp4" capture="environment">
+                <div class="story-source-buttons">
+                    <label class="story-source-button">${uiIcon("camera")}<span>Camera</span><input class="story-camera-input" type="file" accept="image/*,video/mp4" capture="environment"></label>
+                    <label class="story-source-button">${uiIcon("photo")}<span>Library</span><input class="story-file-input" type="file" accept="image/*,video/mp4"></label>
+                </div>
                 <label>Caption <input class="story-caption" type="text" maxlength="120" placeholder="Optional caption"></label>
                 <label>Text overlay <input class="story-overlay" type="text" maxlength="160" placeholder="Optional text — drag it in the preview"></label>
                 <div class="story-upload-progress hidden"><span></span></div>
                 <p class="story-composer-status" role="status"></p>
                 <button class="primary-button story-publish" type="submit" disabled>Post Story</button>
-            </form>
-        </dialog>
-        <dialog class="story-share-sheet" aria-label="Share Story">
-            <form>
-                <header><strong>Send Story</strong><button type="button" data-close-story-share>Done</button></header>
-                <input class="story-share-search" type="search" placeholder="Search classmates" aria-label="Search classmates">
-                <p class="story-share-status" role="status"></p>
-                <div class="story-share-people"></div>
-                <button class="primary-button story-share-send" type="submit" disabled>Send Story</button>
             </form>
         </dialog>`;
 
@@ -96,24 +70,41 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, es
     });
     root.addEventListener("click", handleClick);
     $(".story-file-input").addEventListener("change", selectStoryMedia);
+    $(".story-camera-input").addEventListener("change", selectStoryMedia);
     $(".story-composer form").addEventListener("submit", publishSelectedStory);
     $(".story-composer").addEventListener("close", resetStoryComposer);
-    $(".story-reply").addEventListener("submit", sendStoryReply);
-    $(".story-share-sheet form").addEventListener("submit", sendSharedStory);
-    $(".story-share-search").addEventListener("input", renderSharePeople);
-    $(".story-share-people").addEventListener("change", updateShareSelection);
     window.addEventListener("online", () => void retryPendingStories());
-    $(".story-viewer").addEventListener("keydown", (event) => {
-        if (event.key === "ArrowRight") { event.preventDefault(); void next(); }
-        if (event.key === "ArrowLeft") { event.preventDefault(); void previous(); }
-    });
-    $(".story-viewer").addEventListener("close", () => { resetMedia(); clearStoryURL(); });
 
-    function currentAuthor() { return authors[authorIndex] || null; }
-    function currentItem() { return currentAuthor()?.items?.[itemIndex] || null; }
+    // The viewer, its sheets, and their gestures load on first use.
+    function loadViewer() {
+        viewerPromise ||= import("./viewer.js").then(({ createStoryViewer }) => createStoryViewer({
+            root, api, getUser, getConfig, escapeHTML, showToast, displayName,
+            safeURL: (value) => safeURL(value, api),
+            onViewed: () => renderRail(),
+            onChanged: () => activate({ force: true }),
+        })).catch((error) => {
+            viewerPromise = null;
+            throw error;
+        });
+        return viewerPromise;
+    }
+
+    async function openViewer(authorIndex, itemIndex = null, { viewers = false } = {}) {
+        try {
+            const viewer = await loadViewer();
+            viewer.open(authors, authorIndex, itemIndex);
+            if (viewers && authors[authorIndex]?.is_owner) await viewer.showViewers();
+        } catch (error) {
+            showToast?.(userMessage(error, "Couldn't open this Story. Try again."));
+        }
+    }
 
     function renderRail() {
-        const visibleAuthors = authors.filter((author) => author.items?.length);
+        // Your Story first, then people with something new, then the rest (StoryStrip).
+        const visibleAuthors = authors.filter((author) => author.items?.length)
+            .map((author, order) => ({ author, order }))
+            .sort((left, right) => Number(Boolean(right.author.has_unviewed)) - Number(Boolean(left.author.has_unviewed)) || left.order - right.order)
+            .map(({ author }) => author);
         const owner = visibleAuthors.find((author) => author.is_owner);
         const profile = getProfile() || {};
         const avatarMarkup = (name, url) => {
@@ -135,7 +126,11 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, es
     renderRail();
 
     async function activate({ force = false } = {}) {
-        if (loading || (!force && lastLoaded && Date.now() - lastLoaded < REFRESH_MS)) return;
+        if (!loading && (force || !lastLoaded || Date.now() - lastLoaded >= REFRESH_MS)) await load();
+        await openRequestedStory();
+    }
+
+    async function load() {
         loading = true;
         $(".stories-status").textContent = authors.length ? "Refreshing…" : "Loading…";
         try {
@@ -144,8 +139,7 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, es
             lastLoaded = Date.now();
             renderRail();
             $(".stories-status").textContent = "";
-            const requestedStoryId = new URLSearchParams(location.search).get("story");
-            if (requestedStoryId && !$(".story-viewer").open) openStoryById(requestedStoryId);
+            if (authors.length) void loadViewer().catch(() => null);
             void retryPendingStories();
         } catch (error) {
             $(".stories-status").textContent = error.message || "Stories unavailable";
@@ -154,151 +148,31 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, es
         }
     }
 
-    function resetMedia() {
-        cancelMediaWait?.();
-        cancelMediaWait = null;
-        const video = $(".story-media video");
-        video.pause();
-        video.removeAttribute("src");
-        video.load();
-        $(".story-media img").removeAttribute("src");
-    }
-
-    function waitForMedia(item) {
-        const media = item.media_type === "video" ? $(".story-media video") : $(".story-media img");
-        if (item.media_type === "video" && media.readyState >= 1) return Promise.resolve();
-        if (item.media_type !== "video" && media.complete && media.naturalWidth) return Promise.resolve();
-        return new Promise((resolve, reject) => {
-            const success = item.media_type === "video" ? "loadedmetadata" : "load";
-            const cleanup = () => {
-                clearTimeout(timeout);
-                media.removeEventListener(success, loaded);
-                media.removeEventListener("error", failed);
-                if (cancelMediaWait === cancelled) cancelMediaWait = null;
-            };
-            const loaded = () => { cleanup(); resolve(); };
-            const failed = () => { cleanup(); reject(new Error("This Story could not be opened.")); };
-            const cancelled = () => {
-                cleanup();
-                reject(new DOMException("Story load replaced", "AbortError"));
-            };
-            const timeout = setTimeout(() => {
-                cleanup();
-                reject(new Error("This Story took too long to open."));
-            }, 10_000);
-            cancelMediaWait?.();
-            cancelMediaWait = cancelled;
-            media.addEventListener(success, loaded, { once: true });
-            media.addEventListener("error", failed, { once: true });
-        });
-    }
-
-    function rememberRecordedView(id) {
-        if (recordedViews.size >= MAX_RECORDED_VIEWS) recordedViews.delete(recordedViews.values().next().value);
-        recordedViews.add(id);
-    }
-
-    async function showCurrent() {
-        const author = currentAuthor();
-        const item = currentItem();
-        if (!author || !item) return closeViewer();
-        const mediaURL = safeURL(item.media_url, api);
-        if (!mediaURL) {
-            closeViewer();
-            return showToast?.("This Story is unavailable.");
-        }
-        resetMedia();
-        const image = $(".story-media img");
-        const video = $(".story-media video");
-        image.hidden = item.media_type === "video";
-        video.hidden = item.media_type !== "video";
-        (item.media_type === "video" ? video : image).src = mediaURL;
-        image.alt = item.media_type === "photo" ? `${displayName(author)}'s Story` : "";
-        $(".story-author").innerHTML = `<strong>${escapeHTML(author.is_owner ? "Your Story" : displayName(author))}</strong><small>${itemIndex + 1} of ${author.items.length}</small>`;
-        $(".story-progress").innerHTML = author.items.map((_, index) => `<i class="${index <= itemIndex ? "viewed" : ""}"></i>`).join("");
-        const overlay = $(".story-text-overlay");
-        overlay.hidden = !item.text_overlay;
-        overlay.textContent = item.text_overlay || "";
-        setRuntimeStyles(overlay, {
-            left: `${Number(item.text_overlay_x ?? 0.5) * 100}%`,
-            top: `${Number(item.text_overlay_y ?? 0.5) * 100}%`,
-        });
-        $(".story-copy p").textContent = item.caption || "";
-        $(".story-copy small").textContent = `Expires ${new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(item.expires_at))}`;
-        $("[data-story-viewers]").hidden = !author.is_owner;
-        $("[data-delete-story]").hidden = !author.is_owner;
-        $("[data-report-story]").hidden = author.is_owner;
-        $(".story-reply").classList.toggle("hidden", author.is_owner);
-        const dialog = $(".story-viewer");
-        if (!dialog.open) dialog.showModal();
-        try {
-            await waitForMedia(item);
-            if (!author.is_owner && !recordedViews.has(String(item.id))) {
-                rememberRecordedView(String(item.id));
-                await api.recordStoryView(getUser().id, item.id);
-                item.viewer_has_viewed = true;
-                author.has_unviewed = author.items.some((candidate) => !candidate.viewer_has_viewed);
-                renderRail();
-            }
-        } catch (error) {
-            recordedViews.delete(String(item.id));
-            if (error.name === "AbortError") return;
-            showToast?.(error.message || "This Story could not be opened.");
-        }
-    }
-
-    function openAuthor(index) {
-        authorIndex = Math.max(0, Math.min(authors.length - 1, Number(index) || 0));
-        const items = currentAuthor()?.items || [];
-        itemIndex = Math.max(0, items.findIndex((item) => !item.viewer_has_viewed));
-        updateStoryURL();
-        void showCurrent();
-    }
-
-    function openStoryById(storyId) {
+    // `?story=<id>` opens that Story; `&viewers=1` (a story_capture
+    // notification) also opens its viewers list when it is the viewer's own.
+    async function openRequestedStory() {
+        const params = new URLSearchParams(location.search);
+        const storyId = params.get("story");
+        const viewers = params.get("viewers") === "1";
+        if (!storyId || !lastLoaded) return;
+        const viewer = await loadViewer().catch(() => null);
+        if (viewer?.isOpen()) return;
         const index = authors.findIndex((author) => author.items.some((item) => String(item.id) === String(storyId)));
-        if (index < 0) return showToast?.("That Story is unavailable or has expired.");
-        authorIndex = index;
-        itemIndex = authors[index].items.findIndex((item) => String(item.id) === String(storyId));
-        void showCurrent();
-    }
-
-    function updateStoryURL() {
-        const item = currentItem();
-        if (!item) return;
-        const url = new URL(location.href);
-        url.searchParams.set("story", item.id);
-        history.replaceState(history.state, "", `${url.pathname}${url.search}`);
-    }
-
-    function closeViewer() {
-        const dialog = $(".story-viewer");
-        if (dialog.open) dialog.close();
-        else clearStoryURL();
-    }
-
-    function clearStoryURL() {
-        const url = new URL(location.href);
-        if (url.searchParams.has("story")) {
+        if (index < 0) {
+            const url = new URL(location.href);
             url.searchParams.delete("story");
-            history.replaceState(history.state, "", `${url.pathname}${url.search}`);
+            url.searchParams.delete("viewers");
+            history.replaceState(history.state, "", `${url.pathname}${url.search}${url.hash}`);
+            return showToast?.("That Story is unavailable or has expired.");
         }
-    }
-
-    async function next() {
-        if (itemIndex + 1 < (currentAuthor()?.items?.length || 0)) itemIndex += 1;
-        else if (authorIndex + 1 < authors.length) { authorIndex += 1; itemIndex = 0; }
-        else return closeViewer();
-        updateStoryURL();
-        await showCurrent();
-    }
-
-    async function previous() {
-        if (itemIndex > 0) itemIndex -= 1;
-        else if (authorIndex > 0) { authorIndex -= 1; itemIndex = Math.max(0, (currentAuthor()?.items?.length || 1) - 1); }
-        else return;
-        updateStoryURL();
-        await showCurrent();
+        const itemIndex = authors[index].items.findIndex((item) => String(item.id) === String(storyId));
+        if (viewers) {
+            // Handled once: a reload or refresh must not reopen the list.
+            const url = new URL(location.href);
+            url.searchParams.delete("viewers");
+            history.replaceState(history.state, "", `${url.pathname}${url.search}${url.hash}`);
+        }
+        await openViewer(index, itemIndex, { viewers });
     }
 
     function openStoryComposer() {
@@ -471,6 +345,7 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, es
         storyUploadRequestId = null;
         storyPublishRequestId = null;
         $(".story-file-input").value = "";
+        $(".story-camera-input").value = "";
         $(".story-caption").value = "";
         $(".story-overlay").value = "";
         $(".story-composer-preview").innerHTML = `<span aria-hidden="true">${uiIcon("plus")}</span><p>Choose a photo or an MP4 video.</p>`;
@@ -481,208 +356,12 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, es
         $(".story-publish").disabled = true;
     }
 
-    function deliveryIntent(storyId, recipientId, context) {
-        const key = `${storyId}:${recipientId}:${context}`;
-        if (!storyDeliveryIntents.has(key)) {
-            if (storyDeliveryIntents.size >= 30) storyDeliveryIntents.delete(storyDeliveryIntents.keys().next().value);
-            storyDeliveryIntents.set(key, { createRequestId: crypto.randomUUID(), sendRequestId: crypto.randomUUID() });
-        }
-        return { key, ...storyDeliveryIntents.get(key) };
-    }
-
-    async function deliverStory({ storyId, recipientId, context, body = null }) {
-        const intent = deliveryIntent(storyId, recipientId, context);
-        const created = await api.createChat(getUser().id, [recipientId], null, intent.createRequestId);
-        const chatId = created.chat?.id || created.id;
-        if (!chatId) throw new Error("Could not open a chat for this Story.");
-        const message = await api.sendChatMessage(getUser().id, chatId, {
-            body: body?.trim() || null,
-            story_id: storyId,
-            story_share_context: context,
-            client_request_id: intent.sendRequestId,
-        });
-        storyDeliveryIntents.delete(intent.key);
-        return { chat: created.chat || created, message };
-    }
-
-    async function sendStoryReply(event) {
-        event.preventDefault();
-        const author = currentAuthor();
-        const item = currentItem();
-        const input = $(".story-reply input");
-        const body = input.value.trim();
-        if (!author || !item || author.is_owner || !body) return;
-        const button = $(".story-reply button");
-        button.disabled = true;
-        button.textContent = "Sending…";
-        try {
-            const outcome = await deliverStory({ storyId: item.id, recipientId: author.user_id, context: "reply", body });
-            input.value = "";
-            showToast?.(Number(outcome.chat.pending_count || 0) > 0 ? "Reply sent · chat approval pending" : "Reply sent");
-        } catch (error) {
-            showToast?.(`${error.message || "Could not send your reply."} Tap Send to retry safely.`);
-        } finally {
-            button.disabled = false;
-            button.textContent = "Send";
-        }
-    }
-
-    async function openStoryShare() {
-        const author = currentAuthor();
-        if (!author || !currentItem()) return;
-        const dialog = $(".story-share-sheet");
-        shareSelected.clear();
-        $(".story-share-search").value = "";
-        $(".story-share-status").textContent = "Finding classmates…";
-        $(".story-share-people").innerHTML = "";
-        $(".story-share-send").disabled = true;
-        dialog.showModal();
-        try {
-            const result = await api.getClassmates(getUser().id, "", 500);
-            sharePeople = (Array.isArray(result) ? result : result.items || result.classmates || [])
-                .filter((person) => String(person.user_id || person.id) !== String(getUser().id)
-                    && String(person.user_id || person.id) !== String(author.user_id))
-                .slice(0, 500);
-            $(".story-share-status").textContent = author.is_owner
-                ? "Choose up to 10 classmates. Registered contacts remain available in iOS."
-                : "Someone else's Story stays inside their school.";
-            renderSharePeople();
-        } catch (error) {
-            $(".story-share-status").textContent = error.message || "Could not load classmates.";
-        }
-    }
-
-    function renderSharePeople() {
-        const query = $(".story-share-search").value.trim().toLowerCase();
-        $(".story-share-people").innerHTML = sharePeople.filter((person) => {
-            const text = `${displayName(person)} ${person.username || ""} ${person.school_name || ""}`.toLowerCase();
-            return !query || text.includes(query);
-        }).map((person) => {
-            const id = String(person.user_id || person.id);
-            return `<label><input type="checkbox" value="${escapeHTML(id)}" ${shareSelected.has(id) ? "checked" : ""}> <span><strong>${escapeHTML(displayName(person))}</strong><small>${escapeHTML(person.username ? `@${person.username}` : person.school_name || "Classmate")}</small></span></label>`;
-        }).join("") || `<p>No classmates found.</p>`;
-        updateShareSelection();
-    }
-
-    function updateShareSelection(event) {
-        if (event?.target?.matches("input")) {
-            if (event.target.checked && shareSelected.size >= 10) {
-                event.target.checked = false;
-                showToast?.("Choose up to 10 people at a time.");
-            } else if (event.target.checked) shareSelected.add(event.target.value);
-            else shareSelected.delete(event.target.value);
-        }
-        $(".story-share-send").disabled = !shareSelected.size;
-    }
-
-    async function sendSharedStory(event) {
-        event.preventDefault();
-        const item = currentItem();
-        const recipients = [...shareSelected].slice(0, 10);
-        if (!item || !recipients.length) return;
-        const button = $(".story-share-send");
-        button.disabled = true;
-        button.textContent = "Sending…";
-        let sent = 0;
-        try {
-            for (const recipientId of recipients) {
-                await deliverStory({ storyId: item.id, recipientId, context: "share" });
-                sent += 1;
-                shareSelected.delete(recipientId);
-                const input = [...$(".story-share-people").querySelectorAll("input")].find((candidate) => candidate.value === recipientId);
-                if (input) { input.checked = false; input.disabled = true; }
-            }
-            $(".story-share-sheet").close();
-            showToast?.(sent === 1 ? "Story sent" : `Story sent to ${sent} people`);
-        } catch (error) {
-            $(".story-share-status").textContent = `${error.message || "Could not send that Story."} ${sent ? `${sent} already sent. ` : ""}Keep the remaining people selected and retry.`;
-        } finally {
-            button.disabled = false;
-            button.textContent = "Send Story";
-        }
-    }
-
-    async function showViewers() {
-        const item = currentItem();
-        if (!item || !currentAuthor()?.is_owner) return;
-        const dialog = $(".story-viewers-sheet");
-        dialog.querySelector("div").innerHTML = `<p>Loading…</p>`;
-        viewerCursor = null;
-        viewerRows = [];
-        dialog.showModal();
-        await loadMoreViewers();
-    }
-
-    function renderViewers() {
-        const container = $(".story-viewers-sheet div");
-        const rows = viewerRows.map((viewer) => {
-            const captures = [Number(viewer.screenshot_count || 0) ? `${Number(viewer.screenshot_count)} screenshot${Number(viewer.screenshot_count) === 1 ? "" : "s"}` : "", Number(viewer.screen_capture_count || 0) ? `${Number(viewer.screen_capture_count)} screen recording${Number(viewer.screen_capture_count) === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ");
-            return `<article><strong>${escapeHTML(displayName(viewer))}</strong><small>${escapeHTML(new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(viewer.viewed_at)))}</small>${captures ? `<span>${escapeHTML(captures)}</span>` : ""}</article>`;
-        }).join("");
-        const more = viewerCursor && viewerRows.length < MAX_STORY_VIEWERS
-            ? `<button type="button" data-more-story-viewers>Load more viewers</button>`
-            : "";
-        container.innerHTML = rows || `<p>No views yet.</p>`;
-        container.insertAdjacentHTML("beforeend", more);
-    }
-
-    async function loadMoreViewers() {
-        const item = currentItem();
-        if (!item || !currentAuthor()?.is_owner || viewerRows.length >= MAX_STORY_VIEWERS) return;
-        const button = $("[data-more-story-viewers]");
-        if (button) button.disabled = true;
-        try {
-            const result = await api.getStoryViewers(getUser().id, item.id, { cursor: viewerCursor, limit: 50 });
-            const seen = new Set(viewerRows.map((viewer) => String(viewer.user_id)));
-            viewerRows.push(...(result.viewers || []).filter((viewer) => !seen.has(String(viewer.user_id))));
-            viewerRows = viewerRows.slice(0, MAX_STORY_VIEWERS);
-            viewerCursor = result.next_cursor || null;
-            renderViewers();
-        } catch (error) {
-            $(".story-viewers-sheet div").insertAdjacentHTML("beforeend", `<p>${escapeHTML(error.message || "Could not load viewers.")}</p>`);
-        }
-    }
-
-    async function deleteCurrent() {
-        const item = currentItem();
-        if (!item || !currentAuthor()?.is_owner || !confirm("Delete this Story?")) return;
-        try {
-            await api.deleteStory(getUser().id, item.id);
-            closeViewer();
-            await activate({ force: true });
-            showToast?.("Story deleted");
-        } catch (error) { showToast?.(error.message || "Could not delete this Story."); }
-    }
-
-    async function reportCurrent() {
-        const item = currentItem();
-        if (!item || currentAuthor()?.is_owner) return;
-        const reason = prompt("Tell us why you're reporting this Story:");
-        if (!reason?.trim()) return;
-        try {
-            await api.reportStory(getUser().id, item.id, reason);
-            closeViewer();
-            await activate({ force: true });
-            showToast?.("Story reported");
-        } catch (error) { showToast?.(error.message || "Could not report this Story."); }
-    }
-
     function handleClick(event) {
         const target = event.target.closest("button");
         if (!target) return;
         if (target.matches("[data-create-story]")) return openStoryComposer();
         if (target.matches("[data-close-story-composer]")) return $(".story-composer").close();
-        if (target.matches("[data-share-story]")) return void openStoryShare();
-        if (target.matches("[data-close-story-share]")) return $(".story-share-sheet").close();
-        if (target.dataset.storyAuthor !== undefined) return openAuthor(target.dataset.storyAuthor);
-        if (target.matches("[data-close-story]")) return closeViewer();
-        if (target.matches("[data-next-story]")) return void next();
-        if (target.matches("[data-previous-story]")) return void previous();
-        if (target.matches("[data-story-viewers]")) return void showViewers();
-        if (target.matches("[data-more-story-viewers]")) return void loadMoreViewers();
-        if (target.matches("[data-close-story-viewers]")) return $(".story-viewers-sheet").close();
-        if (target.matches("[data-delete-story]")) return void deleteCurrent();
-        if (target.matches("[data-report-story]")) return void reportCurrent();
+        if (target.dataset.storyAuthor !== undefined) return void openViewer(Number(target.dataset.storyAuthor));
     }
 
     return { activate, refresh: () => activate({ force: true }) };
