@@ -77,7 +77,7 @@ function safeHex(value, fallback) {
     return /^#[0-9a-f]{6}$/i.test(text) ? text.toUpperCase() : fallback;
 }
 
-function normalizeFeaturedEffect(row) {
+export function normalizeFeaturedEffect(row) {
     const recipe = row?.recipe;
     const schemaVersion = Number(recipe?.schema_version);
     if (!row?.id || !recipe || recipe.render_mode !== "live_recipe"
@@ -130,7 +130,11 @@ export function drawImageWithCameraEffect(context, image, width, height, effect 
     if ("filter" in context) context.filter = cameraEffectFilter(effect);
     context.drawImage(image, 0, 0, normalizedWidth, normalizedHeight);
     context.restore();
+    paintCameraEffectOverlays(context, normalizedWidth, normalizedHeight, effect);
+}
 
+// The wash and vignette of an effect, drawn over pixels that are already graded.
+export function paintCameraEffectOverlays(context, normalizedWidth, normalizedHeight, effect = ORIGINAL_EFFECT) {
     const washOpacity = boundedNumber(effect.washOpacity, 0, 0, 0.45);
     if (washOpacity > 0) {
         context.save();

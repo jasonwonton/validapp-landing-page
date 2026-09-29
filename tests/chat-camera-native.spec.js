@@ -31,7 +31,7 @@ test('chat camera opens immediately, single shutter reviews, retakes and sends o
     await expect(dialog.locator('.chat-media-publish')).toBeEnabled();
     expect(await page.evaluate(() => chatCameraStreams.length)).toBe(1);
     expect(await page.evaluate(() => chatCameraStreams.every(s => s.getTracks().every(t => t.readyState === 'ended')))).toBe(true);
-    await expect(dialog.getByLabel('Text overlay')).toBeHidden();
+    await expect(dialog.getByRole('textbox', { name: 'Caption' })).toHaveCount(0);
     expect(fileChoosers).toBe(0);
     await dialog.locator('[data-retake-chat-photo]').click();
     await expect(shutter).toBeEnabled();
@@ -55,7 +55,8 @@ test('camera denial keeps an explicit library fallback and clean review', async 
     await expect(dialog.locator('.chat-media-publish')).toBeEnabled();
     await expect(dialog.locator('.live-camera')).toBeHidden();
     await expect(dialog.locator('.chat-media-file-input')).toBeHidden();
-    await expect(dialog.locator('.chat-media-edit-options')).not.toHaveAttribute('open', '');
+    await expect(dialog.locator('.chat-media-edit-options')).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: 'Add caption' })).toBeVisible();
     await dialog.locator('[data-close-chat-media]:visible').click();
     await expect(dialog).toBeHidden();
 });
@@ -89,7 +90,7 @@ for (const theme of ['light', 'dark']) test(`${theme}: profile and native chat c
     await page.getByRole('button', { name: 'Profile', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Add bio' })).toBeVisible();
     await expect(page.locator('.profile-bio-button')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-    await expect(page.locator('.profile-streak .ui-icon')).toHaveCSS('color', 'rgb(255, 149, 0)');
+    await expect(page.locator('.profile-streak .ui-icon')).toHaveCSS('color', theme === 'dark' ? 'rgb(255, 168, 82)' : 'rgb(255, 149, 0)');
     const plus = await page.locator('.profile-add-bio-icon').evaluate(el => ({ ink: getComputedStyle(el).color, background: getComputedStyle(el).backgroundColor }));
     expect(plus.ink).not.toBe(plus.background);
     for (const id of ['hapticsToggle', 'testHaptics', 'hapticsStatus']) await expect(page.locator(`#${id}`)).toBeHidden();

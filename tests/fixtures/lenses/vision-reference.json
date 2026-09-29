@@ -1,0 +1,39 @@
+{
+ "note": "macOS Vision VNDetectFaceLandmarksRequest on the fixture photos (swift scripts/lenses/vision-reference.swift solo.jpg group.jpg). Normalized, top-left origin; box is [x, y, width, height]; points are landmark-region centroids.",
+ "solo": {
+  "width": 720,
+  "height": 960,
+  "faces": [
+   {
+    "box": [0.2919, 0.3711, 0.4811, 0.3608],
+    "leftEye": [0.4283, 0.4724],
+    "rightEye": [0.6216, 0.4728],
+    "nose": [0.5274, 0.545],
+    "mouth": [0.5282, 0.6205],
+    "innerLipRatio": 0.05642247525366287
+   }
+  ]
+ },
+ "group": {
+  "width": 720,
+  "height": 960,
+  "faces": [
+   {
+    "box": [0.1105, 0.463, 0.2506, 0.188],
+    "leftEye": [0.1807, 0.5217],
+    "rightEye": [0.288, 0.5188],
+    "nose": [0.236, 0.5681],
+    "mouth": [0.2376, 0.6074],
+    "innerLipRatio": 0.07504189971200004
+   },
+   {
+    "box": [0.6364, 0.4285, 0.2625, 0.1969],
+    "leftEye": [0.7105, 0.4847],
+    "rightEye": [0.8198, 0.4853],
+    "nose": [0.7663, 0.5259],
+    "mouth": [0.7658, 0.5679],
+    "innerLipRatio": 0.06860972678161133
+   }
+  ]
+ }
+}

@@ -55,8 +55,8 @@ assert.doesNotMatch(appJS, /function pendingTbhRows\(/, "Feed row construction m
 assert.doesNotMatch(appJS, /list\.innerHTML = rows\s*\n?\s*\.sort/, "The feed must not rebuild every row with innerHTML");
 assert.match(styles, /#feedList > \[data-list-key\] \{ content-visibility: auto;/, "Offscreen feed rows must skip rendering work");
 assert.match(appJS, /activateRoute\(panel, context\)/, "Panel activation must use route modules");
-assert.match(appJS, /feedItemsStore\.apply\(event\);/, "Feed must accept batched realtime events");
-assert.match(appJS, /feedRealtimeRenderFrame = requestAnimationFrame/, "Realtime feed rendering must batch to one frame");
+assert.match(appJS, /feedItemsStore\.replace\(items, \{ flush: "sync" \}\)/, "Feed refreshes must go through the keyed realtime store");
+assert.match(appJS, /refreshFeedIfStale\(FEED_FOREGROUND_REFRESH_MS\)/, "The Feed must refresh itself in place when it returns to the foreground");
 assert.match(commentsRoute, /const MAX_ROOTS = 100;/, "Comment root DOM state must remain bounded");
 assert.match(commentsRoute, /const MAX_REPLIES_PER_ROOT = 100;/, "Comment reply DOM state must remain bounded");
 assert.match(commentsRoute, /const MAX_REACTORS = 100;/, "Comment reactor DOM state must remain bounded");
@@ -75,7 +75,12 @@ for (const entry of shellEntries) {
         ? gzipSync(body, { level: 9 }).length
         : body.length;
 }
-assert.ok(shellTransferEstimate <= 750_000, `Estimated app-shell transfer exceeds 750 KB (${shellTransferEstimate} bytes)`);
+// 754 KB: chat parity (thumbhash placeholders, shared event stream, call listener,
+// day separators, dialogs) after moving calls, gestures, voice and report UI on demand.
+// 785 KB: the camera, review editor and photo pipeline stay precached so a chat
+// photo can still be drafted offline and queued (core-flows offline journey).
+// Precache downloads after first paint; it does not delay the first screen.
+assert.ok(shellTransferEstimate <= 785_000, `Estimated app-shell transfer exceeds 785 KB (${shellTransferEstimate} bytes)`);
 
 console.log(JSON.stringify({
     fontBytes,

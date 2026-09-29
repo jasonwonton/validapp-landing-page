@@ -91,11 +91,12 @@ test('anonymous author identity remains hidden until a confirmed reveal succeeds
     const author = page.locator('.poll-submitter-row');
     await expect(author).toContainText('Someone at your school');
     await expect(author).not.toContainText('Maya Chen');
-    page.once('dialog', dialog => dialog.dismiss());
     await author.click();
+    await page.locator('.ui-sheet').getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.locator('.ui-sheet')).toHaveCount(0);
     await expect(author).toContainText('Someone at your school');
-    page.once('dialog', dialog => dialog.accept());
     await author.click();
+    await page.locator('.ui-sheet .ui-sheet-confirm').click();
     await expect(author).toContainText('Maya Chen');
 });
 

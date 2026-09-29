@@ -47,3 +47,11 @@
 @media (prefers-reduced-motion: reduce) { .comment-row.highlighted { animation: none; outline: 2px solid var(--comments-primary); } }
 :root[data-theme="dark"] .comments-screen { --comments-surface: #0b2528; --comments-raised: #12363a; --comments-text: #f5ffff; --comments-muted: #b8d2d3; --comments-quiet: #8eaaac; --comments-border: rgba(218, 255, 252, .17); --comments-primary: #74e2dc; --comments-danger: #ff8b82; }
 :root[data-theme="dark"] .comment-composer { background: color-mix(in srgb, var(--comments-surface) 94%, transparent); }
+/* PollCommentsView: spinner while loading; every action answers to 44px. */
+.comments-loading { display: grid; justify-items: center; gap: 10px; }
+.comments-spinner { width: 28px; height: 28px; border: 3px solid var(--comments-border); border-top-color: var(--comments-primary); border-radius: 50%; animation: play-gear-spin .8s linear infinite; }
+.comment-pending { opacity: .6; }
+.comment-actions > button, .comment-load-replies { min-height: 44px; }
+.comment-actions { gap: 0 16px; }
+.comment-reaction-picker button { width: 44px; height: 44px; border-radius: 22px; }
+.comment-reply-context button { min-height: 44px; min-width: 44px; }

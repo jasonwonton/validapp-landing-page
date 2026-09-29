@@ -86,7 +86,8 @@ const chatRuntime = await readFile(new URL("../app/chat/index.js", import.meta.u
 const appRuntime = await readFile(new URL("../app/app.js", import.meta.url), "utf8");
 const callRuntime = await readFile(new URL("../app/calls/index.js", import.meta.url), "utf8");
 const serviceWorker = await readFile(new URL("../app/service-worker.js", import.meta.url), "utf8");
-assert.match(chatRuntime, /addEventListener\("chat", consumeEvent\)/, "Chat SSE must consume the backend's named event stream");
+const realtimeRuntime = await readFile(new URL("../app/chat/realtime.js", import.meta.url), "utf8");
+assert.match(realtimeRuntime, /addEventListener\("chat", consume\)/, "Chat SSE must consume the backend's named event stream");
 assert.match(chatRuntime, /\["resync", "ready", "message_updated", "message_deleted", "chat_history_changed"\]\.includes\(event\.type\)/, "Reconnects and moderation hints must repair mutations with an authoritative resync");
 assert.match(appRuntime, /config\.enable_chats === true && config\.enable_web_chats === true/, "PWA Chats must require its independent web rollout flag");
 assert.match(chatRuntime, /enable_web_mementos === true/, "PWA Mementos must require its independent web rollout flag");

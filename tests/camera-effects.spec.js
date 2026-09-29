@@ -27,33 +27,48 @@ async function previewDigest(locator) {
     });
 }
 
-test("chat photos have no filters or filter catalog requests, while text overlays still work", async ({ page }) => {
+test("chat photo review loads the Featured catalog once and leaves the photo untouched until a filter is swiped", async ({ page }) => {
     const catalogRequests = [];
     page.on('request', request => { if (request.url().includes('camera-filters')) catalogRequests.push(request.url()); });
     await signInToDemo(page);
+    await page.evaluate(async () => {
+        const { DemoAPI } = await import('/app/demo-api.js');
+        const original = DemoAPI.prototype.getFeaturedCameraFilters;
+        window.catalogLoads = 0;
+        DemoAPI.prototype.getFeaturedCameraFilters = function () { window.catalogLoads++; return original.call(this); };
+    });
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
     await page.getByRole("button", { name: "Send photo or video" }).click();
     const dialog = page.getByRole("dialog", { name: "Send media" });
     await dialog.locator(".chat-media-file-input").setInputFiles("assets/AppIconV2.png");
-    await dialog.getByRole('button', { name: 'Add text', exact: true }).click();
-    const effects = dialog.getByRole("group", { name: "Photo effect" });
-    await expect(effects).toHaveCount(0);
-
-    const preview = dialog.getByRole("img", { name: "Photo preview" });
-    const original = await previewDigest(preview);
-    await dialog.getByRole("textbox", { name: "Text overlay" }).fill("Keep my position");
-    const overlay = dialog.locator("[data-media-overlay-position]");
-    await overlay.press("Shift+ArrowRight");
-    await expect(overlay).toHaveAccessibleName(/60% from left, 50% from top/);
     await expect(dialog.locator('.chat-media-publish')).toBeEnabled();
-    await expect(dialog.getByRole("textbox", { name: "Text overlay" })).toHaveValue("Keep my position");
-    await expect(overlay).toHaveAccessibleName(/60% from left, 50% from top/);
-    expect(await previewDigest(preview)).toEqual(original);
+    await expect(dialog.getByRole("group", { name: "Photo effect" })).toHaveCount(0);
+    const preview = dialog.getByRole("img", { name: "Photo preview" });
+    const original = await canvasDigest(preview);
+    await dialog.getByRole('button', { name: 'Add caption', exact: true }).click();
+    await dialog.getByRole("textbox", { name: "Caption" }).fill("Keep my caption");
+    await dialog.getByRole("textbox", { name: "Caption" }).press("Enter");
+    expect(await canvasDigest(preview)).toEqual(original);
+    await dialog.locator(".chat-media-file-input").setInputFiles("assets/AppIconV2.png");
+    await expect(dialog.locator('.chat-media-publish')).toBeEnabled();
+    expect(await page.evaluate(() => window.catalogLoads)).toBe(1);
     expect(catalogRequests).toEqual([]);
     await dialog.getByRole("button", { name: "Send", exact: true }).click();
     await expect(page.getByText("Photo sent", { exact: true })).toBeVisible();
 });
+
+async function canvasDigest(locator) {
+    return locator.evaluate((node) => {
+        const pixels = node.getContext("2d").getImageData(0, 0, node.width, node.height).data;
+        let digest = 2166136261;
+        for (let index = 0; index < pixels.length; index += 4) {
+            digest ^= pixels[index] | (pixels[index + 1] << 8) | (pixels[index + 2] << 16);
+            digest = Math.imul(digest, 16777619);
+        }
+        return String(digest >>> 0);
+    });
+}
 
 test("a single-view Memento remains a safe fallback and preserves the authoritative publish flow", async ({ page }) => {
     await signInToDemo(page);

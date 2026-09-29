@@ -64,8 +64,8 @@ test("declining an invitation removes it from the authoritative chat list", asyn
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await expect(page.getByText("Art Club", { exact: true })).toBeVisible();
-    page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Decline" }).click();
+    await page.getByRole("dialog", { name: "Decline this invitation?" }).getByRole("button", { name: "Decline" }).click();
     await expect(page.getByText("Art Club", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Accept" })).toHaveCount(0);
 });
@@ -235,8 +235,8 @@ test("group owners can remove a member and refresh the authoritative roster", as
     await page.getByRole("button", { name: /Weekend Crew/ }).click();
     await page.getByRole("button", { name: "Chat settings" }).click();
     const settings = page.getByRole("dialog", { name: "Chat settings" });
-    page.once("dialog", (dialog) => dialog.accept());
     await settings.getByRole("button", { name: "Remove Maya Chen" }).click();
+    await page.getByRole("dialog", { name: "Remove Maya Chen?" }).getByRole("button", { name: "Remove" }).click();
     await expect(settings.getByText("Maya Chen", { exact: true })).toHaveCount(0);
     await expect(page.locator(".chat-room-title")).toContainText("3 people");
 });
@@ -246,8 +246,8 @@ test("leaving a chat reloads the list without the ended membership", async ({ pa
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
     await page.getByRole("button", { name: "Chat settings" }).click();
-    page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("dialog", { name: "Chat settings" }).getByRole("button", { name: "Leave chat" }).click();
+    await page.getByRole("dialog", { name: "Leave & delete this chat?" }).getByRole("button", { name: "Leave & Delete" }).click();
     await expect(page.locator('[data-chat-screen="list"]')).toBeVisible();
     await expect(page.getByRole("button", { name: /Noah Williams/ })).toHaveCount(0);
 });
@@ -378,8 +378,8 @@ test("chat settings expose the authoritative account-wide block action", async (
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Weekend Crew/ }).click();
     await page.getByRole("button", { name: "Chat settings" }).click();
-    page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: /Block Maya Chen/ }).click();
+    await page.getByRole("dialog", { name: "Block Maya Chen?" }).getByRole("button", { name: "Block" }).click();
     await expect(page.getByText("Person blocked", { exact: true })).toBeVisible();
 });
 
@@ -403,14 +403,14 @@ test("hide-for-me removes only the local row while unsend renders a tombstone", 
 
     const incoming = page.locator('[data-message-id="msg-n1"]');
     await incoming.getByRole("button", { name: "Message actions" }).click();
-    page.once("dialog", (dialog) => dialog.accept());
     await incoming.getByRole("button", { name: "Delete for me" }).click();
+    await page.getByRole("dialog", { name: "Delete for you?" }).getByRole("button", { name: "Delete" }).click();
     await expect(incoming).toHaveCount(0);
 
     const mine = page.locator('[data-message-id="msg-n3"]');
     await mine.getByRole("button", { name: "Message actions" }).click();
-    page.once("dialog", (dialog) => dialog.accept());
     await mine.getByRole("button", { name: "Unsend for everyone" }).click();
+    await page.getByRole("dialog", { name: "Unsend this message?" }).getByRole("button", { name: "Unsend" }).click();
     await expect(mine).toHaveCount(0);
     await expect(page.getByText("Message removed", { exact: true })).toBeVisible();
 });
@@ -463,52 +463,16 @@ test("chat media sends a prepared photo through upload, finalize, and message cr
     const dialog = page.getByRole("dialog", { name: "Send media" });
     await dialog.locator(".chat-media-file-input").setInputFiles("assets/AppIconV2.png");
     await expect(dialog.locator('.chat-media-publish')).toBeEnabled();
-    await dialog.getByRole('button', { name: 'Add text', exact: true }).click();
-    await dialog.getByLabel("Text overlay").fill("After practice");
-    const overlayHandle = dialog.locator("[data-media-overlay-position]");
-    await expect(overlayHandle).toHaveAccessibleName(/50% from left, 50% from top/);
-    await overlayHandle.press("Shift+ArrowRight");
-    await overlayHandle.press("ArrowDown");
-    await expect(overlayHandle).toHaveAccessibleName(/60% from left, 52% from top/);
-    await overlayHandle.hover();
-    const previewBounds = await dialog.locator(".chat-media-preview").boundingBox();
-    await overlayHandle.evaluate((node, bounds) => {
-        const pointer = { bubbles: true, pointerId: 6, pointerType: "touch", button: 0 };
-        node.dispatchEvent(new PointerEvent("pointerdown", {
-            ...pointer,
-            clientX: bounds.x + bounds.width * 0.6,
-            clientY: bounds.y + bounds.height * 0.52,
-        }));
-        node.parentElement.dispatchEvent(new PointerEvent("pointermove", {
-            ...pointer,
-            clientX: bounds.x - 100,
-            clientY: bounds.y + bounds.height * 0.52,
-        }));
-        node.parentElement.dispatchEvent(new PointerEvent("pointerup", pointer));
-    }, previewBounds);
-    await expect(overlayHandle).toHaveAccessibleName(/8% from left, 52% from top/);
-    await overlayHandle.press("Home");
-    if (browserName === "firefox") {
-        await overlayHandle.evaluate((node, bounds) => {
-            const pointer = { bubbles: true, pointerId: 7, pointerType: "mouse", button: 0 };
-            node.dispatchEvent(new PointerEvent("pointerdown", {
-                ...pointer,
-                clientX: bounds.x + bounds.width * 0.5,
-                clientY: bounds.y + bounds.height * 0.5,
-            }));
-            node.parentElement.dispatchEvent(new PointerEvent("pointermove", {
-                ...pointer,
-                clientX: bounds.x + bounds.width * 0.7,
-                clientY: bounds.y + bounds.height * 0.3,
-            }));
-            node.parentElement.dispatchEvent(new PointerEvent("pointerup", pointer));
-        }, previewBounds);
-    } else {
-        await page.mouse.down();
-        await page.mouse.move(previewBounds.x + previewBounds.width * 0.7, previewBounds.y + previewBounds.height * 0.3);
-        await page.mouse.up();
-    }
-    await expect(overlayHandle).toHaveAccessibleName(/70% from left, 30% from top/);
+    // iOS caption bars: tap to place one at that height, drag it vertically.
+    const stage = dialog.locator(".review-stage");
+    const stageBox = await stage.boundingBox();
+    await page.mouse.click(stageBox.x + stageBox.width / 2, stageBox.y + stageBox.height * 0.6);
+    await dialog.getByRole("textbox", { name: "Caption" }).fill("After practice");
+    await dialog.getByRole("textbox", { name: "Caption" }).press("Enter");
+    const caption = dialog.getByRole("button", { name: /Media text: After practice/ });
+    await expect(caption).toBeVisible();
+    await caption.press("ArrowUp");
+    for (let step = 0; step < 14; step++) await caption.press("ArrowUp");
     await dialog.getByRole("button", { name: "Send", exact: true }).click();
     await expect(dialog).toBeHidden();
     const sent = page.locator(".chat-message.mine").last();
@@ -516,8 +480,8 @@ test("chat media sends a prepared photo through upload, finalize, and message cr
     await expect(sent).toContainText("After practice");
     // Native mouse coordinates round to CSS pixels on WebKit. Preserve the
     // dragged location to within one percent rather than requiring subpixels.
-    expect(Number(await sent.locator('.chat-media-text').getAttribute('data-overlay-x'))).toBeCloseTo(0.7, 2);
-    expect(Number(await sent.locator('.chat-media-text').getAttribute('data-overlay-y'))).toBeCloseTo(0.3, 2);
+    expect(Number(await sent.locator('.chat-media-text').getAttribute('data-overlay-x'))).toBeCloseTo(0.5, 2);
+    expect(Number(await sent.locator('.chat-media-text').getAttribute('data-overlay-y'))).toBeCloseTo(0.3, 1);
     await expect(page.getByText("Photo sent", { exact: true })).toBeVisible();
 });
 

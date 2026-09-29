@@ -34,37 +34,6 @@ test("poll reactions can be set, changed, removed, and inspected", async ({ page
     await expect(poll).toHaveAttribute("data-identity-probe", "preserved");
 });
 
-test("batched realtime feed events insert, update, and remove stable rows", async ({ page }) => {
-    await signIn(page);
-    const liveItem = {
-        question_answer_id: "live-poll-1",
-        question_text: "Who brings the best energy?",
-        timestamp: "2026-08-27T16:00:00Z",
-        voted_for_name: "Maya Chen",
-        selected_contact_name: "Maya Chen",
-        reaction_count: 0,
-        reaction_summary: {},
-        can_react: true,
-    };
-    await page.evaluate((item) => {
-        dispatchEvent(new CustomEvent("valid:feed-update", { detail: { type: "upsert", item } }));
-        dispatchEvent(new CustomEvent("valid:feed-update", { detail: { type: "upsert", item: { ...item, question_text: "Who brings great energy every day?" } } }));
-    }, liveItem);
-
-    const row = page.locator("[data-feed-detail='live-poll-1']");
-    await expect(row).toContainText("Who brings great energy every day?");
-    await row.evaluate((element) => { element.dataset.realtimeIdentity = "preserved"; });
-    await page.evaluate(() => dispatchEvent(new CustomEvent("valid:feed-update", {
-        detail: { type: "upsert", item: { question_answer_id: "live-poll-1" } },
-    })));
-    await expect(row).toHaveAttribute("data-realtime-identity", "preserved");
-
-    await page.evaluate(() => dispatchEvent(new CustomEvent("valid:feed-update", {
-        detail: { type: "delete", key: "live-poll-1" },
-    })));
-    await expect(row).toHaveCount(0);
-});
-
 test("Settings purchases a TBH with an angle and authoritative aura balance", async ({ page }) => {
     await signIn(page);
     await page.getByRole("button", { name: "Profile", exact: true }).click();
@@ -107,7 +76,7 @@ test("Inbox filters match iOS All, Polls, TBHs, and Ask Me sections", async ({ p
     await expect(page.locator("[data-tbh-detail^='received:'], [data-tbh-detail^='sent:']")).toHaveCount(2);
     await expect(page.locator("[data-anonymous-question], [data-anonymous-answer]")).toHaveCount(3);
 
-    await filters.getByRole("button", { name: "Polls", exact: true }).click();
+    await filters.getByRole("button", { name: /^Polls/ }).click();
     await expect(page.locator("#personalInboxDescription")).toHaveText("Votes and nominations you received.");
     await expect(page.locator("[data-feed-detail]")).toHaveCount(2);
     await expect(page.locator("[data-tbh-detail], [data-tbh-request], [data-anonymous-question], [data-anonymous-answer]")).toHaveCount(0);

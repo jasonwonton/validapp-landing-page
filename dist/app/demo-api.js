@@ -732,7 +732,7 @@ export class DemoAPI {
     async setPollCommentReaction(_userId, targetId, commentId, reaction) { return this.mutateDemoCommentReaction("poll", targetId, commentId, reaction); }
     async removePollCommentReaction(_userId, targetId, commentId) { return this.mutateDemoCommentReaction("poll", targetId, commentId, null); }
     async getPollCommentReactors(_userId, targetId, commentId, offset, limit) { return this.getDemoCommentReactors("poll", targetId, commentId, offset, limit); }
-    async reportPollComment(_userId, targetId, commentId) { return this.hideDemoComment("poll", targetId, commentId, "reported_hidden"); }
+    async reportPollComment(_userId, targetId, commentId, reason) { this.lastCommentReportReason = reason; return this.hideDemoComment("poll", targetId, commentId, "reported_hidden"); }
     async deletePollComment(_userId, targetId, commentId) { return this.hideDemoComment("poll", targetId, commentId, "author_deleted"); }
     async listFeedActivityComments(_userId, targetId, before, limit) { return this.listDemoComments("activity", targetId, before, limit); }
     async getFeedActivityComment(_userId, targetId, commentId) { return this.getDemoComment("activity", targetId, commentId); }
@@ -741,7 +741,7 @@ export class DemoAPI {
     async setFeedActivityCommentReaction(_userId, targetId, commentId, reaction) { return this.mutateDemoCommentReaction("activity", targetId, commentId, reaction); }
     async removeFeedActivityCommentReaction(_userId, targetId, commentId) { return this.mutateDemoCommentReaction("activity", targetId, commentId, null); }
     async getFeedActivityCommentReactors(_userId, targetId, commentId, offset, limit) { return this.getDemoCommentReactors("activity", targetId, commentId, offset, limit); }
-    async reportFeedActivityComment(_userId, targetId, commentId) { return this.hideDemoComment("activity", targetId, commentId, "reported_hidden"); }
+    async reportFeedActivityComment(_userId, targetId, commentId, reason) { this.lastCommentReportReason = reason; return this.hideDemoComment("activity", targetId, commentId, "reported_hidden"); }
     async deleteFeedActivityComment(_userId, targetId, commentId) { return this.hideDemoComment("activity", targetId, commentId, "author_deleted"); }
 
     async createFeedShareLink(_userId, type, id) { return { share_url: `https://validapp.lol/${type === 'poll' ? 'poll' : 'tbh'}/demo-${id}` }; }
@@ -808,8 +808,28 @@ export class DemoAPI {
         return { questions: this.questions.map((question) => ({ ...question })) };
     }
 
+    async getActiveBanner() {
+        assertLocalDemo();
+        // ?banner=1 shows an info banner with a link; ?banner=locked a
+        // non-dismissible warning. Otherwise there is none (the API's 404).
+        const variant = new URLSearchParams(window.location.search).get("banner");
+        if (variant === "1") return { id: 7, title: "Spirit Week is here", message: "Vote in Play all week to earn double aura on every answer.", banner_type: "info", action_url: "https://validapp.lol/community-guidelines.html", action_text: "Learn more", priority: 10, created_at: ago(30), dismissible: true, min_app_version: null };
+        if (variant === "locked") return { id: 8, title: "Scheduled maintenance", message: "Valid may be slow tonight from 11 PM to midnight.", banner_type: "warning", action_url: null, action_text: null, priority: 20, created_at: ago(10), dismissible: false, min_app_version: null };
+        return null;
+    }
+    // Media routes without a named method (the ingest) go to the demo media fixtures.
+    async request(path, options = {}) { return (await import("./demo-media.js")).demoMediaRequest(this, path, options); }
+    // Named ingest methods (media-ingest.js prefers them) share the same fixtures.
+    createMediaIngest(userId, payload) { return this.request(`/users/${userId}/media-ingests`, { method: "POST", body: JSON.stringify(payload) }); }
+    finalizeMediaIngest(userId, ingestId) { return this.request(`/users/${userId}/media-ingests/${ingestId}/finalize`, { method: "POST" }); }
+    getMediaIngest(userId, ingestId) { return this.request(`/users/${userId}/media-ingests/${ingestId}`); }
+
     async getConfig() {
-        return {
+        const query = new URLSearchParams(location.search);
+        return this.config = {
+            chat_photo_max_dimension: 2560, chat_photo_jpeg_quality: 0.92, chat_photo_target_bytes: 800_000,
+            chat_photo_preview_max_dimension: 640, chat_photo_preview_jpeg_quality: 0.7,
+            enable_web_media_ingest: ["1", "fail"].includes(query.get("ingest")),
             nomination_aura_cost: 100,
             tbh_request_aura_cost: 100,
             question_submission_aura_cost: 200,
@@ -822,6 +842,7 @@ export class DemoAPI {
             global_visibility_boost_cost: 400,
             targeted_visibility_boost_cost: 200,
             enable_tbh_requests: true,
+            enable_delete_account: true,
             enable_chats: true,
             enable_web_chats: true,
             enable_chat_daily_ledger: true,
@@ -831,6 +852,7 @@ export class DemoAPI {
             enable_calls: this.demoCallsEnabled,
             enable_web_calls: this.demoCallsEnabled,
             enable_web_comments: new URLSearchParams(location.search).get("comments") !== "0",
+            enable_vault: new URLSearchParams(location.search).get("vault") !== "0",
         };
     }
 
@@ -839,10 +861,26 @@ export class DemoAPI {
             { user_id: "demo-user", first_name: "Jules", last_name: "Rivera", username: "jules", profile_picture_url: "../assets/AppIconV2.png", is_owner: true, has_unviewed: false, items: [{ id: "story-jules", media_type: "photo", media_url: "../assets/app/pencil-clipboard.webp", thumbnail_url: null, caption: "Friday energy", text_overlay: "finally ✨", text_overlay_x: 0.5, text_overlay_y: 0.5, published_at: ago(20), expires_at: new Date(Date.now() + 23 * 60 * 60_000).toISOString(), viewer_has_viewed: true, view_count: 2 }] },
             { user_id: "classmate-2", first_name: "Noah", last_name: "Williams", username: "noah", profile_picture_url: "../assets/app/lock.webp", is_owner: false, has_unviewed: true, items: [{ id: "story-noah", media_type: "photo", media_url: "../assets/app/lock.webp", thumbnail_url: null, caption: "Game night", text_overlay: null, text_overlay_x: null, text_overlay_y: null, published_at: ago(5), expires_at: new Date(Date.now() + 23 * 60 * 60_000).toISOString(), viewer_has_viewed: false, view_count: 4 }] },
         ];
+        // `&storyvideo=1` adds browser Story video states (docs/web-media-contract.md).
+        if (new URLSearchParams(location.search).get("storyvideo") === "1" && !this.demoStoryAuthors.some((author) => author.user_id === "classmate-1")) {
+            const expires = new Date(Date.now() + 23 * 60 * 60_000).toISOString();
+            const video = (id, extra) => ({ id, media_type: "video", media_url: "../assets/demo.mp4", thumbnail_url: "../assets/app/aura.webp", video_duration_ms: 2_000, caption: null, text_overlay: null, text_overlay_x: null, text_overlay_y: null, text_overlays: null, published_at: ago(40), expires_at: expires, viewer_has_viewed: false, view_count: 3, ...extra });
+            this.demoStoryAuthors.push({ user_id: "classmate-1", first_name: "Maya", last_name: "Chen", username: "maya_c", profile_picture_url: "../assets/app/anonymous.webp", is_owner: false, has_unviewed: true, items: [
+                video("story-maya-video", { video_state: "ready", text_overlays: [{ text: "pregame 🏀", x: 0.5, y: 0.2 }] }),
+                video("story-maya-processing", { video_state: "processing", media_url: "../assets/demo-original.mov" }),
+                video("story-maya-unavailable", { video_state: "unavailable", media_url: "../assets/app/lock.webp" }),
+            ] });
+        }
         return this.demoStoryAuthors;
     }
 
-    async getStories() { return { authors: structuredClone(this.storyAuthors()), server_time: new Date().toISOString() }; }
+    async getStories() {
+        // A processing Story video finishes on the next feed refresh.
+        this.demoStoryFeedLoads = (this.demoStoryFeedLoads || 0) + 1;
+        const processing = this.storyAuthors().flatMap((author) => author.items).find((item) => item.video_state === "processing");
+        if (processing && this.demoStoryFeedLoads > 1) Object.assign(processing, { video_state: "ready", media_url: "../assets/demo.mp4" });
+        return { authors: structuredClone(this.storyAuthors()), server_time: new Date().toISOString() };
+    }
     async createStoryUpload(_userId, payload) {
         return {
             media_asset_id: `story-media-${payload.clientRequestId}`,
@@ -887,6 +925,8 @@ export class DemoAPI {
     async getStoryViewers(_userId, storyId) { return { story_id: storyId, viewers: [{ user_id: "classmate-2", first_name: "Noah", last_name: "Williams", username: "noah", profile_picture_url: "../assets/app/lock.webp", viewed_at: ago(2), screenshot_count: 1, last_screenshot_at: ago(1), screen_capture_count: 0, last_screen_capture_at: null }], next_cursor: null }; }
     async deleteStory(_userId, storyId) { for (const author of this.storyAuthors()) author.items = author.items.filter((item) => item.id !== storyId); }
     async reportStory(_userId, storyId) { for (const author of this.storyAuthors()) author.items = author.items.filter((item) => item.id !== storyId); return { story_id: storyId, reported: true }; }
+    // Memories and Vault fixtures load on demand (vault/demo.js, vault/api.js).
+    async demoVault(action, ...args) { assertLocalDemo(); const { demoVault } = await import('./vault/demo.js'); return demoVault(this, action, args); }
 
     async updateChatPresence(userId, payload) {
         const enabled = this.demoActivityEnabled ?? (new URLSearchParams(location.search).get('presence') === '1');
@@ -959,8 +999,8 @@ export class DemoAPI {
         const messages = Object.entries(this.chatMessages).flatMap(([chatId, items]) => items.filter((message) => String(message.body || "").toLowerCase().includes(needle)).map((message) => ({ id: message.id, result_type: "message", title: this.chats.find((chat) => chat.id === chatId)?.display_name || "Chat", snippet: message.body, occurred_at: message.created_at, chat_id: chatId, room_sequence: message.room_sequence, source_context: "message" }))).slice(0, limitPerType);
         return { query: String(query).trim(), chats: { items: chats, next_cursor: null }, messages: { items: messages, next_cursor: null } };
     }
-    async sendChatMessage(_userId, chatId, payload) { const messages = this.chatMessages[chatId] || (this.chatMessages[chatId] = []); const prior = messages.find((item) => item.client_request_id === payload.client_request_id); if (prior) return structuredClone(prior); const asset = this.chatMediaAssets[payload.media_asset_id]; const kind = payload.story_id ? "story" : payload.daily_entry_id ? "memento" : payload.sticker_id ? "sticker" : asset?.kind || "text"; const story = payload.story_id ? this.storyAuthors().flatMap((author) => author.items.map((item) => ({ ...item, author }))).find((item) => item.id === payload.story_id) : null; const message = { id: `msg-${Date.now()}`, client_request_id: payload.client_request_id, chat_id: chatId, room_sequence: (messages.at(-1)?.room_sequence || 0) + 1, sender_user_id: "demo-user", sender_first_name: "Jules", kind, body: payload.body || (kind === "memento" ? "Sent a Memento" : null), story_id: payload.story_id || null, story_share_context: payload.story_share_context || null, story_is_available: Boolean(story), story_owner_user_id: story?.author.user_id || null, story_owner_first_name: story?.author.first_name || null, story_owner_username: story?.author.username || null, story_media_type: story?.media_type || null, story_media_url: story?.media_url || null, story_thumbnail_url: story?.thumbnail_url || null, story_video_duration_ms: story?.video_duration_ms || null, story_text_overlay: story?.text_overlay || null, story_text_overlay_x: story?.text_overlay_x || null, story_text_overlay_y: story?.text_overlay_y || null, story_published_at: story?.published_at || null, story_expires_at: story?.expires_at || null, daily_entry_id: payload.daily_entry_id || null, sticker_id: payload.sticker_id || null, sticker_image_url: kind === "sticker" ? "../assets/app/rocket.webp" : null, reply_to_message_id: payload.reply_to_message_id || null, photo_image_url: kind === "photo" && !payload.view_once ? "../assets/AppIconV2.png" : null, video_url: kind === "video" && !payload.view_once ? "../assets/demo.mp4" : null, video_thumbnail_url: kind === "video" && !payload.view_once ? "../assets/AppIconV2.png" : null, audio_url: kind === "audio" ? "../assets/AppIconV2.png" : null, audio_duration_ms: kind === "audio" ? asset?.durationMs || 3_000 : null, view_once: Boolean(payload.view_once), view_once_available: Boolean(payload.view_once), view_once_consumed: false, view_once_remaining_views: payload.view_once ? 2 : 0, view_once_opened_count: 0, view_once_recipient_count: payload.view_once ? 1 : 0, media_text_overlay: payload.media_text_overlay || null, status: "active", viewer_is_sender: true, reaction_count: 0, reaction_summary: {}, current_user_reaction: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }; messages.push(message); const chat = this.chats.find((item) => item.id === chatId); Object.assign(chat, { last_room_sequence: message.room_sequence, last_message_body: message.body, last_message_kind: message.kind, last_message_sender_first_name: "Jules", last_message_is_mine: true, last_message_at: message.created_at, updated_at: message.created_at }); return structuredClone(message); }
-    async createChatMediaUpload(_userId, options) { const id = `chat-media-${Date.now()}`; this.chatMediaAssets[id] = { kind: options.contentType === "video/mp4" ? "video" : options.contentType === "audio/mp4" ? "audio" : "photo", view_once: options.viewOnce, durationMs: options.durationMs }; return { media_asset_id: id, upload_url: "", thumbnail_upload_url: "", upload_method: "PUT", required_headers: {}, thumbnail_required_headers: {}, already_finalized: true, expires_at: new Date(Date.now() + 900_000).toISOString() }; }
+    async sendChatMessage(_userId, chatId, payload) { const messages = this.chatMessages[chatId] || (this.chatMessages[chatId] = []); const prior = messages.find((item) => item.client_request_id === payload.client_request_id); if (prior) return structuredClone(prior); const asset = this.chatMediaAssets[payload.media_asset_id]; const kind = payload.story_id ? "story" : payload.daily_entry_id ? "memento" : payload.sticker_id ? "sticker" : asset?.kind || "text"; const story = payload.story_id ? this.storyAuthors().flatMap((author) => author.items.map((item) => ({ ...item, author }))).find((item) => item.id === payload.story_id) : null; const message = { id: `msg-${Date.now()}`, client_request_id: payload.client_request_id, chat_id: chatId, room_sequence: (messages.at(-1)?.room_sequence || 0) + 1, sender_user_id: "demo-user", sender_first_name: "Jules", kind, body: payload.body || (kind === "memento" ? "Sent a Memento" : null), story_id: payload.story_id || null, story_share_context: payload.story_share_context || null, story_is_available: Boolean(story), story_owner_user_id: story?.author.user_id || null, story_owner_first_name: story?.author.first_name || null, story_owner_username: story?.author.username || null, story_media_type: story?.media_type || null, story_media_url: story?.media_url || null, story_thumbnail_url: story?.thumbnail_url || null, story_video_duration_ms: story?.video_duration_ms || null, story_text_overlay: story?.text_overlay || null, story_text_overlay_x: story?.text_overlay_x || null, story_text_overlay_y: story?.text_overlay_y || null, story_published_at: story?.published_at || null, story_expires_at: story?.expires_at || null, daily_entry_id: payload.daily_entry_id || null, sticker_id: payload.sticker_id || null, sticker_image_url: kind === "sticker" ? "../assets/app/rocket.webp" : null, reply_to_message_id: payload.reply_to_message_id || null, photo_image_url: kind === "photo" && !payload.view_once ? "../assets/AppIconV2.png" : null, photo_thumbnail_url: kind === "photo" && !payload.view_once ? "../assets/AppIconV2.png" : null, video_url: kind === "video" && !payload.view_once ? "../assets/demo.mp4" : null, video_thumbnail_url: kind === "video" && !payload.view_once ? "../assets/AppIconV2.png" : null, audio_url: kind === "audio" ? "../assets/AppIconV2.png" : null, audio_duration_ms: kind === "audio" ? asset?.durationMs || 3_000 : null, view_once: Boolean(payload.view_once), view_once_available: Boolean(payload.view_once), view_once_consumed: false, view_once_remaining_views: payload.view_once ? 2 : 0, view_once_opened_count: 0, view_once_recipient_count: payload.view_once ? 1 : 0, media_text_overlay: payload.media_text_overlay || null, preview_hash: asset?.previewHash || (kind === "photo" && !payload.view_once ? "1QcSHQRnh493V4dIh4eXh1h4kJUI" : null), status: "active", viewer_is_sender: true, reaction_count: 0, reaction_summary: {}, current_user_reaction: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }; messages.push(message); const chat = this.chats.find((item) => item.id === chatId); Object.assign(chat, { last_room_sequence: message.room_sequence, last_message_body: message.body, last_message_kind: message.kind, last_message_sender_first_name: "Jules", last_message_is_mine: true, last_message_at: message.created_at, updated_at: message.created_at }); return structuredClone(message); }
+    async createChatMediaUpload(_userId, options) { const id = `chat-media-${Date.now()}`; (this.chatMediaUploads ||= []).push(structuredClone(options)); this.chatMediaAssets[id] = { kind: options.contentType === "video/mp4" ? "video" : options.contentType === "audio/mp4" ? "audio" : "photo", view_once: options.viewOnce, durationMs: options.durationMs, previewHash: options.previewHash || null }; return { media_asset_id: id, upload_url: "", thumbnail_upload_url: "", upload_method: "PUT", required_headers: {}, thumbnail_required_headers: {}, already_finalized: true, expires_at: new Date(Date.now() + 900_000).toISOString() }; }
     async finalizeChatMediaUpload(_userId, mediaId) { return { media_asset_id: mediaId, state: "ready" }; }
     async beginChatMediaViewSession(_userId, chatId, options) { const message = this.chatMessages[chatId].find((item) => item.id === options.messageId) || this.chatMessages[chatId].find((item) => item.id === this.chatViewSessions[options.replayOfSessionId]?.message_id); if (!message || !message.view_once_available) throw new Error("This view-once message is no longer available."); const sessionId = `view-${Date.now()}`; this.chatViewSessions[sessionId] = { message_id: message.id, started: false }; return { session_id: sessionId, expires_at: new Date(Date.now() + 60_000).toISOString(), message: { ...structuredClone(message), photo_image_url: message.kind === "photo" ? "../assets/AppIconV2.png" : null, video_url: message.kind === "video" ? "../assets/demo.mp4" : null, video_thumbnail_url: message.kind === "video" ? "../assets/AppIconV2.png" : null } }; }
     async startChatMediaViewSession(_userId, chatId, sessionId) { const session = this.chatViewSessions[sessionId]; const message = this.chatMessages[chatId].find((item) => item.id === session.message_id); if (!session.started) { session.started = true; message.view_once_opened_count += 1; message.view_once_remaining_views = Math.max(0, message.view_once_remaining_views - 1); message.view_once_available = message.view_once_remaining_views > 0; } return { session_id: sessionId, started_at: new Date().toISOString(), newly_started: true, message_id: message.id }; }

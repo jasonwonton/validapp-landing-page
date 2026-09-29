@@ -26,7 +26,7 @@ export async function checkPasskeyEnvironment(rpId = RP_ID) {
     }
     const capabilities = await PublicKeyCredential.getClientCapabilities?.().catch(() => null);
     if (capabilities?.relatedOrigins === false) {
-        throw authError('related_origins_unavailable', 'This browser cannot use your Six7 passkey on Valid. Open Valid in updated Chrome or Safari.');
+        throw authError('related_origins_unavailable', 'This browser cannot use your Valid passkey. Open Valid in updated Chrome or Safari.');
     }
 }
 
@@ -159,7 +159,7 @@ export async function passkeySecurityFailure(rpId, stage) {
     } catch (_) {}
     const error = authError('passkey_security',
         sameRP ? 'Your browser could not complete the passkey security check. Open Valid in an updated Chrome or Safari browser and try again.'
-            : 'Your browser could not verify access to your Six7 passkey. Try mobile data or an updated Chrome or Safari browser. Opening the same page again may not resolve this domain check.', stage);
+            : 'Your browser could not verify access to your Valid passkey. Try mobile data or an updated Chrome or Safari browser. Opening the same page again may not resolve this domain check.', stage);
     error.passkeyContext = sameRP ? 'webauthn.same_rp' : `webauthn.related_origin_${related}`;
     return error;
 }

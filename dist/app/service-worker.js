@@ -1,55 +1,72 @@
 const CACHE_PREFIX = "valid-web-";
-const CACHE_NAME = `${CACHE_PREFIX}v105-d52805afe05dbcaf23bb`;
+const CACHE_NAME = `${CACHE_PREFIX}v106-262d738816c7607f397f`;
+// Every module the startup graph imports statically must be listed here, or the
+// installed app cannot start offline; scripts/tests/service-worker-shell.test.mjs
+// walks the import graph and enforces it. Dynamic imports that need the network
+// anyway (the weekly game, LiveKit, the localhost-only demo) stay network-only.
 const APP_SHELL = [
     "./",
-    "/app/_static/d52805afe05dbcaf23bb/styles.css",
-    "/app/_static/d52805afe05dbcaf23bb/preferences.js",
-    "/app/_static/d52805afe05dbcaf23bb/app.js",
-    "/app/_static/d52805afe05dbcaf23bb/api.js",
-    "/app/_static/d52805afe05dbcaf23bb/session-recovery.js",
-    "/app/_static/d52805afe05dbcaf23bb/demo-api.js",
-    "/app/_static/d52805afe05dbcaf23bb/passkeys.js",
-    "/app/_static/d52805afe05dbcaf23bb/auth-reliability.js",
-    "/app/_static/d52805afe05dbcaf23bb/auth-route-recovery.js",
-    "/app/_static/d52805afe05dbcaf23bb/auth-diagnostics.js",
-    "/app/_static/d52805afe05dbcaf23bb/performance.js",
-    "/app/_static/d52805afe05dbcaf23bb/keyed-list.js",
-    "/app/_static/d52805afe05dbcaf23bb/realtime-list.js",
-    "/app/_static/d52805afe05dbcaf23bb/runtime-style.js",
-    "/app/_static/d52805afe05dbcaf23bb/camera-effects.js",
-    "/app/_static/d52805afe05dbcaf23bb/ui-icons.js",
-    "/app/_static/d52805afe05dbcaf23bb/tbh-share.js",
-    "/app/_static/d52805afe05dbcaf23bb/feed-sender.js",
-    "/app/_static/d52805afe05dbcaf23bb/live-camera.js",
-    "/app/_static/d52805afe05dbcaf23bb/media-overlay-positioner.js",
-    "/app/_static/d52805afe05dbcaf23bb/routes/route-loader.js",
-    "/app/_static/d52805afe05dbcaf23bb/routes/feed.js",
-    "/app/_static/d52805afe05dbcaf23bb/routes/play.js",
-    "/app/_static/d52805afe05dbcaf23bb/routes/chats.js",
-    "/app/_static/d52805afe05dbcaf23bb/routes/profile.js",
-    "/app/_static/d52805afe05dbcaf23bb/chat/styles.css",
-    "/app/_static/d52805afe05dbcaf23bb/chat/presence.js",
-    "/app/_static/d52805afe05dbcaf23bb/chat/activity-settings.js",
-    "/app/_static/d52805afe05dbcaf23bb/chat/index.js",
-    "/app/_static/d52805afe05dbcaf23bb/chat/actions.js",
-    "/app/_static/d52805afe05dbcaf23bb/chat/appearance.js",
-    "/app/_static/d52805afe05dbcaf23bb/chat/sticker-maker.js",
-    "/app/_static/d52805afe05dbcaf23bb/chat/photo-stickers.js",
-    "/app/_static/d52805afe05dbcaf23bb/chat/voice-interaction.js",
-    "/app/_static/d52805afe05dbcaf23bb/chat/message-window.js",
-    "/app/_static/d52805afe05dbcaf23bb/chat/timeline-scroll.js",
-    "/app/_static/d52805afe05dbcaf23bb/chat/models.js",
-    "/app/_static/d52805afe05dbcaf23bb/chat/call-history.js",
-    "/app/_static/d52805afe05dbcaf23bb/chat/store.js",
-    "/app/_static/d52805afe05dbcaf23bb/chat/media.js",
-    "/app/_static/d52805afe05dbcaf23bb/chat/outbox.js",
-    "/app/_static/d52805afe05dbcaf23bb/calls/index.js",
-    "/app/_static/d52805afe05dbcaf23bb/calls/ringback.js",
-    "/app/_static/d52805afe05dbcaf23bb/stories/index.js",
-    "/app/_static/d52805afe05dbcaf23bb/stories/styles.css",
-    "/app/_static/d52805afe05dbcaf23bb/calls/styles.css",
-    "/app/_static/d52805afe05dbcaf23bb/comments/index.js",
-    "/app/_static/d52805afe05dbcaf23bb/comments/styles.css",
+    "/app/_static/262d738816c7607f397f/styles.css",
+    "/app/_static/262d738816c7607f397f/preferences.js",
+    "/app/_static/262d738816c7607f397f/app.js",
+    "/app/_static/262d738816c7607f397f/api.js",
+    "/app/_static/262d738816c7607f397f/session-recovery.js",
+    "/app/_static/262d738816c7607f397f/passkeys.js",
+    "/app/_static/262d738816c7607f397f/auth-reliability.js",
+    "/app/_static/262d738816c7607f397f/auth-route-recovery.js",
+    "/app/_static/262d738816c7607f397f/auth-diagnostics.js",
+    "/app/_static/262d738816c7607f397f/performance.js",
+    "/app/_static/262d738816c7607f397f/keyed-list.js",
+    "/app/_static/262d738816c7607f397f/realtime-list.js",
+    "/app/_static/262d738816c7607f397f/runtime-style.js",
+    "/app/_static/262d738816c7607f397f/ui-icons.js",
+    "/app/_static/262d738816c7607f397f/media-url.js",
+    "/app/_static/262d738816c7607f397f/ui-dialogs.js",
+    "/app/_static/262d738816c7607f397f/toast.js",
+    "/app/_static/262d738816c7607f397f/user-message.js",
+    "/app/_static/262d738816c7607f397f/tbh-share.js",
+    "/app/_static/262d738816c7607f397f/blocked-users.js",
+    "/app/_static/262d738816c7607f397f/ios-install.js",
+    "/app/_static/262d738816c7607f397f/banner.js",
+    "/app/_static/262d738816c7607f397f/feed-sender.js",
+    "/app/_static/262d738816c7607f397f/media-overlay-positioner.js",
+    "/app/_static/262d738816c7607f397f/routes/route-loader.js",
+    "/app/_static/262d738816c7607f397f/routes/feed.js",
+    "/app/_static/262d738816c7607f397f/routes/play.js",
+    "/app/_static/262d738816c7607f397f/routes/chats.js",
+    "/app/_static/262d738816c7607f397f/routes/profile.js",
+    "/app/_static/262d738816c7607f397f/chat/styles.css",
+    "/app/_static/262d738816c7607f397f/chat/presence.js",
+    "/app/_static/262d738816c7607f397f/chat/activity-settings.js",
+    "/app/_static/262d738816c7607f397f/chat/index.js",
+    "/app/_static/262d738816c7607f397f/chat/actions.js",
+    "/app/_static/262d738816c7607f397f/chat/history.js",
+    "/app/_static/262d738816c7607f397f/chat/view-once.js",
+    "/app/_static/262d738816c7607f397f/chat/appearance.js",
+    "/app/_static/262d738816c7607f397f/chat/sticker-maker.js",
+    "/app/_static/262d738816c7607f397f/chat/photo-stickers.js",
+    "/app/_static/262d738816c7607f397f/chat/voice-interaction.js",
+    "/app/_static/262d738816c7607f397f/chat/message-window.js",
+    "/app/_static/262d738816c7607f397f/chat/timeline-scroll.js",
+    "/app/_static/262d738816c7607f397f/chat/models.js",
+    "/app/_static/262d738816c7607f397f/chat/call-history.js",
+    "/app/_static/262d738816c7607f397f/chat/store.js",
+    "/app/_static/262d738816c7607f397f/chat/media.js",
+    "/app/_static/262d738816c7607f397f/live-camera.js",
+    "/app/_static/262d738816c7607f397f/camera/review-editor.js",
+    "/app/_static/262d738816c7607f397f/camera/photo-pipeline.js",
+    "/app/_static/262d738816c7607f397f/camera/review-filters.js",
+    "/app/_static/262d738816c7607f397f/camera-effects.js",
+    "/app/_static/262d738816c7607f397f/thumbhash.js",
+    "/app/_static/262d738816c7607f397f/chat/outbox.js",
+    "/app/_static/262d738816c7607f397f/chat/thumbhash.js",
+    "/app/_static/262d738816c7607f397f/chat/realtime.js",
+    "/app/_static/262d738816c7607f397f/calls/service.js",
+    "/app/_static/262d738816c7607f397f/stories/index.js",
+    "/app/_static/262d738816c7607f397f/stories/styles.css",
+    "/app/_static/262d738816c7607f397f/calls/styles.css",
+    "/app/_static/262d738816c7607f397f/comments/index.js",
+    "/app/_static/262d738816c7607f397f/comments/styles.css",
     "./manifest.webmanifest",
     "../assets/AppIconV2.png",
     "../assets/pwa/icon-192.png",
@@ -57,7 +74,7 @@ const APP_SHELL = [
     "../assets/pwa/icon-maskable-512.png",
     "../assets/valid_logo.png",
     "../assets/Jua-Latin.woff2",
-    "/app/_static/d52805afe05dbcaf23bb/local-config.js",
+    "/app/_static/262d738816c7607f397f/local-config.js",
 ];
 
 self.addEventListener("install", (event) => {
@@ -76,6 +93,16 @@ self.addEventListener("activate", (event) => {
                 .map((key) => caches.delete(key))))
             .then(() => self.clients.claim())
     );
+});
+
+// Background Sync (Android Chrome): when connectivity returns, ask open pages
+// to drain the chat/Story/Memento media outbox. The upload itself stays in the
+// page, which holds the session and the IndexedDB records.
+self.addEventListener("sync", (event) => {
+    if (event.tag !== "valid-media-outbox") return;
+    event.waitUntil(self.clients.matchAll({ type: "window" }).then((clients) => {
+        for (const client of clients) client.postMessage({ type: "valid-media-outbox-sync" });
+    }));
 });
 
 self.addEventListener("fetch", (event) => {
@@ -110,6 +137,113 @@ function safeNotificationURL(value) {
     return new URL("/app/", self.location.origin).href;
 }
 
+// The page reports which chat it shows (VALID_ACTIVE_CHAT). Worker memory can be
+// dropped between pushes, so a focused client's URL (?chat=) is the fallback.
+const activeChats = new Map();
+
+self.addEventListener("message", (event) => {
+    const clientId = event.source?.id;
+    if (event.data?.type === "VALID_ACTIVE_CHAT" && clientId) {
+        activeChats.set(clientId, event.data.visible && event.data.chatId ? String(event.data.chatId) : null);
+    } else if (event.data?.type === "VALID_BADGE_SYNC") {
+        event.waitUntil(writeBadgeCount(Math.max(0, Number(event.data.count) || 0)));
+    }
+});
+
+function badgeStore(mode, operation) {
+    return new Promise((resolve, reject) => {
+        const open = indexedDB.open("valid-worker", 1);
+        open.onupgradeneeded = () => open.result.createObjectStore("state");
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+            const transaction = open.result.transaction("state", mode);
+            const request = operation(transaction.objectStore("state"));
+            transaction.oncomplete = () => { open.result.close(); resolve(request.result); };
+            transaction.onerror = () => { open.result.close(); reject(transaction.error); };
+        };
+    });
+}
+
+const readBadgeCount = () => badgeStore("readonly", (store) => store.get("badge")).then((value) => Number(value) || 0).catch(() => 0);
+const writeBadgeCount = (count) => badgeStore("readwrite", (store) => store.put(count, "badge")).catch(() => null);
+
+async function updateAppBadge(payload) {
+    if (!self.navigator || !("setAppBadge" in self.navigator)) return;
+    // Prefer the server's unread count; otherwise count pushes since the page
+    // last reported its own badge (VALID_BADGE_SYNC).
+    const explicit = Number(payload.badge ?? payload.data?.badge ?? payload.data?.badge_count);
+    const count = Number.isFinite(explicit) && explicit >= 0 ? explicit : await readBadgeCount() + 1;
+    await writeBadgeCount(count);
+    await Promise.resolve(count > 0 ? self.navigator.setAppBadge(count) : self.navigator.clearAppBadge?.()).catch(() => null);
+}
+
+function notificationType(payload) {
+    return String(payload.type || payload.data?.type || "");
+}
+
+async function clientViewingChat(chatId) {
+    if (!chatId) return null;
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    return windows.find((client) => {
+        if (!client.focused || client.visibilityState !== "visible") return false;
+        if (activeChats.has(client.id)) return activeChats.get(client.id) === chatId;
+        try { return new URL(client.url).searchParams.get("chat") === chatId; } catch (_) { return false; }
+    }) || null;
+}
+
+// Safari revokes a subscription whose pushes show nothing, so on WebKit a
+// suppressed chat push is still shown silently and closed at once.
+const appleWebKit = () => /AppleWebKit/.test(self.navigator?.userAgent || "") && !/Chrome|Chromium|Edg\//.test(self.navigator.userAgent);
+
+async function presentPush(payload) {
+    const type = notificationType(payload);
+    const url = new URL(safeNotificationURL(payload.url));
+    // Story screenshot notices open that Story's viewers list.
+    if (type === "story_capture" && url.searchParams.has("story")) url.searchParams.set("viewers", "1");
+    const data = { url: url.href, type };
+    const title = payload.title || "Valid";
+    const tag = typeof payload.tag === "string" && payload.tag.trim() ? payload.tag.trim() : undefined;
+
+    if (type.startsWith("chat_")) {
+        const chatId = String(payload.data?.chat_id || url.searchParams.get("chat") || "");
+        const viewer = await clientViewingChat(chatId);
+        if (viewer) {
+            viewer.postMessage({ type: "VALID_PUSH_IN_ACTIVE_CHAT", chatId, payload: { title, body: payload.body, type, url: data.url } });
+            if (!appleWebKit()) return;
+            const shown = `valid-suppressed-${Date.now()}`;
+            await self.registration.showNotification(title, { body: payload.body || "", tag: shown, silent: true, data });
+            (await self.registration.getNotifications({ tag: shown })).forEach((notification) => notification.close());
+            return;
+        }
+    }
+
+    const options = {
+        body: payload.body || "You have a new update.",
+        icon: "/assets/pwa/icon-192.png",
+        // Android draws the badge from its alpha channel: a white glyph on transparency.
+        badge: "/assets/pwa/badge-96.png",
+        tag,
+        renotify: Boolean(tag),
+        timestamp: Number(payload.timestamp) || Date.now(),
+        data,
+    };
+    if (type === "incoming_call") {
+        const callId = String(payload.data?.call_id || "");
+        const chatId = String(payload.data?.chat_id || url.searchParams.get("chat") || "");
+        const callURL = new URL("/app/", self.location.origin);
+        callURL.search = new URLSearchParams({ signin: "1", tab: "chats", chat: chatId, call: callId }).toString();
+        Object.assign(options, {
+            tag: tag || `valid-call-${callId}`,
+            renotify: true,
+            requireInteraction: true,
+            vibrate: [400, 200, 400, 200, 400, 200, 400],
+            actions: [{ action: "answer", title: "Answer" }, { action: "decline", title: "Decline" }],
+            data: { ...data, url: callURL.href, callId, chatId },
+        });
+    }
+    await Promise.all([self.registration.showNotification(title, options), updateAppBadge(payload)]);
+}
+
 self.addEventListener("push", (event) => {
     let payload = {};
     try {
@@ -117,34 +251,49 @@ self.addEventListener("push", (event) => {
     } catch (_) {
         payload = { body: event.data?.text() || "You have a new update." };
     }
-    const tag = typeof payload.tag === "string" && payload.tag.trim() ? payload.tag.trim() : undefined;
-    const incomingCall = payload.data?.type === "incoming_call";
-    event.waitUntil(self.registration.showNotification(payload.title || "Valid", {
-        body: payload.body || "You have a new update.",
-        icon: "/assets/pwa/icon-192.png",
-        badge: "/assets/pwa/icon-192.png",
-        tag,
-        renotify: Boolean(tag),
-        timestamp: Number(payload.timestamp) || Date.now(),
-        actions: incomingCall
-            ? [{ action: "open", title: "Open call" }]
-            : [{ action: "open", title: "Open Valid" }, { action: "play", title: "Play" }],
-        data: { url: safeNotificationURL(payload.url) },
-    }));
+    event.waitUntil(presentPush(payload));
 });
+
+async function appWindows() {
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    return windows.filter((client) => {
+        const url = new URL(client.url);
+        return url.origin === self.location.origin && url.pathname.startsWith("/app/");
+    }).sort((left, right) => Number(right.focused) - Number(left.focused)
+        || Number(right.visibilityState === "visible") - Number(left.visibilityState === "visible"));
+}
+
+async function declineCall(data) {
+    const [client] = await appWindows();
+    // An open page declines with its signed-in API client.
+    if (client) return client.postMessage({ type: "VALID_CALL_DECLINE", callId: data.callId, chatId: data.chatId });
+    // Otherwise use the first-party session cookie: same-origin, never a stored token.
+    if (!/^[\w-]{1,64}$/.test(data.callId || "")) return;
+    const session = await fetch("/api/v1/auth/session", { credentials: "include", cache: "no-store" })
+        .then((response) => response.ok ? response.json() : null).catch(() => null);
+    const userId = session?.user?.id;
+    if (!/^[\w-]{1,64}$/.test(String(userId || ""))) return;
+    await fetch(`/api/v1/users/${encodeURIComponent(userId)}/calls/${encodeURIComponent(data.callId)}/decline`, {
+        method: "POST", credentials: "include", headers: { Accept: "application/json" },
+    }).catch(() => null);
+}
+
+async function openNotificationTarget(url) {
+    const [client] = await appWindows();
+    if (client) {
+        // Route inside the running app instead of reloading it.
+        client.postMessage({ type: "VALID_NOTIFICATION_CLICK", url });
+        return client.focus();
+    }
+    return self.clients.openWindow(url);
+}
 
 self.addEventListener("notificationclick", (event) => {
     event.notification.close();
-    const url = event.action === "play"
-        ? safeNotificationURL("/app/?tab=play")
-        : safeNotificationURL(event.notification.data?.url);
-    event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clients) => {
-        for (const client of clients) {
-            const clientURL = new URL(client.url);
-            if (clientURL.origin !== self.location.origin || !clientURL.pathname.startsWith("/app/")) continue;
-            client.postMessage({ type: "VALID_NOTIFICATION_CLICK", url });
-            return client.focus();
-        }
-        return self.clients.openWindow(url);
-    }));
+    const data = event.notification.data || {};
+    if (event.action === "decline") {
+        event.waitUntil(declineCall(data));
+        return;
+    }
+    event.waitUntil(openNotificationTarget(safeNotificationURL(data.url)));
 });

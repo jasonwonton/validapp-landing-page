@@ -96,3 +96,35 @@ test('missing vibration and denied preference storage never block the app', asyn
     await page.getByRole('button', { name: 'Chats', exact: true }).click();
     await expect(page.locator('.chat-page-header')).toBeVisible();
 });
+
+test('iPhone haptics use the native switch, show the setting, and never leak synthetic clicks', async ({ page }) => {
+    await page.addInitScript(() => {
+        Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' });
+        Object.defineProperty(navigator, 'vibrate', { configurable: true, value: undefined });
+        Object.defineProperty(HTMLInputElement.prototype, 'switch', { configurable: true, get() { return this.hasAttribute('switch'); } });
+        window.toggles = 0; window.leakedClicks = 0;
+        const click = HTMLLabelElement.prototype.click;
+        HTMLLabelElement.prototype.click = function() { if (this.querySelector('input[switch]')) window.toggles += 1; return click.call(this); };
+        document.addEventListener('click', event => { if (event.target.closest?.('label') && event.target.closest('label').querySelector('input[switch]')) window.leakedClicks += 1; });
+    });
+    await profile(page);
+    const toggle = page.getByRole('switch', { name: /Haptic feedback/ });
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toBeChecked();
+    await expect(page.locator('#hapticsHint')).toContainText('iPhone');
+    await page.evaluate(() => { window.toggles = 0; });
+    await page.getByRole('button', { name: 'Test haptics' }).click();
+    await expect.poll(() => page.evaluate(() => window.toggles)).toBe(2);
+    await expect(page.locator('#hapticsStatus')).toContainText('Haptic played');
+    await page.waitForTimeout(120);
+    await page.evaluate(() => { window.toggles = 0; });
+    await page.getByRole('button', { name: 'Feed', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.toggles)).toBe(1);
+    expect(await page.evaluate(() => window.leakedClicks)).toBe(0);
+    expect(await page.evaluate(() => window.ValidPreferences.HAPTIC_KINDS)).toEqual(['selection', 'light', 'medium', 'heavy', 'success', 'warning', 'error']);
+    await page.getByRole('button', { name: 'Profile', exact: true }).click();
+    await toggle.click();
+    await page.evaluate(() => { window.toggles = 0; });
+    await page.getByRole('button', { name: 'Feed', exact: true }).click();
+    expect(await page.evaluate(() => window.toggles)).toBe(0);
+});

@@ -1,3 +1,4 @@
+import { setMediaImageSource } from './media-url.js';
 export function openBlockedUsers({ api, userId }) {
     const existing = document.querySelector('.blocked-users-dialog');
     if (existing) { existing.focus(); return; }
@@ -18,7 +19,7 @@ export function openBlockedUsers({ api, userId }) {
             const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(' ') || 'Valid user';
             name.textContent = fullName; avatar.textContent = [profile.first_name,profile.last_name].filter(Boolean).map(s=>s[0]).join('');
             const picture = profile.profile_picture_url_thumb || profile.profile_picture_url;
-            if (picture) { const img = document.createElement('img'); img.src = api.assetURL(picture); img.alt = ''; avatar.replaceChildren(img); }
+            if (picture) { const img = document.createElement('img'); img.alt = ''; setMediaImageSource(img, [api.assetURL(profile.profile_picture_url_thumb), api.assetURL(profile.profile_picture_url)], { initials: avatar.textContent }); avatar.replaceChildren(img); }
             button.type = 'button'; button.textContent = 'Unblock'; button.className = 'secondary-button'; button.disabled = pending;
             button.setAttribute('aria-label', `Unblock ${fullName}`);
             button.onclick = () => {

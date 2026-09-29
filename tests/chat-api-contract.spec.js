@@ -51,7 +51,7 @@ test('signed chat storage PUT is allowed by both CSPs and sends no app credentia
 
 test('unintercepted upload transport preserves signed headers and exact bytes', async ({ page }) => {
     const uploads = [];
-    const sources = new Map(await Promise.all(['api.js', 'auth-route-recovery.js', 'auth-reliability.js', 'auth-diagnostics.js', 'session-recovery.js'].map(async name => [`/app/${name}`, await readFile(new URL(`../app/${name}`, import.meta.url))])));
+    const sources = new Map(await Promise.all(['api.js', 'auth-route-recovery.js', 'auth-reliability.js', 'auth-diagnostics.js', 'session-recovery.js', 'user-message.js'].map(async name => [`/app/${name}`, await readFile(new URL(`../app/${name}`, import.meta.url))])));
     const server = createServer(async (request, response) => {
         if (sources.has(request.url)) { response.writeHead(200, { 'content-type': 'text/javascript' }); response.end(sources.get(request.url)); return; }
         if (request.method === 'PUT') {
@@ -248,7 +248,7 @@ test("production chat adapter matches the released iOS chat and Memento contract
         { method: "POST", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/read`, body: { through_sequence: 9, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } },
         { method: "GET", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/daily-row?timezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, body: null },
         { method: "POST", path: `/api/v1/users/${USER_ID}/chats/${CHAT_ID}/daily-row/skip`, body: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } },
-        { method: "POST", path: `/api/v1/users/${USER_ID}/daily-highlight-uploads?delivery=proxy`, body: { content_type: "image/jpeg", size_bytes: 12345, client_request_id: "66666666-6666-6666-6666-666666666666", secondary_size_bytes: 54321 } },
+        { method: "POST", path: `/api/v1/users/${USER_ID}/daily-highlight-uploads`, body: { content_type: "image/jpeg", size_bytes: 12345, client_request_id: "66666666-6666-6666-6666-666666666666", secondary_size_bytes: 54321 } },
         { method: "POST", path: `/api/v1/users/${USER_ID}/daily-entries`, body: { media_asset_id: "33333333-3333-3333-3333-333333333333", caption: "Today", chat_ids: [CHAT_ID], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, client_request_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" } },
     ]);
     expect(contractRequests.every((request) => request.authorization === "Bearer chat-token")).toBe(true);

@@ -3,14 +3,16 @@ import { HISTORY_MODES, canSaveMessage, historyVisible, createHistoryReceipts } 
 import { viewOncePresentation } from './view-once.js';
 import { presenceLabel } from "./presence.js";
 import { reconcileKeyedElements } from "../keyed-list.js";
-import { prepareChatMedia, prepareMementoImages } from "./media.js";
+import { ingestEnabled, ingestSegmentCount, photoPipeline, prepareChatMedia, prepareMementoImages } from "./media.js";
 import { createPhotoStickers } from './photo-stickers.js';
 import { bindVoiceGesture, createVoiceWaveform } from './voice-interaction.js';
 import {
-    CHAT_REACTIONS, chatAttentionPriority, chatNeedsMemento, chatPreview, displayMember, escapeChatHTML,
-    messageTime, normalizeMessage, recentConversations, relativeChatTime, safeMediaURL,
+    CHAT_REACTIONS, chatAttentionPriority, chatNeedsMemento, chatPreview, chatSeparatorBefore, displayMember, escapeChatHTML,
+    KNOWN_MESSAGE_KINDS, linkifyChatText, messageTime, normalizeMessage, recentConversations, relativeChatTime, safeMediaURL,
     VIDEO_PROCESSING_MESSAGE, VIDEO_UNAVAILABLE_MESSAGE, videoPlaybackState, videoRefreshDelay,
 } from "./models.js";
+import { thumbHashDataURL } from "./thumbhash.js";
+import { confirmSheet } from "../ui-dialogs.js";
 import { createChatStore } from "./store.js";
 import {
     MAX_AUTOMATIC_ATTEMPTS,
@@ -25,10 +27,9 @@ import {
     removeChatMediaOutbox,
     removeChatTextOutbox,
 } from "./outbox.js";
-import { createCallsController } from "../calls/index.js";
-import { createLiveCamera } from "../live-camera.js";
+import { callService } from "../calls/service.js";
 import { uiIcon } from "../ui-icons.js";
-import { createMediaOverlayPositioner } from "../media-overlay-positioner.js";
+import { mediaImageMarkup } from "../media-url.js";
 import { setRuntimeStyles } from "../runtime-style.js";
 import {
     CHAT_COLOR_STYLES,
@@ -43,43 +44,51 @@ import { callHistoryPresentation } from './call-history.js';
 
 const REFRESH_MS = 30_000;
 const MAX_VOICE_RECORDING_MS = 300_000;
+const TIME_REVEAL_WIDTH = 86;
 
 export async function deliverMementoRecord(api, userId, record, { onProgress } = {}) {
-    const session = await api.createDailyHighlightUpload(userId, record.file.size, record.request_id, record.secondary?.size ?? null);
-    await api.putDirectUpload(record.file, session, { onProgress: (progress) => onProgress?.(record.secondary ? progress * 0.48 : progress * 0.96) });
-    if (record.secondary && !session.already_finalized) {
-        if (!session.secondary_upload_url) throw new Error("The second Memento upload session was invalid.");
-        await api.putDirectUpload(record.secondary, {
-            upload_url: session.secondary_upload_url,
-            upload_method: session.upload_method,
-            required_headers: session.required_headers,
-        }, { onProgress: (progress) => onProgress?.(0.48 + progress * 0.48) });
-    }
-    await api.finalizeDailyHighlightUpload(userId, session.media_asset_id);
-    onProgress?.(1);
-    return api.publishDailyHighlight(userId, session.media_asset_id, record.chat_ids, record.caption, record.request_id);
+    const { deliverMemento } = await import("../media-delivery.js");
+    return deliverMemento(api, userId, record, { onProgress });
 }
 
-function compatibleAudioRecordingType() {
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") return "";
-    return ["audio/mp4;codecs=mp4a.40.2", "audio/mp4"]
-        .find((type) => MediaRecorder.isTypeSupported?.(type)) || "";
+// Camera, review editing and uploads load on first use (outside the app shell).
+const loadLiveCamera = () => import("../live-camera.js");
+const cameraHaptic = (kind) => window.ValidPreferences?.haptic?.(kind);
+
+// M4A goes straight to chat-media-uploads (unchanged). Browsers that can only
+// record Opus send it through the server ingest when /config enables it.
+function voiceRecordingFormat(ingestEnabled = false) {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") return null;
+    const supported = (type) => { try { return MediaRecorder.isTypeSupported?.(type) === true; } catch (_) { return false; } };
+    const direct = ["audio/mp4;codecs=mp4a.40.2", "audio/mp4"].find(supported);
+    if (direct) return { mimeType: direct, ingest: false };
+    if (!ingestEnabled) return null;
+    const opus = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/webm"].find(supported);
+    return opus ? { mimeType: opus, ingest: true } : null;
+}
+
+function formatClock(seconds) {
+    const value = Math.max(0, Math.floor(Number(seconds) || 0));
+    return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, "0")}`;
 }
 
 function localLedgerDate(date = new Date()) {
     return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 }
 
-export function createChatsView({ root, api, getUser, getConfig, presence, softHaptic, successHaptic, showToast, onUnreadChange, onPlay }) {
+export function createChatsView({ root, api, getUser, getConfig, presence, softHaptic, successHaptic, haptic, showToast, onUnreadChange, onPlay }) {
+    const feedback = (kind) => (haptic || globalThis.ValidPreferences?.haptic)?.(kind);
     const attentionPriority = chat => chatAttentionPriority(chat, {
         dailyLedgerEnabled: dailyLedgerEnabled(),
         callsEnabled: getConfig()?.enable_calls === true && getConfig()?.enable_web_calls === true,
     });
     const store = createChatStore({ attentionPriority });
     const messageWindow = createMessageWindow();
-    const calls = createCallsController({ api, getUser, getConfig, showToast,
-        onCallChanged: (call) => handleRealtimeEvent({ type: 'call_history_changed', chat_id: call.chat_id }),
-    });
+    const callsService = callService({ api, getUser, getConfig, showToast });
+    const calls = callsService.calls;
+    const realtime = callsService.realtime;
+    callsService.onCallChanged((call) => handleRealtimeEvent({ type: 'call_history_changed', chat_id: call.chat_id }));
+    realtime.subscribe((event) => { if (activation) void handleRealtimeEvent(event); });
     let lastListLoad = 0;
     let activation = null;
     let selectedMementoFile = null;
@@ -146,6 +155,13 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     let outboxRetryTimer = null;
     let mediaOutboxRetrying = false;
     let mediaOutboxRetryTimer = null;
+    let viewUserId = null;
+    let historySweepTimer = null;
+    let listRefreshTimer = null;
+    const chatRefreshTimers = new Map();
+    const refreshedMediaMessages = new Set();
+    let viewerGestures = null;
+    let reportingChat = false;
 
     root.innerHTML = `
         <div class="chat-shell">
@@ -173,7 +189,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 <div class="chat-timeline" role="list" aria-live="polite" aria-label="Messages"></div>
                 <button class="chat-jump-latest hidden" type="button" data-jump-latest aria-label="Jump to latest messages">${uiIcon('down')}<span>Latest</span></button>
                 <div class="chat-typing hidden" aria-live="polite">Someone is typing…</div>
-                <div class="chat-reply-draft hidden"><span></span><button type="button" data-cancel-reply aria-label="Cancel reply">×</button></div>
+                <div class="chat-reply-draft hidden"><span></span><button type="button" data-cancel-reply aria-label="Cancel reply">${uiIcon('close')}</button></div>
                 <form class="chat-composer">
                     <div class="chat-memento-draft hidden">
                         <img alt="" decoding="async">
@@ -182,9 +198,9 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                     </div>
                     <button class="chat-camera-button" type="button" data-open-chat-media aria-label="Send photo or video">${uiIcon('camera-filled')}</button>
                     <button class="chat-attachment-button" type="button" data-open-stickers aria-label="Send a sticker"><span class="native-sticker-icon" aria-hidden="true"></span></button>
-                    <div class="chat-input-wrap"><textarea rows="1" maxlength="2000" placeholder="Message" aria-label="Message"></textarea><button type="button" class="chat-mic-button" data-record-voice aria-label="Record voice message">${uiIcon('mic')}</button></div>
+                    <div class="chat-input-wrap"><textarea rows="1" maxlength="2000" placeholder="Message" aria-label="Message" enterkeyhint="send"></textarea><button type="button" class="chat-mic-button" data-record-voice aria-label="Record voice message">${uiIcon('mic')}</button></div>
                     <button class="chat-send-button" type="submit" aria-label="Send message">${uiIcon('send')}</button>
-                    <section class="chat-voice-inline hidden" aria-label="Voice message"><button type="button" data-cancel-voice aria-label="Discard voice message">${uiIcon('close')}</button><div class="chat-voice-body"><p class="chat-voice-status" role="status"></p><canvas class="chat-voice-waveform" width="192" height="28" aria-hidden="true"></canvas><p class="chat-voice-hint"></p><audio class="chat-inline-audio" aria-label="Voice message preview" hidden></audio><div class="chat-voice-player" hidden><button type="button" data-voice-play aria-label="Play voice preview">${uiIcon('play')}</button><input type="range" min="0" max="100" value="0" aria-label="Voice preview position"></div></div><button type="button" data-stop-voice aria-label="Stop recording and preview">${uiIcon('stop')}</button><button type="button" data-record-again aria-label="Record voice message">${uiIcon('mic')}</button><button type="button" data-send-voice aria-label="Send voice message">${uiIcon('send')}</button></section>
+                    <section class="chat-voice-inline hidden" aria-label="Voice message"><button type="button" data-cancel-voice aria-label="Discard voice message">${uiIcon('close')}</button><div class="chat-voice-body"><p class="chat-voice-status" role="status"></p><canvas class="chat-voice-waveform" width="192" height="28" aria-hidden="true"></canvas><p class="chat-voice-hint"></p><audio class="chat-inline-audio" aria-label="Voice message preview" hidden></audio><div class="chat-voice-player" hidden><button type="button" data-voice-play aria-label="Play voice preview">${uiIcon('play')}</button><input type="range" min="0" max="100" value="0" step="0.1" aria-label="Voice preview position"><small class="chat-voice-clock" aria-hidden="true">0:00</small><button type="button" class="chat-voice-speed" data-voice-speed aria-label="Playback speed 1×">1×</button></div></div><button type="button" data-stop-voice aria-label="Stop recording and preview">${uiIcon('stop')}</button><button type="button" data-record-again aria-label="Record voice message">${uiIcon('mic')}</button><button type="button" data-send-voice aria-label="Send voice message">${uiIcon('send')}</button></section>
                 </form>
             </section>
         </div>
@@ -215,11 +231,11 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 <header><button type="button" data-close-chat-media>Cancel</button><strong>Photo or video</strong><button type="button" data-chat-photo-library aria-label="Photo library">${uiIcon('photo')}</button></header>
                 <section class="live-camera" data-chat-camera tabindex="-1" hidden aria-label="Message camera"></section>
                 <section class="chat-media-editor">
-                <div class="chat-photo-tools"><button type="button" data-retake-chat-photo>${uiIcon('flip')} Retake</button><span></span><button type="button" data-photo-cutout aria-label="Make a sticker from this photo">${uiIcon('scissors')}</button><button type="button" data-photo-stickers aria-label="Open My Stickers"><span class="native-sticker-icon" aria-hidden="true"></span></button><button type="button" data-photo-text aria-label="Add text">Aa</button><button type="button" data-close-chat-media aria-label="Close photo">${uiIcon('close')}</button></div>
+                <div class="chat-photo-tools"><button type="button" data-retake-chat-photo>${uiIcon('flip')} Retake</button><span></span><button type="button" data-close-chat-media aria-label="Close photo">${uiIcon('close')}</button></div>
                 <div class="chat-media-preview"><span aria-hidden="true">${uiIcon("plus")}</span><p>Choose a photo, an MP4 video, or an M4A voice recording.</p></div>
-                <details class="chat-media-edit-options"><summary>Edit photo</summary>
-                <label>Text overlay <input class="chat-media-overlay" type="text" maxlength="160" placeholder="Optional text — drag it in the preview"></label>
-                </details>
+                <div class="chat-review-tools" data-review-tools hidden><button type="button" data-photo-cutout aria-label="Make a sticker from this photo">${uiIcon('scissors')}</button><button type="button" data-photo-stickers aria-label="Open My Stickers"><span class="native-sticker-icon" aria-hidden="true"></span></button><button type="button" data-photo-text aria-label="Add caption">Aa</button><button type="button" data-photo-draw aria-label="Draw on this" aria-pressed="false"></button><div class="review-draw-tools" hidden></div><button type="button" data-undo-zoom aria-label="Undo zoom" hidden>${uiIcon('back')}</button></div>
+                <p class="chat-media-send-count" hidden></p>
+                <button type="button" data-cancel-chat-upload hidden>Cancel upload</button>
                 <label class="chat-media-option"><input type="checkbox" data-chat-view-once aria-label="View once">${uiIcon('infinity')}${uiIcon('view-once')}<span>Keep in chat</span></label>
                 <div class="chat-media-progress hidden"><span></span></div>
                 <p class="chat-media-status" role="status"></p>
@@ -248,51 +264,74 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         <dialog class="chat-sheet" data-chat-settings-dialog aria-label="Chat settings"><div class="chat-settings-content"></div></dialog>
         <dialog class="chat-sheet" data-chat-reactors-dialog aria-label="Message reactions"><div class="chat-reactors-content"></div></dialog>
         <dialog class="chat-sheet" data-chat-readers-dialog aria-label="Read receipts"><div class="chat-readers-content"></div></dialog>
-        <dialog class="chat-media-viewer" data-chat-media-viewer aria-label="Chat media"><button type="button" data-close-media aria-label="Close">×</button><img alt="" hidden><video playsinline controls hidden></video><div class="chat-viewer-overlay" hidden></div><progress class="chat-ephemeral-progress" max="1" value="0" aria-label="Media time remaining" hidden></progress><button type="button" data-pause-ephemeral aria-label="Pause media" hidden>${uiIcon("pause")}</button><p></p><div class="chat-viewer-actions"><button type="button" data-swap-viewed-memento aria-label="Swap front and back photos" hidden>⇄ Swap views</button><button type="button" data-share-viewed-memento hidden>Share</button><button type="button" data-reply-viewed-media hidden>Reply</button><button type="button" data-react-viewed-media hidden>${uiIcon("heart")} React</button></div></dialog>`;
+        <dialog class="chat-media-viewer" data-chat-media-viewer aria-label="Chat media" aria-describedby="chatViewerHint"><span class="visually-hidden" id="chatViewerHint">Drag down to close. Pinch or double-tap to zoom.</span><button type="button" data-close-media aria-label="Close">${uiIcon('close')}</button><div class="chat-viewer-stage"><div class="chat-viewer-media"><img class="chat-viewer-placeholder" alt="" aria-hidden="true" hidden><img alt="" hidden><video playsinline controls hidden></video><div class="chat-viewer-overlay" hidden></div></div></div><progress class="chat-ephemeral-progress" max="1" value="0" aria-label="Media time remaining" hidden></progress><button type="button" data-pause-ephemeral aria-label="Pause media" hidden>${uiIcon("pause")}</button><p></p><div class="chat-viewer-actions"><button type="button" data-swap-viewed-memento aria-label="Swap front and back photos" hidden>⇄ Swap views</button><button type="button" data-share-viewed-memento hidden>Share</button><button type="button" data-reply-viewed-media hidden>Reply</button><button type="button" data-react-viewed-media hidden>${uiIcon("heart")} React</button></div></dialog>`;
 
     const $ = (selector) => root.querySelector(selector);
     const $$ = (selector) => [...root.querySelectorAll(selector)];
-    const chatMediaOverlay = createMediaOverlayPositioner({
-        preview: $(".chat-media-preview"),
-        input: $(".chat-media-overlay"),
-    });
-    const mementoCamera = createLiveCamera({
-        container: $('[data-memento-camera]'),
-        onCapture: async ([first, second]) => {
-            $('[data-memento-dialog]').classList.remove('is-capturing');
-            selectedMementoSourceFile = first;
-            selectedMementoSecondarySourceFile = second || null;
-            mementoFrontIsPrimary = false;
-            await prepareSelectedMemento(first);
-        },
-        onFallback: () => {
-            $('[data-memento-dialog]').classList.remove('is-capturing');
-            $('.memento-photo-fallback').hidden = false;
-            $('.memento-file-input').focus();
-        },
-    });
+    let mementoCamera = null;
+    let mementoCameraToken = 0;
+    async function ensureMementoCamera() {
+        if (mementoCamera) return mementoCamera;
+        const { createLiveCamera, ensureCameraStyles } = await loadLiveCamera();
+        await ensureCameraStyles();
+        mementoCamera ||= createLiveCamera({
+            container: $('[data-memento-camera]'),
+            maxDimension: 1600,
+            haptic: cameraHaptic,
+            onCapture: async ([first, second]) => {
+                $('[data-memento-dialog]').classList.remove('is-capturing');
+                selectedMementoSourceFile = first;
+                selectedMementoSecondarySourceFile = second || null;
+                mementoFrontIsPrimary = false;
+                await prepareSelectedMemento(first);
+            },
+            onFallback: () => {
+                $('[data-memento-dialog]').classList.remove('is-capturing');
+                $('.memento-photo-fallback').hidden = false;
+                $('.memento-file-input').focus();
+            },
+        });
+        return mementoCamera;
+    }
     // Initialize on first use so opening a chat never requests camera permission.
     let chatCamera = null;
-    const photoStickers = createPhotoStickers($('.chat-media-preview'), { onChange: resetChatMediaRequestIds, disabled: () => chatMediaPublishing });
+    let chatCameraToken = 0;
+    let reviewEditor = null;
+    let reviewEditorLoading = null;
+    let chatMediaEncoded = null;
+    let chatMediaAbort = null;
+    function ensureReviewEditor() {
+        reviewEditorLoading ||= Promise.all([import("../camera/review-editor.js"), loadLiveCamera().then((module) => module.ensureCameraStyles())])
+            .then(([{ createReviewEditor }]) => (reviewEditor = createReviewEditor({
+                preview: $('.chat-media-preview'),
+                toolColumn: $('[data-review-tools]'),
+                drawTools: $('[data-review-tools] .review-draw-tools'),
+                api, showToast, haptic: cameraHaptic,
+                isBusy: () => chatMediaPublishing,
+                onChange: chatMediaEdited,
+            })))
+            .catch((error) => { reviewEditorLoading = null; throw error; });
+        return reviewEditorLoading;
+    }
+    const photoStickers = createPhotoStickers($('.chat-media-preview'), { onChange: () => chatMediaEdited(), disabled: () => chatMediaPublishing });
     const voiceWaveform = createVoiceWaveform($('.chat-voice-waveform'));
     const voiceGesture = bindVoiceGesture($('[data-record-voice]'), {
-        canStart: () => !voiceMode && !chatMediaPublishing && !chatAccessUnavailable() && !calls.isActive() && Boolean(compatibleAudioRecordingType()),
+        canStart: () => !voiceMode && !chatMediaPublishing && !chatAccessUnavailable() && !calls.isActive() && Boolean(voiceRecordingFormat(ingestEnabled(getConfig()))),
         begin: () => toggleVoiceRecording(), recording: () => Boolean(voiceRecorder),
         stop: () => stopVoiceRecorder(), discard: () => resetChatMediaComposer(),
-        hint: value => { $('.chat-voice-hint').textContent = value; },
+        hint: (value, danger = false) => { $('.chat-voice-hint').textContent = value; $('.chat-voice-hint').classList.toggle('is-danger', danger); },
+        haptic: feedback,
     });
     const voiceAudio = $('.chat-inline-audio');
-    const voiceSeek = $('.chat-voice-player input');
-    $('[data-voice-play]').addEventListener('click', () => {
-        if (voiceAudio.paused) void voiceAudio.play().catch(() => { $('.chat-voice-status').textContent = 'Could not play this recording.'; });
-        else voiceAudio.pause();
-    });
-    for (const event of ['play', 'pause', 'ended']) voiceAudio.addEventListener(event, () => {
-        $('[data-voice-play]').innerHTML = uiIcon(voiceAudio.paused ? 'play' : 'pause');
-        $('[data-voice-play]').setAttribute('aria-label', voiceAudio.paused ? 'Play voice preview' : 'Pause voice preview');
-    });
-    voiceAudio.addEventListener('timeupdate', () => { voiceSeek.value = Number.isFinite(voiceAudio.duration) && voiceAudio.duration > 0 ? voiceAudio.currentTime / voiceAudio.duration * 100 : 0; });
-    voiceSeek.addEventListener('input', () => { if (Number.isFinite(voiceAudio.duration)) voiceAudio.currentTime = Number(voiceSeek.value) / 100 * voiceAudio.duration; });
+    // Interaction-only code loads with the first room, outside the app shell.
+    let roomTools = null;
+    function loadRoomTools() {
+        roomTools ||= import('./room-tools.js').then((tools) => {
+            tools.bindTimeReveal($('.chat-timeline'), { width: TIME_REVEAL_WIDTH });
+            return { ...tools, voice: tools.bindVoicePlayers(root, { composerAudio: voiceAudio, showToast, onChange: () => softHaptic?.() }) };
+        }).catch(() => { roomTools = null; return null; });
+        return roomTools;
+    }
     function syncVoiceComposer() {
         $('.chat-composer').classList.toggle('voice-mode', voiceMode);
         $('.chat-voice-inline').classList.toggle('hidden', !voiceMode);
@@ -314,27 +353,63 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     const panel = root.closest('.panel');
     if (panel) new MutationObserver(() => { if (panel.classList.contains('hidden') && voiceMode) resetChatMediaComposer(); }).observe(panel, { attributes: true, attributeFilter: ['class'] });
     function showChatMediaReview() {
+        chatCameraToken++;
         chatCamera?.close();
         $('[data-chat-media-dialog]').classList.remove('is-capturing');
     }
-    function startChatCamera() {
+    async function startChatCamera() {
         if (chatMediaPublishing) return;
         resetChatMediaComposer();
-        chatCamera ||= createLiveCamera({
-            container: $('[data-chat-camera]'), singlePhoto: true,
-            onCapture: async ([file]) => { showChatMediaReview(); await prepareSelectedChatMedia(file); },
-            onFallback: () => { showChatMediaReview(); $('.chat-media-file-input').click(); },
-        });
+        const token = ++chatCameraToken;
         $('[data-chat-media-dialog]').classList.add('is-capturing');
+        try {
+            if (!chatCamera) {
+                const { createLiveCamera, ensureCameraStyles } = await loadLiveCamera();
+                await ensureCameraStyles();
+                chatCamera ||= createLiveCamera({
+                    container: $('[data-chat-camera]'), singlePhoto: true,
+                    // iOS opens the message camera on the front camera.
+                    initialFacing: 'user',
+                    maxDimension: 3840,
+                    haptic: cameraHaptic,
+                    onCapture: async ([bitmap]) => { showChatMediaReview(); await prepareSelectedChatMedia(bitmap); },
+                    onFallback: () => { showChatMediaReview(); $('.chat-media-file-input').click(); },
+                    recording: {
+                        // Without the ingest only a small MP4 (Safari) can go straight up.
+                        limitFor: (mimeType) => ingestEnabled(getConfig())
+                            ? Number(getConfig()?.web_media_ingest_video_max_duration_ms) || 60_000
+                            : mimeType.startsWith('video/mp4') ? 15_000 : 0,
+                        onRecorded: ({ file, durationMs, poster }) => { showChatMediaReview(); void prepareSelectedChatMedia(file, { durationMsHint: durationMs, poster }); },
+                    },
+                });
+            }
+        } catch (_) {
+            if (token !== chatCameraToken) return;
+            showChatMediaReview();
+            $(".chat-media-status").textContent = "The camera needs a connection to load. Choose a photo from your library instead.";
+            return;
+        }
+        if (token !== chatCameraToken || !$('[data-chat-media-dialog]').open) return;
         chatCamera.open();
     }
     $('[data-retake-chat-photo]').addEventListener('click', startChatCamera);
     $('[data-chat-photo-library]').addEventListener('click', () => { showChatMediaReview(); $('.chat-media-file-input').click(); });
-    function startMementoCamera() {
+    async function startMementoCamera() {
         if (mementoPublishing) return;
         resetMementoComposer();
+        const token = ++mementoCameraToken;
         $('[data-memento-dialog]').classList.add('is-capturing');
         $('.memento-photo-fallback').hidden = true;
+        try {
+            await ensureMementoCamera();
+        } catch (_) {
+            if (token !== mementoCameraToken) return;
+            $('[data-memento-dialog]').classList.remove('is-capturing');
+            $('.memento-photo-fallback').hidden = false;
+            $(".memento-status").textContent = "The camera needs a connection to load. Choose a photo instead.";
+            return;
+        }
+        if (token !== mementoCameraToken || !$('[data-memento-dialog]').open) return;
         mementoCamera.open();
     }
     $('[data-retake-memento]').addEventListener('click', startMementoCamera);
@@ -418,25 +493,67 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     mediaViewer.addEventListener('pointerup', event => {
         if (!ephemeralPointer) return;
         const point = ephemeralPointer; ephemeralPointer = null;
-        if (event.clientY - point.y > 90 || (performance.now() - point.at < 220 && event.clientX > innerWidth / 2)) closeMediaViewer();
+        // Drag-to-dismiss belongs to the gesture module once it has loaded.
+        const dragged = event.clientY - point.y > 90;
+        if (dragged && viewerGestures) return;
+        if (dragged || (performance.now() - point.at < 220 && Math.abs(event.clientY - point.y) < 12 && event.clientX > innerWidth / 2)) closeMediaViewer();
         else setEphemeralPaused(false);
     });
     mediaViewer.addEventListener('pointercancel', () => { ephemeralPointer = null; setEphemeralPaused(false); });
     $('.chat-timeline').addEventListener('scroll', () => requestAnimationFrame(recordVisibleHistory), { passive: true });
     document.addEventListener('visibilitychange', () => {
-        if (document.hidden) { void historyReceipts?.leave(store.state.activeChatId); closeMediaViewer(); closeMessageActions(); }
-        else { void refreshSharedHistory(); requestAnimationFrame(recordVisibleHistory); }
+        if (document.hidden) { void historyReceipts?.leave(store.state.activeChatId); closeMediaViewer(); closeMessageActions(); stopTyping(); }
+        else if (activation) {
+            void refreshSharedHistory(); requestAnimationFrame(recordVisibleHistory);
+            void retryPendingMessages(null);
+        }
+        scheduleHistorySweep();
+        reportActiveChat();
     });
-    addEventListener('pagehide', () => { void historyReceipts?.leave(); closeMediaViewer(); closeMessageActions(); });
+    addEventListener('pagehide', () => { void historyReceipts?.leave(); closeMediaViewer(); closeMessageActions(); stopTyping(); reportActiveChat(); });
     addEventListener('online', () => { void historyReceipts?.flush(); void refreshSharedHistory(); });
     if (panel) new MutationObserver(() => {
-        if (panel.classList.contains('hidden')) { void historyReceipts?.leave(); closeMediaViewer(); closeMessageActions(); }
+        if (panel.classList.contains('hidden')) {
+            void historyReceipts?.leave(); closeMediaViewer(); closeMessageActions();
+            // Another tab replaced this room; typing and presence must not linger.
+            if (store.state.activeChatId) leaveRoom();
+        }
         else { void refreshSharedHistory(); requestAnimationFrame(recordVisibleHistory); }
+        scheduleHistorySweep();
+        reportActiveChat();
     }).observe(panel, { attributes: true, attributeFilter: ['class'] });
-    setInterval(() => {
-        if (!store.state.activeChatId || root.closest('.hidden')) return;
-        if (store.messages().some(message => !historyVisible(message))) renderMessages(false, { preservePosition: true });
-    }, 1000);
+
+    // Expired history disappears at its deadline. One timer for the nearest
+    // deadline in the open room, never a standing interval, and none while hidden.
+    function scheduleHistorySweep() {
+        clearTimeout(historySweepTimer);
+        historySweepTimer = null;
+        if (!store.state.activeChatId || document.hidden || root.closest('.hidden')) return;
+        const now = Date.now();
+        const next = store.messages().reduce((soonest, message) => {
+            const at = Date.parse(message.history_expires_at);
+            return message.kind !== 'memento' && Number.isFinite(at) && at < soonest ? at : soonest;
+        }, Infinity);
+        if (!Number.isFinite(next)) return;
+        historySweepTimer = setTimeout(() => {
+            historySweepTimer = null;
+            if (store.state.activeChatId && store.messages().some(message => !historyVisible(message))) renderMessages(false, { preservePosition: true });
+            else scheduleHistorySweep();
+        }, Math.min(2_147_000_000, Math.max(250, next - now + 50)));
+    }
+
+    // The shell forwards this to the service worker so an open, visible room
+    // does not also raise a notification for its own messages.
+    let reportedChatId;
+    function reportActiveChat() {
+        const roomVisible = !document.hidden && !root.closest('.hidden') && !$('[data-chat-screen=room]').classList.contains('hidden');
+        const chatId = roomVisible && store.state.activeChatId ? String(store.state.activeChatId) : null;
+        if (chatId === reportedChatId) return;
+        reportedChatId = chatId;
+        if (chatId) document.documentElement.dataset.activeChatId = chatId;
+        else delete document.documentElement.dataset.activeChatId;
+        window.dispatchEvent(new CustomEvent('valid:active-chat', { detail: { chatId } }));
+    }
     root.addEventListener('pointerdown', event => {
         const target = event.target.closest('[data-replay]');
         if (!target || target.disabled || viewOnceStates.get(target.dataset.openViewOnce)?.armed) return;
@@ -461,7 +578,24 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     });
     $(".chat-composer").addEventListener("submit", sendMessage);
     $(".chat-search-form").addEventListener("submit", searchChats);
-    $(".chat-composer textarea").addEventListener("input", handleTypingInput);
+    $(".chat-composer textarea").addEventListener("input", () => { handleTypingInput(); resizeComposer(); });
+    $(".chat-composer textarea").addEventListener("keydown", (event) => {
+        // Hardware keyboards send with Enter (Shift+Enter adds a line); touch keyboards keep Return as a newline.
+        if (event.key !== "Enter" || event.shiftKey || event.isComposing || !matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+        event.preventDefault();
+        $(".chat-composer").requestSubmit();
+    });
+    // Tapping Send must not move focus off the composer (the keyboard stays up).
+    $(".chat-send-button").addEventListener("mousedown", (event) => {
+        if (document.activeElement === $(".chat-composer textarea")) event.preventDefault();
+    });
+    // Expired signed URLs (~15 minutes) fail every route; fetch fresh ones once per message.
+    $(".chat-timeline").addEventListener("error", (event) => {
+        const image = event.target;
+        if (!(image instanceof HTMLImageElement) || !image.dataset.messageMedia || !image.classList.contains("media-placeholder")) return;
+        const message = store.messages().find((item) => item.id === image.dataset.messageMedia);
+        if (message) void refreshMessageMedia(message);
+    }, true);
     $(".chat-person-search input").addEventListener("input", renderPeople);
     $(".chat-people-list").addEventListener("change", updateCreateState);
     $(".memento-file-input").addEventListener("change", selectMemento);
@@ -487,8 +621,12 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     });
     $("[data-chat-media-viewer]").addEventListener("close", () => { if (!$("[data-chat-media-viewer]").open) { mediaOpenGeneration++; resetMediaViewerContents(); } });
     window.addEventListener("online", () => {
-        void retryPendingMessages(store.state.activeChatId);
+        if (!activation) return;
+        void retryPendingMessages(null);
         void retryPendingMediaUploads();
+    });
+    navigator.serviceWorker?.addEventListener?.("message", (event) => {
+        if (event.data?.type === "valid-media-outbox-sync") void retryPendingMediaUploads();
     });
 
     const visiblePresenceNodes = new Set();
@@ -544,20 +682,46 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     }
     presence?.subscribe(renderPresence);
 
+    // The route keeps one view for the page's lifetime; a different account
+    // must never see the previous account's inbox, rooms or timers.
+    function resetForUser() {
+        if (store.state.activeChatId) leaveRoom();
+        viewUserId = userId() ? String(userId()) : null;
+        lastListLoad = 0;
+        store.replaceChats([]);
+        store.state.messagesByChat.clear();
+        store.state.messagePageByChat.clear();
+        store.state.lastEventId = null;
+        clearTimeout(outboxRetryTimer); outboxRetryTimer = null;
+        clearTimeout(mediaOutboxRetryTimer); mediaOutboxRetryTimer = null;
+        clearTimeout(listRefreshTimer); listRefreshTimer = null;
+        for (const timer of chatRefreshTimers.values()) clearTimeout(timer);
+        chatRefreshTimers.clear();
+        refreshedMediaMessages.clear();
+        readWatermark = { chatId: null, sequence: 0 };
+        $(".chat-list").innerHTML = "";
+        $(".chat-recent-rail").innerHTML = "";
+        $(".chat-recent").classList.add("hidden");
+        onUnreadChange?.(0);
+    }
+
     async function activate(context) {
+        if ((userId() ? String(userId()) : null) !== viewUserId) resetForUser();
         ensureHistoryReceipts();
         activation = context;
         if (!(getConfig()?.enable_chats === true && getConfig()?.enable_web_chats === true)) {
             $(".chat-list-status").textContent = "Chats are not available yet.";
             return;
         }
+        realtime.start();
         if (!store.state.chats.length || Date.now() - lastListLoad > REFRESH_MS) await loadChats();
-        startRealtime();
         void retryPendingMediaUploads();
+        void retryPendingMessages(null);
         const requestedChatId = new URLSearchParams(location.search).get("chat");
         if (requestedChatId) await openChat(requestedChatId, { updateHistory: false });
         else {
-            store.state.activeChatId = null;
+            // Browser Back from a room lands here: run the same cleanup as the in-app back button.
+            if (store.state.activeChatId) leaveRoom();
             store.state.detail = null;
             store.state.dailyRow = null;
             store.state.displayedDailyRow = null;
@@ -576,6 +740,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         $$('[data-chat-screen]').forEach((screen) => screen.classList.toggle("hidden", screen.dataset.chatScreen !== name));
         root.closest(".panel")?.classList.toggle("chat-room-open", name === "room");
         observePresence();
+        reportActiveChat();
     }
 
     async function loadChats({ quiet = false } = {}) {
@@ -613,12 +778,14 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     function conversationAvatarMarkup(chat) {
         const isGroup = chat.name != null || chat.accepted_count + chat.pending_count >= 3;
         const photo = safeMediaURL(isGroup ? chat.chat_photo_url : chat.pair_profile_picture_url || chat.member_previews?.[0]?.profile_picture_url, api);
-        if (photo) return `<img src="${escapeChatHTML(photo)}" alt="" loading="lazy" decoding="async">`;
+        const initial = String(chat.display_name || "").slice(0, 1).toUpperCase();
+        if (photo) return mediaImageMarkup(photo, { initials: initial || "V" });
         if (!isGroup) return `<span>${escapeChatHTML(chat.display_name.slice(0, 1).toUpperCase())}</span>`;
         const members = (chat.member_previews || []).slice(0, 4);
         return `<span class="chat-avatar-mosaic" data-member-count="${members.length}" aria-hidden="true">${members.length ? members.map(member => {
             const image = safeMediaURL(member.profile_picture_url, api);
-            return `<i class="chat-avatar-member">${image ? `<img src="${escapeChatHTML(image)}" alt="" loading="lazy" decoding="async">` : escapeChatHTML(displayMember(member).slice(0, 1).toUpperCase())}</i>`;
+            const initial = displayMember(member).slice(0, 1).toUpperCase();
+            return `<i class="chat-avatar-member">${image ? mediaImageMarkup(image, { initials: initial }) : escapeChatHTML(initial)}</i>`;
         }).join('') : uiIcon('group')}</span>`;
     }
 
@@ -705,6 +872,8 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         const savedAnchor = savedPosition && !savedPosition.bottom
             ? savedPosition.anchors.map(anchor => store.messages().find(item => item.id === anchor.key)).find(Boolean) : null;
         if (store.state.activeChatId !== String(chatId)) {
+            store.state.typingUserIds.clear();
+            $(".chat-typing").classList.add("hidden");
             void historyReceipts?.leave(store.state.activeChatId);
             viewOnceSessionByMessage.clear(); viewOnceStates.clear();
             closeMediaViewer();
@@ -722,6 +891,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             $('.chat-memento-gallery').innerHTML = '';
         }
         const generation = ++roomGeneration;
+        void loadRoomTools();
         historyLoading = null;
         historyError = null;
         historyHasNewer = false;
@@ -782,7 +952,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         renderSettings();
         updatePresenceAudience();
         if (!savedAnchor) await markRoomRead();
-        await loadChats({ quiet: true });
+        scheduleChatRowRefresh(String(chatId), 0);
         if (!chatAccessUnavailable()) void retryPendingMessages(chatId);
         const requestedCallId = new URLSearchParams(location.search).get("call");
         if (requestedCallId) void calls.open(requestedCallId);
@@ -797,6 +967,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             && chat?.membership_status !== "invited"
             && chat?.has_viewer_blocked_member !== true;
         $(".chat-call-actions").classList.toggle("hidden", !callsAvailable);
+        if (callsAvailable) calls.preload();
     }
 
     function renderRoomPresence(chat) {
@@ -934,11 +1105,21 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             key: "window:earlier",
             html: historyEdgeMarkup('older'),
         });
+        // Computed once per render: the receipt row belongs to the latest sent message.
+        const mineMessage = item => item.viewer_is_sender || String(item.sender_user_id) === String(userId());
+        const latestOutgoing = items.findLast(item => mineMessage(item) && item.kind !== 'system' && item.delivery_state === 'sent');
+        const acceptedOthers = (store.state.detail?.members || []).filter((member) => member.status === "accepted" && String(member.user_id) !== String(userId()));
+        const context = { latestOutgoingId: latestOutgoing?.id || null, groupReceipts: acceptedOthers.length > 1 };
         visible.items.forEach((message, visibleIndex) => {
             const index = visible.start + visibleIndex;
+            const separator = chatSeparatorBefore(message, items[index - 1]);
+            if (separator) entries.push({
+                key: `sep:${message.id}`,
+                html: `<div class="chat-day-separator" role="presentation" data-list-key="sep:${escapeChatHTML(message.id)}"><time datetime="${escapeChatHTML(separator.at)}"><strong>${escapeChatHTML(separator.day)}</strong> ${escapeChatHTML(separator.time)}</time></div>`,
+            });
             entries.push({
                 key: message.id,
-                html: messageMarkup(message, byId.get(String(message.reply_to_message_id)), items[index - 1], items[index + 1], index, visible.total),
+                html: messageMarkup(message, byId.get(String(message.reply_to_message_id)), items[index - 1], items[index + 1], index, visible.total, context),
             });
         });
         if (visible.hiddenAfter || historyHasNewer) entries.push({
@@ -956,6 +1137,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         timelineScroll.observe();
         requestAnimationFrame(recordVisibleHistory);
         scheduleVideoRefreshes();
+        scheduleHistorySweep();
     }
 
     function videoBadgeMarkup(message) {
@@ -992,6 +1174,19 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     function queueVideoRefresh(key, refresh) {
         const delay = videoRefreshDelay(refresh.attempt, Date.now() - refresh.startedAt);
         refresh.timer = delay === null ? null : setTimeout(() => void refreshVideoMessage(key, refresh), delay);
+    }
+
+    async function refreshMessageMedia(message) {
+        const chatId = store.state.activeChatId;
+        const key = `${chatId}:${message.id}`;
+        if (!chatId || refreshedMediaMessages.has(key) || String(message.id).startsWith("pending:") || message.view_once) return false;
+        refreshedMediaMessages.add(key);
+        if (refreshedMediaMessages.size > 200) refreshedMediaMessages.delete(refreshedMediaMessages.values().next().value);
+        const latest = await fetchVideoMessage(chatId, message);
+        if (!latest || chatId !== store.state.activeChatId) return false;
+        store.updateMessage(chatId, { ...message, ...latest });
+        renderMessages(false, { preservePosition: true });
+        return true;
     }
 
     async function fetchVideoMessage(chatId, message) {
@@ -1075,9 +1270,32 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         await loadHistory(direction);
     }
 
-    function messageMarkup(message, reply, previous, next, index = 0, total = 1) {
+    function mediaBoxMarkup(message, mediaURL, mementoSwappedURL, mediaOverlay) {
+        const kind = ['memento', 'story', 'sticker', 'video'].includes(message.kind) ? message.kind : 'photo';
+        const alt = kind === "memento" ? "Memento" : kind === "video" ? "Video thumbnail" : kind === "sticker" ? "Sticker" : "Photo";
+        // The preview loads first; the full photo is its fallback when the preview never landed.
+        const preview = kind === 'photo' ? safeMediaURL(message.photo_thumbnail_url, api) : '';
+        const hash = kind === 'sticker' ? '' : thumbHashDataURL(message.preview_hash);
+        const image = mediaImageMarkup(preview && preview !== mediaURL ? [preview, mediaURL] : [mediaURL], {
+            alt, className: 'chat-media-image', attributes: `data-message-media="${escapeChatHTML(message.id)}"`,
+        });
+        const open = kind === "memento"
+            ? `data-view-memento="${escapeChatHTML(mediaURL)}" ${mementoSwappedURL ? `data-memento-swapped="${escapeChatHTML(mementoSwappedURL)}"` : ""} data-memento-owner="${escapeChatHTML(message.sender_first_name || "Memento")}" data-memento-entry="${escapeChatHTML(message.daily_entry_id || "")}"`
+            : `data-open-chat-media-message="${escapeChatHTML(message.id)}"`;
+        return `<button class="chat-message-media ${kind}" type="button" ${open}>${hash ? `<img class="chat-media-hash" src="${escapeChatHTML(hash)}" alt="" aria-hidden="true" decoding="async">` : ''}${image}${mediaOverlay}${kind === "video" ? videoBadgeMarkup(message) : ""}</button>`;
+    }
+
+    function voiceMessageMarkup(message) {
+        const audioURL = safeMediaURL(message.audio_url, api);
+        if (!audioURL) return `<div class="chat-audio-message unavailable">Voice message unavailable</div>`;
+        const seconds = Math.max(1, Math.round(Number(message.audio_duration_ms || 0) / 1000));
+        return `<div class="chat-audio-message" data-voice-message="${escapeChatHTML(message.id)}"><button type="button" class="chat-voice-toggle" data-voice-toggle aria-label="Play voice message">${uiIcon('play')}</button><input type="range" min="0" max="100" value="0" step="0.1" data-voice-seek aria-label="Voice message position"><small class="chat-voice-clock" data-voice-clock data-duration="${seconds}">0:00 · −${formatClock(seconds)}</small><button type="button" class="chat-voice-speed" data-voice-speed aria-label="Playback speed 1×">1×</button><audio src="${escapeChatHTML(audioURL)}" preload="metadata" aria-label="Voice message" hidden></audio></div>`;
+    }
+
+    function messageMarkup(message, reply, previous, next, index = 0, total = 1, context = {}) {
         const position = `role="listitem" aria-posinset="${index + 1}" aria-setsize="${total}"`;
         if (message.kind === "tombstone" || message.status !== "active") return `<article class="chat-system-message" ${position} data-list-key="${escapeChatHTML(message.id)}"><span>Message removed</span></article>`;
+        if (!message.call_id && !KNOWN_MESSAGE_KINDS.has(message.kind)) return `<article class="chat-system-message unsupported" ${position} data-list-key="${escapeChatHTML(message.id)}"><span>Update Valid to see this message</span></article>`;
         if (message.call_id) {
             const call = callHistoryPresentation(message, userId());
             return `<article class="chat-call-history ${call.mine ? 'mine' : ''} ${call.attention ? 'attention' : ''}" ${position} data-list-key="${escapeChatHTML(message.id)}"><div class="chat-call-history-icon">${uiIcon(call.icon)}</div><div><strong>${escapeChatHTML(call.title)}</strong><small>${escapeChatHTML(call.detail)}</small></div><time>${escapeChatHTML(messageTime(message.created_at))}</time></article>`;
@@ -1092,25 +1310,24 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         const mementoSwappedURL = message.kind === "memento" ? safeMediaURL(message.memento_swapped_image_url, api) : null;
         const overlay = message.kind === "story" ? { text: message.story_text_overlay, x: message.story_text_overlay_x, y: message.story_text_overlay_y } : message.media_text_overlay;
         const mediaOverlay = overlay?.text ? `<span class="chat-media-text" data-overlay-x="${Number(overlay.x || 0.5)}" data-overlay-y="${Number(overlay.y || 0.5)}">${escapeChatHTML(overlay.text)}</span>` : "";
-        const persistentMedia = mediaURL ? `<button class="chat-message-media ${message.kind === "sticker" ? "sticker" : ""}" type="button" ${message.kind === "memento" ? `data-view-memento="${escapeChatHTML(mediaURL)}" ${mementoSwappedURL ? `data-memento-swapped="${escapeChatHTML(mementoSwappedURL)}"` : ""} data-memento-owner="${escapeChatHTML(message.sender_first_name || "Memento")}" data-memento-entry="${escapeChatHTML(message.daily_entry_id || "")}"` : `data-open-chat-media-message="${escapeChatHTML(message.id)}"`}><img src="${escapeChatHTML(mediaURL)}" alt="${message.kind === "memento" ? "Memento" : message.kind === "video" ? "Video thumbnail" : message.kind === "sticker" ? "Sticker" : "Photo"}" loading="lazy" decoding="async">${mediaOverlay}${message.kind === "video" ? videoBadgeMarkup(message) : ""}</button>` : "";
-        const audioURL = safeMediaURL(message.audio_url, api);
-        const audioMedia = message.kind === "audio" ? (audioURL ? `<div class="chat-audio-message"><strong>Voice message</strong><audio src="${escapeChatHTML(audioURL)}" controls preload="metadata" aria-label="Voice message"></audio><small>${Math.max(1, Math.round(Number(message.audio_duration_ms || 0) / 1000))}s</small></div>` : `<div class="chat-audio-message unavailable">Voice message unavailable</div>`) : "";
+        const persistentMedia = mediaURL ? mediaBoxMarkup(message, mediaURL, mementoSwappedURL, mediaOverlay) : "";
+        const audioMedia = message.kind === "audio" ? voiceMessageMarkup(message) : "";
         const once = viewOncePresentation(message, { canReplay: viewOnceSessionByMessage.has(message.id), ...viewOnceStates.get(message.id) });
         const marker = once.mine ? `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 19 9-19 9 4-9Z"/></svg>`
             : once.expired ? uiIcon('clock') : `<span>${once.kind === 'video' ? uiIcon('play') : ''}</span>`;
         const viewOnceMedia = message.view_once ? `<button class="chat-view-once-card ${once.kind} ${once.hollow ? 'opened' : ''} ${once.mine ? 'outgoing' : ''} ${once.label.length > 16 ? 'compact-label' : ''} ${viewOnceStates.get(message.id)?.armed ? 'armed' : ''}" type="button" data-open-view-once="${escapeChatHTML(message.id)}" ${once.replay ? 'data-replay="true"' : ''} ${once.disabled ? 'disabled' : ''} aria-label="${escapeChatHTML(`${once.kind === 'video' ? 'Video' : 'Photo'} · ${once.label}`)}"><i class="chat-media-marker" aria-hidden="true">${marker}</i><strong>${escapeChatHTML(once.label)}</strong></button>` : '';
         const media = audioMedia || (message.view_once ? viewOnceMedia : persistentMedia);
-        const body = message.body && message.body !== "Sent a Memento" ? `<p>${escapeChatHTML(message.body)}</p>` : "";
+        const body = message.body && message.body !== "Sent a Memento" ? `<p>${linkifyChatText(message.body)}</p>` : "";
         const reactionTypes = Object.entries(message.reaction_summary || {}).filter(([type, count]) => Number(count) > 0 && CHAT_REACTIONS.some(([key]) => key === type))
             .sort(([a, x], [b, y]) => Number(y) - Number(x) || a.localeCompare(b)).slice(0, 3);
         const reactionCount = Number(message.reaction_count || Object.values(message.reaction_summary || {}).reduce((total, count) => total + Number(count || 0), 0));
         const reactions = reactionCount > 0 ? `<span class="chat-reaction-cluster" aria-hidden="true">${reactionTypes.map(([type]) => `<span>${CHAT_REACTIONS.find(([key]) => key === type)[1]}</span>`).join('')}</span> <span class="chat-reaction-count">${reactionCount}</span>` : '';
-        const latestOutgoing = store.messages().findLast(item => (item.viewer_is_sender || String(item.sender_user_id) === String(userId())) && item.kind !== 'system' && item.delivery_state === 'sent');
+        const latestOutgoingId = context.latestOutgoingId ?? null;
         const readers = mine && message.delivery_state === "sent" ? readReceiptMembers(message) : [];
-        const acceptedOthers = (store.state.detail?.members || []).filter((member) => member.status === "accepted" && String(member.user_id) !== String(userId()));
-        const receipt = readers.length && message.id === latestOutgoing?.id ? `<button type="button" class="chat-read-receipt" data-view-readers="${escapeChatHTML(message.id)}">${acceptedOthers.length > 1 ? `Read by ${readers.length}` : "Read"}</button>` : "";
+        const receipt = readers.length && message.id === latestOutgoingId ? `<button type="button" class="chat-read-receipt" data-view-readers="${escapeChatHTML(message.id)}">${context.groupReceipts ? `Read by ${readers.length}` : "Read"}</button>` : "";
         const viewReceipt = mine && message.view_once ? `<button type="button" class="chat-read-receipt" data-view-once-receipts="${escapeChatHTML(message.id)}">View receipts</button>` : "";
-        return `<article class="chat-message ${mine ? "mine" : "theirs"} ${startsSequence ? "starts-sequence" : ""} ${endsSequence ? "ends-sequence" : ""} ${message.delivery_state || ""} ${message.view_once ? "ephemeral" : ""}" ${position} data-list-key="${escapeChatHTML(message.id)}" data-message-id="${escapeChatHTML(message.id)}"><div class="chat-message-meta">${!mine && startsSequence ? `<strong>${escapeChatHTML(message.sender_first_name || "Student")}</strong>` : ""}</div><div class="chat-bubble" data-message-bubble="${escapeChatHTML(message.id)}">${replyMarkup}${media}${message.saved_in_chat ? `<small class="chat-saved-label">Saved by ${escapeChatHTML(message.saved_by?.first_name || "a member")}</small>` : ""}${message.kind === "memento" ? `<small class="memento-label">Memento</small>` : message.kind === "story" ? `<small class="memento-label">${message.story_share_context === "reply" ? "Story reply" : "Shared Story"}</small>` : ""}${body}<time>${escapeChatHTML(message.delivery_state === "sending" ? "Sending…" : message.delivery_state === "failed" ? "Not sent" : messageTime(message.created_at))}</time><button class="chat-message-menu-button" type="button" data-message-menu="${escapeChatHTML(message.id)}" aria-label="Message actions" aria-expanded="false">${uiIcon("more")}</button></div>${message.delivery_state === "failed" ? `<button class="chat-retry" type="button" data-retry-message="${escapeChatHTML(message.client_request_id)}">Retry</button>` : ""}${messageActionsMarkup(message, { mine, olderReaders: readers.length && message.id !== latestOutgoing?.id && !message.view_once })}${reactions ? `<button type="button" class="chat-reaction-summary ${message.current_user_reaction ? 'has-own-reaction' : ''}" data-view-reactions="${escapeChatHTML(message.id)}" aria-label="View reactions">${reactions}</button>` : ""}${viewReceipt || receipt}</article>`;
+        const mediaOnly = persistentMedia && !body && !replyMarkup && !message.saved_in_chat && ["photo", "video", "sticker"].includes(message.kind) && message.delivery_state === "sent";
+        return `<article class="chat-message ${mine ? "mine" : "theirs"} ${mediaOnly ? "media-only" : ""} ${startsSequence ? "starts-sequence" : ""} ${endsSequence ? "ends-sequence" : ""} ${message.delivery_state || ""} ${message.view_once ? "ephemeral" : ""}" ${position} data-list-key="${escapeChatHTML(message.id)}" data-message-id="${escapeChatHTML(message.id)}"><div class="chat-message-meta">${!mine && startsSequence ? `<strong>${escapeChatHTML(message.sender_first_name || "Student")}</strong>` : ""}</div><div class="chat-bubble" data-message-bubble="${escapeChatHTML(message.id)}">${replyMarkup}${media}${message.saved_in_chat ? `<small class="chat-saved-label">Saved by ${escapeChatHTML(message.saved_by?.first_name || "a member")}</small>` : ""}${message.kind === "memento" ? `<small class="memento-label">Memento</small>` : message.kind === "story" ? `<small class="memento-label">${message.story_share_context === "reply" ? "Story reply" : "Shared Story"}</small>` : ""}${body}<time>${escapeChatHTML(message.delivery_state === "sending" ? "Sending…" : message.delivery_state === "failed" ? "Not sent" : messageTime(message.created_at))}</time><button class="chat-message-menu-button" type="button" data-message-menu="${escapeChatHTML(message.id)}" aria-label="Message actions" aria-expanded="false">${uiIcon("more")}</button></div>${message.delivery_state === 'sent' ? `<time class="chat-reveal-time" datetime="${escapeChatHTML(message.created_at || '')}">${escapeChatHTML(messageTime(message.created_at))}</time>` : ''}${message.delivery_state === "failed" ? `<div class="chat-send-failure"><button class="chat-retry" type="button" data-retry-message="${escapeChatHTML(message.client_request_id)}" aria-label="Not sent. Tap to retry">Not sent · Tap to retry</button><button class="chat-discard" type="button" data-discard-message="${escapeChatHTML(message.client_request_id)}" aria-label="Delete unsent message">Delete</button></div>` : ""}${messageActionsMarkup(message, { mine, olderReaders: readers.length && message.id !== latestOutgoingId && !message.view_once })}${reactions ? `<button type="button" class="chat-reaction-summary ${message.current_user_reaction ? 'has-own-reaction' : ''}" data-view-reactions="${escapeChatHTML(message.id)}" aria-label="View reactions">${reactions}</button>` : ""}${viewReceipt || receipt}</article>`;
     }
 
     function readReceiptMembers(message) {
@@ -1144,26 +1361,27 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         }
     }
 
-    function scheduleOutboxRetry(records, chatId = store.state.activeChatId) {
+    function scheduleOutboxRetry(records) {
         clearTimeout(outboxRetryTimer);
         outboxRetryTimer = null;
         const next = records
-            .filter((record) => record.chat_id === String(chatId)
-                && Number(record.attempts || 0) < MAX_AUTOMATIC_ATTEMPTS)
+            .filter((record) => Number(record.attempts || 0) < MAX_AUTOMATIC_ATTEMPTS)
             .reduce((earliest, record) => Math.min(earliest, Number(record.next_attempt_at || 0)), Infinity);
         if (!Number.isFinite(next)) return;
         outboxRetryTimer = setTimeout(
-            () => void retryPendingMessages(store.state.activeChatId),
+            () => void retryPendingMessages(null),
             Math.max(1_000, Math.min(5 * 60_000, next - Date.now())),
         );
     }
 
+    // `chatId` null retries every chat's pending texts (reconnect, back online, visible again).
     async function retryPendingMessages(chatId) {
-        if (!chatId || outboxRetrying || navigator.onLine === false || chatAccessUnavailable()) return;
+        if (!userId() || outboxRetrying || navigator.onLine === false || document.hidden) return;
         outboxRetrying = true;
         try {
             const records = await listChatTextOutbox(userId()).catch(() => []);
-            const due = records.filter((record) => record.chat_id === String(chatId)
+            const due = records.filter((record) => (!chatId || record.chat_id === String(chatId))
+                && !(record.chat_id === store.state.activeChatId && chatAccessUnavailable())
                 && Number(record.attempts || 0) < MAX_AUTOMATIC_ATTEMPTS
                 && Number(record.next_attempt_at || 0) <= Date.now()).slice(0, 10);
             for (const record of due) await sendMessage(null, record.client_request_id, { automatic: true });
@@ -1187,35 +1405,13 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         );
     }
 
-    async function deliverMediaRecord(record, { onProgress } = {}) {
+    async function deliverMediaRecord(record, { onProgress, onStatus, signal } = {}) {
         if (record.kind === "memento") {
             return deliverMementoRecord(api, userId(), record, { onProgress });
         }
         if (record.kind !== "chat_media") throw new Error("This saved upload is not supported.");
-        const session = await api.createChatMediaUpload(userId(), {
-            contentType: record.content_type,
-            sizeBytes: record.file.size,
-            thumbnailSizeBytes: record.thumbnail?.size ?? null,
-            durationMs: record.duration_ms,
-            viewOnce: record.view_once,
-            clientRequestId: record.upload_request_id,
-        });
-        await api.putDirectUpload(record.file, session, { onProgress: (progress) => onProgress?.(progress * 0.88) });
-        if (record.thumbnail && !session.already_finalized) {
-            await api.putDirectUpload(record.thumbnail, {
-                upload_url: session.thumbnail_upload_url,
-                upload_method: session.upload_method,
-                required_headers: session.thumbnail_required_headers,
-            }, { onProgress: (progress) => onProgress?.(0.88 + progress * 0.1) });
-        }
-        await api.finalizeChatMediaUpload(userId(), session.media_asset_id);
-        return api.sendChatMessage(userId(), record.chat_id, {
-            media_asset_id: session.media_asset_id,
-            view_once: record.view_once,
-            media_text_overlay: record.overlay,
-            reply_to_message_id: record.reply_to_message_id,
-            client_request_id: record.send_request_id,
-        });
+        const { deliverChatMedia } = await import("../media-delivery.js");
+        return deliverChatMedia(api, userId(), record, { onProgress, onStatus, signal });
     }
 
     async function retryPendingMediaUploads() {
@@ -1260,9 +1456,21 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         }
     }
 
+    function resizeComposer() {
+        const textarea = $(".chat-composer textarea");
+        if (!textarea.value) { setRuntimeStyles(textarea, { height: null, "overflow-y": null }); return; }
+        // Grow with the text up to five lines, then scroll (iOS ChatComposerTextView).
+        setRuntimeStyles(textarea, { height: "auto" });
+        const style = getComputedStyle(textarea);
+        const line = Number.parseFloat(style.lineHeight) || Number.parseFloat(style.fontSize) * 1.25 || 20;
+        const chrome = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+        const limit = Math.ceil(line * 5 + chrome);
+        setRuntimeStyles(textarea, { height: `${Math.min(textarea.scrollHeight, limit)}px`, "overflow-y": textarea.scrollHeight > limit ? "auto" : "hidden" });
+    }
+
     async function sendMessage(event, retryRequestId = null, { automatic = false } = {}) {
         event?.preventDefault?.();
-        if (chatAccessUnavailable()) return;
+        if (!retryRequestId && !automatic && chatAccessUnavailable()) return;
         const textarea = $(".chat-composer textarea");
         if (!retryRequestId && !automatic && textarea.value.trim().toLowerCase() === '/play') {
             // Match iOS: a local command never enters the outbox or clears replies/media.
@@ -1274,22 +1482,36 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             else showToast?.('The weekly game is unavailable. Please reopen Valid.');
             return;
         }
-        const pendingRecords = retryRequestId ? await listChatTextOutbox(userId()).catch(() => []) : [];
-        const persisted = pendingRecords.find((record) => record.client_request_id === retryRequestId);
-        const pendingChatId = persisted?.chat_id || store.state.activeChatId;
-        const existing = retryRequestId
-            ? store.messages(pendingChatId).find((message) => message.client_request_id === retryRequestId)
-            : null;
-        const body = retryRequestId ? String(persisted?.body ?? existing?.body ?? "").trim() : textarea.value.trim();
-        const dailyEntryId = retryRequestId
-            ? (persisted?.daily_entry_id || existing?.daily_entry_id || null)
-            : sharedMementoDraft?.entryId || null;
-        if ((!body && !dailyEntryId) || !pendingChatId) return;
-        const chatId = pendingChatId;
+        let body, dailyEntryId, replyToMessageId, draftImageURL = null, chatId;
+        if (!retryRequestId) {
+            // Capture and clear the composer before the first await, so a second
+            // tap (or Enter) while the outbox write runs finds nothing to send.
+            chatId = store.state.activeChatId;
+            body = textarea.value.trim();
+            dailyEntryId = sharedMementoDraft?.entryId || null;
+            if ((!body && !dailyEntryId) || !chatId) return;
+            replyToMessageId = store.state.replyToMessageId;
+            draftImageURL = sharedMementoDraft?.imageURL || null;
+            textarea.value = "";
+            resizeComposer();
+            store.state.replyToMessageId = null;
+            clearSharedMementoDraft();
+            renderReplyDraft();
+            stopTyping();
+            // iOS keeps the keyboard up after sending.
+            textarea.focus({ preventScroll: true });
+        } else {
+            const pendingRecords = await listChatTextOutbox(userId()).catch(() => []);
+            const persisted = pendingRecords.find((record) => record.client_request_id === retryRequestId);
+            chatId = persisted?.chat_id || store.state.activeChatId;
+            const existing = store.messages(chatId).find((message) => message.client_request_id === retryRequestId);
+            body = String(persisted?.body ?? existing?.body ?? "").trim();
+            dailyEntryId = persisted?.daily_entry_id || existing?.daily_entry_id || null;
+            replyToMessageId = persisted?.reply_to_message_id || existing?.reply_to_message_id || null;
+            if ((!body && !dailyEntryId) || !chatId) return;
+            if (chatId === store.state.activeChatId && chatAccessUnavailable()) return;
+        }
         const clientRequestId = retryRequestId || crypto.randomUUID();
-        const replyToMessageId = retryRequestId
-            ? (persisted?.reply_to_message_id || existing?.reply_to_message_id || null)
-            : store.state.replyToMessageId;
         await putChatTextOutbox({
             userId: userId(), chatId, clientRequestId,
             body, replyToMessageId, dailyEntryId,
@@ -1301,18 +1523,12 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             sender_user_id: userId(), sender_first_name: getUser()?.first_name,
             kind: dailyEntryId ? "memento" : "text", body,
             daily_entry_id: dailyEntryId,
-            memento_image_url: !retryRequestId && sharedMementoDraft?.entryId === dailyEntryId ? sharedMementoDraft.imageURL : null,
+            memento_image_url: draftImageURL,
             reply_to_message_id: replyToMessageId,
             status: "active", viewer_is_sender: true, created_at: new Date().toISOString(),
             delivery_state: "sending",
         });
         store.updateMessage(chatId, optimistic);
-        if (!automatic && !retryRequestId && store.state.activeChatId === chatId) {
-            textarea.value = "";
-            store.state.replyToMessageId = null;
-            clearSharedMementoDraft();
-            stopTyping();
-        }
         if (!automatic) softHaptic?.();
         if (store.state.activeChatId === chatId) renderMessages(!automatic);
         try {
@@ -1327,17 +1543,30 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             store.updateMessage(chatId, { ...message, delivery_state: "sent" });
             if (store.state.activeChatId === chatId) renderMessages(!automatic);
             if (!automatic) successHaptic?.();
-            void loadChats({ quiet: true });
+            scheduleChatRowRefresh(chatId);
         } catch (error) {
-            if (chatTextSendIsRetryable(error)) {
+            // A background retry for a room that is Memento-locked right now keeps
+            // its text for the person to retry or delete, rather than dropping it.
+            const keep = chatTextSendIsRetryable(error) || (automatic && error?.status === 403 && chatId !== store.state.activeChatId);
+            if (keep) {
                 await markChatTextOutboxAttempt(userId(), clientRequestId).catch(() => null);
             } else {
                 await removeChatTextOutbox(userId(), clientRequestId).catch(() => null);
             }
             store.updateMessage(chatId, { ...optimistic, delivery_state: "failed", error_message: error.message });
             if (store.state.activeChatId === chatId) renderMessages(false);
-            if (chatTextSendIsRetryable(error)) scheduleOutboxRetry(await listChatTextOutbox(userId()).catch(() => []), chatId);
+            if (chatTextSendIsRetryable(error)) scheduleOutboxRetry(await listChatTextOutbox(userId()).catch(() => []));
         }
+    }
+
+    async function discardFailedMessage(clientRequestId) {
+        if (!clientRequestId) return;
+        const chatId = store.state.activeChatId;
+        await removeChatTextOutbox(userId(), clientRequestId).catch(() => null);
+        if (!chatId) return;
+        store.replaceMessages(chatId, store.messages(chatId).filter((message) => message.client_request_id !== clientRequestId || !String(message.id).startsWith('pending:')), store.state.messagePageByChat.get(String(chatId)) || {});
+        renderMessages(false, { preservePosition: true });
+        feedback('medium');
     }
 
     async function markRoomRead() {
@@ -1434,7 +1663,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         }).map((person) => {
             const id = String(person.user_id || person.id);
             const image = safeMediaURL(person.profile_picture_url, api);
-            return `<label class="chat-person-row">${image ? `<img src="${escapeChatHTML(image)}" alt="" loading="lazy">` : `<span>${escapeChatHTML(displayMember(person).slice(0, 1))}</span>`}<span><strong>${escapeChatHTML(displayMember(person))}</strong><small>${escapeChatHTML(person.grade || "Classmate")}</small></span><input type="checkbox" value="${escapeChatHTML(id)}" ${selected.has(id) ? "checked" : ""}></label>`;
+            return `<label class="chat-person-row">${image ? mediaImageMarkup(image, { initials: displayMember(person).slice(0, 1) }) : `<span>${escapeChatHTML(displayMember(person).slice(0, 1))}</span>`}<span><strong>${escapeChatHTML(displayMember(person))}</strong><small>${escapeChatHTML(person.grade || "Classmate")}</small></span><input type="checkbox" value="${escapeChatHTML(id)}" ${selected.has(id) ? "checked" : ""}></label>`;
         }).join("") || `<p class="chat-no-people">No classmates found.</p>`;
         updateCreateState();
     }
@@ -1480,7 +1709,12 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     }
 
     async function declineInvitation(membershipId) {
-        if (!confirm("Decline this chat invitation?")) return;
+        const chat = store.state.chats.find((item) => item.membership_id === membershipId);
+        if (!await confirmSheet({
+            title: "Decline this invitation?",
+            message: `You won't join ${chat?.display_name || "this chat"} unless someone invites you again.`,
+            confirmLabel: "Decline", destructive: true,
+        })) return;
         try {
             await api.declineChatInvitation(userId(), membershipId);
             await loadChats();
@@ -1535,7 +1769,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     async function selectMemento(event) {
         const file = event.target.files?.[0];
         if (!file) return;
-        mementoCamera.close();
+        mementoCamera?.close();
         $('[data-memento-dialog]').classList.remove('is-capturing');
         selectedMementoSourceFile = file;
         selectedMementoSecondarySourceFile = null;
@@ -1651,7 +1885,9 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     }
 
     function resetMementoComposer() {
-        mementoCamera.close();
+        mementoCameraToken++;
+        mementoCamera?.close();
+        for (const source of [selectedMementoSourceFile, selectedMementoSecondarySourceFile]) if (source instanceof Blob === false) source?.close?.();
         $(".memento-publish").disabled = true;
         $('[data-memento-dialog]').classList.remove('is-capturing');
         mementoPreparationGeneration += 1;
@@ -1677,8 +1913,9 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         if (!store.state.activeChatId || chatAccessUnavailable() || chatMediaPublishing) return;
         if (voiceMode) resetChatMediaComposer();
         document.activeElement?.blur();
+        $(".chat-media-file-input").accept = ingestEnabled(getConfig()) ? "image/*,video/*" : "image/*,video/mp4";
         $("[data-chat-media-dialog]").showModal();
-        startChatCamera();
+        void startChatCamera();
         $('[data-chat-camera]').focus({ preventScroll: true });
     }
 
@@ -1730,7 +1967,11 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     }
 
     async function deleteSticker(stickerId) {
-        if (!stickerId || !confirm("Remove this sticker from your saved stickers? Existing messages will stay in their chats.")) return;
+        if (!stickerId || !await confirmSheet({
+            title: "Remove from My Stickers?",
+            message: "Messages you already sent keep this sticker.",
+            confirmLabel: "Remove", destructive: true,
+        })) return;
         const item = $("[data-delete-sticker=\"" + CSS.escape(stickerId) + "\"]")?.closest(".chat-sticker-item");
         item?.querySelectorAll("button").forEach((button) => { button.disabled = true; });
         try {
@@ -1770,7 +2011,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 renderMessages(true);
             }
             successHaptic?.();
-            void loadChats({ quiet: true });
+            scheduleChatRowRefresh(chatId);
         } catch (error) {
             if (chatId !== store.state.activeChatId) {
                 showToast?.('Sticker not confirmed. Reopen that chat and tap the same sticker to retry.');
@@ -1790,54 +2031,91 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         chatMediaSendRequestId = null;
     }
 
-    async function prepareSelectedChatMedia(file, { durationMsHint = null } = {}) {
+    // An edit changes the pixels: encode again (with new request ids) on send.
+    function chatMediaEdited() {
+        resetChatMediaRequestIds();
+        chatMediaEncoded = null;
+    }
+
+    async function prepareSelectedChatMedia(file, { durationMsHint = null, poster = null, prepared: preparedMedia = null } = {}) {
         if (!file || chatMediaPublishing) return;
         showChatMediaReview();
-        const isPhotoSource = file.type.startsWith("image/");
+        const isPhotoSource = !(file instanceof Blob) || file.type.startsWith("image/") || /\.hei[cf]$/i.test(file.name || "");
         photoStickers.reset();
-        selectedChatMediaSourceFile = isPhotoSource ? file : null;
-        $(".chat-media-overlay").value = "";
-        chatMediaOverlay.reset();
+        releaseSelectedChatMedia();
+        selectedChatMediaSourceFile = null;
         const generation = ++chatMediaPreparationGeneration;
         $(".chat-media-status").textContent = "Preparing media…";
         $(".chat-media-publish").disabled = true;
-        $(".chat-media-overlay").disabled = true;
-        chatMediaOverlay.setDisabled(true);
+        $(".chat-media-send-count").hidden = true;
         resetChatMediaRequestIds();
         try {
-            const prepared = await prepareChatMedia(file, {
-                durationMsHint,
-            });
+            let prepared;
+            if (isPhotoSource) {
+                const [pipeline, editor] = await Promise.all([photoPipeline(), ensureReviewEditor()]);
+                const decoded = await pipeline.decodePhoto(file);
+                const profile = pipeline.chatPhotoProfile(getConfig());
+                try {
+                    prepared = { kind: "photo", canvas: pipeline.renderPhoto(decoded.image, { maxDimension: profile.maxDimension }), profile, file: null, thumbnail: null, durationMs: null };
+                } finally {
+                    decoded.release();
+                    if (!(file instanceof Blob)) file.close?.();
+                }
+                if (generation !== chatMediaPreparationGeneration) { prepared.canvas.width = prepared.canvas.height = 0; return; }
+                selectedChatMedia = prepared;
+                selectedChatMediaSourceFile = file instanceof Blob ? file : null;
+                await editor.loadPhoto(prepared.canvas);
+            } else {
+                prepared = preparedMedia || await prepareChatMedia(file, { durationMsHint, poster, config: getConfig() });
+                const editor = prepared.kind === "video" ? await ensureReviewEditor() : null;
+                if (generation !== chatMediaPreparationGeneration) return;
+                selectedChatMedia = prepared;
+                selectedChatMediaPreview = URL.createObjectURL(selectedChatMedia.file);
+                if (editor) editor.loadVideo(selectedChatMediaPreview, { durationMs: prepared.durationMs });
+                else $(".chat-media-preview").innerHTML = `<audio src="${escapeChatHTML(selectedChatMediaPreview)}" controls aria-label="Voice message preview"></audio>`;
+            }
             if (generation !== chatMediaPreparationGeneration) return;
-            selectedChatMedia = prepared;
-            if (selectedChatMediaPreview) URL.revokeObjectURL(selectedChatMediaPreview);
-            selectedChatMediaPreview = URL.createObjectURL(selectedChatMedia.file);
-            $(".chat-media-preview").innerHTML = selectedChatMedia.kind === "audio"
-                ? `<audio src="${escapeChatHTML(selectedChatMediaPreview)}" controls aria-label="Voice message preview"></audio>`
-                : selectedChatMedia.kind === "video"
-                ? `<video src="${escapeChatHTML(selectedChatMediaPreview)}" muted playsinline controls aria-label="Video preview"></video>`
-                : `<img src="${escapeChatHTML(selectedChatMediaPreview)}" alt="Photo preview">`;
             const isAudio = selectedChatMedia.kind === "audio";
             $("[data-chat-view-once]").checked = false;
             $("[data-chat-view-once]").disabled = isAudio;
-            chatMediaOverlay.mount();
+            $("[data-review-tools]").hidden = isAudio;
             photoStickers.mount();
             $(".chat-media-status").textContent = '';
             $('.chat-media-option span').textContent = 'Keep in chat';
             $$('[data-photo-cutout], [data-photo-stickers]').forEach(button => { button.hidden = selectedChatMedia.kind !== 'photo'; });
+            const clips = selectedChatMedia.ingest && selectedChatMedia.kind === "video" ? ingestSegmentCount(selectedChatMedia.durationMs) : 1;
+            $(".chat-media-send-count").textContent = `Sends as ${clips} videos`;
+            $(".chat-media-send-count").hidden = clips < 2;
             $(".chat-media-publish").disabled = false;
             syncVoiceComposer();
         } catch (error) {
             if (generation !== chatMediaPreparationGeneration) return;
             selectedChatMedia = null;
-            $(".chat-media-status").textContent = error.message || "Could not prepare that media.";
-        } finally {
-            if (generation === chatMediaPreparationGeneration) {
-                const disableOverlay = selectedChatMedia?.kind === "audio";
-                $(".chat-media-overlay").disabled = disableOverlay;
-                chatMediaOverlay.setDisabled(disableOverlay);
-            }
+            // Photo editing is loaded on first use; offline, that load can fail.
+            $(".chat-media-status").textContent = /dynamically imported module|module script failed/i.test(error?.message || "")
+                ? "Photo editing needs a connection to load. Reconnect and try again."
+                : error.message || "Could not prepare that media.";
         }
+    }
+
+    // Frees the decoded photo and any preview URL of the current selection.
+    function releaseSelectedChatMedia() {
+        reviewEditor?.reset();
+        if (selectedChatMedia?.canvas) selectedChatMedia.canvas.width = selectedChatMedia.canvas.height = 0;
+        selectedChatMedia = null;
+        chatMediaEncoded = null;
+        if (selectedChatMediaPreview) URL.revokeObjectURL(selectedChatMediaPreview);
+        selectedChatMediaPreview = null;
+    }
+
+    // Sticker cut-outs need a file; camera captures only exist as pixels.
+    async function selectedPhotoSourceFile() {
+        if (selectedChatMediaSourceFile) return selectedChatMediaSourceFile;
+        if (!selectedChatMedia?.canvas) return null;
+        const pipeline = await photoPipeline();
+        const blob = await pipeline.canvasBlob(selectedChatMedia.canvas, 0.92);
+        selectedChatMediaSourceFile = new File([blob], "chat-photo.jpg", { type: "image/jpeg", lastModified: Date.now() });
+        return selectedChatMediaSourceFile;
     }
 
     async function selectChatMedia(event) {
@@ -1886,12 +2164,15 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             return;
         }
         resetChatMediaComposer({ keepGesture: true }); voiceMode = true; syncVoiceComposer();
-        const mimeType = compatibleAudioRecordingType();
-        if (!mimeType) {
+        const format = voiceRecordingFormat(ingestEnabled(getConfig()));
+        if (!format) {
             $(".chat-media-status").textContent = "Live recording is unavailable here. Choose an M4A voice recording instead.";
             $('.chat-audio-file-input').click();
             return;
         }
+        const { mimeType } = format;
+        // M4A uses the direct 4 MB path; Opus goes through the ingest (10 MB).
+        const maxBytes = format.ingest ? 10 * 1024 * 1024 : 4 * 1024 * 1024;
         const button = $("[data-record-voice]");
         button.disabled = true;
         const recordingGeneration = chatMediaPreparationGeneration;
@@ -1911,7 +2192,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             recorder.addEventListener("dataavailable", (event) => {
                 if (!event.data?.size) return;
                 recordedBytes += event.data.size;
-                if (recordedBytes > 4 * 1024 * 1024 || chunks.length >= 600) {
+                if (recordedBytes > maxBytes || chunks.length >= 600) {
                     $('.chat-media-status').textContent = 'Recording limit reached. Record a shorter message.';
                     stopVoiceRecorder({ discard: true }); return;
                 }
@@ -1933,6 +2214,13 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 recorder.stream.getTracks().forEach((track) => track.stop());
                 clearVoiceRecordingState();
                 if (discarded || !chunks.length) return;
+                if (format.ingest) {
+                    const type = (recorder.mimeType || mimeType).split(";")[0] || "audio/webm";
+                    const extension = type === "audio/ogg" ? "ogg" : type === "audio/mp4" ? "m4a" : "webm";
+                    const file = new File(chunks, `voice.${extension}`, { type: recorder.mimeType || mimeType, lastModified: Date.now() });
+                    await prepareSelectedChatMedia(file, { prepared: { kind: "audio", file, thumbnail: null, durationMs, ingest: true } });
+                    return;
+                }
                 const file = new File(chunks, "voice.m4a", { type: "audio/mp4", lastModified: Date.now() });
                 await prepareSelectedChatMedia(file, { durationMsHint: durationMs });
             }, { once: true });
@@ -1962,8 +2250,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         const mediaKind = selectedChatMedia.kind;
         const button = $(".chat-media-publish");
         const viewOnce = selectedChatMedia.kind !== "audio" && $("[data-chat-view-once]").checked;
-        const overlayText = selectedChatMedia.kind === "audio" ? "" : $(".chat-media-overlay").value.trim();
-        const overlayPosition = chatMediaOverlay.value();
+        const textOverlay = selectedChatMedia.kind === "audio" ? null : reviewEditor?.textOverlay() || null;
         chatMediaUploadRequestId ||= crypto.randomUUID();
         chatMediaSendRequestId ||= crypto.randomUUID();
         const uploadRequestId = chatMediaUploadRequestId, sendRequestId = chatMediaSendRequestId;
@@ -1976,46 +2263,69 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         $(".chat-media-file-input").disabled = true;
         $(".chat-audio-file-input").disabled = true;
         $("[data-chat-view-once]").disabled = true;
-        $(".chat-media-overlay").disabled = true;
-        chatMediaOverlay.setDisabled(true);
         $(".chat-media-progress").classList.remove("hidden");
-        $(".chat-media-status").textContent = "Starting secure upload…";
+        $(".chat-media-status").textContent = media.kind === "photo" ? "Preparing photo…" : "Starting secure upload…";
+        const abort = chatMediaAbort = new AbortController();
+        $("[data-cancel-chat-upload]").hidden = false;
         let recoverySaved = false;
         try {
-            const uploadFile = media.kind === 'photo' ? await photoStickers.bake(media.file) : media.file;
+            let uploadFile = media.file;
+            let thumbnail = media.thumbnail || null;
+            let previewHash = null;
+            if (media.kind === "photo") {
+                // Edits, stickers and the filter are burned in and the JPEG is
+                // encoded exactly once; a retry reuses the same bytes.
+                if (!chatMediaEncoded) {
+                    const pipeline = await photoPipeline();
+                    const composed = reviewEditor.compose({ drawExtras: (context, width, height) => photoStickers.draw(context, width, height) });
+                    try { chatMediaEncoded = await pipeline.encodeChatPhoto(composed, media.profile); }
+                    finally { composed.width = composed.height = 0; }
+                }
+                ({ file: uploadFile, preview: thumbnail, previewHash } = chatMediaEncoded);
+                $(".chat-media-status").textContent = "Starting secure upload…";
+            }
             if (preparationGeneration !== chatMediaPreparationGeneration || senderId !== userId()) throw new Error('Media selection changed. Try again.');
+            if (abort.signal.aborted) throw Object.assign(new Error("The media upload was cancelled."), { cancelled: true });
             const record = {
                 id: recordId,
                 user_id: senderId,
                 kind: "chat_media",
                 file: uploadFile,
-                thumbnail: media.thumbnail || null,
+                thumbnail,
+                preview_hash: previewHash,
                 chat_id: chatId,
-                content_type: uploadFile.type,
+                content_type: media.ingest ? (media.contentType || uploadFile.type) : uploadFile.type,
+                ingest: Boolean(media.ingest),
                 duration_ms: media.durationMs,
                 view_once: viewOnce,
-                overlay: overlayText ? { text: overlayText, ...overlayPosition } : null,
+                overlay: textOverlay,
                 reply_to_message_id: replyId,
                 upload_request_id: uploadRequestId,
                 send_request_id: sendRequestId,
             };
             await putChatMediaOutbox(record);
             recoverySaved = true;
-            const message = await deliverMediaRecord(record, { onProgress: (progress) => {
-                setRuntimeStyles($(".chat-media-progress span"), { width: `${Math.round(progress * 100)}%` });
-            } });
+            const result = await deliverMediaRecord(record, {
+                signal: abort.signal,
+                onStatus: (text) => { $(".chat-media-status").textContent = text; },
+                onProgress: (progress) => { setRuntimeStyles($(".chat-media-progress span"), { width: `${Math.round(progress * 100)}%` }); },
+            });
             await removeChatMediaOutbox(record.id);
             setRuntimeStyles($(".chat-media-progress span"), { width: "100%" });
-            store.updateMessage(chatId, message);
+            const sent = [].concat(result || []);
+            for (const message of sent) store.updateMessage(chatId, message);
             store.state.replyToMessageId = null;
             $("[data-chat-media-dialog]").close();
             if (voiceMode) resetChatMediaComposer();
             renderMessages(true);
             successHaptic?.();
-            showToast?.(`${mediaKind === "audio" ? "Voice message" : mediaKind === "video" ? "Video" : "Photo"} sent${viewOnce ? " · view once" : ""}`);
-            void loadChats({ quiet: true });
+            showToast?.(`${sent.length > 1 ? `${sent.length} videos` : mediaKind === "audio" ? "Voice message" : mediaKind === "video" ? "Video" : "Photo"} sent${viewOnce ? " · view once" : ""}`);
+            scheduleChatRowRefresh(chatId);
         } catch (error) {
-            if (recoverySaved && chatTextSendIsRetryable(error)) {
+            if (error?.cancelled || abort.signal.aborted) {
+                await removeChatMediaOutbox(recordId).catch(() => null);
+                $(".chat-media-status").textContent = "Upload cancelled. Your selection is still here.";
+            } else if (recoverySaved && chatTextSendIsRetryable(error)) {
                 await markChatMediaOutboxAttempt(recordId).catch(() => null);
                 $(".chat-media-status").textContent = `${error.message || "Could not send that media."} It is saved on this device and will retry while Valid is open.`;
             } else {
@@ -2026,6 +2336,8 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             }
         } finally {
             chatMediaPublishing = false;
+            if (chatMediaAbort === abort) chatMediaAbort = null;
+            $("[data-cancel-chat-upload]").hidden = true;
             root.querySelectorAll('[data-retake-chat-photo], [data-chat-photo-library], [data-chat-audio-library], [data-record-voice]').forEach(control => { control.disabled = false; });
             button.innerHTML = uiIcon('send');
             button.disabled = !selectedChatMedia;
@@ -2038,17 +2350,15 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         voiceMode = false;
         photoStickerMode = false;
         photoStickers.reset();
+        chatCameraToken++;
         chatCamera?.close();
+        chatMediaAbort?.abort();
         $('[data-chat-media-dialog]').classList.remove('is-capturing');
-        $('.chat-media-edit-options').open = false;
         chatMediaPreparationGeneration += 1;
         stopVoiceRecorder({ discard: true });
         if (!voiceRecorder) clearVoiceRecordingState();
-        selectedChatMedia = null;
+        releaseSelectedChatMedia();
         selectedChatMediaSourceFile = null;
-        if (selectedChatMediaPreview) URL.revokeObjectURL(selectedChatMediaPreview);
-        selectedChatMediaPreview = null;
-        chatMediaOverlay.reset();
         resetChatMediaRequestIds();
         $(".chat-media-file-input").value = "";
         $(".chat-media-file-input").disabled = false;
@@ -2056,8 +2366,8 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         $(".chat-audio-file-input").disabled = false;
         $("[data-chat-view-once]").checked = false;
         $("[data-chat-view-once]").disabled = false;
-        $(".chat-media-overlay").value = "";
-        $(".chat-media-overlay").disabled = false;
+        $("[data-review-tools]").hidden = true;
+        $(".chat-media-send-count").hidden = true;
         $(".chat-media-preview").innerHTML = `<span aria-hidden="true">${uiIcon("plus")}</span><p>Choose a photo, an MP4 video, or an M4A voice recording.</p>`;
         $(".chat-media-status").textContent = "";
         $(".chat-media-progress").classList.add("hidden");
@@ -2101,16 +2411,46 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         }
     }
 
-    async function showMediaViewer(url, { kind = "photo", label = "Media", overlay = null } = {}) {
+    const viewerImage = () => $("[data-chat-media-viewer] img:not(.chat-viewer-placeholder)");
+
+    function ensureViewerGestures() {
+        if (viewerGestures) return viewerGestures;
+        viewerGestures = import("./viewer-gestures.js").then(({ bindViewerGestures }) => bindViewerGestures({
+            dialog: mediaViewer,
+            stage: $(".chat-viewer-stage"),
+            target: () => $(".chat-viewer-media"),
+            onDismiss: () => { softHaptic?.(); closeMediaViewer(); },
+            // View-once media keeps hold-to-pause and tap-to-advance; it does not zoom.
+            canZoom: () => !ephemeralTimer && $("[data-chat-media-viewer] video").hidden,
+            canDismiss: () => true,
+            onDismissStart: () => setEphemeralPaused(true),
+        })).catch(() => null);
+        return viewerGestures;
+    }
+
+    // Never show a black frame: the thumbnail/ThumbHash (or video poster) stays
+    // under the media until it has decoded something to draw.
+    async function showMediaViewer(url, { kind = "photo", label = "Media", overlay = null, poster = null, placeholder = null } = {}) {
         if (!url) throw new Error("That media is no longer available.");
         const dialog = $("[data-chat-media-viewer]");
-        const image = dialog.querySelector("img");
+        const image = viewerImage();
         const video = dialog.querySelector("video");
+        const still = dialog.querySelector(".chat-viewer-placeholder");
         const target = kind === "video" ? video : image;
         image.hidden = kind === "video";
         video.hidden = kind !== "video";
         image.removeAttribute("src");
         video.removeAttribute("src");
+        video.removeAttribute("poster");
+        const preview = kind === "video" ? poster : placeholder;
+        still.hidden = !preview;
+        if (preview) still.src = preview;
+        else still.removeAttribute("src");
+        if (kind === "video" && poster) video.poster = poster;
+        dialog.classList.add("is-loading");
+        const settle = () => { if (target.getAttribute("src") === url) { dialog.classList.remove("is-loading"); still.hidden = true; } };
+        if (kind === "video") video.addEventListener("loadeddata", settle, { once: true });
+        else image.addEventListener("load", settle, { once: true });
         target.src = url;
         image.alt = kind === "video" ? "" : label;
         if (kind === "video") video.setAttribute("aria-label", label);
@@ -2125,14 +2465,16 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 top: `${Number(overlay.y || 0.5) * 100}%`,
             });
         }
-        dialog.showModal();
+        if (!dialog.open) dialog.showModal();
+        void ensureViewerGestures().then((gestures) => gestures?.reset());
         await Promise.race([
             kind === "video" ? new Promise((resolve, reject) => {
                 video.addEventListener("loadedmetadata", resolve, { once: true });
-                video.addEventListener("error", () => reject(new Error("That video could not be opened.")), { once: true });
-            }) : image.decode(),
+                video.addEventListener("error", () => reject(Object.assign(new Error("That video could not be opened."), { mediaFailed: true })), { once: true });
+            }) : image.decode().catch(() => { throw Object.assign(new Error("That photo could not be opened."), { mediaFailed: true }); }),
             new Promise((_, reject) => setTimeout(() => reject(new Error("That media took too long to open.")), 10_000)),
         ]);
+        if (kind === "photo") settle();
     }
 
     function viewMemento(url, owner, entryId = null, swappedURL = null) {
@@ -2155,7 +2497,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
 
     async function swapViewedMemento() {
         if (!viewedMementoPrimaryURL || !viewedMementoSwappedURL) return;
-        const image = $("[data-chat-media-viewer] img");
+        const image = viewerImage();
         const button = $("[data-swap-viewed-memento]");
         const previousURL = image.getAttribute("src");
         const nextShowsSwapped = !viewedMementoShowsSwapped;
@@ -2196,10 +2538,16 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         video.controls = true;
         video.onended = null;
         video.removeAttribute("src");
+        video.removeAttribute("poster");
         video.load();
-        const image = dialog.querySelector("img");
+        const image = viewerImage();
         image.removeAttribute("src");
         image.alt = "";
+        const still = dialog.querySelector(".chat-viewer-placeholder");
+        still.hidden = true;
+        still.removeAttribute("src");
+        dialog.classList.remove("is-loading");
+        void viewerGestures?.then((gestures) => gestures?.reset());
         video.removeAttribute("aria-label");
         dialog.querySelector(".chat-viewer-overlay").textContent = "";
         viewedMessageId = null;
@@ -2247,7 +2595,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         showToast?.("Memento added to message");
     }
 
-    function openPersistentChatMedia(messageId) {
+    function openPersistentChatMedia(messageId, { retried = false } = {}) {
         const message = store.messages().find((item) => item.id === messageId);
         if (!message || message.view_once) return;
         const videoState = videoPlaybackState(message);
@@ -2257,7 +2605,14 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         const kind = isStory ? message.story_media_type : message.kind === "video" ? "video" : "photo";
         const url = safeMediaURL(isStory ? (message.story_is_available === false ? null : message.story_media_url) : kind === "video" ? message.video_url : message.sticker_image_url || message.photo_image_url, api);
         const overlay = isStory ? { text: message.story_text_overlay, x: message.story_text_overlay_x, y: message.story_text_overlay_y } : message.media_text_overlay;
-        void showMediaViewer(url, { kind, label: isStory ? `${message.story_owner_first_name || "Student"} · Story` : `${message.sender_first_name || "Student"} · ${kind}`, overlay }).catch((error) => showToast?.(error.message));
+        const poster = safeMediaURL(isStory ? message.story_thumbnail_url : message.video_thumbnail_url, api) || null;
+        const placeholder = safeMediaURL(message.photo_thumbnail_url, api) || thumbHashDataURL(message.preview_hash) || null;
+        void showMediaViewer(url, { kind, label: isStory ? `${message.story_owner_first_name || "Student"} · Story` : `${message.sender_first_name || "Student"} · ${kind}`, overlay, poster, placeholder })
+            .catch(async (error) => {
+                // Signed media URLs expire after ~15 minutes: fetch fresh ones and retry once.
+                if (error.mediaFailed && !retried && await refreshMessageMedia(message)) return openPersistentChatMedia(messageId, { retried: true });
+                showToast?.(error.message);
+            });
     }
 
     async function openViewOnceMessage(messageId, { accessible = false } = {}) {
@@ -2290,7 +2645,11 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             }
             viewedMessageId = messageId;
             const url = safeMediaURL(kind === 'video' ? revealed.video_url : revealed.photo_image_url, api);
-            await showMediaViewer(url, { kind, label: kind === 'video' ? 'Video · View once' : 'Photo · View once', overlay: revealed.media_text_overlay });
+            await showMediaViewer(url, {
+                kind, label: kind === 'video' ? 'Video · View once' : 'Photo · View once', overlay: revealed.media_text_overlay,
+                poster: safeMediaURL(revealed.video_thumbnail_url, api) || null,
+                placeholder: safeMediaURL(revealed.photo_thumbnail_url, api) || thumbHashDataURL(revealed.preview_hash) || null,
+            });
             if (!current() || !$('[data-chat-media-viewer]').open) return;
             if (kind === 'video') {
                 const video = $('[data-chat-media-viewer] video');
@@ -2308,7 +2667,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             viewOnceStates.delete(messageId);
             beginEphemeralPlayback(kind);
             renderMessages(false);
-            void loadChats({ quiet: true });
+            scheduleChatRowRefresh(chatId);
         } catch (error) {
             if (!current()) return;
             closeMediaViewer();
@@ -2436,8 +2795,14 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     async function changeHistoryMode(mode) {
         const chatId = store.state.activeChatId, uid = userId(), chat = store.state.detail?.chat;
         if (sharedHistorySaving || !chat?.history_loaded || !HISTORY_MODES.some(item => item.value === mode) || chat.history_mode === mode) return;
-        const description = mode === 'after24Hours' ? 'Unsaved messages clear 24 hours after everyone views them.' : 'Unsaved messages clear after everyone views them and leaves the chat.';
-        if (mode !== 'save' && !window.confirm(`${description} This changes chat history for everyone. Saved messages and Mementos stay. Continue?`)) return;
+        // iOS ChatHistoryConfirmation copy.
+        const message = {
+            after24Hours: 'Unsaved messages clear 24 hours after everyone opens the chat, or after 30 days if someone never does. Saved messages and Mementos stay.',
+            afterLeaving: 'Unsaved messages clear once everyone has opened the chat and left, or after 30 days if someone never does. Saved messages and Mementos stay.',
+            save: 'Messages stay in this chat.',
+        }[mode];
+        if (!await confirmSheet({ title: 'Change history for everyone?', message, confirmLabel: 'Change history', destructive: mode !== 'save' })) return;
+        if (sharedHistorySaving || chatId !== store.state.activeChatId || store.state.detail?.chat?.history_mode === mode) return;
         sharedHistorySaving = true; sharedHistoryError = ''; renderHistorySettings();
         try {
             await api.setChatHistory(uid, chatId, mode);
@@ -2553,7 +2918,8 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     }
 
     async function unsendMessage(messageId) {
-        if (!confirm("Unsend this message for everyone?")) return;
+        closeMessageActions();
+        if (!await confirmSheet({ title: "Unsend this message?", message: "It will be removed for everyone in this chat.", confirmLabel: "Unsend", destructive: true })) return;
         try {
             const updated = await api.unsendChatMessage(userId(), store.state.activeChatId, messageId);
             store.updateMessage(store.state.activeChatId, updated);
@@ -2562,7 +2928,8 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     }
 
     async function deleteMessageForMe(messageId) {
-        if (!confirm("Hide this message from your chat?")) return;
+        closeMessageActions();
+        if (!await confirmSheet({ title: "Delete for you?", message: "This hides the message from your chat. Other people still see it.", confirmLabel: "Delete", destructive: true })) return;
         try {
             await api.deleteChatMessageForMe(userId(), store.state.activeChatId, messageId);
             const remaining = store.messages().filter((message) => message.id !== messageId);
@@ -2645,9 +3012,10 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     }
 
     function handleTypingInput() {
+        if (!$(".chat-composer textarea").value.trim()) return stopTyping();
         if (!typingSent && store.state.activeChatId) {
-            typingSent = true;
-            void api.setChatTyping(userId(), store.state.activeChatId, true).catch(() => null);
+            typingSent = String(store.state.activeChatId);
+            void api.setChatTyping(userId(), typingSent, true).catch(() => null);
         }
         clearTimeout(typingTimer);
         typingTimer = setTimeout(stopTyping, 1800);
@@ -2656,39 +3024,59 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     function stopTyping() {
         clearTimeout(typingTimer);
         typingTimer = null;
-        if (typingSent && store.state.activeChatId) void api.setChatTyping(userId(), store.state.activeChatId, false).catch(() => null);
+        if (typingSent && userId()) void api.setChatTyping(userId(), typingSent, false).catch(() => null);
         typingSent = false;
     }
 
-    function startRealtime() {
-        if (store.state.eventSource || typeof EventSource === "undefined" || typeof api.chatEventsURL !== "function" || !userId()) return;
-        const source = new EventSource(api.chatEventsURL(userId()), { withCredentials: true });
-        store.state.eventSource = source;
-        const consumeEvent = (event) => {
-            try {
-                const payload = JSON.parse(event.data);
-                if (!payload.id && event.lastEventId) payload.id = event.lastEventId;
-                void handleRealtimeEvent(payload);
-            } catch (_) { /* A later authoritative refresh repairs malformed hints. */ }
-        };
-        source.onmessage = consumeEvent;
-        source.addEventListener("chat", consumeEvent);
-        source.onerror = () => {
-            if (source.readyState === EventSource.CLOSED) {
-                store.state.eventSource = null;
-                clearTimeout(store.state.reconnectTimer);
-                store.state.reconnectTimer = setTimeout(startRealtime, 5_000);
-            }
-        };
+    // Hints about other chats update only that row (one GET), coalesced per
+    // chat. Unknown chats, reconnects and bursts fall back to one list reload.
+    function scheduleListRefresh(delay = 400) {
+        clearTimeout(listRefreshTimer);
+        listRefreshTimer = setTimeout(() => { listRefreshTimer = null; void loadChats({ quiet: true }); }, delay);
+    }
+
+    function scheduleChatRowRefresh(chatId, delay = 300) {
+        if (!chatId) return;
+        if (!store.state.chats.some(chat => chat.id === chatId) || chatRefreshTimers.size >= 8) return scheduleListRefresh();
+        clearTimeout(chatRefreshTimers.get(chatId));
+        chatRefreshTimers.set(chatId, setTimeout(() => {
+            chatRefreshTimers.delete(chatId);
+            void refreshChatRow(chatId);
+        }, delay));
+    }
+
+    async function refreshChatRow(chatId) {
+        const uid = userId();
+        if (!uid) return;
+        try {
+            const detail = await api.getChat(uid, chatId);
+            if (uid !== userId() || !detail?.chat) return;
+            if (!['accepted', 'invited'].includes(detail.chat.membership_status || 'accepted')) return scheduleListRefresh(0);
+            store.upsertChat(detail.chat);
+            if (chatId === store.state.activeChatId && store.state.detail) store.state.detail = { ...store.state.detail, ...detail };
+            renderChatList();
+            if (store.state.activeChatId) renderMementoToolbar();
+        } catch (_) {
+            scheduleListRefresh();
+        }
     }
 
     async function handleRealtimeEvent(event) {
+        if (event.type === 'presence_snapshot') return;
         store.state.lastEventId = event.id || store.state.lastEventId;
-        void calls.handleRealtimeEvent(event);
+        // A (re)connection or server resync without a room means events may have
+        // been missed while the stream was closed: repair the open room and the list.
+        if (!event.chat_id && ['ready', 'resync'].includes(event.type)) {
+            if (Date.now() - lastListLoad > 5_000) scheduleListRefresh(0);
+            if (store.state.activeChatId) void handleRealtimeEvent({ ...event, type: 'resync', chat_id: store.state.activeChatId });
+            void retryPendingMessages(null);
+            return;
+        }
         const chatId = String(event.chat_id || "");
         if (event.type === 'chat_history_changed' && chatId === store.state.activeChatId) void refreshSharedHistory();
         const callHistoryChanged = ['call_started', 'call_updated', 'call_answered', 'call_declined', 'call_ended', 'call_history_changed'].includes(event.type);
-        if (["typing_started", "typing_stopped"].includes(event.type) && chatId === store.state.activeChatId && String(event.actor_user_id) !== String(userId())) {
+        if (["typing_started", "typing_stopped"].includes(event.type)) {
+            if (chatId !== store.state.activeChatId || String(event.actor_user_id) === String(userId())) return;
             if (event.type === "typing_started") store.state.typingUserIds.add(String(event.actor_user_id));
             else store.state.typingUserIds.delete(String(event.actor_user_id));
             $(".chat-typing").classList.toggle("hidden", store.state.typingUserIds.size < 1);
@@ -2755,7 +3143,8 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 if (pending?.chat_id === store.state.activeChatId) void handleRealtimeEvent(pending);
             }
         }
-        void loadChats({ quiet: true });
+        if (chatId) scheduleChatRowRefresh(chatId);
+        else if (!event.type?.startsWith('call_')) scheduleListRefresh();
     }
 
     function pushRoomHistory(chatId) {
@@ -2780,13 +3169,17 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         requestAnimationFrame(() => scrollMessageWithinTimeline(message));
     }
 
-    function showChatList() {
+    // Every way out of a room (back button, browser Back, tab switch, account
+    // change) runs this, so typing, receipts and timers always stop.
+    function leaveRoom() {
+        const chatId = store.state.activeChatId;
         closeMessageActions();
-        void historyReceipts?.leave(store.state.activeChatId);
+        void historyReceipts?.leave(chatId);
         viewOnceSessionByMessage.clear(); viewOnceStates.clear();
         closeMediaViewer();
         stopTyping();
         clearSharedMementoDraft();
+        if (voiceMode) resetChatMediaComposer();
         roomGeneration += 1;
         historyLoading = null;
         pendingRealtimeEvent = null;
@@ -2796,16 +3189,33 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         store.state.dailyRow = null;
         store.state.displayedDailyRow = null;
         store.state.dailyRowsByDate.clear();
+        store.state.typingUserIds.clear();
+        store.state.replyToMessageId = null;
+        $(".chat-typing").classList.add("hidden");
+        clearTimeout(historySweepTimer); historySweepTimer = null;
         $('[data-memento-gallery-dialog]').close();
         $('[data-sticker-library-dialog]').close();
+        reportActiveChat();
+        return chatId;
+    }
+
+    function showChatList() {
+        // Only this view pushes entries with a chatId: pop that entry instead of
+        // stacking a second list entry on top of it.
+        const popRoomEntry = history.state?.validApp === true && history.state.chatId != null && String(history.state.chatId) === String(store.state.activeChatId);
+        const chatId = leaveRoom();
         showScreen("list");
-        const url = new URL(location.href);
-        url.searchParams.set("tab", "chats");
-        url.searchParams.delete("chat");
-        url.searchParams.delete("message");
-        url.searchParams.delete("call");
-        history.replaceState({ validApp: true, panel: "chats" }, "", `${url.pathname}${url.search}`);
-        void loadChats({ quiet: true });
+        if (popRoomEntry) history.back();
+        else {
+            const url = new URL(location.href);
+            url.searchParams.set("tab", "chats");
+            url.searchParams.delete("chat");
+            url.searchParams.delete("message");
+            url.searchParams.delete("call");
+            history.replaceState({ validApp: true, panel: "chats" }, "", `${url.pathname}${url.search}`);
+        }
+        if (chatId) scheduleChatRowRefresh(chatId, 0);
+        else void loadChats({ quiet: true });
     }
 
     async function handleClick(event) {
@@ -2871,23 +3281,24 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         if (target.matches("[data-close-chat-media]")) { if (!chatMediaPublishing) $('[data-chat-media-dialog]').close(); return; }
         if (target.matches("[data-make-sticker]")) { $('[data-save-sticker]').textContent = photoStickerMode ? 'Save and add' : 'Save and send'; return $(".chat-sticker-file-input").click(); }
         if (target.matches('[data-retry-stickers]')) return loadStickerLibrary();
+        if (target.matches("[data-voice-play], [data-voice-toggle]")) return loadRoomTools().then((tools) => tools?.voice.toggle(target));
+        if (target.matches("[data-voice-speed]")) return loadRoomTools().then((tools) => tools?.voice.cycleSpeed(target));
         if (target.matches("[data-record-voice]")) return void toggleVoiceRecording();
         if (target.matches('[data-record-again]')) return void toggleVoiceRecording();
         if (target.matches('[data-stop-voice]')) return stopVoiceRecorder();
         if (target.matches('[data-cancel-voice]')) return resetChatMediaComposer();
         if (target.matches('[data-send-voice]')) return publishChatMedia(event);
         if (target.matches('[data-photo-text]')) {
-            if (chatMediaPublishing) return;
-            $('.chat-media-edit-options').open = !$('.chat-media-edit-options').open;
-            if ($('.chat-media-edit-options').open) $('.chat-media-overlay').focus({ preventScroll: true });
+            if (!chatMediaPublishing) reviewEditor?.beginCaption(undefined, { viaKeyboard: event.detail === 0 });
             return;
         }
+        if (target.matches('[data-cancel-chat-upload]')) { chatMediaAbort?.abort(); return; }
         if (target.matches('[data-photo-stickers]')) { if (!chatMediaPublishing) return openStickerLibrary({ photo: true }); return; }
         if (target.matches('[data-photo-cutout]')) {
-            if (chatMediaPublishing || !selectedChatMediaSourceFile) return;
+            if (chatMediaPublishing || selectedChatMedia?.kind !== 'photo') return;
             photoStickerMode = true;
             $('[data-save-sticker]').textContent = 'Save and add';
-            return stickerMaker.open(selectedChatMediaSourceFile).catch(error => { $('.chat-media-status').textContent = error.message; });
+            return selectedPhotoSourceFile().then(file => stickerMaker.open(file)).catch(error => { $('.chat-media-status').textContent = error.message; });
         }
         if (target.matches("[data-close-memento]")) return $("[data-memento-dialog]").close();
         if (target.matches("[data-skip-memento]")) return skipMementoForToday();
@@ -2938,7 +3349,19 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             } catch (error) { showToast?.(error.message || "Could not rename this group."); }
             return;
         }
-        if (target.dataset.removeChatMember && confirm("Remove this person from the group?")) {
+        const memberFor = (id) => (store.state.detail?.members || []).find((member) => String(member.user_id) === String(id));
+        if (target.dataset.removeChatMember) {
+            const member = memberFor(target.dataset.removeChatMember);
+            const invited = member?.status === "invited";
+            if (!await confirmSheet(invited ? {
+                title: "Cancel invite?",
+                message: "They won't be able to join this group unless an admin invites them again.",
+                confirmLabel: "Cancel Invite", cancelLabel: "Keep", destructive: true,
+            } : {
+                title: `Remove ${member ? displayMember(member) : "this person"}?`,
+                message: "They'll immediately lose access and stop receiving new messages. Mementos they already shared stay in the group.",
+                confirmLabel: "Remove", destructive: true,
+            })) return;
             try {
                 presence?.invalidate();
                 await api.removeChatMember(userId(), store.state.activeChatId, target.dataset.removeChatMember);
@@ -2948,7 +3371,13 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             } catch (error) { showToast?.(error.message || "Could not remove that person."); }
             return;
         }
-        if (target.dataset.blockChatMember && confirm("Block this person? Their content and contact will be restricted across Valid.")) {
+        if (target.dataset.blockChatMember) {
+            const member = memberFor(target.dataset.blockChatMember);
+            if (!await confirmSheet({
+                title: `Block ${member ? displayMember(member) : "this person"}?`,
+                message: "They won't be able to contact you, and their content will be hidden across Valid.",
+                confirmLabel: "Block", destructive: true,
+            })) return;
             try {
                 presence?.invalidate();
                 await api.blockUser(userId(), target.dataset.blockChatMember);
@@ -2970,21 +3399,58 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         if (target.dataset.deleteMessage) return deleteMessageForMe(target.dataset.deleteMessage);
         if (target.dataset.unsendMessage) return unsendMessage(target.dataset.unsendMessage);
         if (target.dataset.retryMessage) return sendMessage(null, target.dataset.retryMessage);
+        if (target.dataset.discardMessage) return discardFailedMessage(target.dataset.discardMessage);
         if (target.dataset.scrollMessage) return revealMessageWithinTimeline(target.dataset.scrollMessage, "smooth");
-        if (target.matches("[data-report-current-chat]")) {
-            const reason = prompt("Tell us why you're reporting this chat:");
-            if (reason?.trim().length >= 3) await api.reportChat(userId(), store.state.activeChatId, reason.trim()).then(() => showToast?.("Report submitted")).catch((error) => showToast?.(error.message));
-        }
-        if (target.matches("[data-leave-current-chat]") && confirm("Leave this chat? You will stop receiving new messages.")) {
-        presence?.invalidate();
-            await api.leaveChat(userId(), store.state.activeChatId).then(async () => {
-                presence?.invalidate();
-                $("[data-chat-settings-dialog]").close();
-                await loadChats({ quiet: true });
-                showChatList();
-            }).catch((error) => showToast?.(error.message));
+        if (target.matches("[data-report-current-chat]")) return reportCurrentChat();
+        if (target.matches("[data-leave-current-chat]")) {
+            if (!await confirmSheet({
+                title: "Leave & delete this chat?",
+                message: "This removes the chat from your Chats. Other people keep their copy.",
+                confirmLabel: "Leave & Delete", destructive: true,
+            })) return;
+            return leaveCurrentChat();
         }
     }
 
-    return { activate, refresh, openChat, store, beforeSessionEnd: async () => { closeMessageActions(); await historyReceipts?.close(); historyReceipts = null; receiptUser = null; closeMediaViewer(); roomGeneration++; historyLoading = null; pendingRealtimeEvent = null; timelineScroll.reset(); mementoCamera.close(); resetChatMediaComposer(); $('[data-chat-media-dialog]').close(); return calls.beforeSessionEnd(); } };
+    async function leaveCurrentChat() {
+        const chatId = store.state.activeChatId;
+        if (!chatId) return;
+        presence?.invalidate();
+        await api.leaveChat(userId(), chatId).then(async () => {
+            presence?.invalidate();
+            $("[data-chat-settings-dialog]").close();
+            await loadChats({ quiet: true });
+            if (store.state.activeChatId === chatId) showChatList();
+        }).catch((error) => showToast?.(error.message || "Could not leave this chat."));
+    }
+
+    async function reportCurrentChat() {
+        const chatId = store.state.activeChatId;
+        const chat = store.state.detail?.chat;
+        if (!chatId || reportingChat) return;
+        reportingChat = true;
+        try {
+            const tools = await loadRoomTools();
+            if (!tools) return void showToast?.("Reporting is unavailable offline. Try again.");
+            await tools.reportChatFlow({
+                chatName: chat?.display_name || "this chat",
+                isGroup: isGroupChat(chat),
+                submit: async (reason) => chatId === store.state.activeChatId && api.reportChat(userId(), chatId, reason),
+                leave: () => chatId === store.state.activeChatId && leaveCurrentChat(),
+                showToast, haptic: feedback,
+            });
+        } finally {
+            reportingChat = false;
+        }
+    }
+
+    return { activate, refresh, openChat, store, beforeSessionEnd: async () => {
+        stopTyping();
+        if (store.state.activeChatId) leaveRoom();
+        realtime.stop();
+        activation = null;
+        closeMessageActions(); await historyReceipts?.close(); historyReceipts = null; receiptUser = null; closeMediaViewer(); roomGeneration++; historyLoading = null; pendingRealtimeEvent = null; timelineScroll.reset(); mementoCamera?.close(); resetChatMediaComposer(); $('[data-chat-media-dialog]').close();
+        reportActiveChat();
+        return calls.beforeSessionEnd();
+    } };
 }

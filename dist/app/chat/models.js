@@ -84,6 +84,78 @@ export function messageTime(value) {
     return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(date);
 }
 
+const DAY_MS = 86_400_000;
+const SEPARATOR_GAP_MS = 60 * 60_000;
+
+function localDayStart(value) {
+    const date = new Date(value);
+    date.setHours(0, 0, 0, 0);
+    return date.getTime();
+}
+
+// "Today", "Yesterday", a weekday this week, then "Sep 7" (with the year once it differs).
+export function chatDayLabel(value, now = new Date()) {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return "";
+    const days = Math.round((localDayStart(now) - localDayStart(date)) / DAY_MS);
+    if (days === 0) return "Today";
+    if (days === 1) return "Yesterday";
+    if (days > 1 && days < 7) return new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(date);
+    return new Intl.DateTimeFormat(undefined, {
+        month: "short", day: "numeric",
+        ...(date.getFullYear() !== new Date(now).getFullYear() ? { year: "numeric" } : {}),
+    }).format(date);
+}
+
+// A separator starts the conversation, every new local day, and any gap over an hour.
+export function chatSeparatorBefore(message, previous) {
+    const at = Date.parse(message?.created_at);
+    if (!Number.isFinite(at) || message?.delivery_state === "sending" || message?.delivery_state === "failed") return null;
+    const before = Date.parse(previous?.created_at);
+    if (previous && Number.isFinite(before) && localDayStart(before) === localDayStart(at) && at - before < SEPARATOR_GAP_MS) return null;
+    return { at: new Date(at).toISOString(), day: chatDayLabel(at), time: messageTime(at) };
+}
+
+// Long-press footer: "Today at 3:42 PM", "Mon at 9:10 AM", "Sep 7 at 2:00 PM".
+export function messageDateTime(value, now = new Date()) {
+    const day = chatDayLabel(value, now);
+    const time = messageTime(value);
+    return day && time ? `${day} at ${time}` : time;
+}
+
+const LINK_PATTERN = /\b(?:https?:\/\/|www\.)[^\s<>"'`]+/gi;
+
+function trimLinkTail(text) {
+    let value = text;
+    while (/[.,!?;:'"\]}>)]$/.test(value)) {
+        if (value.endsWith(")") && value.split("(").length > value.split(")").length - 1) break;
+        value = value.slice(0, -1);
+    }
+    return value;
+}
+
+// Escaped message text with http(s) links made tappable. Nothing else becomes markup.
+export function linkifyChatText(text) {
+    const value = String(text ?? "");
+    let html = "";
+    let last = 0;
+    for (const match of value.matchAll(LINK_PATTERN)) {
+        const raw = trimLinkTail(match[0]);
+        if (!raw || /^www\.$/i.test(raw)) continue;
+        let href;
+        try {
+            const url = new URL(/^www\./i.test(raw) ? `https://${raw}` : raw);
+            if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) continue;
+            href = url.href;
+        } catch (_) { continue; }
+        html += `${escapeChatHTML(value.slice(last, match.index))}<a href="${escapeChatHTML(href)}" target="_blank" rel="noopener noreferrer">${escapeChatHTML(raw)}</a>`;
+        last = match.index + raw.length;
+    }
+    return html + escapeChatHTML(value.slice(last));
+}
+
+export const KNOWN_MESSAGE_KINDS = new Set(["text", "system", "tombstone", "memento", "photo", "video", "audio", "story", "sticker"]);
+
 export function relativeChatTime(value) {
     const date = new Date(value);
     if (!Number.isFinite(date.getTime())) return "";

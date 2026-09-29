@@ -28,5 +28,25 @@
     "width": 128,
     "height": 128,
     "conversion": "cwebp -lossless -resize 128 128; use alpha as template mask"
+  },
+  {
+    "source": "ios/Six7/Six7/Assets.xcassets/instagram.imageset/instagram.png",
+    "sourceSHA256": "bd9d1254bc591f1ae799ba2893da7ad5fbeee4e96608907f94947dadeaa32279",
+    "web": "assets/app/instagram.webp",
+    "webSHA256": "3e7e5fa3332b5e9387ea0eaf954d7aea7e793f9a5cbb438d7868079708b87dce",
+    "bytes": 4770,
+    "width": 174,
+    "height": 174,
+    "conversion": "resize 174 174 (3x of 58pt share icon); cwebp"
+  },
+  {
+    "source": "ios/Six7/Six7/Assets.xcassets/TikTok_Icon_Black_Square.imageset/TikTok_Icon_Black_Square.png",
+    "sourceSHA256": "e8013e14350422f54f4b61735d91e232bf02972f6156d979cd82905559f5ee2e",
+    "web": "assets/app/tiktok-icon-black-square.webp",
+    "webSHA256": "6f5ed962bdfdf82fb8cb837c885229b59f9676b6456027fa8471b38f3d4b3ce4",
+    "bytes": 2330,
+    "width": 174,
+    "height": 174,
+    "conversion": "resize 174 174 (3x of 58pt share icon); cwebp"
   }
 ]

@@ -12,6 +12,9 @@ export function createPhotoStickers(preview, { onChange, disabled }) {
     }
     removeButton.addEventListener('click', () => { if (selected && !disabled()) remove(selected); });
     function bounds() {
+        // The review stage is the photo's frame; stickers sit in its coordinates.
+        const stage = preview.querySelector(':scope > [data-review-stage]');
+        if (stage?.offsetWidth) return { x: stage.offsetLeft, y: stage.offsetTop, w: stage.offsetWidth, h: stage.offsetHeight };
         const image = preview.querySelector(':scope > img');
         if (!image?.naturalWidth) return null;
         const width = preview.clientWidth, height = preview.clientHeight;
@@ -88,22 +91,12 @@ export function createPhotoStickers(preview, { onChange, disabled }) {
         selected = item; mount(); onChange();
         } finally { pendingAdds--; }
     }
-    async function bake(file) {
-        if (!items.length) return file;
-        const current = generation;
-        const image = await createImageBitmap(file);
-        try {
-            if (generation !== current) throw new Error('Photo was closed. Choose it again.');
-            const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
-            const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0);
-            for (const item of items) { const w = image.width * item.scale, h = w * item.bitmap.height / item.bitmap.width;
-                ctx.save(); ctx.translate(image.width * item.x, image.height * item.y); ctx.rotate(item.rotation);
-                ctx.drawImage(item.bitmap, -w / 2, -h / 2, w, h); ctx.restore(); }
-            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', .9));
-            if (!blob || blob.size > 8 * 1024 * 1024) throw new Error('That photo is too large to send.');
-            return new File([blob], 'chat-photo.jpg', { type: 'image/jpeg' });
-        } finally { image.close(); }
+    // Burns the stickers into a canvas the size of the photo (one encode later).
+    function draw(ctx, width, height) {
+        for (const item of items) { const w = width * item.scale, h = w * item.bitmap.height / item.bitmap.width;
+            ctx.save(); ctx.translate(width * item.x, height * item.y); ctx.rotate(item.rotation);
+            ctx.drawImage(item.bitmap, -w / 2, -h / 2, w, h); ctx.restore(); }
     }
     function reset() { generation++; for (const i of items) { i.node.remove(); i.bitmap.close(); URL.revokeObjectURL(i.url); } items = []; selected = null; removeButton.remove(); }
-    return { add, bake, reset, mount };
+    return { add, draw, reset, mount, get count() { return items.length; } };
 }

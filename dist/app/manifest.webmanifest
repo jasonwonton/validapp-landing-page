@@ -43,6 +43,12 @@
       "icons": [{ "src": "../assets/pwa/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ],
+  "screenshots": [
+    {"src":  "../assets/pwa/screenshots/feed.jpg", "sizes":  "780x1688", "type":  "image/jpeg", "form_factor":  "narrow", "label":  "Your Feed: votes, TBHs and Ask Me messages"},
+    {"src":  "../assets/pwa/screenshots/play.jpg", "sizes":  "780x1688", "type":  "image/jpeg", "form_factor":  "narrow", "label":  "Play: answer polls about classmates"},
+    {"src":  "../assets/pwa/screenshots/chats.jpg", "sizes":  "780x1688", "type":  "image/jpeg", "form_factor":  "narrow", "label":  "Chats and daily Mementos with friends"},
+    {"src":  "../assets/pwa/screenshots/profile.jpg", "sizes":  "780x1688", "type":  "image/jpeg", "form_factor":  "narrow", "label":  "Your profile, aura and Ask Me link"}
+  ],
   "icons": [
     {
       "src": "../assets/pwa/icon-192.png",

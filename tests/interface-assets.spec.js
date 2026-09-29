@@ -13,8 +13,9 @@ test('interface source has no decorative emoji; product reactions remain intact'
         // The selected-poll finger and nomination celebration are native product artwork.
         if (path === 'app.js') source = source
             .replace('aria-label="Picked">👆</span>', 'aria-label="Picked"></span>')
-            .replace('context.fillText("👆", selectedPointer.x, selectedPointer.y);', '')
             .replace('<span aria-hidden="true">🎉</span></div>', '<span aria-hidden="true"></span></div>');
+        // The poll share image (drawn by the lazy share-cards module) paints the same finger.
+        if (path === 'share-cards.js') source = source.replace('context.fillText("👆", selectedPointer.x, selectedPointer.y);', '');
         // Allow only the existing reaction enum definitions, never arbitrary UI text.
         const withoutReactions = source
             .replace(/\{ type: "(?:thumbs_down|surprised|fire|eyes|funny|love|legacy_agree)", emoji: "[^"]+", label: "[^"]+" \}/g, '')
@@ -32,7 +33,7 @@ test('interface source has no decorative emoji; product reactions remain intact'
 test('imported iOS artwork has pinned provenance and stays outside the offline shell', async () => {
     const manifest = JSON.parse(await readFile(new URL('../assets/app/ios-interface-provenance.json', import.meta.url), 'utf8'));
     const worker = await readFile(new URL('../app/service-worker.js', import.meta.url), 'utf8');
-    expect(manifest).toHaveLength(3);
+    expect(manifest).toHaveLength(5);
     for (const entry of manifest) {
         const bytes = await readFile(new URL(`../${entry.web}`, import.meta.url));
         expect(createHash('sha256').update(bytes).digest('hex')).toBe(entry.webSHA256);
@@ -56,8 +57,8 @@ for (const theme of ['light', 'dark']) {
         await expect(page.locator('.heart [data-ui-icon="heart"]')).toBeVisible();
         await page.getByRole('button', { name: 'Play', exact: true }).click();
         await expect(page.locator('.play-streak-chip [data-ui-icon="fire"]')).toBeVisible();
-        await expect(page.locator('.play-streak-chip [data-ui-icon="fire"]')).toHaveCSS('color', 'rgb(255, 59, 48)');
-        await expect(page.locator('.play-streak-chip [data-ui-icon="fire"]')).toHaveCSS('fill', 'rgb(255, 59, 48)');
+        await expect(page.locator('.play-streak-chip [data-ui-icon="fire"]')).toHaveCSS('color', theme === 'dark' ? 'rgb(255, 168, 82)' : 'rgb(255, 149, 0)');
+        await expect(page.locator('.play-streak-chip [data-ui-icon="fire"]')).toHaveCSS('fill', theme === 'dark' ? 'rgb(255, 168, 82)' : 'rgb(255, 149, 0)');
         await page.getByRole('button', { name: 'Chats', exact: true }).click();
         await page.getByRole('button', { name: /Noah Williams/ }).click();
         const sticker = page.getByRole('button', { name: 'Send a sticker', exact: true }).locator('.native-sticker-icon');

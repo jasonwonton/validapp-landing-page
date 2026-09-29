@@ -60,6 +60,9 @@ test("new users can complete passkey-only school onboarding", async ({ page }) =
     await expect(dialog.getByText("No password. No phone number.", { exact: true })).toHaveCount(0);
     await expect(dialog.getByText("Choose from Library", { exact: true })).toBeVisible();
     await dialog.getByLabel(/Profile photo/).setInputFiles("assets/valid_logo.png");
+    // Profile photos go through the iOS circle crop before they are used.
+    await page.locator(".avatar-crop-dialog").getByRole("button", { name: "Use photo" }).click();
+    await expect(dialog.locator("#signupPhotoPreview img")).toHaveAttribute("src", /^blob:/);
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(page.locator("#appView")).toBeVisible();
     const contacts = page.locator("#classmatesDialog");
@@ -228,9 +231,10 @@ test("installed Chromium shell opens a previously unvisited Chats overlay journe
     await page.getByRole("button", { name: "Send photo or video" }).click();
     const dialog = page.getByRole("dialog", { name: "Send media" });
     await dialog.locator(".chat-media-file-input").setInputFiles("assets/AppIconV2.png");
-    await dialog.getByRole('button', { name: 'Add text', exact: true }).click();
-    await dialog.getByLabel("Text overlay").fill("Offline draft");
-    await expect(dialog.locator("[data-media-overlay-position]")).toHaveAccessibleName(/50% from left, 50% from top/);
+    await dialog.getByRole('button', { name: 'Add caption', exact: true }).click();
+    await dialog.getByRole("textbox", { name: "Caption" }).fill("Offline draft");
+    await dialog.getByRole("textbox", { name: "Caption" }).press("Enter");
+    await expect(dialog.getByRole("button", { name: /Media text: Offline draft/ })).toBeVisible();
     await context.setOffline(false);
 });
 
@@ -305,7 +309,8 @@ test("PWA ships install icons and Web Push worker handlers", async ({ request })
     expect(worker).toContain('addEventListener("notificationclick"');
     expect(worker).toContain("safeNotificationURL");
     expect(worker).toContain("SKIP_WAITING");
-    expect(worker).toContain('{ action: "play", title: "Play" }');
+    expect(worker).toContain('/assets/pwa/badge-96.png');
+    expect(worker).not.toContain('title: "Play"');
     expect(worker).toContain('url.pathname.startsWith("/api/")');
     expect(worker).not.toContain("cache.put(");
     expect(worker).not.toContain("Jua-Regular.ttf");
@@ -466,7 +471,8 @@ test("feed polls open the iOS-style detail and moderation flow", async ({ page }
     await page.locator("[data-feed-detail='9001']").click();
     const dialog = page.locator("#feedDetailDialog");
     await expect(dialog).toHaveCSS("position", "fixed");
-    await expect(dialog.locator(".detail-screen-header > strong")).toContainText("Sophomore");
+    // QuestionDetailView voterInfoText hides the grade until it is safe, like the feed row.
+    await expect(dialog.locator(".detail-screen-header > strong")).toHaveText("A 👧💗 Girl said");
     await expect(dialog.locator(".feed-detail-result")).toHaveCount(0);
     await expect(dialog.locator(".feed-detail-art")).toBeVisible();
     await expect(dialog.locator(".feed-detail-option")).toHaveCount(4);
@@ -482,8 +488,8 @@ test("feed polls open the iOS-style detail and moderation flow", async ({ page }
     await dialog.getByRole("button", { name: "More poll actions" }).click();
     await expect(dialog.getByRole("menuitem", { name: "Delete This Question" })).toBeVisible();
     await expect(dialog.getByRole("menuitem", { name: "Report question" })).toBeVisible();
-    page.once("dialog", (confirmation) => confirmation.accept());
     await dialog.getByRole("menuitem", { name: "Report question" }).click();
+    await page.locator(".ui-sheet").getByRole("button", { name: "Report" }).click();
     await expect(dialog).toBeHidden();
     await expect(page.locator("#toast")).toContainText("Question reported");
     await expect(page.locator("[data-feed-detail='9001']")).toHaveCount(0);
@@ -495,11 +501,9 @@ test("feed polls can be privately deleted without reporting", async ({ page }) =
     const dialog = page.locator("#feedDetailDialog");
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "More poll actions" }).click();
-    page.once("dialog", async (confirmation) => {
-        expect(confirmation.message()).toContain("It won't be reported or affect anyone else.");
-        await confirmation.accept();
-    });
     await dialog.getByRole("menuitem", { name: "Delete This Question" }).click();
+    await expect(page.locator(".ui-sheet")).toContainText("It won't be reported or affect anyone else.");
+    await page.locator(".ui-sheet").getByRole("button", { name: "Delete" }).click();
     await expect(dialog).toBeHidden();
     await expect(page.locator("#toast")).toContainText("Question deleted");
     await expect(page.locator("[data-feed-detail='9002']")).toHaveCount(0);
@@ -715,8 +719,9 @@ test("play supports shuffle and paid classmate nominations", async ({ page }) =>
     await expect(dialog.getByText("100").first()).toBeVisible();
     const candidate = dialog.locator("[data-nomination]").first();
     const name = await candidate.locator("strong").textContent();
-    page.once("dialog", (confirmation) => confirmation.accept());
     await candidate.click();
+    await expect(page.locator("#auraSpendTitle")).toHaveText(`Nominate ${name}?`);
+    await page.locator("#confirmAuraSpend").click();
     await expect(page.locator("#toast")).toContainText(`You nominated ${name}`);
 });
 
@@ -740,8 +745,8 @@ test("play exposes safety controls for classmate-submitted polls", async ({ page
     await page.getByRole("button", { name: "More question actions" }).click();
     await expect(page.getByRole("menuitem", { name: "Report question" })).toBeVisible();
     await expect(page.getByRole("menuitem", { name: "Block submitter" })).toBeVisible();
-    page.once("dialog", (confirmation) => confirmation.accept());
     await page.getByRole("menuitem", { name: "Report question" }).click();
+    await page.locator(".ui-sheet").getByRole("button", { name: "Report" }).click();
     await expect(page.locator("#toast")).toContainText("Reported to Valid");
     await expect(page.getByText("Who gives the best advice?")).toBeVisible();
 });
@@ -757,7 +762,7 @@ test("completing a poll set celebrates earned aura before cooldown", async ({ pa
     await expect(page.locator("#auraCount")).toHaveText("1,300");
     await page.getByRole("button", { name: "W aura" }).click();
     await expect(page.getByRole("heading", { name: "Next Poll Set Locked" })).toBeVisible();
-    await expect(page.locator("#playLockMessage")).toContainText(/Unlocks in (0:5\d|1:00)/);
+    await expect(page.locator("#playLockMessage")).toContainText(/Unlocks in (\d+s|1m)$/);
 });
 
 test("profile information matches the iOS correction and school-change flow", async ({ page }) => {
@@ -890,8 +895,8 @@ test("God Mode subscribers can unsubscribe from edit profile details", async ({ 
     const informationDialog = page.getByRole("dialog");
     const unsubscribe = informationDialog.getByRole("button", { name: /Unsubscribe from God Mode/ });
     await expect(unsubscribe).toBeVisible();
-    page.once("dialog", (dialog) => dialog.accept());
     await unsubscribe.click();
+    await page.locator(".ui-sheet").getByRole("button", { name: "Unsubscribe" }).click();
     await expect(informationDialog.getByText(/Unsubscribed\. God Mode stays active through/)).toBeVisible();
     await expect(informationDialog.getByRole("button", { name: /God Mode cancellation scheduled/ })).toBeDisabled();
 });

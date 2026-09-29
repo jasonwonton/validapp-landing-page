@@ -438,6 +438,25 @@ test("real adapter does not expose an upstream HTML error page", async ({ page }
     });
 });
 
+test("real adapter turns a FastAPI 422 detail array into a readable field message", async ({ page }) => {
+    await page.addInitScript((apiOrigin) => {
+        window.VALID_API_BASE_URL = `${apiOrigin}/api/v1`;
+    }, API_ORIGIN);
+    await page.route(`${API_ORIGIN}/api/v1/config`, (route) => route.fulfill({
+        status: 422,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: [{ loc: ["body", "username"], msg: "String should have at least 3 characters", type: "string_too_short" }] }),
+    }));
+    await page.goto("/app/?signin=1");
+    const error = await page.evaluate(async () => {
+        const { ValidAPI } = await import("/app/api.js");
+        const { userMessage } = await import("/app/user-message.js");
+        try { await new ValidAPI().getConfig(); return null; }
+        catch (caught) { return { message: caught.message, status: caught.status, shown: userMessage(caught, "fallback") }; }
+    });
+    expect(error).toEqual({ message: "Username must be at least 3 characters.", status: 422, shown: "Username must be at least 3 characters." });
+});
+
 function profile(firstName = "Jordan", auraPoints = 500) {
     return {
         user_id: USER_ID,
@@ -930,11 +949,9 @@ test("real adapter links signup only after Turnstile-backed SMS verification", a
     await page.getByRole("button", { name: "Create an account" }).click();
     const dialog = page.getByRole("dialog");
     await fillProductionSignup(dialog);
-    await dialog.getByLabel(/Profile photo/).setInputFiles({
-        name: "avatar.png",
-        mimeType: "image/png",
-        buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
-    });
+    await dialog.getByLabel(/Profile photo/).setInputFiles("assets/valid_logo.png");
+    await page.locator(".avatar-crop-dialog").getByRole("button", { name: "Use photo" }).click();
+    await expect(dialog.locator("#signupPhotoPreview img")).toBeVisible();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
 
