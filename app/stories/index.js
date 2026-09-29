@@ -1,4 +1,5 @@
 import { uiIcon } from "../ui-icons.js";
+import { mediaImageMarkup } from "../media-url.js";
 import { prepareChatMedia } from "../chat/media.js";
 import {
     MAX_MEDIA_AUTOMATIC_ATTEMPTS,
@@ -117,7 +118,7 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, es
         const profile = getProfile() || {};
         const avatarMarkup = (name, url) => {
             const avatar = safeURL(url, api);
-            return `<span class="story-avatar">${avatar ? `<img src="${escapeHTML(avatar)}" alt="" loading="lazy" decoding="async">` : `<span>${escapeHTML(name.slice(0, 1).toUpperCase())}</span>`}</span>`;
+            return `<span class="story-avatar">${avatar ? mediaImageMarkup(avatar, { initials: name.slice(0, 1).toUpperCase() }) : `<span>${escapeHTML(name.slice(0, 1).toUpperCase())}</span>`}</span>`;
         };
         const addBadge = `<span class="story-add-badge" aria-hidden="true">${uiIcon("plus")}</span>`;
         // Always reserve the first position for the viewer, even on an empty or

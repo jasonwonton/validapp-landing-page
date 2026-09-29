@@ -18,6 +18,7 @@ const APP_SHELL = [
     "./runtime-style.js",
     "./camera-effects.js",
     "./ui-icons.js",
+    "./media-url.js",
     "./tbh-share.js",
     "./feed-sender.js",
     "./live-camera.js",

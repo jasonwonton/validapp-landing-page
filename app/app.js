@@ -8,9 +8,12 @@ import { startPerformanceMonitoring } from "./performance.js";
 import { createRealtimeList } from "./realtime-list.js";
 import { activateRoute, preloadRoute } from "./routes/route-loader.js";
 import { clearRuntimeStyles, setRuntimeStyles } from "./runtime-style.js";
+import { configureMediaFallback, installMediaImageFallback, mediaImageMarkup } from "./media-url.js";
 
 const demoMode = localDemoAllowed();
 const api = demoMode ? new DemoAPI() : new ValidAPI();
+configureMediaFallback({ apiBase: api.baseURL });
+installMediaImageFallback();
 let chatPresence = null;
 let presenceLifecycle = null;
 let weeklyGame = null;
@@ -500,12 +503,20 @@ function initials(profile) {
 function avatarMarkup(profile, className = "row-avatar", fallbackURL = null) {
     const originalURL = api.assetURL(profile?.profile_picture_url || fallbackURL);
     const imageURL = api.assetURL(profile?.profile_picture_url_thumb) || originalURL;
-    const fallbackImageURL = originalURL && originalURL !== imageURL ? originalURL : null;
-    const name = displayName(profile);
     const fallbackInitials = initials(profile);
-    return `<span class="${className}">${imageURL
-        ? `<img loading="lazy" decoding="async" src="${escapeHTML(imageURL)}" alt="${escapeHTML(name)}" data-avatar-image data-avatar-initials="${escapeHTML(fallbackInitials)}"${fallbackImageURL ? ` data-avatar-fallback="${escapeHTML(fallbackImageURL)}"` : ""}>`
-        : `<span>${escapeHTML(fallbackInitials)}</span>`}</span>`;
+    const image = mediaImageMarkup([imageURL, originalURL], { alt: displayName(profile), initials: fallbackInitials });
+    return `<span class="${className}">${image || `<span>${escapeHTML(fallbackInitials)}</span>`}</span>`;
+}
+
+/** An avatar image (or the initials) for a profile, largest-first sources. */
+function profileImageMarkup(profile, sources, { alt = displayName(profile) } = {}) {
+    const urls = sources.map((source) => api.assetURL(source)).filter(Boolean);
+    return mediaImageMarkup(urls, { alt, initials: initials(profile) }) || `<span>${escapeHTML(initials(profile))}</span>`;
+}
+
+/** A public artwork image; falls back across media hosts, then a neutral placeholder. */
+function publicImageMarkup(url, options = {}) {
+    return mediaImageMarkup(api.assetURL(url), options);
 }
 
 function hasCustomProfilePicture(profile) {
@@ -529,20 +540,6 @@ function sortClassmatesLikeIOS(classmates) {
             return weeklyVoteDifference || first.index - second.index;
         })
         .map(({ classmate }) => classmate);
-}
-
-function handleAvatarImageError(event) {
-    const image = event.target;
-    if (!(image instanceof HTMLImageElement) || !image.matches("[data-avatar-image]")) return;
-    const fallbackURL = image.dataset.avatarFallback;
-    if (fallbackURL && image.src !== fallbackURL) {
-        delete image.dataset.avatarFallback;
-        image.src = fallbackURL;
-        return;
-    }
-    const fallback = document.createElement("span");
-    fallback.textContent = image.dataset.avatarInitials || "V";
-    image.replaceWith(fallback);
 }
 
 function shareIconMarkup(platform) {
@@ -829,11 +826,8 @@ function renderProfileHeader() {
     const multiplierElement = $("#playStreakMultiplier");
     multiplierElement.textContent = `(${multiplier.toFixed(1)}x)`;
     multiplierElement.classList.toggle("hidden", multiplier <= 1);
-    const imageURL = api.assetURL(profile.profile_picture_url_thumb || profile.profile_picture_url);
     $("#questionIdentityName").textContent = displayName(profile);
-    $("#questionIdentityAvatar").innerHTML = imageURL
-        ? `<img loading="lazy" decoding="async" src="${escapeHTML(imageURL)}" alt="">`
-        : escapeHTML(initials(profile));
+    $("#questionIdentityAvatar").innerHTML = profileImageMarkup(profile, [profile.profile_picture_url_thumb, profile.profile_picture_url], { alt: "" });
 }
 
 function formatGrade(value = "") {
@@ -888,10 +882,9 @@ function renderProfilePolls(container, questions, emptyMessage) {
         return;
     }
     container.innerHTML = questions.map((question, index) => {
-        const imageURL = api.assetURL(question.image_url);
         const pollKey = `${question.question_id || question.id || index}`;
         return `<button class="profile-poll-row" type="button" data-top-poll="${escapeHTML(pollKey)}" aria-label="Open poll: ${escapeHTML(question.question_text)}">
-            <div class="profile-poll-art">${imageURL ? `<img loading="lazy" decoding="async" src="${escapeHTML(imageURL)}" alt="">` : `<span>${index + 1}</span>`}</div>
+            <div class="profile-poll-art">${publicImageMarkup(question.image_url) || `<span>${index + 1}</span>`}</div>
             <div class="profile-poll-copy"><strong>${escapeHTML(question.question_text)}</strong><span>${uiIcon("heart")} ${Number(question.vote_count || 0).toLocaleString()} votes</span></div>
             <span class="profile-poll-chevron" aria-hidden="true">›</span>
         </button>`;
@@ -933,7 +926,7 @@ function renderProfilePanel() {
     const hasProfilePhoto = Boolean(imageURL && !String(profile.profile_picture_url || "").includes("default.png"));
     $("#profileCard").innerHTML = `<article class="full-profile-card">
         <button class="profile-photo-button" type="button" data-edit-photo aria-label="Change profile picture">
-            <span class="full-profile-avatar">${imageURL ? `<img loading="lazy" decoding="async" src="${escapeHTML(imageURL)}" alt="${escapeHTML(displayName(profile))}">` : `<span>${escapeHTML(initials(profile))}</span>`}</span>
+            <span class="full-profile-avatar">${imageURL ? profileImageMarkup(profile, [profile.profile_picture_url_medium, profile.profile_picture_url]) : `<span>${escapeHTML(initials(profile))}</span>`}</span>
             <span class="photo-edit-badge" aria-hidden="true">${uiIcon("edit")}</span>
         </button>
         ${hasProfilePhoto ? "" : '<p class="profile-photo-warning">Users without profile pictures receive less votes.</p>'}
@@ -1595,9 +1588,9 @@ function openTopPoll(pollKey) {
     const question = polls.find((item) => String(item.question_id || item.id) === String(pollKey));
     if (!question) return;
     state.selectedTopPoll = question;
-    const imageURL = api.assetURL(question.image_url);
+    const artwork = publicImageMarkup(question.image_url);
     $("#pollSummaryBody").innerHTML = `<article class="poll-summary-card">
-        ${imageURL ? `<div class="profile-poll-art"><img loading="lazy" decoding="async" src="${escapeHTML(imageURL)}" alt=""></div>` : ""}
+        ${artwork ? `<div class="profile-poll-art">${artwork}</div>` : ""}
         <h3>${escapeHTML(question.question_text)}</h3>
         <span class="poll-summary-votes"><span aria-hidden="true">${uiIcon("heart")}</span><strong>${Number(question.vote_count || 0).toLocaleString()} votes</strong></span>
         <button class="primary-button" type="button" data-share-top-poll>Share poll</button>
@@ -1780,9 +1773,8 @@ async function openClassmateDirectory() {
 function renderClassmateProfile() {
     const profile = state.selectedClassmateProfile;
     if (!profile) return;
-    const imageURL = api.assetURL(profile.profile_picture_url_medium || profile.profile_picture_url);
     $("#classmateProfileCard").innerHTML = `<article class="full-profile-card classmate-profile-card">
-        <span class="full-profile-avatar">${imageURL ? `<img loading="lazy" decoding="async" src="${escapeHTML(imageURL)}" alt="${escapeHTML(displayName(profile))}">` : `<span>${escapeHTML(initials(profile))}</span>`}</span>
+        <span class="full-profile-avatar">${profileImageMarkup(profile, [profile.profile_picture_url_medium, profile.profile_picture_url])}</span>
         <h3>${escapeHTML(displayName(profile))}</h3>
         <div class="profile-handle">${profile.username ? `@${escapeHTML(profile.username)}` : "Valid classmate"}</div>
         ${profile.bio ? `<p class="profile-bio">${escapeHTML(profile.bio)}</p>` : ""}
@@ -2262,7 +2254,7 @@ function renderSignupSchoolResults() {
         const logoURL = school.logo_url ? api.assetURL(school.logo_url) : "";
         const initials = String(school.name || "S").split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase();
         return `<button class="signup-school-result ${selected ? "selected" : ""}" type="button" role="option" aria-selected="${selected}" data-signup-school="${escapeHTML(school.id)}">
-            <span class="signup-school-logo">${logoURL ? `<img loading="lazy" decoding="async" src="${escapeHTML(logoURL)}" alt="">` : escapeHTML(initials)}</span>
+            <span class="signup-school-logo">${logoURL ? mediaImageMarkup(logoURL, { initials }) : escapeHTML(initials)}</span>
             <span><strong>${escapeHTML(school.name)}</strong><small>${escapeHTML(schoolLocationLabel(school))}${Number.isFinite(Number(school.distance_miles)) ? ` · ${Number(school.distance_miles).toFixed(1)} mi` : ""}</small></span>
             <span class="signup-school-check" aria-hidden="true">${selected ? "✓" : "›"}</span>
         </button>`;
@@ -2975,7 +2967,7 @@ function renderFeedDetail() {
     $("#feedDetailBody").innerHTML = `<article class="feed-detail-card">
         <div class="feed-detail-prompt"><h3>${escapeHTML(item.question_text)}</h3>
         ${item.is_nomination ? "" : questionSubmitterMarkup(item)}</div>
-        <div class="feed-detail-art">${artworkURL ? `<img loading="lazy" decoding="async" src="${escapeHTML(artworkURL)}" alt="">` : `<div class="artwork-placeholder"><img loading="lazy" decoding="async" src="../assets/app/pencil-clipboard.webp" alt=""><span>Image unavailable</span></div>`}</div>
+        <div class="feed-detail-art">${artworkURL ? mediaImageMarkup(artworkURL) : `<div class="artwork-placeholder"><img loading="lazy" decoding="async" src="../assets/app/pencil-clipboard.webp" alt=""><span>Image unavailable</span></div>`}</div>
         ${item.is_nomination ? `<div class="feed-nomination-card"><strong>${escapeHTML(selectedName)}</strong><p>got nominated${item.voter_gender ? ` by ${escapeHTML(formatVoterHint(item).replace(/^(from|by) /, ""))}` : item.voter_name ? ` by ${escapeHTML(item.voter_name)}` : ""}</p><span aria-hidden="true">🎉</span></div>` : options.length ? `<div class="feed-detail-options">${options.map((option, index) => {
             const name = option.name || option.contact_name || "A classmate";
             const explicit = options.findIndex(candidate => candidate.is_selected === true);
@@ -4305,7 +4297,7 @@ function renderPlay() {
     const remainingSkips = Math.max(0, Number(state.config?.max_skips_per_set ?? 3) - state.skipsUsedInSet);
     card.innerHTML = `<article class="play-card">
         <div class="play-question-copy"><h3>${escapeHTML(question.question_text)}</h3>${attribution}</div>
-        <div class="question-artwork">${artworkURL ? `<img loading="lazy" decoding="async" src="${escapeHTML(artworkURL)}" alt="">` : `<div class="artwork-placeholder"><img loading="lazy" decoding="async" src="../assets/app/pencil-clipboard.webp" alt=""><span>Question artwork</span></div>`}</div>
+        <div class="question-artwork">${artworkURL ? mediaImageMarkup(artworkURL) : `<div class="artwork-placeholder"><img loading="lazy" decoding="async" src="../assets/app/pencil-clipboard.webp" alt=""><span>Question artwork</span></div>`}</div>
         <div class="choice-grid">${choices.map(choiceMarkup).join("")}</div>
         <div class="play-actions">
             <button class="play-action-button" data-shuffle type="button">${uiIcon("shuffle-circle")} Shuffle</button>
@@ -4969,7 +4961,7 @@ function renderProfileSchoolResults() {
         const logoURL = school.logo_url ? api.assetURL(school.logo_url) : "";
         const initials = String(school.name || "S").split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase();
         return `<button class="signup-school-result ${selected ? "selected" : ""}" type="button" role="option" aria-selected="${selected}" data-profile-school="${escapeHTML(school.id)}">
-            <span class="signup-school-logo">${logoURL ? `<img loading="lazy" decoding="async" src="${escapeHTML(logoURL)}" alt="">` : escapeHTML(initials)}</span>
+            <span class="signup-school-logo">${logoURL ? mediaImageMarkup(logoURL, { initials }) : escapeHTML(initials)}</span>
             <span><strong>${escapeHTML(school.name)}</strong><small>${escapeHTML(schoolLocationLabel(school))}${Number.isFinite(Number(school.distance_miles)) ? ` · ${Number(school.distance_miles).toFixed(1)} mi` : ""}</small></span>
             <span class="signup-school-check" aria-hidden="true">${selected ? "✓" : "›"}</span>
         </button>`;
@@ -5696,7 +5688,7 @@ function renderQuestionSubmissions({ loading = false } = {}) {
         const removalLabel = question.status === "approved" ? "Deactivate question" : "Delete submission";
         return `<article class="question-history-card" data-question-submission="${escapeHTML(question.id)}" tabindex="-1">
             <header><span class="question-history-badge ${status.kind}">${escapeHTML(status.label)}</span><time datetime="${escapeHTML(question.submitted_at || "")}">Submitted ${escapeHTML(questionSubmissionDate(question.submitted_at))}</time></header>
-            <div class="question-history-summary">${imageURL ? `<img src="${escapeHTML(imageURL)}" alt="" loading="lazy" decoding="async">` : `<span class="question-history-image-placeholder" aria-hidden="true">▧</span>`}<div><strong>${escapeHTML(question.question_text || "Question")}</strong><small>${question.is_anonymous ? "Posted anonymously" : "Posted with your name"}</small></div></div>
+            <div class="question-history-summary">${imageURL ? mediaImageMarkup(imageURL) : `<span class="question-history-image-placeholder" aria-hidden="true">▧</span>`}<div><strong>${escapeHTML(question.question_text || "Question")}</strong><small>${question.is_anonymous ? "Posted anonymously" : "Posted with your name"}</small></div></div>
             ${questionSubmissionStateMarkup(question)}
             ${questionPollActivityMarkup(question)}
             ${canRemove ? `<button class="question-history-remove" type="button" data-remove-question-submission="${escapeHTML(question.id)}">${escapeHTML(removalLabel)}</button>` : ""}
@@ -7060,7 +7052,6 @@ function bindEvents() {
     });
     $("#streakCelebration").addEventListener("click", hideStreakCelebration);
     $("#bioForm").addEventListener("submit", saveBio);
-    document.addEventListener("error", handleAvatarImageError, true);
     $$("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
     addEventListener("valid:session-expired", () => showSignedOut("Your session expired. Sign in with your passkey again."));
     addEventListener("valid:feed-update", (event) => applyFeedRealtimeEvent(event.detail));

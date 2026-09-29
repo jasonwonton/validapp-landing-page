@@ -28,6 +28,7 @@ import {
 import { createCallsController } from "../calls/index.js";
 import { createLiveCamera } from "../live-camera.js";
 import { uiIcon } from "../ui-icons.js";
+import { mediaImageMarkup } from "../media-url.js";
 import { createMediaOverlayPositioner } from "../media-overlay-positioner.js";
 import { setRuntimeStyles } from "../runtime-style.js";
 import {
@@ -613,12 +614,14 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     function conversationAvatarMarkup(chat) {
         const isGroup = chat.name != null || chat.accepted_count + chat.pending_count >= 3;
         const photo = safeMediaURL(isGroup ? chat.chat_photo_url : chat.pair_profile_picture_url || chat.member_previews?.[0]?.profile_picture_url, api);
-        if (photo) return `<img src="${escapeChatHTML(photo)}" alt="" loading="lazy" decoding="async">`;
+        const initial = String(chat.display_name || "").slice(0, 1).toUpperCase();
+        if (photo) return mediaImageMarkup(photo, { initials: initial || "V" });
         if (!isGroup) return `<span>${escapeChatHTML(chat.display_name.slice(0, 1).toUpperCase())}</span>`;
         const members = (chat.member_previews || []).slice(0, 4);
         return `<span class="chat-avatar-mosaic" data-member-count="${members.length}" aria-hidden="true">${members.length ? members.map(member => {
             const image = safeMediaURL(member.profile_picture_url, api);
-            return `<i class="chat-avatar-member">${image ? `<img src="${escapeChatHTML(image)}" alt="" loading="lazy" decoding="async">` : escapeChatHTML(displayMember(member).slice(0, 1).toUpperCase())}</i>`;
+            const initial = displayMember(member).slice(0, 1).toUpperCase();
+            return `<i class="chat-avatar-member">${image ? mediaImageMarkup(image, { initials: initial }) : escapeChatHTML(initial)}</i>`;
         }).join('') : uiIcon('group')}</span>`;
     }
 
@@ -1434,7 +1437,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         }).map((person) => {
             const id = String(person.user_id || person.id);
             const image = safeMediaURL(person.profile_picture_url, api);
-            return `<label class="chat-person-row">${image ? `<img src="${escapeChatHTML(image)}" alt="" loading="lazy">` : `<span>${escapeChatHTML(displayMember(person).slice(0, 1))}</span>`}<span><strong>${escapeChatHTML(displayMember(person))}</strong><small>${escapeChatHTML(person.grade || "Classmate")}</small></span><input type="checkbox" value="${escapeChatHTML(id)}" ${selected.has(id) ? "checked" : ""}></label>`;
+            return `<label class="chat-person-row">${image ? mediaImageMarkup(image, { initials: displayMember(person).slice(0, 1) }) : `<span>${escapeChatHTML(displayMember(person).slice(0, 1))}</span>`}<span><strong>${escapeChatHTML(displayMember(person))}</strong><small>${escapeChatHTML(person.grade || "Classmate")}</small></span><input type="checkbox" value="${escapeChatHTML(id)}" ${selected.has(id) ? "checked" : ""}></label>`;
         }).join("") || `<p class="chat-no-people">No classmates found.</p>`;
         updateCreateState();
     }

@@ -78,6 +78,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .media-overlay-positioner { position: absolute; z-index: 4; max-width: 82%; min-height: 44px; padding: 7px 11px; border: 1px dashed rgba(255,255,255,.82); border-radius: 10px; background: rgba(5,9,20,.46); color: #fff; font-size: clamp(.9rem, 4vw, 1.35rem); font-weight: 800; line-height: 1.15; overflow-wrap: anywhere; text-align: center; text-shadow: 0 1px 3px rgba(0,0,0,.85); touch-action: none; cursor: move; transform: translate(-50%, -50%); }
 .media-overlay-positioner:disabled { opacity: .72; cursor: default; }
 .hidden { display: none !important; }
+/* media-url.js: a public image whose every route failed keeps its box as a neutral tile. */
+img.media-placeholder { background: var(--mint); object-fit: cover; }
 
 .camera-effect-picker { min-width: 0; display: grid; gap: 7px; margin: 0; padding: 0; border: 0; }
 .camera-effect-picker legend { padding: 0; font-size: .8rem; }
