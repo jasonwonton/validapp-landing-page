@@ -32,6 +32,8 @@ test('retention icons remain centered with their label in both themes and states
 
 test('keyboard resize and Safari viewport pan keep composer against the keyboard and header visible', async ({ page }) => {
     await page.addInitScript(() => {
+        // The mic shows only where voice can be recorded in the app (Firefox records Opus, which needs the ingest).
+        if (!MediaRecorder.isTypeSupported('audio/mp4')) Object.defineProperty(window, 'MediaRecorder', { configurable: true, value: class { static isTypeSupported(type) { return type.startsWith('audio/mp4'); } } });
         const realViewport = window.visualViewport;
         window.testViewport = Object.assign(new EventTarget(), { offsetTop: 0, offsetLeft: 0, scale: 1 });
         let testHeight;

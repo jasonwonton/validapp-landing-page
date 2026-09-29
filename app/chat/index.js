@@ -56,8 +56,10 @@ export async function deliverMementoRecord(api, userId, record, { onProgress } =
 const loadLiveCamera = () => import("../live-camera.js");
 const cameraHaptic = (kind) => window.ValidPreferences?.haptic?.(kind);
 
+// Voice notes are only ever recorded in the app, never picked from files.
 // M4A goes straight to chat-media-uploads (unchanged). Browsers that can only
 // record Opus send it through the server ingest when /config enables it.
+// With neither, the mic button is hidden (syncVoiceComposer).
 function voiceRecordingFormat(ingestEnabled = false) {
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") return null;
     const supported = (type) => { try { return MediaRecorder.isTypeSupported?.(type) === true; } catch (_) { return false; } };
@@ -233,7 +235,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 <section class="live-camera" data-chat-camera tabindex="-1" hidden aria-label="Message camera"></section>
                 <section class="chat-media-editor">
                 <div class="chat-photo-tools"><button type="button" data-retake-chat-photo>${uiIcon('flip')} Retake</button><span></span><button type="button" data-close-chat-media aria-label="Close photo">${uiIcon('close')}</button></div>
-                <div class="chat-media-preview"><span aria-hidden="true">${uiIcon("plus")}</span><p>Choose a photo, an MP4 video, or an M4A voice recording.</p></div>
+                <div class="chat-media-preview"><span aria-hidden="true">${uiIcon("plus")}</span><p>Choose a photo or video.</p></div>
                 <div class="chat-review-tools" data-review-tools hidden><button type="button" data-photo-cutout aria-label="Make a sticker from this photo">${uiIcon('scissors')}</button><button type="button" data-photo-stickers aria-label="Open My Stickers"><span class="native-sticker-icon" aria-hidden="true"></span></button><button type="button" data-photo-text aria-label="Add caption">Aa</button><button type="button" data-photo-draw aria-label="Draw on this" aria-pressed="false"></button><div class="review-draw-tools" hidden></div><button type="button" data-undo-zoom aria-label="Undo zoom" hidden>${uiIcon('back')}</button></div>
                 <p class="chat-media-send-count" hidden></p>
                 <button type="button" data-cancel-chat-upload hidden>Cancel upload</button>
@@ -243,7 +245,6 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 <div class="chat-media-review-actions"><button class="primary-button chat-media-publish" type="submit" aria-label="Send" disabled>${uiIcon('send')}</button></div>
                 </section>
                 <input class="chat-media-file-input" type="file" accept="image/*,video/mp4" hidden aria-label="Photo or video file">
-                <input class="chat-audio-file-input" type="file" accept="audio/mp4,.m4a" hidden aria-label="Voice recording file">
             </form>
         </dialog>
         <dialog class="chat-sheet chat-stickers-sheet" data-sticker-library-dialog aria-label="Send a sticker"><section class="chat-stickers-content"><header><button type="button" data-close-stickers>Close</button><strong>Send a Sticker</strong><button type="button" data-edit-stickers aria-pressed="false">Edit</button></header><p>Tap a sticker to send it.</p><p class="chat-sticker-status" role="status"></p><section class="chat-sticker-library"><input class="chat-sticker-file-input visually-hidden" type="file" accept="image/*" capture="environment"><div><small>Loading…</small></div></section></section></dialog>
@@ -334,6 +335,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         return roomTools;
     }
     function syncVoiceComposer() {
+        $('[data-record-voice]').classList.toggle('hidden', !voiceMode && !voiceRecordingFormat(ingestEnabled(getConfig())));
         $('.chat-composer').classList.toggle('voice-mode', voiceMode);
         $('.chat-voice-inline').classList.toggle('hidden', !voiceMode);
         const audio = $('.chat-inline-audio');
@@ -617,7 +619,6 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         if (mementoPublishing) event.preventDefault();
     });
     $(".chat-media-file-input").addEventListener("change", selectChatMedia);
-    $(".chat-audio-file-input").addEventListener("change", selectChatMedia);
     $(".chat-sticker-file-input").addEventListener("change", selectStickerSource);
     $(".chat-media-form").addEventListener("submit", publishChatMedia);
     $("[data-chat-media-dialog]").addEventListener("close", resetChatMediaComposer);
@@ -746,6 +747,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         if (name !== 'room' && voiceMode) resetChatMediaComposer();
         $$('[data-chat-screen]').forEach((screen) => screen.classList.toggle("hidden", screen.dataset.chatScreen !== name));
         root.closest(".panel")?.classList.toggle("chat-room-open", name === "room");
+        if (name === "room") syncVoiceComposer();
         observePresence();
         reportActiveChat();
     }
@@ -2126,7 +2128,15 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     }
 
     async function selectChatMedia(event) {
-        await prepareSelectedChatMedia(event.target.files?.[0]);
+        const file = event.target.files?.[0];
+        // The library is for photos and videos; voice notes are recorded here.
+        if (file && (/^audio\//.test(file.type) || /\.(m4a|mp3|wav|aac|ogg|opus)$/i.test(file.name || ""))) {
+            event.target.value = "";
+            showChatMediaReview();
+            $(".chat-media-status").textContent = "Choose a photo or video.";
+            return;
+        }
+        await prepareSelectedChatMedia(file);
     }
 
     function voiceRecordingElapsed() {
@@ -2170,13 +2180,9 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             stopVoiceRecorder();
             return;
         }
-        resetChatMediaComposer({ keepGesture: true }); voiceMode = true; syncVoiceComposer();
         const format = voiceRecordingFormat(ingestEnabled(getConfig()));
-        if (!format) {
-            $(".chat-media-status").textContent = "Live recording is unavailable here. Choose an M4A voice recording instead.";
-            $('.chat-audio-file-input').click();
-            return;
-        }
+        if (!format) return syncVoiceComposer(); // no recording path: the mic hides
+        resetChatMediaComposer({ keepGesture: true }); voiceMode = true; syncVoiceComposer();
         const { mimeType } = format;
         // M4A uses the direct 4 MB path; Opus goes through the ingest (10 MB).
         const maxBytes = format.ingest ? 10 * 1024 * 1024 : 4 * 1024 * 1024;
@@ -2206,7 +2212,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 chunks.push(event.data);
             });
             recorder.addEventListener("error", () => {
-                $(".chat-media-status").textContent = "Voice recording stopped unexpectedly. Try again or choose an M4A file.";
+                $(".chat-media-status").textContent = "Voice recording stopped unexpectedly. Try again.";
                 recorder.stream.getTracks().forEach((track) => track.stop());
                 clearVoiceRecordingState();
             }, { once: true });
@@ -2244,8 +2250,8 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         } catch (error) {
             clearVoiceRecordingState();
             $(".chat-media-status").textContent = error?.name === "NotAllowedError"
-                ? "Microphone access was not allowed. Choose an M4A voice recording instead."
-                : "Could not start voice recording. Choose an M4A voice recording instead.";
+                ? "Microphone access was not allowed. Allow it in your browser settings, then try again."
+                : userMessage(error, "Could not start voice recording. Try again.");
         }
     }
 
@@ -2266,9 +2272,8 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         const recordId = `${senderId}:chat-media:${uploadRequestId}`;
         button.disabled = true;
         button.textContent = "Sending…";
-        root.querySelectorAll('[data-retake-chat-photo], [data-chat-photo-library], [data-chat-audio-library], [data-record-voice]').forEach(control => { control.disabled = true; });
+        root.querySelectorAll('[data-retake-chat-photo], [data-chat-photo-library], [data-record-voice]').forEach(control => { control.disabled = true; });
         $(".chat-media-file-input").disabled = true;
-        $(".chat-audio-file-input").disabled = true;
         $("[data-chat-view-once]").disabled = true;
         $(".chat-media-progress").classList.remove("hidden");
         $(".chat-media-status").textContent = media.kind === "photo" ? "Preparing photo…" : "Starting secure upload…";
@@ -2345,7 +2350,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             chatMediaPublishing = false;
             if (chatMediaAbort === abort) chatMediaAbort = null;
             $("[data-cancel-chat-upload]").hidden = true;
-            root.querySelectorAll('[data-retake-chat-photo], [data-chat-photo-library], [data-chat-audio-library], [data-record-voice]').forEach(control => { control.disabled = false; });
+            root.querySelectorAll('[data-retake-chat-photo], [data-chat-photo-library], [data-record-voice]').forEach(control => { control.disabled = false; });
             button.innerHTML = uiIcon('send');
             button.disabled = !selectedChatMedia;
         }
@@ -2369,13 +2374,11 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         resetChatMediaRequestIds();
         $(".chat-media-file-input").value = "";
         $(".chat-media-file-input").disabled = false;
-        $(".chat-audio-file-input").value = "";
-        $(".chat-audio-file-input").disabled = false;
         $("[data-chat-view-once]").checked = false;
         $("[data-chat-view-once]").disabled = false;
         $("[data-review-tools]").hidden = true;
         $(".chat-media-send-count").hidden = true;
-        $(".chat-media-preview").innerHTML = `<span aria-hidden="true">${uiIcon("plus")}</span><p>Choose a photo, an MP4 video, or an M4A voice recording.</p>`;
+        $(".chat-media-preview").innerHTML = `<span aria-hidden="true">${uiIcon("plus")}</span><p>Choose a photo or video.</p>`;
         $(".chat-media-status").textContent = "";
         $(".chat-media-progress").classList.add("hidden");
         setRuntimeStyles($(".chat-media-progress span"), { width: "0" });

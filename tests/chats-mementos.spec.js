@@ -496,19 +496,36 @@ test("chat media rejects an undecodable MP4 before upload", async ({ page }) => 
     await expect(dialog.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
 });
 
-test("voice composer keeps an M4A picker fallback when a browser cannot record compatible audio", async ({ page }) => {
-    await page.addInitScript(() => {
-        Object.defineProperty(window, "MediaRecorder", { configurable: true, value: undefined });
+for (const [label, script, query, visible] of [
+    ["no MediaRecorder", () => Object.defineProperty(window, "MediaRecorder", { configurable: true, value: undefined }), "", false],
+    ["Opus only without the ingest", () => Object.defineProperty(window, "MediaRecorder", { configurable: true, value: class { static isTypeSupported(type) { return type.includes("opus"); } } }), "", false],
+    ["Opus only with the ingest", () => Object.defineProperty(window, "MediaRecorder", { configurable: true, value: class { static isTypeSupported(type) { return type.includes("opus"); } } }), "&ingest=1", true],
+]) {
+    test(`voice notes are recorded in the app only; the mic ${visible ? "shows" : "hides"} with ${label}`, async ({ page }) => {
+        await page.addInitScript(script);
+        await page.addInitScript(() => {
+            if (!navigator.mediaDevices) Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: async () => ({ getTracks: () => [] }) } });
+        });
+        await signInToDemo(page, query);
+        await page.getByRole("button", { name: "Chats", exact: true }).click();
+        await page.getByRole("button", { name: /Noah Williams/ }).click();
+        await expect(page.locator('[data-message-id="msg-n4"]')).toBeVisible();
+        await expect(page.getByRole("button", { name: "Record voice message", exact: true })).toBeVisible({ visible });
+        // Never a voice-file picker, whatever the browser can record.
+        await expect(page.locator('input[type="file"][accept*="audio"]')).toHaveCount(0);
+        await expect(page.locator(".chat-voice-inline")).toBeHidden();
     });
+}
+
+test("the photo/video library turns away audio files instead of sending them as voice notes", async ({ page }) => {
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
-    const chooser = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: 'Record voice message', exact: true }).click();
-    await chooser;
-    await expect(page.getByLabel('Voice recording file')).toHaveAttribute('accept', 'audio/mp4,.m4a');
-    await expect(page.locator('[data-chat-media-dialog]')).toBeHidden();
-    await expect(page.locator('.chat-voice-inline')).toContainText('Live recording is unavailable');
+    await page.getByRole("button", { name: "Send photo or video" }).click();
+    const dialog = page.getByRole("dialog", { name: "Send media" });
+    await dialog.locator(".chat-media-file-input").setInputFiles({ name: "memo.m4a", mimeType: "audio/mp4", buffer: Buffer.from("voice") });
+    await expect(dialog.locator(".chat-media-status")).toHaveText("Choose a photo or video.");
+    await expect(dialog.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
 });
 
 test("compatible browsers can record an MP4 voice message locally before upload", async ({ page }) => {
