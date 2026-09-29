@@ -1,7 +1,6 @@
 import { ValidAPI } from "./api.js";
 import { uiIcon } from "./ui-icons.js";
 import { feedVoterLine, senderGradeIsSafe, tbhSenderLine } from "./feed-sender.js";
-import { DemoAPI, localDemoAllowed } from "./demo-api.js";
 import { createAdditionalPasskey, createSignupPasskey, passkeysSupported, signInWithPasskey } from "./passkeys.js";
 import { authBrowserURL, checkPasskeyEnvironment, completeSignupSafely, enablePreviewSignup, reportAuthFailure, needsPhoneReverification } from './auth-reliability.js';
 import { startPerformanceMonitoring } from "./performance.js";
@@ -13,8 +12,11 @@ import { confirmSheet } from "./ui-dialogs.js";
 import { showToast } from "./toast.js";
 import { userMessage } from "./user-message.js";
 
-const demoMode = localDemoAllowed();
-const api = demoMode ? new DemoAPI() : new ValidAPI();
+// The localhost-only demo fixtures load on demand so they never join the
+// production module graph or the service-worker shell.
+const demoMode = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname)
+    && new URLSearchParams(location.search).get("demo") === "1";
+const api = demoMode ? new (await import("./demo-api.js")).DemoAPI() : new ValidAPI();
 configureMediaFallback({ apiBase: api.baseURL });
 installMediaImageFallback();
 let chatPresence = null;

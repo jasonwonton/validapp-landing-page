@@ -1,5 +1,9 @@
 const CACHE_PREFIX = "valid-web-";
 const CACHE_NAME = `${CACHE_PREFIX}v105`;
+// Every module the startup graph imports statically must be listed here, or the
+// installed app cannot start offline; scripts/tests/service-worker-shell.test.mjs
+// walks the import graph and enforces it. Dynamic imports that need the network
+// anyway (the weekly game, LiveKit, the localhost-only demo) stay network-only.
 const APP_SHELL = [
     "./",
     "./styles.css",
@@ -7,7 +11,6 @@ const APP_SHELL = [
     "./app.js",
     "./api.js",
     "./session-recovery.js",
-    "./demo-api.js",
     "./passkeys.js",
     "./auth-reliability.js",
     "./auth-route-recovery.js",
@@ -23,6 +26,7 @@ const APP_SHELL = [
     "./toast.js",
     "./user-message.js",
     "./tbh-share.js",
+    "./blocked-users.js",
     "./feed-sender.js",
     "./live-camera.js",
     "./media-overlay-positioner.js",
@@ -36,6 +40,8 @@ const APP_SHELL = [
     "./chat/activity-settings.js",
     "./chat/index.js",
     "./chat/actions.js",
+    "./chat/history.js",
+    "./chat/view-once.js",
     "./chat/appearance.js",
     "./chat/sticker-maker.js",
     "./chat/photo-stickers.js",
