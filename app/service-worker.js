@@ -16,7 +16,6 @@ const APP_SHELL = [
     "./keyed-list.js",
     "./realtime-list.js",
     "./runtime-style.js",
-    "./camera-effects.js",
     "./ui-icons.js",
     "./media-url.js",
     "./ui-dialogs.js",
@@ -24,7 +23,6 @@ const APP_SHELL = [
     "./user-message.js",
     "./tbh-share.js",
     "./feed-sender.js",
-    "./live-camera.js",
     "./media-overlay-positioner.js",
     "./routes/route-loader.js",
     "./routes/feed.js",
@@ -79,6 +77,16 @@ self.addEventListener("activate", (event) => {
                 .map((key) => caches.delete(key))))
             .then(() => self.clients.claim())
     );
+});
+
+// Background Sync (Android Chrome): when connectivity returns, ask open pages
+// to drain the chat/Story/Memento media outbox. The upload itself stays in the
+// page, which holds the session and the IndexedDB records.
+self.addEventListener("sync", (event) => {
+    if (event.tag !== "valid-media-outbox") return;
+    event.waitUntil(self.clients.matchAll({ type: "window" }).then((clients) => {
+        for (const client of clients) client.postMessage({ type: "valid-media-outbox-sync" });
+    }));
 });
 
 self.addEventListener("fetch", (event) => {

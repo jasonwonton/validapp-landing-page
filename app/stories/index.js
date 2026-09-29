@@ -1,6 +1,6 @@
 import { uiIcon } from "../ui-icons.js";
 import { mediaImageMarkup } from "../media-url.js";
-import { prepareChatMedia } from "../chat/media.js";
+import { ingestEnabled, ingestSegmentCount, prepareChatMedia } from "../chat/media.js";
 import {
     MAX_MEDIA_AUTOMATIC_ATTEMPTS,
     chatTextSendIsRetryable,
@@ -303,6 +303,8 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, es
 
     function openStoryComposer() {
         resetStoryComposer();
+        // Longer, larger or non-MP4 clips go through the server ingest when it is on.
+        $(".story-file-input").accept = ingestEnabled(api.config) ? "image/*,video/*" : "image/*,video/mp4";
         $(".story-composer").showModal();
     }
 
@@ -324,7 +326,7 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, es
         storyUploadRequestId = null;
         storyPublishRequestId = null;
         try {
-            const prepared = await prepareChatMedia(file);
+            const prepared = await prepareChatMedia(file, { config: api.config });
             if (generation !== storyPreparationGeneration) return;
             if (prepared.kind === "audio") throw new Error("Choose a photo or MP4 video for your Story.");
             selectedStoryMedia = prepared;
@@ -335,7 +337,8 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, es
                 : `<img src="${escapeHTML(selectedStoryPreview)}" alt="Story photo preview" decoding="async">`;
             if (!preserveOverlay) storyOverlay.reset();
             storyOverlay.mount();
-            $(".story-composer-status").textContent = `${selectedStoryMedia.kind === "video" ? "Video" : "Photo"} ready to post`;
+            const parts = selectedStoryMedia.ingest ? ingestSegmentCount(selectedStoryMedia.durationMs) : 1;
+            $(".story-composer-status").textContent = parts > 1 ? `Posts as ${parts} Stories` : `${selectedStoryMedia.kind === "video" ? "Video" : "Photo"} ready to post`;
             $(".story-publish").disabled = false;
         } catch (error) {
             if (generation !== storyPreparationGeneration) return;
@@ -349,28 +352,10 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, es
         }
     }
 
-    async function deliverStoryRecord(record, { onProgress } = {}) {
-        const session = await api.createStoryUpload(record.user_id, {
-            contentType: record.content_type,
-            sizeBytes: record.file.size,
-            thumbnailSizeBytes: record.thumbnail?.size ?? null,
-            durationMs: record.duration_ms,
-            clientRequestId: record.upload_request_id,
-        });
-        await api.putDirectUpload(record.file, session, { onProgress: (progress) => onProgress?.(progress * 0.88) });
-        if (record.thumbnail && !session.already_finalized) {
-            await api.putDirectUpload(record.thumbnail, {
-                upload_url: session.thumbnail_upload_url,
-                upload_method: session.upload_method,
-                required_headers: session.thumbnail_required_headers,
-            }, { onProgress: (progress) => onProgress?.(0.88 + progress * 0.1) });
-        }
-        await api.finalizeStoryUpload(record.user_id, session.media_asset_id);
-        return api.publishStory(record.user_id, session.media_asset_id, {
-            caption: record.caption,
-            overlay: record.overlay,
-            clientRequestId: record.publish_request_id,
-        });
+    async function deliverStoryRecord(record, { onProgress, onStatus } = {}) {
+        // Resumes from the last finished step; long clips post one Story per segment.
+        const { deliverStory } = await import("../media-delivery.js");
+        return deliverStory(api, record.user_id, record, { onProgress, onStatus });
     }
 
     async function publishSelectedStory(event) {
@@ -386,7 +371,8 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, es
             kind: "story",
             file: selectedStoryMedia.file,
             thumbnail: selectedStoryMedia.thumbnail || null,
-            content_type: selectedStoryMedia.file.type,
+            content_type: selectedStoryMedia.ingest ? selectedStoryMedia.contentType : selectedStoryMedia.file.type,
+            ingest: Boolean(selectedStoryMedia.ingest),
             duration_ms: selectedStoryMedia.durationMs,
             caption: $(".story-caption").value.trim() || null,
             overlay: $(".story-overlay").value.trim() ? { text: $(".story-overlay").value.trim(), ...overlayPosition } : null,
@@ -401,9 +387,10 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, es
         try {
             await putChatMediaOutbox(record);
             saved = true;
-            await deliverStoryRecord(record, { onProgress: (progress) => {
-                setRuntimeStyles($(".story-upload-progress span"), { width: `${Math.round(progress * 100)}%` });
-            } });
+            await deliverStoryRecord(record, {
+                onStatus: (text) => { $(".story-composer-status").textContent = text; },
+                onProgress: (progress) => { setRuntimeStyles($(".story-upload-progress span"), { width: `${Math.round(progress * 100)}%` }); },
+            });
             await removeChatMediaOutbox(record.id);
             $(".story-composer").close();
             showToast?.("Story posted");

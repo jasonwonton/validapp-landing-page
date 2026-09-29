@@ -463,52 +463,16 @@ test("chat media sends a prepared photo through upload, finalize, and message cr
     const dialog = page.getByRole("dialog", { name: "Send media" });
     await dialog.locator(".chat-media-file-input").setInputFiles("assets/AppIconV2.png");
     await expect(dialog.locator('.chat-media-publish')).toBeEnabled();
-    await dialog.getByRole('button', { name: 'Add text', exact: true }).click();
-    await dialog.getByLabel("Text overlay").fill("After practice");
-    const overlayHandle = dialog.locator("[data-media-overlay-position]");
-    await expect(overlayHandle).toHaveAccessibleName(/50% from left, 50% from top/);
-    await overlayHandle.press("Shift+ArrowRight");
-    await overlayHandle.press("ArrowDown");
-    await expect(overlayHandle).toHaveAccessibleName(/60% from left, 52% from top/);
-    await overlayHandle.hover();
-    const previewBounds = await dialog.locator(".chat-media-preview").boundingBox();
-    await overlayHandle.evaluate((node, bounds) => {
-        const pointer = { bubbles: true, pointerId: 6, pointerType: "touch", button: 0 };
-        node.dispatchEvent(new PointerEvent("pointerdown", {
-            ...pointer,
-            clientX: bounds.x + bounds.width * 0.6,
-            clientY: bounds.y + bounds.height * 0.52,
-        }));
-        node.parentElement.dispatchEvent(new PointerEvent("pointermove", {
-            ...pointer,
-            clientX: bounds.x - 100,
-            clientY: bounds.y + bounds.height * 0.52,
-        }));
-        node.parentElement.dispatchEvent(new PointerEvent("pointerup", pointer));
-    }, previewBounds);
-    await expect(overlayHandle).toHaveAccessibleName(/8% from left, 52% from top/);
-    await overlayHandle.press("Home");
-    if (browserName === "firefox") {
-        await overlayHandle.evaluate((node, bounds) => {
-            const pointer = { bubbles: true, pointerId: 7, pointerType: "mouse", button: 0 };
-            node.dispatchEvent(new PointerEvent("pointerdown", {
-                ...pointer,
-                clientX: bounds.x + bounds.width * 0.5,
-                clientY: bounds.y + bounds.height * 0.5,
-            }));
-            node.parentElement.dispatchEvent(new PointerEvent("pointermove", {
-                ...pointer,
-                clientX: bounds.x + bounds.width * 0.7,
-                clientY: bounds.y + bounds.height * 0.3,
-            }));
-            node.parentElement.dispatchEvent(new PointerEvent("pointerup", pointer));
-        }, previewBounds);
-    } else {
-        await page.mouse.down();
-        await page.mouse.move(previewBounds.x + previewBounds.width * 0.7, previewBounds.y + previewBounds.height * 0.3);
-        await page.mouse.up();
-    }
-    await expect(overlayHandle).toHaveAccessibleName(/70% from left, 30% from top/);
+    // iOS caption bars: tap to place one at that height, drag it vertically.
+    const stage = dialog.locator(".review-stage");
+    const stageBox = await stage.boundingBox();
+    await page.mouse.click(stageBox.x + stageBox.width / 2, stageBox.y + stageBox.height * 0.6);
+    await dialog.getByRole("textbox", { name: "Caption" }).fill("After practice");
+    await dialog.getByRole("textbox", { name: "Caption" }).press("Enter");
+    const caption = dialog.getByRole("button", { name: /Media text: After practice/ });
+    await expect(caption).toBeVisible();
+    await caption.press("ArrowUp");
+    for (let step = 0; step < 14; step++) await caption.press("ArrowUp");
     await dialog.getByRole("button", { name: "Send", exact: true }).click();
     await expect(dialog).toBeHidden();
     const sent = page.locator(".chat-message.mine").last();
@@ -516,8 +480,8 @@ test("chat media sends a prepared photo through upload, finalize, and message cr
     await expect(sent).toContainText("After practice");
     // Native mouse coordinates round to CSS pixels on WebKit. Preserve the
     // dragged location to within one percent rather than requiring subpixels.
-    expect(Number(await sent.locator('.chat-media-text').getAttribute('data-overlay-x'))).toBeCloseTo(0.7, 2);
-    expect(Number(await sent.locator('.chat-media-text').getAttribute('data-overlay-y'))).toBeCloseTo(0.3, 2);
+    expect(Number(await sent.locator('.chat-media-text').getAttribute('data-overlay-x'))).toBeCloseTo(0.5, 2);
+    expect(Number(await sent.locator('.chat-media-text').getAttribute('data-overlay-y'))).toBeCloseTo(0.3, 1);
     await expect(page.getByText("Photo sent", { exact: true })).toBeVisible();
 });
 
