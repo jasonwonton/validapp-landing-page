@@ -943,6 +943,22 @@ function renderProfilePanel() {
     renderProfileInviteCard();
     renderPasskeyStatus();
     renderTabBadges();
+    renderMemoriesEntry();
+}
+
+// Memories + Vault live in a lazily loaded module (app/vault/).
+let vaultPromise = null;
+function renderMemoriesEntry() {
+    let entry = $("#memoriesEntry");
+    if (state.config?.enable_vault !== true || !api.user?.id) return entry?.classList.add("hidden");
+    if (!entry) {
+        entry = Object.assign(document.createElement("div"), { id: "memoriesEntry", className: "hidden" });
+        $("#schoolCard").after(entry);
+    }
+    vaultPromise ||= import("./vault/index.js").then(({ createVault }) => createVault({
+        api, getUser: () => api.user, openDetailScreen, closeDetailScreen, haptic, mount: $("#commentsRoot").parentElement,
+    }));
+    vaultPromise.then((vault) => vault.renderEntry(entry)).catch(() => { vaultPromise = null; });
 }
 
 function renderSchoolCard() {
