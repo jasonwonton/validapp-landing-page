@@ -11,6 +11,7 @@ import { clearRuntimeStyles, setRuntimeStyles } from "./runtime-style.js";
 import { configureMediaFallback, installMediaImageFallback, mediaImageMarkup } from "./media-url.js";
 import { confirmSheet } from "./ui-dialogs.js";
 import { showToast } from "./toast.js";
+import { userMessage } from "./user-message.js";
 
 const demoMode = localDemoAllowed();
 const api = demoMode ? new DemoAPI() : new ValidAPI();
@@ -53,7 +54,7 @@ async function openWeeklyGame() {
         if (api.user?.id !== userId) return;
         weeklyGame ||= createWeeklyGame({ api, getProfilePhoto: () => state.profile?.profile_picture_url });
         await weeklyGame.open();
-    } catch (error) { showToast(error.message || 'Could not open the weekly game.'); }
+    } catch (error) { showToast(userMessage(error, 'Could not open the weekly game.')); }
     finally { weeklyGameOpening = false; }
 }
 const DEFAULT_FULL_REVEAL_AURA_COST = 1000;
@@ -309,11 +310,9 @@ HTMLDialogElement.prototype.showModal = function showMountedModal() {
     return nativeShowModal.call(this);
 };
 
+// Kept for existing call sites; see user-message.js.
 function friendlyErrorMessage(error, fallback = "Something went wrong. Please try again.") {
-    const raw = typeof error === "string" ? error : error?.message;
-    const message = String(raw || "").trim();
-    if (!message || /<!doctype|<html|<body|<head/i.test(message) || message.length > 240) return fallback;
-    return message;
+    return userMessage(error, fallback);
 }
 
 function appCacheKey(name) {
@@ -698,7 +697,7 @@ async function showSignedIn() {
             maybePromptForPasskeyEnrollment();
         });
     } catch (error) {
-        if (!error.confirmedSessionInvalid) $("#feedStatus").textContent = error.message || "Could not load your profile.";
+        if (!error.confirmedSessionInvalid) $("#feedStatus").textContent = userMessage(error, "Could not load your profile.");
     }
 }
 
@@ -1215,7 +1214,7 @@ async function startGodModeCheckout(button) {
         status.textContent = "Finish checkout, then return here. God Mode will unlock automatically.";
     } catch (error) {
         checkoutWindow?.close();
-        status.textContent = error.message || "Could not start Stripe checkout.";
+        status.textContent = userMessage(error, "Could not start Stripe checkout.");
     } finally {
         button.disabled = false;
         button.innerHTML = originalHTML;
@@ -1270,7 +1269,7 @@ async function shareGodModeInvite(button, channel) {
             status.textContent = channel === "snapchat" ? "Invite copied — paste it into Snapchat." : "Invite link copied.";
         }
     } catch (error) {
-        if (error.name !== "AbortError") status.textContent = error.message || "Could not create an invite.";
+        if (error.name !== "AbortError") status.textContent = userMessage(error, "Could not create an invite.");
     } finally {
         button.disabled = false;
         button.removeAttribute("aria-busy");
@@ -1434,7 +1433,7 @@ async function openTbhRequestPurchase() {
         state.tbhTargets = mergeTbhTargetsWithClassmates(targetResponse.items, classmateResponse.classmates);
         renderTbhRequestFlow();
     } catch (error) {
-        $("#tbhRequestBody").innerHTML = `<div class="empty-card"><strong>Couldn't load classmates</strong><p>${escapeHTML(error.message || "Please try again.")}</p></div>`;
+        $("#tbhRequestBody").innerHTML = `<div class="empty-card"><strong>Couldn't load classmates</strong><p>${escapeHTML(userMessage(error, "Please try again."))}</p></div>`;
     }
 }
 
@@ -1500,7 +1499,7 @@ async function submitTbhResponse(event) {
         showToast("TBH sent ✓");
         loadTbhContent();
     } catch (error) {
-        $("#tbhComposerStatus").textContent = error.message || "Couldn't send TBH.";
+        $("#tbhComposerStatus").textContent = userMessage(error, "Couldn't send TBH.");
         setButtonLoading(button, false);
     }
 }
@@ -1510,7 +1509,7 @@ async function dismissTbhRequest(requestId) {
     state.tbhPendingRequests = state.tbhPendingRequests.filter((item) => String(item.id) !== String(requestId));
     renderFeed();
     try { await api.dismissTbhRequest(api.user.id, requestId); }
-    catch (error) { state.tbhPendingRequests = previous; renderFeed(); showToast(error.message || "Couldn't dismiss request."); }
+    catch (error) { state.tbhPendingRequests = previous; renderFeed(); showToast(userMessage(error, "Couldn't dismiss request.")); }
 }
 
 async function suppressTbhRequester(requesterId) {
@@ -1518,7 +1517,7 @@ async function suppressTbhRequester(requesterId) {
     state.tbhPendingRequests = state.tbhPendingRequests.filter((item) => String(item.requester_user_id) !== String(requesterId));
     renderFeed();
     try { await api.suppressTbhRequester(api.user.id, requesterId); }
-    catch (error) { state.tbhPendingRequests = previous; renderFeed(); showToast(error.message || "Couldn't update requests."); }
+    catch (error) { state.tbhPendingRequests = previous; renderFeed(); showToast(userMessage(error, "Couldn't update requests.")); }
 }
 
 async function openTbhDetail(value) {
@@ -1682,7 +1681,7 @@ async function confirmAuraSpend() {
                 ? "You're boosted"
                 : `Boosted toward ${displayName(purchase.target)}`);
     } catch (error) {
-        $("#auraSpendStatus").textContent = error.message || (purchase.kind === "reveal"
+        $("#auraSpendStatus").textContent = userMessage(error, purchase.kind === "reveal"
             ? "Could not reveal this sender."
             : purchase.kind === "nominate" ? "Could not save your nomination." : "Could not purchase this boost.");
     } finally {
@@ -1726,7 +1725,7 @@ async function openTargetedBoostPicker() {
         $("#targetedBoostStatus").textContent = "";
         renderTargetedBoostList();
     } catch (error) {
-        $("#targetedBoostStatus").textContent = error.message || "Could not load classmates.";
+        $("#targetedBoostStatus").textContent = userMessage(error, "Could not load classmates.");
     }
 }
 
@@ -1765,7 +1764,7 @@ async function openClassmateDirectory() {
         $("#classmateDirectoryStatus").textContent = "";
         renderClassmateDirectory();
     } catch (error) {
-        $("#classmateDirectoryStatus").textContent = error.message || "Could not load classmates.";
+        $("#classmateDirectoryStatus").textContent = userMessage(error, "Could not load classmates.");
     }
 }
 
@@ -2294,7 +2293,7 @@ async function lookupSignupSchools() {
         state.signupSelectedSchool = null;
         $("#signupSchoolPicker").classList.add("hidden");
         showSignupSchoolFallback(true);
-        $("#signupStatus").textContent = error.message || "Couldn't load nearby schools. Enter your school manually.";
+        $("#signupStatus").textContent = userMessage(error, "Couldn't load nearby schools. Enter your school manually.");
     }
 }
 
@@ -2408,7 +2407,7 @@ async function advanceSignup(button) {
                 return;
             }
             setSignupStep(3);
-            $("#signupStatus").textContent = error.message || "Could not check that phone number.";
+            $("#signupStatus").textContent = userMessage(error, "Could not check that phone number.");
             return;
         } finally { setButtonLoading(button, false); }
         return;
@@ -2431,7 +2430,7 @@ async function advanceSignup(button) {
             state.signupVerifiedPhone = phoneNumber;
             setSignupStep(5);
         } catch (error) {
-            $("#signupStatus").textContent = error.message || "Could not verify that code.";
+            $("#signupStatus").textContent = userMessage(error, "Could not verify that code.");
         } finally { setButtonLoading(button, false); }
         return;
     }
@@ -2448,7 +2447,7 @@ async function advanceSignup(button) {
                 return;
             }
         } catch (error) {
-            $("#signupStatus").textContent = error.message || "Could not check that username.";
+            $("#signupStatus").textContent = userMessage(error, "Could not check that username.");
             return;
         } finally { setButtonLoading(button, false); }
     }
@@ -2479,7 +2478,7 @@ async function resendSignupPhoneCode(button) {
             requestAnimationFrame(() => $("#passkeyButton").focus());
             return;
         }
-        $("#signupStatus").textContent = error.message || "Could not send another code.";
+        $("#signupStatus").textContent = userMessage(error, "Could not send another code.");
     } finally {
         setButtonLoading(button, false);
     }
@@ -2906,7 +2905,7 @@ async function openReactorList(target) {
             : await api.getFeedActivityReactors(api.user.id, targetId);
         $("#reactorList").innerHTML = reactors.length ? reactors.map((reactor) => `<div class="reactor-row">${avatarMarkup({ first_name: reactor.first_name, last_name: reactor.last_name, profile_picture_url: reactor.profile_picture_url }, "row-avatar")}<strong>${escapeHTML(`${reactor.first_name} ${reactor.last_name}`)}</strong><span aria-label="${escapeHTML(REACTION_BY_TYPE.get(reactor.reaction_type)?.label || "Reaction")}">${REACTION_BY_TYPE.get(reactor.reaction_type)?.emoji || uiIcon("smile")}</span></div>`).join("") : '<div class="empty-card"><strong>No reactions yet</strong><p>Be the first to react.</p></div>';
     } catch (error) {
-        $("#reactorList").innerHTML = `<div class="empty-card"><strong>Couldn't load reactions</strong><p>${escapeHTML(error.message || "Please try again.")}</p></div>`;
+        $("#reactorList").innerHTML = `<div class="empty-card"><strong>Couldn't load reactions</strong><p>${escapeHTML(userMessage(error, "Please try again."))}</p></div>`;
     }
 }
 
@@ -2922,7 +2921,7 @@ async function sendContentLink(button) {
         if (navigator.share) await navigator.share({ url: result.share_url });
         else { await navigator.clipboard.writeText(result.share_url); showToast('Link copied'); }
     } catch (error) {
-        if (error.name !== 'AbortError') showToast(error.message || 'Could not share. Please try again.');
+        if (error.name !== 'AbortError') showToast(userMessage(error, 'Could not share. Please try again.'));
     } finally { button.disabled = false; }
 }
 
@@ -2956,7 +2955,7 @@ async function revealQuestionSubmitter(button) {
         state.profile.remaining_reveals = Number(result.remaining_reveals || 0);
         state.profile.aura_points = Number(result.total_aura_points ?? state.profile.aura_points);
         renderProfileHeader(); renderProfilePanel(); renderFeed(); renderFeedDetail();
-    } catch (error) { showToast(error.message || 'Could not reveal question author.'); button.disabled = false; }
+    } catch (error) { showToast(userMessage(error, 'Could not reveal question author.')); button.disabled = false; }
 }
 
 function renderFeedDetail() {
@@ -3635,7 +3634,7 @@ async function revealFeedSender() {
         applyFeedSenderReveal(item, result);
         showToast(`Revealed: ${result.full_name}`);
     } catch (error) {
-        $("#feedDetailStatus").textContent = error.message || "Could not reveal this sender.";
+        $("#feedDetailStatus").textContent = userMessage(error, "Could not reveal this sender.");
         setButtonLoading(button, false);
     }
 }
@@ -3684,7 +3683,7 @@ async function moderateFeedItem(action) {
             dismiss: "Could not delete this question.",
             report: "Could not report this question.",
         };
-        $("#feedDetailStatus").textContent = error.message || fallbackMessages[action];
+        $("#feedDetailStatus").textContent = userMessage(error, fallbackMessages[action]);
     }
 }
 
@@ -3784,7 +3783,7 @@ async function loadAnonymousInbox() {
             state.anonymousInbox = null;
             renderFeed();
         } else {
-            $("#feedStatus").textContent = error.message || "Could not load anonymous messages.";
+            $("#feedStatus").textContent = userMessage(error, "Could not load anonymous messages.");
         }
     }
 }
@@ -3925,7 +3924,7 @@ async function openAnonymousQuestionDialog(questionId) {
         renderAnonymousInbox();
         renderAnonymousQuestionDialog();
     } catch (error) {
-        $("#anonymousAnswerStatus").textContent = error.message || "Could not open this question.";
+        $("#anonymousAnswerStatus").textContent = userMessage(error, "Could not open this question.");
     }
 }
 
@@ -3962,7 +3961,7 @@ async function answerAnonymousQuestion(event) {
         }, 1200);
         refreshProfile();
     } catch (error) {
-        $("#anonymousAnswerStatus").textContent = error.message || "Could not answer this question.";
+        $("#anonymousAnswerStatus").textContent = userMessage(error, "Could not answer this question.");
     } finally {
         updateAnonymousAnswerButton();
     }
@@ -3984,7 +3983,7 @@ async function handleAnonymousSafetyAction(action) {
         renderAnonymousInbox();
         showToast("Question deleted");
     } catch (error) {
-        $("#anonymousAnswerStatus").textContent = error.message || `Could not ${action} this question.`;
+        $("#anonymousAnswerStatus").textContent = userMessage(error, `Could not ${action} this question.`);
     }
 }
 
@@ -4030,7 +4029,7 @@ async function submitAnonymousReport(event) {
             ? "Reported and sender blocked"
             : "Reported and removed");
     } catch (error) {
-        $("#anonymousReportStatus").textContent = error.message || "Could not report this question.";
+        $("#anonymousReportStatus").textContent = userMessage(error, "Could not report this question.");
     } finally {
         setButtonLoading(button, false);
     }
@@ -4086,7 +4085,7 @@ async function loadFeed(reset = false) {
         loadMore.classList.toggle("hidden", schoolSort === "hottest" || schoolContent === "tbhs" || items.length < 20);
     } catch (error) {
         if (generation !== state.feedGeneration) return;
-        status.textContent = error.message || "Could not load the feed.";
+        status.textContent = userMessage(error, "Could not load the feed.");
     }
 }
 
@@ -4208,7 +4207,7 @@ async function toggleUpvote(button) {
         item.upvote_count = Math.max(0, Number(item.upvote_count || 0) + (result.was_added ? 1 : -1));
         renderFeed();
     } catch (error) {
-        showToast(error.message || "Could not update that vote.");
+        showToast(userMessage(error, "Could not update that vote."));
     }
 }
 
@@ -4353,7 +4352,7 @@ async function loadPlay() {
             state.inviteStatus = await api.getInviteStatus(api.user.id).catch(() => null);
             $("#playStatus").textContent = "";
             renderLockedPlay();
-        } else $("#playStatus").textContent = error.message || "Could not load Play.";
+        } else $("#playStatus").textContent = userMessage(error, "Could not load Play.");
     }
 }
 
@@ -4488,7 +4487,7 @@ async function answerPlayQuestion(choiceId) {
             clearOptimisticEarnedProfile();
             renderProfileHeader();
         }
-        showToast(error.message || "Could not save your answer.");
+        showToast(userMessage(error, "Could not save your answer."));
         renderPlay();
     }
 }
@@ -4529,7 +4528,7 @@ async function moderatePlayQuestion(action) {
         renderPlay();
         showToast(action === "block" ? "Submitter blocked" : "Reported to Valid");
     } catch (error) {
-        showToast(error.message || `Could not ${action} this question.`);
+        showToast(userMessage(error, `Could not ${action} this question.`));
     }
 }
 
@@ -4543,7 +4542,7 @@ async function inviteAndUnlock(button) {
             showToast("Invite link copied");
         }
     } catch (error) {
-        if (error.name !== "AbortError") showToast(error.message || "Could not create an invite.");
+        if (error.name !== "AbortError") showToast(userMessage(error, "Could not create an invite."));
     } finally {
         setButtonLoading(button, false);
     }
@@ -4620,7 +4619,7 @@ async function acknowledgeAskSafetyNotice() {
         state.askSafetyNotices.shift();
         showNextAskSafetyNotice();
     } catch (error) {
-        $("#askSafetyNoticeStatus").textContent = error.message || "Could not save your acknowledgement.";
+        $("#askSafetyNoticeStatus").textContent = userMessage(error, "Could not save your acknowledgement.");
         setButtonLoading(button, false);
     }
 }
@@ -4647,7 +4646,7 @@ async function openAskSafetyHistory() {
         $("#askSafetyHistoryStatus").textContent = "";
         renderAskSafetyHistory();
     } catch (error) {
-        $("#askSafetyHistoryStatus").textContent = error.message || "Could not load safety notices.";
+        $("#askSafetyHistoryStatus").textContent = userMessage(error, "Could not load safety notices.");
     }
 }
 
@@ -4748,7 +4747,7 @@ async function prepareAskStoryShare() {
         } catch (_) { /* A direct Save image tap preserves Safari's user gesture. */ }
         openAskStoryInstructions(platform, copied, imageHandled);
     } catch (error) {
-        $("#askStoryConfirmStatus").textContent = error.message || "Could not create the story image.";
+        $("#askStoryConfirmStatus").textContent = userMessage(error, "Could not create the story image.");
     } finally {
         setButtonLoading(button, false);
     }
@@ -4806,7 +4805,7 @@ async function toggleAskLink() {
     try {
         state.askLink = await api.setAskLinkActive(api.user.id, !state.askLink.is_active);
         renderAskLink();
-    } catch (error) { showToast(error.message || "Could not update your link."); }
+    } catch (error) { showToast(userMessage(error, "Could not update your link.")); }
 }
 
 async function rotateAskLink() {
@@ -4815,7 +4814,7 @@ async function rotateAskLink() {
         state.askLink = await api.rotateAskLink(api.user.id);
         renderAskLink();
         showToast("New ask me link created");
-    } catch (error) { showToast(error.message || "Could not replace your link."); }
+    } catch (error) { showToast(userMessage(error, "Could not replace your link.")); }
 }
 
 function profileOriginalInformation() {
@@ -5010,7 +5009,7 @@ async function lookupProfileSchools() {
             : "No schools were found near that ZIP code.";
     } catch (error) {
         if (generation !== state.profileSchoolLookupGeneration) return;
-        $("#profileSchoolStatus").textContent = error.message || "Couldn't load nearby schools.";
+        $("#profileSchoolStatus").textContent = userMessage(error, "Couldn't load nearby schools.");
     } finally { setButtonLoading(button, false); }
 }
 
@@ -5038,7 +5037,7 @@ async function requestProfileSchool() {
         const response = await api.resolveSchool({ school_name: schoolName, city, state: schoolState });
         selectProfileSchool(response.school);
     } catch (error) {
-        $("#profileSchoolStatus").textContent = error.message || "Could not use that school.";
+        $("#profileSchoolStatus").textContent = userMessage(error, "Could not use that school.");
     } finally { setButtonLoading(button, false); }
 }
 
@@ -5131,7 +5130,7 @@ async function finishProfileUsername() {
         state.profileCheckedUsername = username;
         setProfileEditor("hub");
     } catch (error) {
-        $("#profileUsernameStatus").textContent = error.message || "Couldn't check availability. Please try again.";
+        $("#profileUsernameStatus").textContent = userMessage(error, "Couldn't check availability. Please try again.");
     } finally { setButtonLoading(button, false); }
 }
 
@@ -5174,7 +5173,7 @@ async function saveProfile(event) {
         showToast("Profile updated");
         if (flags.school) await loadProfilePanel({ force: true });
     } catch (error) {
-        $("#profileInformationConfirmStatus").textContent = error.message || "Could not save all profile changes.";
+        $("#profileInformationConfirmStatus").textContent = userMessage(error, "Could not save all profile changes.");
     } finally { setButtonLoading(button, false); }
 }
 
@@ -5196,7 +5195,7 @@ async function saveBio(event) {
         $("#bioDialog").close();
         showToast("Bio updated");
     } catch (error) {
-        $("#bioEditStatus").textContent = error.message || "Could not update your bio.";
+        $("#bioEditStatus").textContent = userMessage(error, "Could not update your bio.");
     } finally { setButtonLoading(button, false); }
 }
 
@@ -5285,7 +5284,7 @@ async function submitFeedback(event) {
         $("#feedbackPhotoName").textContent = "No screenshot selected";
         showToast("Thanks — feedback sent");
     } catch (error) {
-        status.textContent = error.message || "Could not send your feedback.";
+        status.textContent = userMessage(error, "Could not send your feedback.");
     } finally {
         setButtonLoading(button, false);
     }
@@ -5305,7 +5304,7 @@ async function changeProfilePicture(event) {
         await refreshProfile();
         showToast("Profile photo updated");
     } catch (error) {
-        showToast(error.message || "Could not update your photo.");
+        showToast(userMessage(error, "Could not update your photo."));
     } finally { input.value = ""; }
 }
 
@@ -5615,10 +5614,10 @@ async function confirmQuestionSubmission() {
         if (definitive) {
             state.pendingQuestionSubmissionKey = null;
             state.pendingQuestionDraft = null;
-            $("#questionStatus").textContent = error.message || "Could not submit your question.";
+            $("#questionStatus").textContent = userMessage(error, "Could not submit your question.");
         } else {
             $("#questionStatus").textContent = error.status === 429
-                ? error.message
+                ? userMessage(error)
                 : "We couldn't confirm the result. Tap “Check submission” — you won't be charged twice.";
         }
     } finally {
@@ -5743,7 +5742,7 @@ async function loadQuestionSubmissions({ submissionId = state.highlightedQuestio
     } catch (error) {
         if (generation !== state.questionSubmissionsGeneration) return;
         if (!state.questionSubmissions.length) renderQuestionSubmissions();
-        $("#questionHistoryStatus").textContent = error.message || "Could not load your questions. Try again.";
+        $("#questionHistoryStatus").textContent = userMessage(error, "Could not load your questions. Try again.");
     }
 }
 
@@ -5795,7 +5794,7 @@ async function confirmQuestionRemoval() {
         $("#questionHistoryStatus").textContent = `${result.message || (approved ? "Question deactivated." : "Submission deleted.")}${Number(result.aura_refunded) > 0 ? ` ${Number(result.aura_refunded).toLocaleString()} aura refunded.` : ""}`;
         state.questionSubmissionToRemove = null;
     } catch (error) {
-        $("#questionRemovalStatus").textContent = error.message || (approved ? "Could not deactivate that question." : "Could not delete that submission.");
+        $("#questionRemovalStatus").textContent = userMessage(error, approved ? "Could not deactivate that question." : "Could not delete that submission.");
     } finally {
         setButtonLoading(button, false);
         button.textContent = approved ? "Deactivate question" : "Delete submission";
@@ -5929,7 +5928,7 @@ async function chooseContacts() {
             if (state.activePanel === "play") renderPlay();
         }
     } catch (error) {
-        if (error.name !== "AbortError") $("#classmatesStatus").textContent = error.message || "Could not add those classmates.";
+        if (error.name !== "AbortError") $("#classmatesStatus").textContent = userMessage(error, "Could not add those classmates.");
     } finally {
         setButtonLoading(button, false);
     }
@@ -5946,7 +5945,7 @@ async function shareClassmateInvite() {
             showToast("Invite link copied");
         }
     } catch (error) {
-        if (error.name !== "AbortError") $("#classmatesStatus").textContent = error.message || "Could not create an invite.";
+        if (error.name !== "AbortError") $("#classmatesStatus").textContent = userMessage(error, "Could not create an invite.");
     } finally {
         setButtonLoading(button, false);
         state.inviteStatus = await api.getInviteStatus(api.user.id).catch(() => state.inviteStatus);
@@ -5978,7 +5977,7 @@ async function requestAccountDeletion(event) {
         api.clearSession();
         showSignedOut(`Account deletion is scheduled for ${scheduled}. Sign in with your passkey before then if you want to keep it.`);
     } catch (error) {
-        $("#deleteAccountStatus").textContent = error.message || "Could not schedule account deletion.";
+        $("#deleteAccountStatus").textContent = userMessage(error, "Could not schedule account deletion.");
     } finally {
         setButtonLoading(button, false);
     }
@@ -6004,7 +6003,7 @@ async function cancelAccountDeletion() {
         $("#pendingDeletionDialog").close();
         showToast("Your account is staying on Valid");
     } catch (error) {
-        $("#pendingDeletionStatus").textContent = error.message || "Could not keep your account.";
+        $("#pendingDeletionStatus").textContent = userMessage(error, "Could not keep your account.");
     } finally {
         setButtonLoading(button, false);
     }
@@ -6413,7 +6412,7 @@ async function refreshWebPushStatus({ sync = false } = {}) {
             await syncWebPushSubscription(state.webPushSubscription);
         } catch (error) {
             state.webPushRegistrationState = "error";
-            state.webPushRegistrationError = error.message || "Could not finish notification setup.";
+            state.webPushRegistrationError = userMessage(error, "Could not finish notification setup.");
         }
     } else if (state.webPushSubscription && state.webPushRegistrationState === "off") {
         state.webPushRegistrationState = "syncing";
@@ -6494,12 +6493,12 @@ async function toggleWebPush() {
     } catch (error) {
         if (state.webPushSubscription) {
             state.webPushRegistrationState = "error";
-            state.webPushRegistrationError = error.message || "Could not finish notification setup.";
+            state.webPushRegistrationError = userMessage(error, "Could not finish notification setup.");
         } else {
             state.webPushRegistrationState = "off";
         }
         renderWebPushStatus();
-        showToast(error.message || "Could not enable notifications.");
+        showToast(userMessage(error, "Could not enable notifications."));
     } finally {
         state.webPushBusy = false;
         button.disabled = false;

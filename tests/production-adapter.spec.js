@@ -438,6 +438,25 @@ test("real adapter does not expose an upstream HTML error page", async ({ page }
     });
 });
 
+test("real adapter turns a FastAPI 422 detail array into a readable field message", async ({ page }) => {
+    await page.addInitScript((apiOrigin) => {
+        window.VALID_API_BASE_URL = `${apiOrigin}/api/v1`;
+    }, API_ORIGIN);
+    await page.route(`${API_ORIGIN}/api/v1/config`, (route) => route.fulfill({
+        status: 422,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: [{ loc: ["body", "username"], msg: "String should have at least 3 characters", type: "string_too_short" }] }),
+    }));
+    await page.goto("/app/?signin=1");
+    const error = await page.evaluate(async () => {
+        const { ValidAPI } = await import("/app/api.js");
+        const { userMessage } = await import("/app/user-message.js");
+        try { await new ValidAPI().getConfig(); return null; }
+        catch (caught) { return { message: caught.message, status: caught.status, shown: userMessage(caught, "fallback") }; }
+    });
+    expect(error).toEqual({ message: "Username must be at least 3 characters.", status: 422, shown: "Username must be at least 3 characters." });
+});
+
 function profile(firstName = "Jordan", auraPoints = 500) {
     return {
         user_id: USER_ID,

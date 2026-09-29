@@ -2,6 +2,7 @@ import { confirmsInvalidSession, fetchSessionRequest } from './session-recovery.
 import { permitsAuthRouteRecovery, fetchAuthWithRecovery } from './auth-route-recovery.js';
 import { reportAuthFailure } from './auth-reliability.js';
 import { authStage, authRejectionCode } from './auth-diagnostics.js';
+import { validationMessage } from './user-message.js';
 
 function apiBaseURL() {
     // Browser auth is first-party: production hosting must reverse-proxy this
@@ -150,6 +151,8 @@ export class ValidAPI {
                 ? retryMessage(waitSeconds)
                 : typeof detail === "string"
                 ? detail
+                : Array.isArray(detail)
+                ? validationMessage(detail) || "Some details aren’t valid. Check them and try again."
                 : detail?.message || `Request failed (${response.status})`;
             const failure = new APIError(message, response.status, detail, waitSeconds);
             failure.confirmedSessionInvalid = sessionInvalid;
