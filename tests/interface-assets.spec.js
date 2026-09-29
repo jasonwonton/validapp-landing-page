@@ -56,8 +56,8 @@ for (const theme of ['light', 'dark']) {
         await expect(page.locator('.heart [data-ui-icon="heart"]')).toBeVisible();
         await page.getByRole('button', { name: 'Play', exact: true }).click();
         await expect(page.locator('.play-streak-chip [data-ui-icon="fire"]')).toBeVisible();
-        await expect(page.locator('.play-streak-chip [data-ui-icon="fire"]')).toHaveCSS('color', 'rgb(255, 59, 48)');
-        await expect(page.locator('.play-streak-chip [data-ui-icon="fire"]')).toHaveCSS('fill', 'rgb(255, 59, 48)');
+        await expect(page.locator('.play-streak-chip [data-ui-icon="fire"]')).toHaveCSS('color', theme === 'dark' ? 'rgb(255, 168, 82)' : 'rgb(255, 149, 0)');
+        await expect(page.locator('.play-streak-chip [data-ui-icon="fire"]')).toHaveCSS('fill', theme === 'dark' ? 'rgb(255, 168, 82)' : 'rgb(255, 149, 0)');
         await page.getByRole('button', { name: 'Chats', exact: true }).click();
         await page.getByRole('button', { name: /Noah Williams/ }).click();
         const sticker = page.getByRole('button', { name: 'Send a sticker', exact: true }).locator('.native-sticker-icon');

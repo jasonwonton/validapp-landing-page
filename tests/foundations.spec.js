@@ -140,3 +140,65 @@ test("toasts paint above an open modal dialog", async ({ page }) => {
     await expect(toast).toHaveText("Second toast");
     await expect.poll(() => toastIsPaintedOnTop(page)).toBe(true);
 });
+
+// Six7Theme.primaryButtonText is fixed black: nothing on a peach surface may be light.
+async function lightTextOnPeach(page) {
+    return page.evaluate(() => {
+        const parse = (color) => (color || "").match(/[\d.]+/g)?.map(Number);
+        const near = (rgb, ref) => rgb && ref.every((value, index) => Math.abs(rgb[index] - value) <= 3) && (rgb[3] ?? 1) > .85;
+        const peach = (rgb) => near(rgb, [255, 177, 94]) || near(rgb, [233, 95, 70]);
+        const luminance = (rgb) => rgb.slice(0, 3).map((v) => v / 255).map((v) => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4).reduce((sum, v, i) => sum + v * [.2126, .7152, .0722][i], 0);
+        const background = (element) => {
+            for (let node = element; node?.nodeType === 1; node = node.parentElement) {
+                const style = getComputedStyle(node);
+                const color = parse(style.backgroundColor);
+                if (color && (color[3] ?? 1) > .5) return color;
+                if (style.backgroundImage !== "none") return null;
+            }
+            return null;
+        };
+        const offenders = [];
+        for (const element of document.querySelectorAll("body *")) {
+            if (element.checkVisibility && !element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue;
+            const hasText = [...element.childNodes].some((node) => node.nodeType === 3 && node.textContent.trim());
+            if (!hasText && element.localName !== "svg") continue;
+            if (!peach(background(element))) continue;
+            const color = parse(getComputedStyle(element).color);
+            if (color && luminance(color) > .35) offenders.push(`${element.localName}.${[...element.classList].join(".")} “${element.textContent.trim().slice(0, 20)}”`);
+        }
+        return offenders;
+    });
+}
+
+test("text and icons on peach stay black in dark mode", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await signIn(page);
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--on-peach").trim())).toBe("#000000");
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--streak").trim())).toBe("#ffa852");
+    const offenders = new Set();
+    const collect = async () => { for (const item of await lightTextOnPeach(page)) offenders.add(item); };
+    await collect();
+    await page.getByRole("button", { name: "School", exact: true }).click();
+    await collect();
+    await page.getByRole("button", { name: "Play", exact: true }).click();
+    await expect(page.locator(".choice-button").first()).toBeVisible();
+    await collect();
+    await page.getByRole("button", { name: /Nominate/ }).click();
+    await expect(page.locator("[data-nomination]").first()).toBeVisible();
+    await collect();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    for (const section of await page.locator("#profileCard, .school-rank-card, .aura-price-button, .god-mode-start-button").all()) {
+        await section.scrollIntoViewIfNeeded().catch(() => {});
+        await collect();
+    }
+    await page.getByRole("button", { name: /Submit a school question for/i }).click();
+    await expect(page.getByRole("dialog", { name: "School Questions" })).toBeVisible();
+    await collect();
+    await page.locator("#closeQuestionPage").click();
+    await page.getByRole("button", { name: "Chats", exact: true }).click();
+    await expect(page.locator(".chat-page-header")).toBeVisible();
+    await collect();
+    expect([...offenders]).toEqual([]);
+});

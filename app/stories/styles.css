@@ -12,7 +12,7 @@
 .story-author-button small { width: 72px; overflow: hidden; font-size: 12px; line-height: 1.2; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
 .own-story { position: relative; flex: 0 0 72px; }
 .story-avatar-wrap { position: relative; }
-.story-add-badge { position: absolute; right: 0; bottom: 0; display: grid; place-items: center; width: 25px; height: 25px; border: 2px solid var(--aqua); border-radius: 50%; background: var(--peach); color: #000; }
+.story-add-badge { position: absolute; right: 0; bottom: 0; display: grid; place-items: center; width: 25px; height: 25px; border: 2px solid var(--aqua); border-radius: 50%; background: var(--peach); color: var(--on-peach); }
 .story-add-badge .ui-icon { width: 13px; height: 13px; stroke-width: 3; }
 .story-add-another { position: absolute; top: 35px; right: -8.5px; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer; }
 .story-add-another .story-add-badge { right: 9px; bottom: 9px; }
