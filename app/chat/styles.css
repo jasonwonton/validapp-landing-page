@@ -774,3 +774,9 @@
 .chat-message.media-only .chat-message-media { margin: 0; }
 .chat-message.media-only .chat-message-media.sticker { margin: 0; }
 :root[data-theme="dark"] .chat-message.theirs .chat-bubble a { color: #8fe3e6; }
+/* Interactive edge swipe-back from the room (app.js installEdgeSwipeBack): the
+   list shows through underneath while the room follows the finger. */
+.chat-shell.chat-swipe-reveal { position: relative; }
+.chat-shell.chat-swipe-reveal > .chat-list-screen.hidden { display: block !important; position: absolute; inset: 0 0 auto; z-index: 0; max-height: 100%; overflow: hidden; pointer-events: none; }
+.chat-room-screen.swipe-tracking, .chat-room-screen.swipe-settling { position: relative; z-index: 1; transform: translateX(var(--swipe-x, 0px)); background: var(--aqua); box-shadow: -10px 0 28px rgba(0,0,0,.22); }
+.chat-room-screen.swipe-settling { transition: transform .24s cubic-bezier(.2,.8,.2,1); }

@@ -77,7 +77,7 @@ function localLedgerDate(date = new Date()) {
     return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 }
 
-export function createChatsView({ root, api, getUser, getConfig, presence, softHaptic, successHaptic, haptic, showToast, onUnreadChange, onPlay }) {
+export function createChatsView({ root, api, getUser, getConfig, presence, softHaptic, successHaptic, haptic, showToast, installSwipeBack, onUnreadChange, onPlay }) {
     const feedback = (kind) => (haptic || globalThis.ValidPreferences?.haptic)?.(kind);
     const attentionPriority = chat => chatAttentionPriority(chat, {
         dailyLedgerEnabled: dailyLedgerEnabled(),
@@ -572,6 +572,12 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     });
     root.addEventListener("click", handleClick);
     root.addEventListener("dblclick", handleMessageDoubleClick);
+    // The room pops like a detail screen: it follows the finger over the chat
+    // list and, when released past the threshold, leaves exactly like Back.
+    installSwipeBack?.($(".chat-room-screen"), backFromRoom, {
+        onTrack: () => $(".chat-shell").classList.add("chat-swipe-reveal"),
+        onSettle: () => $(".chat-shell").classList.remove("chat-swipe-reveal"),
+    });
     const messageActions = bindMessageActions(root, { onOpen: () => softHaptic?.() });
     const timelineScroll = createTimelineScroll($('.chat-timeline'), {
         onEdge: direction => void advanceHistory(direction),
@@ -3200,6 +3206,15 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         return chatId;
     }
 
+    // The Back button and the interactive edge swipe share this path.
+    function backFromRoom() {
+        if (inviteMode && store.state.activeChatId) {
+            inviteMode = false;
+            return showScreen("room");
+        }
+        return showChatList();
+    }
+
     function showChatList() {
         // Only this view pushes entries with a chatId: pop that entry instead of
         // stacking a second list entry on top of it.
@@ -3224,13 +3239,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         if (!target) { if (!event.target.closest(".chat-message-actions")) closeMessageActions(); return; }
         if (!target.matches("[data-message-menu]")) closeMessageActions();
         if (target.matches("[data-new-chat]")) return openCreateChat();
-        if (target.matches("[data-chat-list]")) {
-            if (inviteMode && store.state.activeChatId) {
-                inviteMode = false;
-                return showScreen("room");
-            }
-            return showChatList();
-        }
+        if (target.matches("[data-chat-list]")) return backFromRoom();
         if (target.matches("[data-create-submit]")) return createChat();
         if (target.dataset.searchChat) return openSearchResult(target.dataset.searchChat, target.dataset.searchMessage || null);
         if (target.dataset.returnMissedCall) {

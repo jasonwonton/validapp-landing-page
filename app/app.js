@@ -6213,6 +6213,7 @@ function activatePanelRoute(panel) {
         getUser: () => api.user,
         getConfig: () => state.config,
         softHaptic, successHaptic, haptic, showToast,
+        installSwipeBack: edgeSwipeBackSupported() ? installEdgeSwipeBack : null,
         onUnreadChange: renderChatUnreadBadge,
         onPlay: async () => {
             if (!state.profile?.school_id) return showToast('Join a school to play the Game of the Week.');
@@ -6317,8 +6318,13 @@ async function endPullRefresh() {
     }
 }
 
+// Screens that pop like a UINavigationController (detail screens, the chat room).
+function edgeSwipeBackSupported() {
+    return isAndroidDevice() || (isStandaloneApp() && isAppleTouchDevice());
+}
+
 function installNativeSheetGestures() {
-    if (isAndroidDevice() || (isStandaloneApp() && isAppleTouchDevice())) {
+    if (edgeSwipeBackSupported()) {
         for (const screen of $$(".detail-screen")) installEdgeSwipeBack(screen, () => closeDetailScreen(screen));
     }
     if (!isAndroidDevice()) return;
@@ -6372,7 +6378,9 @@ function isAppleTouchDevice() {
 // UIKit-style interactive pop: a drag from the left edge moves the screen with
 // the finger (rubber-banding past the edge) and completes past a third of the
 // width or on a fast flick. Installed iPhone apps have no browser back gesture.
-function installEdgeSwipeBack(screen, onBack) {
+// `onTrack` runs when a drag is recognised (e.g. to reveal the screen below);
+// `onSettle(complete)` runs once it has finished, before `onBack`.
+function installEdgeSwipeBack(screen, onBack, { onTrack, onSettle } = {}) {
     const EDGE = 24;
     let gesture = null;
     const setOffset = (x) => setRuntimeStyles(screen, { "--swipe-x": `${x}px` });
@@ -6383,6 +6391,7 @@ function installEdgeSwipeBack(screen, onBack) {
         const settle = () => {
             screen.classList.remove("swipe-settling");
             clearRuntimeStyles(screen, "--swipe-x");
+            onSettle?.(complete);
             if (complete) onBack();
         };
         if (reduceMotion) return settle();
@@ -6407,6 +6416,7 @@ function installEdgeSwipeBack(screen, onBack) {
             if (dx < 8) return;
             gesture.tracking = true;
             screen.classList.add("swipe-tracking");
+            onTrack?.();
         }
         event.preventDefault();
         // Past the left edge the screen resists like a rubber band.
