@@ -151,6 +151,11 @@ export async function cropAvatar(file, { title = "Adjust photo", instructions = 
     };
     stage.addEventListener("pointerup", release);
     stage.addEventListener("pointercancel", release);
+    // A release outside the stage (or the window) must not leave a drag, and its
+    // pointer capture, behind: that would swallow the next tap on Use photo.
+    stage.addEventListener("lostpointercapture", release);
+    const releaseAnywhere = (event) => { if (pointers.has(event.pointerId)) { stage.releasePointerCapture?.(event.pointerId); release(event); } };
+    addEventListener("pointerup", releaseAnywhere, true);
     stage.addEventListener("wheel", (event) => {
         event.preventDefault();
         view.scale *= Math.exp(-event.deltaY / 300);
@@ -185,6 +190,7 @@ export async function cropAvatar(file, { title = "Adjust photo", instructions = 
             if (settled) return;
             settled = true;
             removeEventListener("resize", resize);
+            removeEventListener("pointerup", releaseAnywhere, true);
             if (dialog.open) dialog.close();
             dialog.remove();
             URL.revokeObjectURL(url);

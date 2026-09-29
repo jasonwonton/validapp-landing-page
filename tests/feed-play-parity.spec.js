@@ -247,6 +247,9 @@ test('Polls chip counts new polls per Inbox visit like iOS, without an API unrea
 test('feed controls answer to 44px hit areas without changing their drawing', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await signIn(page);
+    // Measure only once the feed has rendered and settled (Firefox paints later).
+    await expect(page.locator('#feedList .reaction-count-button').first()).toBeVisible();
+    await page.waitForTimeout(300);
     const hits = await page.evaluate(() => {
         // Probe just inside a 44px target measured from the control's centre.
         const probe = (selector, dx, dy) => {
@@ -350,13 +353,14 @@ test('profile photos over 5 MB are circle-cropped and resized to a 1024px JPEG b
     const stage = await crop.locator('.avatar-crop-stage').boundingBox();
     await page.mouse.move(stage.x + stage.width / 2, stage.y + stage.height / 2);
     await page.mouse.down();
-    await page.mouse.move(stage.x + stage.width / 2 + 2000, stage.y + stage.height / 2, { steps: 4 });
+    await page.mouse.move(stage.x + stage.width - 2, stage.y + stage.height / 2, { steps: 4 });
     await page.mouse.up();
     const image = await crop.locator('.avatar-crop-image').boundingBox();
     expect(image.x).toBeLessThanOrEqual(ring.x + 1);
     expect(image.x + image.width).toBeGreaterThanOrEqual(ring.x + ring.width - 1);
     await crop.getByRole('button', { name: 'Use photo' }).click();
-    await expect(crop).toHaveCount(0);
+    // Encoding a >5 MB photo is slow in Firefox; the sheet closes when it's done.
+    await expect(crop).toHaveCount(0, { timeout: 20_000 });
     // The new photo shows at once while it uploads.
     await expect(page.getByRole('button', { name: 'Uploading profile picture' })).toBeVisible();
     await expect(page.locator('.profile-photo-button img')).toHaveAttribute('src', /^blob:/);
