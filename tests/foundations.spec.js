@@ -202,3 +202,18 @@ test("text and icons on peach stay black in dark mode", async ({ page }) => {
     await collect();
     expect([...offenders]).toEqual([]);
 });
+
+test("a status-bar scrim fades content under the iPhone clock when signed in", async ({ page, browserName }) => {
+    test.skip(browserName !== "chromium", "Safe-area insets can only be emulated through Chromium's DevTools protocol");
+    await signIn(page);
+    const scrim = () => page.evaluate(() => {
+        const style = getComputedStyle(document.body, "::before");
+        return { height: style.height, position: style.position, events: style.pointerEvents, zIndex: style.zIndex };
+    });
+    expect(await scrim()).toEqual({ height: "0px", position: "fixed", events: "none", zIndex: "50" });
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setSafeAreaInsetsOverride", { insets: { top: 47, topMax: 47, bottom: 34, bottomMax: 34, left: 0, leftMax: 0, right: 0, rightMax: 0 } });
+    await expect.poll(async () => (await scrim()).height).toBe("47px");
+    // Signed out there is a sticky top bar instead, so no scrim.
+    expect(await page.evaluate(() => { document.body.classList.remove("authenticated"); const height = getComputedStyle(document.body, "::before").content; document.body.classList.add("authenticated"); return height; })).toBe("none");
+});

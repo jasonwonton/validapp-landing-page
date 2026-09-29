@@ -145,6 +145,11 @@ main {
 .authenticated .topbar { display: none; }
 .authenticated .network-banner { top: 0; }
 .authenticated main { padding-top: max(18px, env(safe-area-inset-top)); }
+/* Signed in, the top bar is hidden and content scrolls under the transparent iPhone
+   status bar. Like iOS, fade it out under the clock: a status-bar-tall scrim above page
+   content (bottom nav 30, chat room 11) and below detail screens (60) and dialogs (top
+   layer). It has no height where there is no inset. */
+body.authenticated::before { content: ""; position: fixed; z-index: 50; top: 0; left: 0; right: 0; height: env(safe-area-inset-top, 0px); background: linear-gradient(to bottom, var(--aqua) 55%, transparent); pointer-events: none; }
 
 .auth-view {
     min-height: calc(100vh - 120px);
