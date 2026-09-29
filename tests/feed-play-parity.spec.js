@@ -143,3 +143,68 @@ test('play lock countdown uses hours and minutes like PlayLockedView', async ({ 
     await page.getByRole('button', { name: 'W aura' }).click();
     await expect(page.locator('#playLockMessage')).toHaveText(/^Unlocks in 1h 5m$/);
 });
+
+for (const via of ['Done button', 'history.back()']) {
+    test(`closing a feed detail screen with the ${via} keeps the exact feed scroll position`, async ({ page }) => {
+        await page.setViewportSize({ width: 375, height: 360 });
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await signIn(page);
+        await page.getByRole('button', { name: 'School', exact: true }).click();
+        await expect(page.locator('#feedList [data-feed-detail]').first()).toBeVisible();
+        await page.evaluate(() => window.scrollTo(0, 600));
+        await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(600);
+        await page.locator('#feedList [data-feed-detail]').last().evaluate((node) => node.click());
+        await expect(page.locator('#feedDetailDialog')).toBeVisible();
+        if (via === 'Done button') await page.locator('[data-close-feed-detail]').click();
+        else await page.evaluate(() => history.back());
+        await expect(page.locator('#feedDetailDialog')).toBeHidden();
+        await page.waitForTimeout(150);
+        expect(await page.evaluate(() => Math.round(window.scrollY))).toBe(600);
+        // Tab switching still restores each tab's own position.
+        await page.getByRole('button', { name: 'Profile', exact: true }).click();
+        await page.getByRole('button', { name: 'Feed', exact: true }).click();
+        await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(600);
+    });
+}
+
+test('feed refreshes itself in place on return to the foreground after 60 s', async ({ page }) => {
+    await page.clock.install();
+    await patchDemo(page, async () => {
+        const { DemoAPI } = await import('/app/demo-api.js');
+        const original = DemoAPI.prototype.getPersonalFeed;
+        window.__feedCalls = 0;
+        DemoAPI.prototype.getPersonalFeed = async function (...args) {
+            window.__feedCalls += 1;
+            const items = await original.apply(this, args);
+            return window.__feedPatch ? window.__feedPatch(items) : items;
+        };
+    });
+    const existing = page.locator("[data-feed-detail='9001']");
+    await expect(existing).toBeVisible();
+    const callsBefore = await page.evaluate(() => window.__feedCalls);
+    const foreground = () => page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+
+    // Within 60 s a foreground reuses the loaded feed.
+    await page.clock.fastForward(30_000);
+    await foreground();
+    await page.waitForTimeout(200);
+    expect(await page.evaluate(() => window.__feedCalls)).toBe(callsBefore);
+
+    await page.evaluate(() => {
+        window.__feedPatch = (items) => [{
+            ...items[0], question_answer_id: 'live-poll-1', question_text: 'Who brings great energy every day?',
+            timestamp: new Date().toISOString(), is_new: true, comment_count: 0, reaction_count: 0, reaction_summary: {},
+        }, ...items];
+    });
+    await page.clock.fastForward(31_000);
+    await foreground();
+    await expect(page.locator("[data-feed-detail='live-poll-1']")).toContainText('Who brings great energy every day?');
+    await expect(existing).toBeVisible();
+    await expect(page.locator('#feedList .feed-skeleton')).toHaveCount(0);
+
+    await page.evaluate(() => { window.__feedPatch = null; });
+    await page.clock.fastForward(61_000);
+    await foreground();
+    await expect(page.locator("[data-feed-detail='live-poll-1']")).toHaveCount(0);
+    await expect(existing).toBeVisible();
+});

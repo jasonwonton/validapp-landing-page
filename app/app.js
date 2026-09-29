@@ -222,6 +222,8 @@ const state = {
     feedbackHistoryGeneration: 0,
     highlightedFeedbackId: null,
     detailReturnFocus: null,
+    detailUnderlyingScroll: null,
+    feedLoadedAt: 0,
     tabScrollPositions: { feed: 0, play: 0, chats: 0, profile: 0 },
     navigationInitialized: false,
     handlingPopState: false,
@@ -242,16 +244,22 @@ function commitFeedItems(items, { reset = false } = {}) {
     return state.feedItems;
 }
 
-let feedRealtimeRenderFrame = null;
+// FeedViewModel.swift: a foreground refreshes a Feed older than 60 s; a tab
+// return reuses anything loaded within tabReturnFreshness (120 s).
+const FEED_FOREGROUND_REFRESH_MS = 60_000;
+const FEED_TAB_RETURN_FRESHNESS_MS = 120_000;
 
-function applyFeedRealtimeEvent(event) {
-    feedItemsStore.apply(event);
-    if (feedRealtimeRenderFrame !== null) return;
-    feedRealtimeRenderFrame = requestAnimationFrame(() => {
-        feedRealtimeRenderFrame = null;
-        state.feedItems = feedItemsStore.snapshot();
-        if (state.activePanel === "feed" && document.body.classList.contains("authenticated")) renderFeed();
-    });
+function feedIsStale(maxAgeMs) {
+    const loadedAt = state.feedLoadedAt;
+    if (!loadedAt) return true;
+    const age = Date.now() - loadedAt;
+    return age < 0 || age >= maxAgeMs;
+}
+
+function refreshFeedIfStale(maxAgeMs) {
+    if (state.activePanel !== "feed" || !document.body.classList.contains("authenticated")) return;
+    if (isFeedVoteLocked() || !state.feedItems.length || !feedIsStale(maxAgeMs)) return;
+    void loadFeed(true);
 }
 
 startPerformanceMonitoring({ disabled: demoMode, getRoute: () => state.activePanel });
@@ -396,7 +404,9 @@ function handleAppPopState(event) {
     closeVisibleDetailScreens({ fromHistory: true });
     const requestedPanel = event.state?.panel || new URLSearchParams(location.search).get("tab");
     const panel = ["feed", "play", "chats", "profile"].includes(requestedPanel) ? requestedPanel : "feed";
-    switchPanel(panel, { historyMode: "none", restoreScroll: true });
+    // Closing a detail screen returns to the same tab: keep its live scroll
+    // position instead of restoring one saved at the last tab switch.
+    if (panel !== state.activePanel) switchPanel(panel, { historyMode: "none", restoreScroll: true });
     const detail = event.state?.detail ? document.getElementById(event.state.detail) : null;
     if (detail?.classList.contains("detail-screen")) openDetailScreen(detail, { historyMode: "none" });
     state.handlingPopState = false;
@@ -565,6 +575,7 @@ function openDetailScreen(screen, { historyMode = "push" } = {}) {
     mountUIRoot(screen);
     closeDetailActionMenus();
     state.detailReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (!$(".detail-screen:not(.hidden)")) state.detailUnderlyingScroll = { panel: state.activePanel, y: window.scrollY };
     screen.classList.remove("hidden");
     screen.classList.remove("detail-screen-closing");
     screen.classList.add("detail-screen-opening");
@@ -578,7 +589,13 @@ function openDetailScreen(screen, { historyMode = "push" } = {}) {
 function closeDetailScreen(screen, { fromHistory = false } = {}) {
     closeDetailActionMenus();
     screen.classList.add("hidden");
-    if (!$(".detail-screen:not(.hidden)")) document.body.classList.remove("detail-screen-open");
+    if (!$(".detail-screen:not(.hidden)")) {
+        document.body.classList.remove("detail-screen-open");
+        // Some engines reset the page while it is scroll-locked; put it back exactly.
+        const underlying = state.detailUnderlyingScroll;
+        state.detailUnderlyingScroll = null;
+        if (underlying?.panel === state.activePanel && Math.abs(window.scrollY - underlying.y) > 1) window.scrollTo(0, underlying.y);
+    }
     state.detailReturnFocus?.focus?.({ preventScroll: true });
     state.detailReturnFocus = null;
     if (!fromHistory && history.state?.detail === screen.id) history.back();
@@ -614,6 +631,8 @@ function showSignedOut(message = "") {
     document.body.classList.remove("authenticated", "play-active");
     state.navigationInitialized = false;
     state.tabScrollPositions = { feed: 0, play: 0, chats: 0, profile: 0 };
+    state.feedLoadedAt = 0;
+    state.playTransition = null;
     void commentsViewPromise?.then((view) => view.clear()).catch(() => null);
     $("#authStatus").textContent = friendlyErrorMessage(message, "");
 }
@@ -4056,6 +4075,7 @@ async function loadFeed(reset = false) {
         const currentSearch = currentRawSearch.length >= 2 ? currentRawSearch : "";
         if (generation !== state.feedGeneration || feedType !== state.feedType || myVotesOnly !== state.myVotesOnly || schoolSort !== state.schoolFeedSort || schoolContent !== state.schoolFeedContent || search !== currentSearch) return;
         commitFeedItems(items, { reset });
+        if (reset) state.feedLoadedAt = Date.now();
         if (feedType === "personal") state.feedOffset += items.length;
         else if (items.length) {
             const last = items.at(-1);
@@ -6158,6 +6178,7 @@ function activatePanelRoute(panel) {
         refreshGate: refreshFeedGateStatus,
         isLocked: isFeedVoteLocked,
         hasItems: () => state.feedItems.length > 0,
+        isStale: () => feedIsStale(FEED_TAB_RETURN_FRESHNESS_MS),
         load: loadFeed,
     });
     if (panel === "play") context.load = loadPlay;
@@ -7164,7 +7185,6 @@ function bindEvents() {
     $("#bioForm").addEventListener("submit", saveBio);
     $$("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
     addEventListener("valid:session-expired", () => showSignedOut("Your session expired. Sign in with your passkey again."));
-    addEventListener("valid:feed-update", (event) => applyFeedRealtimeEvent(event.detail));
     addEventListener("popstate", handleAppPopState);
     addEventListener("offline", updateNetworkStatus);
     addEventListener("online", updateNetworkStatus);
@@ -7177,6 +7197,7 @@ function bindEvents() {
         if (document.visibilityState === "visible") {
             refreshWebPushStatus();
             refreshAskSafetyState();
+            refreshFeedIfStale(FEED_FOREGROUND_REFRESH_MS);
         }
     });
     $("#appView").addEventListener("touchstart", beginPullRefresh, { passive: true });

@@ -2,9 +2,10 @@ import { uiIcon } from "../ui-icons.js";
 import { reconcileKeyedElements } from "../keyed-list.js";
 import { createStoriesView } from "../stories/index.js";
 
-export async function activate({ isCurrent, refreshGate, isLocked, hasItems, load }) {
+export async function activate({ isCurrent, refreshGate, isLocked, hasItems, isStale, load }) {
     await refreshGate();
-    if (isCurrent() && !isLocked() && !hasItems()) await load(true);
+    // Keep the rows visible and refresh in place when the tab returns to stale data.
+    if (isCurrent() && !isLocked() && (!hasItems() || isStale?.())) await load(true);
 }
 
 export function createFeedView(context) {
