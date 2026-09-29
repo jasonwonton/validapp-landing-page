@@ -31,6 +31,8 @@
 /* Review stage: the photo's own frame, letterboxed inside the preview. */
 .chat-camera-sheet:has(.review-stage) .chat-media-form > header { display: none; }
 .chat-camera-sheet:has(.review-stage) .chat-media-form { grid-template-rows: minmax(0, 1fr); }
+/* The review is black around the photo in both themes, as on iOS. */
+:root .chat-camera-sheet .chat-media-preview:has(> .review-stage) { background: #000; border-radius: 0; }
 .chat-media-preview > .review-stage { position: absolute; overflow: hidden; background: #000; touch-action: none; -webkit-user-select: none; user-select: none; }
 .review-stage > canvas, .chat-camera-sheet .chat-media-preview .review-stage > video { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
 .review-stage > canvas[hidden] { display: none; }

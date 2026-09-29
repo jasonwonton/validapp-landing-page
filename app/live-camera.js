@@ -32,7 +32,8 @@ const TAP_TOLERANCE = 12;
 const PINCH_DEAD_ZONE = 0.12;
 const MAX_ZOOM_RATIO = 5;
 const SCREEN_FLASH_MS = 1000;
-const VIDEO_TYPES = ['video/mp4;codecs=avc1,mp4a', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+// The contract's order; plain MP4 last for Safari builds that reject the codec string.
+const VIDEO_TYPES = ['video/mp4;codecs=avc1,mp4a', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
 
 const icons = {
     flash: '<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12Z" fill="currentColor" stroke="none"/></svg>',

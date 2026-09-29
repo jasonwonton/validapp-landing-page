@@ -284,12 +284,12 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 drawTools: $('[data-review-tools] .review-draw-tools'),
                 api, showToast, haptic: cameraHaptic,
                 isBusy: () => chatMediaPublishing,
-                onChange: resetChatMediaRequestIds,
+                onChange: chatMediaEdited,
             })))
             .catch((error) => { reviewEditorLoading = null; throw error; });
         return reviewEditorLoading;
     }
-    const photoStickers = createPhotoStickers($('.chat-media-preview'), { onChange: resetChatMediaRequestIds, disabled: () => chatMediaPublishing });
+    const photoStickers = createPhotoStickers($('.chat-media-preview'), { onChange: () => chatMediaEdited(), disabled: () => chatMediaPublishing });
     const voiceWaveform = createVoiceWaveform($('.chat-voice-waveform'));
     const voiceGesture = bindVoiceGesture($('[data-record-voice]'), {
         canStart: () => !voiceMode && !chatMediaPublishing && !chatAccessUnavailable() && !calls.isActive() && Boolean(compatibleAudioRecordingType()),
@@ -1826,6 +1826,11 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     function resetChatMediaRequestIds() {
         chatMediaUploadRequestId = null;
         chatMediaSendRequestId = null;
+    }
+
+    // An edit changes the pixels: encode again (with new request ids) on send.
+    function chatMediaEdited() {
+        resetChatMediaRequestIds();
         chatMediaEncoded = null;
     }
 
