@@ -214,6 +214,10 @@ const state = {
     profilePanelLoading: null,
     viewportBaselineWidth: window.innerWidth,
     viewportBaselineHeight: window.innerHeight,
+    layoutBaselineWidth: window.innerWidth,
+    layoutBaselineHeight: window.innerHeight,
+    layoutViewportGap: 0,
+    layoutViewportExpected: 0,
     installPrompt: null,
     webPushSubscription: null,
     webPushBusy: false,
@@ -416,18 +420,111 @@ function syncVisualViewport() {
     }
     const bottomInset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
     const keyboardOpen = focusedControl && state.viewportBaselineHeight - viewport.height > 140;
+    // While WebKit leaves the layout viewport short (see checkStaleLayoutViewport),
+    // the visible screen is still full height: size full-screen layouts to it.
+    const height = !keyboardOpen && state.layoutViewportGap > 0
+        ? Math.max(viewport.height, state.layoutViewportExpected - viewport.offsetTop)
+        : viewport.height;
     setRuntimeStyles(document.documentElement, {
         "--visual-viewport-bottom": `${bottomInset}px`,
         "--visual-viewport-top": `${viewport.offsetTop}px`,
         "--visual-viewport-left": `${viewport.offsetLeft}px`,
         "--visual-viewport-center": `${viewport.offsetLeft + viewport.width / 2}px`,
-        "--visual-viewport-middle": `${viewport.offsetTop + viewport.height / 2}px`,
+        "--visual-viewport-middle": `${viewport.offsetTop + height / 2}px`,
         "--visual-viewport-width": `${viewport.width}px`,
-        "--visual-viewport-height": `${viewport.height}px`,
+        "--visual-viewport-height": `${height}px`,
         "--signup-visual-offset": `${viewport.offsetTop}px`,
     });
     document.documentElement.classList.toggle("keyboard-open", keyboardOpen);
     if (keyboardOpen) requestAnimationFrame(keepFocusedControlVisible);
+    else if (!focusedControl) trackLayoutViewportBaseline();
+}
+
+// iOS 26 standalone WebKit sometimes leaves the layout viewport shrunk by the
+// keyboard height after the keyboard closes (or after returning from another
+// app): position:fixed; bottom:0 then anchors to the stale layout bottom and the
+// tab bar floats mid-screen with content visible below it. WebKit bugs 297779
+// and 301857; Apple Developer Forums thread 800125. Detect it by comparing a
+// fixed bottom probe with the true screen bottom, nudge WebKit to re-measure,
+// and otherwise translate fixed-bottom chrome onto the real bottom edge.
+const TEXT_ENTRY = "input:not([type=hidden]):not([type=file]):not([type=checkbox]):not([type=radio]):not([type=range]):not([type=button]):not([type=submit]), textarea, select, [contenteditable=''], [contenteditable='true']";
+let layoutViewportProbes = null;
+let staleViewportTimers = [];
+
+function staleViewportCheckApplies() {
+    return isStandaloneApp() && Math.min(screen.width, screen.height) < 600 && matchMedia("(pointer: coarse)").matches;
+}
+
+function trackLayoutViewportBaseline() {
+    const width = window.innerWidth;
+    if (Math.abs(width - state.layoutBaselineWidth) > 80) {
+        state.layoutBaselineWidth = width;
+        state.layoutBaselineHeight = window.innerHeight;
+    } else if (state.layoutViewportGap === 0) {
+        state.layoutBaselineHeight = Math.max(state.layoutBaselineHeight, window.innerHeight);
+    }
+}
+
+function measureLayoutViewportGap() {
+    if (!layoutViewportProbes) {
+        layoutViewportProbes = ["bottom", "large"].map((kind) => {
+            const probe = document.createElement("div");
+            probe.className = `viewport-probe viewport-probe-${kind}`;
+            probe.setAttribute("aria-hidden", "true");
+            document.body.append(probe);
+            return probe;
+        });
+    }
+    const [bottomProbe, largeProbe] = layoutViewportProbes;
+    const viewport = window.visualViewport;
+    const fixedBottom = Math.min(bottomProbe.getBoundingClientRect().bottom, window.innerHeight);
+    const sameWidth = Math.abs(window.innerWidth - state.layoutBaselineWidth) <= 80;
+    const expected = Math.max(
+        viewport ? viewport.offsetTop + viewport.height : 0,
+        largeProbe.getBoundingClientRect().height,
+        sameWidth ? state.layoutBaselineHeight : 0,
+        sameWidth ? state.viewportBaselineHeight : 0,
+    );
+    return { gap: Math.round(expected - fixedBottom), expected };
+}
+
+function applyLayoutViewportGap(gap, expected = 0) {
+    if (gap === state.layoutViewportGap) return;
+    state.layoutViewportGap = gap;
+    state.layoutViewportExpected = expected;
+    document.documentElement.classList.toggle("layout-viewport-stale", gap > 0);
+    setRuntimeStyles(document.documentElement, { "--layout-viewport-gap": gap > 0 ? `${gap}px` : null });
+    syncVisualViewport();
+}
+
+function checkStaleLayoutViewport({ nudge = true } = {}) {
+    if (!staleViewportCheckApplies() || document.activeElement?.matches?.(TEXT_ENTRY)
+        || document.documentElement.classList.contains("keyboard-open")) {
+        applyLayoutViewportGap(0);
+        return;
+    }
+    const { gap, expected } = measureLayoutViewportGap();
+    if (gap < 40) {
+        applyLayoutViewportGap(0);
+        return;
+    }
+    if (nudge) {
+        // A same-position scroll plus a resize pass is often enough for WebKit to
+        // restore the layout viewport; measure again once it has had a frame.
+        const { scrollX, scrollY } = window;
+        window.scrollTo(scrollX, scrollY + 1);
+        window.scrollTo(scrollX, scrollY);
+        syncVisualViewport();
+        requestAnimationFrame(() => requestAnimationFrame(() => checkStaleLayoutViewport({ nudge: false })));
+        return;
+    }
+    applyLayoutViewportGap(gap, expected);
+}
+
+function scheduleStaleViewportCheck() {
+    staleViewportTimers.forEach(clearTimeout);
+    // The keyboard and app-switch animations settle over ~½ s; check through them.
+    staleViewportTimers = [60, 350, 900].map((delay) => setTimeout(checkStaleLayoutViewport, delay));
 }
 
 let visualViewportFrame = null;
@@ -7124,7 +7221,17 @@ document.addEventListener("focusin", () => {
     scheduleVisualViewportSync();
     setTimeout(keepFocusedControlVisible, 250);
 });
-document.addEventListener("focusout", scheduleVisualViewportSync);
+document.addEventListener("focusout", () => {
+    scheduleVisualViewportSync();
+    scheduleStaleViewportCheck();
+});
+window.visualViewport?.addEventListener("resize", scheduleStaleViewportCheck);
+window.visualViewport?.addEventListener("scroll", scheduleStaleViewportCheck);
+addEventListener("pageshow", scheduleStaleViewportCheck);
+addEventListener("orientationchange", scheduleStaleViewportCheck);
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") scheduleStaleViewportCheck();
+});
 bindEvents();
 installNativeSheetGestures();
 initializeParkedUI();

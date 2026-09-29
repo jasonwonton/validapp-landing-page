@@ -862,6 +862,15 @@ h3 { font-size: 1.45rem; }
     box-shadow: none;
     transform: none;
 }
+/* app.js checkStaleLayoutViewport: WebKit left the layout viewport short, so
+   move fixed-bottom chrome down onto the real screen edge. */
+.viewport-probe { position: fixed; left: 0; width: 0; visibility: hidden; pointer-events: none; }
+.viewport-probe-bottom { bottom: 0; height: 0; }
+.viewport-probe-large { top: 0; height: 100lvh; }
+.layout-viewport-stale .bottom-nav { transform: translateY(var(--layout-viewport-gap)); }
+.layout-viewport-stale .app-update-prompt { bottom: calc(82px + var(--safe-bottom) - var(--layout-viewport-gap)); }
+.layout-viewport-stale .toast, .layout-viewport-stale .toast[popover] { bottom: calc(98px - var(--layout-viewport-gap)); }
+.layout-viewport-stale .detail-screen { bottom: calc(0px - var(--layout-viewport-gap)); }
 .bottom-nav.chats-enabled { grid-template-columns: repeat(4, 1fr); }
 body.play-active .topbar { display: none; }
 body.play-active main { height: var(--visual-viewport-height, 100dvh); min-height: 0; padding-top: max(10px, env(safe-area-inset-top)); padding-bottom: calc(72px + var(--safe-bottom)); }
