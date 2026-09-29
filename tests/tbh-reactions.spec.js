@@ -76,7 +76,7 @@ test("Inbox filters match iOS All, Polls, TBHs, and Ask Me sections", async ({ p
     await expect(page.locator("[data-tbh-detail^='received:'], [data-tbh-detail^='sent:']")).toHaveCount(2);
     await expect(page.locator("[data-anonymous-question], [data-anonymous-answer]")).toHaveCount(3);
 
-    await filters.getByRole("button", { name: "Polls", exact: true }).click();
+    await filters.getByRole("button", { name: /^Polls/ }).click();
     await expect(page.locator("#personalInboxDescription")).toHaveText("Votes and nominations you received.");
     await expect(page.locator("[data-feed-detail]")).toHaveCount(2);
     await expect(page.locator("[data-tbh-detail], [data-tbh-request], [data-anonymous-question], [data-anonymous-answer]")).toHaveCount(0);
