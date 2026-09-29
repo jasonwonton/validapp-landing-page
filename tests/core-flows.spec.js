@@ -466,7 +466,8 @@ test("feed polls open the iOS-style detail and moderation flow", async ({ page }
     await page.locator("[data-feed-detail='9001']").click();
     const dialog = page.locator("#feedDetailDialog");
     await expect(dialog).toHaveCSS("position", "fixed");
-    await expect(dialog.locator(".detail-screen-header > strong")).toContainText("Sophomore");
+    // QuestionDetailView voterInfoText hides the grade until it is safe, like the feed row.
+    await expect(dialog.locator(".detail-screen-header > strong")).toHaveText("A 👧💗 Girl said");
     await expect(dialog.locator(".feed-detail-result")).toHaveCount(0);
     await expect(dialog.locator(".feed-detail-art")).toBeVisible();
     await expect(dialog.locator(".feed-detail-option")).toHaveCount(4);
