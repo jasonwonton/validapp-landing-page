@@ -3447,6 +3447,10 @@ function shareCards() {
     return shareCardsPromise;
 }
 
+// PollShareBranding.contentURL on iOS.
+const POLL_SHARE_URL = "https://validapp.lol";
+const POLL_SHARE_COPIES_LINK = new Set(["instagram", "tiktok"]);
+
 async function copyShareLink(text) {
     try {
         await navigator.clipboard.writeText(text);
@@ -3489,21 +3493,34 @@ async function shareFeedItem(platform = "other") {
         button.disabled = true;
         button.setAttribute("aria-busy", "true");
     }
+    // iOS copies the validapp.lol link before handing the photo to Instagram
+    // (link sticker) or TikTok (caption), since the share can't carry it.
+    // Copy inside the tap, before any await can spend the user activation.
+    const linkCopy = POLL_SHARE_COPIES_LINK.has(platform) ? copyShareLink(POLL_SHARE_URL) : null;
     $("#feedDetailStatus").textContent = `Creating poll photo for ${platformLabel}…`;
     try {
         const file = await (await shareCards()).createPollShareFile(item);
         if (navigator.share && navigator.canShare?.({ files: [file] })) {
-            $("#feedDetailStatus").textContent = `Choose ${platformLabel} in the share sheet.`;
+            const copied = await linkCopy;
+            if (copied) showToast("Link copied");
+            $("#feedDetailStatus").textContent = copied
+                ? `Link copied. Choose ${platformLabel} in the share sheet, then paste it.`
+                : `Choose ${platformLabel} in the share sheet.`;
             await navigator.share({
                 files: [file],
                 title: `Share to ${platformLabel}`,
-                text: "A poll on Valid · https://validapp.lol",
+                text: `A poll on Valid · ${POLL_SHARE_URL}`,
             });
             $("#feedDetailStatus").textContent = "";
-            showToast("Poll photo shared");
+            showToast(copied ? "Poll photo shared • Link copied" : "Poll photo shared");
         } else {
+            // No Web Share (most desktops): save the photo and keep the link on the clipboard.
+            const copied = await (linkCopy || copyShareLink(POLL_SHARE_URL));
             downloadShareFile(file);
-            $("#feedDetailStatus").textContent = `Poll photo saved. Open ${platformLabel} to post it.`;
+            showToast(copied ? "Image saved • Link copied" : "Image saved");
+            $("#feedDetailStatus").textContent = copied
+                ? `Poll photo saved and link copied. Open ${platformLabel} to post it.`
+                : `Poll photo saved. Open ${platformLabel} to post it.`;
         }
     } catch (error) {
         if (error.name === "AbortError") $("#feedDetailStatus").textContent = "";

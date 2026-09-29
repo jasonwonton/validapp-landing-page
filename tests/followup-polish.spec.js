@@ -63,3 +63,56 @@ test.describe("chat room edge swipe-back", () => {
         await expect(page.locator(".chat-list-screen")).toBeVisible();
     });
 });
+
+async function openSharablePoll(page) {
+    await signIn(page);
+    await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "School", exact: true }).click();
+    await page.locator("[data-feed-detail='9003']").click();
+    return page.locator("#feedDetailDialog");
+}
+
+test.describe("poll share copies the validapp.lol link like iOS", () => {
+    test.beforeEach(async ({ page }) => {
+        await page.addInitScript(() => {
+            window.__shareLog = [];
+            Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text) => { window.__shareLog.push(["copy", text]); } } });
+        });
+    });
+
+    test("Instagram copies the link before the share sheet and says so", async ({ page }) => {
+        await page.addInitScript(() => {
+            Object.defineProperty(navigator, "canShare", { configurable: true, value: () => true });
+            Object.defineProperty(navigator, "share", { configurable: true, value: async ({ title }) => { window.__shareLog.push(["share", title]); } });
+        });
+        const dialog = await openSharablePoll(page);
+        await dialog.getByRole("button", { name: "Share poll to Instagram" }).click();
+        await expect(page.locator("#toast")).toContainText("Poll photo shared • Link copied");
+        expect(await page.evaluate(() => window.__shareLog)).toEqual([["copy", "https://validapp.lol"], ["share", "Share to Instagram"]]);
+    });
+
+    test("Snapchat hands off the photo without touching the clipboard, as on iOS", async ({ page }) => {
+        await page.addInitScript(() => {
+            Object.defineProperty(navigator, "canShare", { configurable: true, value: () => true });
+            Object.defineProperty(navigator, "share", { configurable: true, value: async ({ title }) => { window.__shareLog.push(["share", title]); } });
+        });
+        const dialog = await openSharablePoll(page);
+        await dialog.getByRole("button", { name: "Share poll to Snapchat" }).click();
+        await expect(page.locator("#toast")).toHaveText("Poll photo shared");
+        expect(await page.evaluate(() => window.__shareLog)).toEqual([["share", "Share to Snapchat"]]);
+    });
+
+    test("without Web Share the photo downloads and the link is copied", async ({ page }) => {
+        await page.addInitScript(() => {
+            Object.defineProperty(navigator, "share", { configurable: true, value: undefined });
+            Object.defineProperty(navigator, "canShare", { configurable: true, value: undefined });
+        });
+        const dialog = await openSharablePoll(page);
+        const download = page.waitForEvent("download");
+        await dialog.getByRole("button", { name: "Share poll to Snapchat" }).click();
+        expect((await download).suggestedFilename()).toMatch(/\.png$/);
+        await expect(page.locator("#toast")).toContainText("Image saved • Link copied");
+        await expect(page.locator("#feedDetailStatus")).toContainText("link copied");
+        expect(await page.evaluate(() => window.__shareLog)).toEqual([["copy", "https://validapp.lol"]]);
+    });
+});
