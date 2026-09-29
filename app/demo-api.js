@@ -26,8 +26,9 @@ export function localDemoAllowed() {
 export class DemoAPI {
     async getWeeklyGame() {
         assertLocalDemo();
-        const { DEMO_RELEASE } = await import('./weekly-game/demo-release.js');
-        return { release: structuredClone(DEMO_RELEASE), discovery_required: false };
+        const { DEMO_RELEASE, DEMO_SCUBA_RELEASE } = await import('./weekly-game/demo-release.js');
+        const scuba = new URLSearchParams(window.location.search).get('weeklygame') === 'scuba';
+        return { release: structuredClone(scuba ? DEMO_SCUBA_RELEASE : DEMO_RELEASE), discovery_required: false };
     }
 
     async getWeeklyGameLeaderboard() {

@@ -17,6 +17,7 @@ const NETWORK_ONLY_DYNAMIC_IMPORTS = new Map([
     ["weekly-game/compat.js", "checked only after the live weekly release was fetched"],
     ["weekly-game/web-game.js", "loaded by the weekly game"],
     ["weekly-game/camera.js", "loaded by the weekly game"],
+    ["weekly-game/unavailable.js", "loaded by the weekly game for a release the web can't run"],
     ["weekly-game/demo-release.js", "demo fixture"],
     ["calls/livekit.bundle.js", "built at package time and loaded only when a call starts"],
     ["calls/index.js", "the call controller loads when a call starts or rings; calls need the network"],

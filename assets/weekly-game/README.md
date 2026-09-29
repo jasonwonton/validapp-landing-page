@@ -22,15 +22,38 @@ the network. Inference runs in a bounded, single-in-flight browser worker.
 - `packages/` mirrors the exact public selected immutable game package. The CDN
   currently omits browser CORS headers; no application/backend/storage policy
   is loosened to work around that. SHA-256 and byte count are verified at runtime.
-  Downloaded script is never evaluated. Only the reviewed script fingerprint
+  hand-package-v1 script is never evaluated. Only the reviewed script fingerprint
   is accepted, with its equivalent bundled hand-motion implementation tested
-  against the shared native/server fixture vectors.
+  against the shared native/server fixture vectors (v2: see below).
 
 When publishing another camera package, mirror its hash-verified bytes here and
 add its hash to `MIRRORED_PACKAGES`. Existing artwork/rules can change with the
 same reviewed script. A new script requires an explicit implementation review
 and fixture parity before its fingerprint is accepted. Unsupported runtimes
 show an update message and never request camera access.
+
+## hand-package-v2 camera games (Scuba Challenge)
+
+hand-package-v2 packages carry their own mechanics and sprite art, which the
+iOS host runs in a separate WKWebView. The web does the same with the exact
+reviewed script: `scripts/weekly-game/build-camera-host.mjs` verifies the
+mirrored package bytes and the script's SHA-256, then writes an immutable host
+in `camera/<hash>/index.html` whose CSP admits only that script and a small
+JSON bridge (no network, media, workers or frames). The player loads it in an
+opaque-origin `sandbox="allow-scripts"` frame and exchanges JSON only: the
+package receives normalized wrist rows and detections, never camera frames,
+audio or credentials, and every response is bounded as on iOS (score never
+decreases, at most +10 per response, ≤96 valid sprites, ≤64 sprite images).
+`app/weekly-game/camera-hosts.js` maps package SHA-256 → reviewed script hash
+and host, and the Feed shows a v2 game as playable only when it has a host.
+
+To add a v2 game: mirror its public package here, review the script, add
+package/script hashes to `REVIEWED` in the build script and rebuild. Keep old
+host directories for open clients. A selected camera game without a web host
+still appears in the Feed, opening a friendly "play it in the Valid app" state
+with the school leaderboard. Web rounds remain practice: the release's
+self-reported-v1 validator would accept a web score, but ranked web play is a
+product decision that has not been made.
 
 ## Love Flap / Rose Flight
 
