@@ -212,9 +212,9 @@ label.failed .story-share-check .ui-icon { width: 28px; height: 28px; stroke-wid
 /* Swipe colour looks on a Story photo (stories/photo-filter.js), as in the chat review. */
 .story-composer-preview .story-filter-canvas { pointer-events: none; }
 .story-composer-preview:has(.story-filter-canvas) { touch-action: pan-y; }
-.story-filter-name { position: absolute; z-index: 2; inset: 50% 0 auto; margin: 0; transform: translateY(-50%); color: #fff; text-align: center; font-size: 22px; font-weight: 900; text-shadow: 0 1px 6px rgba(0,0,0,.45); opacity: 0; pointer-events: none; }
+.story-composer-preview .story-filter-name { position: absolute; z-index: 2; inset: 50% 0 auto; margin: 0; transform: translateY(-50%); color: #fff; text-align: center; font-size: 22px; font-weight: 900; text-shadow: 0 1px 6px rgba(0,0,0,.45); opacity: 0; pointer-events: none; }
 .story-filter-name.show { animation: story-filter-flash 1.37s both; }
 /* Same timing as .review-filter-name (camera.css), which isn't loaded here. */
 @keyframes story-filter-flash { 0% { opacity: 0; animation-timing-function: ease-out; } 8.76% { opacity: 1; animation-timing-function: linear; } 74.45% { opacity: 1; animation-timing-function: ease-in; } 100% { opacity: 0; } }
-@keyframes story-filter-flash-reduced { 0%, 74% { opacity: 1; } 75%, 100% { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .story-filter-name.show { animation-name: story-filter-flash-reduced; } }
+/* Reduced motion (styles.css shortens every animation): shown without fading, hidden by photo-filter.js. */
+@media (prefers-reduced-motion: reduce) { .story-composer-preview .story-filter-name.show { animation: none; opacity: 1; } }

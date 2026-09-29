@@ -34,6 +34,7 @@ export async function createStoryPhotoFilter({ preview, source, api, config, can
     let filters = [...REVIEW_FILTERS];
     let index = 0;
     let start = null;
+    let nameTimer = 0;
     const composed = new Map();
     void loadReviewFilters(api).then((list) => { if (index === 0) filters = list; });
 
@@ -55,6 +56,8 @@ export async function createStoryPhotoFilter({ preview, source, api, config, can
         name.classList.remove("show");
         void name.offsetWidth;
         name.classList.add("show");
+        clearTimeout(nameTimer);
+        nameTimer = setTimeout(() => name.classList.remove("show"), 1370);
         status.textContent = `${filters[index].name} filter`;
         regrade();
         onChange(filters[index]);
@@ -109,6 +112,7 @@ export async function createStoryPhotoFilter({ preview, source, api, config, can
             preview.removeEventListener("pointerup", onUp);
             preview.removeEventListener("pointercancel", onUp);
             preview.removeEventListener("keydown", onKey);
+            clearTimeout(nameTimer);
             canvas.width = canvas.height = 0;
             display.width = display.height = 0;
             composed.clear();
