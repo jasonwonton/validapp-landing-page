@@ -949,11 +949,9 @@ test("real adapter links signup only after Turnstile-backed SMS verification", a
     await page.getByRole("button", { name: "Create an account" }).click();
     const dialog = page.getByRole("dialog");
     await fillProductionSignup(dialog);
-    await dialog.getByLabel(/Profile photo/).setInputFiles({
-        name: "avatar.png",
-        mimeType: "image/png",
-        buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
-    });
+    await dialog.getByLabel(/Profile photo/).setInputFiles("assets/valid_logo.png");
+    await page.locator(".avatar-crop-dialog").getByRole("button", { name: "Use photo" }).click();
+    await expect(dialog.locator("#signupPhotoPreview img")).toBeVisible();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
 

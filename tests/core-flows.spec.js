@@ -60,6 +60,9 @@ test("new users can complete passkey-only school onboarding", async ({ page }) =
     await expect(dialog.getByText("No password. No phone number.", { exact: true })).toHaveCount(0);
     await expect(dialog.getByText("Choose from Library", { exact: true })).toBeVisible();
     await dialog.getByLabel(/Profile photo/).setInputFiles("assets/valid_logo.png");
+    // Profile photos go through the iOS circle crop before they are used.
+    await page.locator(".avatar-crop-dialog").getByRole("button", { name: "Use photo" }).click();
+    await expect(dialog.locator("#signupPhotoPreview img")).toHaveAttribute("src", /^blob:/);
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(page.locator("#appView")).toBeVisible();
     const contacts = page.locator("#classmatesDialog");
