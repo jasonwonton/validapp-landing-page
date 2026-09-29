@@ -780,3 +780,6 @@
 .chat-shell.chat-swipe-reveal > .chat-list-screen.hidden { display: block !important; position: absolute; inset: 0 0 auto; z-index: 0; max-height: 100%; overflow: hidden; pointer-events: none; }
 .chat-room-screen.swipe-tracking, .chat-room-screen.swipe-settling { position: relative; z-index: 1; transform: translateX(var(--swipe-x, 0px)); background: var(--aqua); box-shadow: -10px 0 28px rgba(0,0,0,.22); }
 .chat-room-screen.swipe-settling { transition: transform .24s cubic-bezier(.2,.8,.2,1); }
+/* Honest note on view-once media: iOS reports screenshots, the web can't detect them. */
+.chat-capture-note { position: absolute; z-index: 3; top: calc(74px + env(safe-area-inset-top)); left: 14px; right: 14px; color: rgba(255,255,255,.72); font: 500 .72rem/1.3 system-ui, sans-serif; text-align: center; text-shadow: 0 1px 2px rgba(0,0,0,.6); pointer-events: none; }
+.chat-capture-note[hidden] { display: none; }

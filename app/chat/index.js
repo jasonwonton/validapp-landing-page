@@ -266,7 +266,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         <dialog class="chat-sheet" data-chat-settings-dialog aria-label="Chat settings"><div class="chat-settings-content"></div></dialog>
         <dialog class="chat-sheet" data-chat-reactors-dialog aria-label="Message reactions"><div class="chat-reactors-content"></div></dialog>
         <dialog class="chat-sheet" data-chat-readers-dialog aria-label="Read receipts"><div class="chat-readers-content"></div></dialog>
-        <dialog class="chat-media-viewer" data-chat-media-viewer aria-label="Chat media" aria-describedby="chatViewerHint"><span class="visually-hidden" id="chatViewerHint">Drag down to close. Pinch or double-tap to zoom.</span><button type="button" data-close-media aria-label="Close">${uiIcon('close')}</button><div class="chat-viewer-stage"><div class="chat-viewer-media"><img class="chat-viewer-placeholder" alt="" aria-hidden="true" hidden><img alt="" hidden><video playsinline controls hidden></video><div class="chat-viewer-overlay" hidden></div></div></div><progress class="chat-ephemeral-progress" max="1" value="0" aria-label="Media time remaining" hidden></progress><button type="button" data-pause-ephemeral aria-label="Pause media" hidden>${uiIcon("pause")}</button><p></p><div class="chat-viewer-actions"><button type="button" data-swap-viewed-memento aria-label="Swap front and back photos" hidden>⇄ Swap views</button><button type="button" data-share-viewed-memento hidden>Share</button><button type="button" data-reply-viewed-media hidden>Reply</button><button type="button" data-react-viewed-media hidden>${uiIcon("heart")} React</button></div></dialog>`;
+        <dialog class="chat-media-viewer" data-chat-media-viewer aria-label="Chat media" aria-describedby="chatViewerHint"><span class="visually-hidden" id="chatViewerHint">Drag down to close. Pinch or double-tap to zoom.</span><button type="button" data-close-media aria-label="Close">${uiIcon('close')}</button><div class="chat-viewer-stage"><div class="chat-viewer-media"><img class="chat-viewer-placeholder" alt="" aria-hidden="true" hidden><img alt="" hidden><video playsinline controls hidden></video><div class="chat-viewer-overlay" hidden></div></div></div><progress class="chat-ephemeral-progress" max="1" value="0" aria-label="Media time remaining" hidden></progress><small class="chat-capture-note" hidden>Screenshots aren’t detected on the web</small><button type="button" data-pause-ephemeral aria-label="Pause media" hidden>${uiIcon("pause")}</button><p></p><div class="chat-viewer-actions"><button type="button" data-swap-viewed-memento aria-label="Swap front and back photos" hidden>⇄ Swap views</button><button type="button" data-share-viewed-memento hidden>Share</button><button type="button" data-reply-viewed-media hidden>Reply</button><button type="button" data-react-viewed-media hidden>${uiIcon("heart")} React</button></div></dialog>`;
 
     const $ = (selector) => root.querySelector(selector);
     const $$ = (selector) => [...root.querySelectorAll(selector)];
@@ -2542,6 +2542,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         clearInterval(ephemeralTimer); ephemeralTimer = null; ephemeralPaused = false;
         $('[data-pause-ephemeral]').hidden = true;
         $('.chat-ephemeral-progress').hidden = true;
+        $('.chat-capture-note').hidden = true;
         const dialog = $("[data-chat-media-viewer]");
         const video = dialog.querySelector("video");
         video.pause();
@@ -2700,6 +2701,8 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         clearInterval(ephemeralTimer); ephemeralPaused = false;
         const progress = $('.chat-ephemeral-progress'), video = $('[data-chat-media-viewer] video');
         progress.hidden = false; progress.value = 0;
+        // iOS logs view-once screenshots in the chat; a browser can't see them.
+        $('.chat-capture-note').hidden = false;
         $('[data-pause-ephemeral]').hidden = false;
         $('[data-pause-ephemeral]').setAttribute('aria-label', 'Pause media');
         $('[data-pause-ephemeral]').innerHTML = uiIcon('pause');

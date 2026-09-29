@@ -161,3 +161,28 @@ test("Story photos get the chat review's swipe colour looks, burned into the pos
     expect(saturation.type).toBe("image/jpeg");
     expect(saturation.spread).toBeLessThan(12);
 });
+
+test.describe("honest screenshot notes where iOS would report a capture", () => {
+    test("view-once media says screenshots aren't detected; kept media doesn't", async ({ page }) => {
+        await openChats(page);
+        await openNoahRoom(page);
+        await page.getByRole("button", { name: "Photo · Tap to view", exact: true }).click();
+        const viewer = page.getByRole("dialog", { name: "Chat media", exact: true });
+        await expect(viewer.locator(".chat-ephemeral-progress")).toBeVisible();
+        await expect(viewer.getByText("Screenshots aren’t detected on the web")).toBeVisible();
+        await viewer.getByRole("button", { name: "Close", exact: true }).click();
+        await expect(viewer.locator(".chat-capture-note")).toBeHidden();
+    });
+
+    test("a classmate's Story carries the note; your own Story doesn't", async ({ page }) => {
+        await page.goto("/app/?demo=1&signin=1&stories=1");
+        await page.getByRole("button", { name: /^sign in$/i }).click();
+        await page.getByRole("button", { name: /Noah Williams's Story/ }).click();
+        const viewer = page.getByRole("dialog", { name: "Story viewer" });
+        await expect(viewer.getByText("Screenshots aren’t detected on the web")).toBeVisible();
+        await viewer.getByRole("button", { name: "Close Story" }).click();
+        await page.getByRole("button", { name: "Your Story", exact: true }).click();
+        await expect(viewer.locator(".story-owner-bar")).toBeVisible();
+        await expect(viewer.locator(".story-capture-note")).toBeHidden();
+    });
+});

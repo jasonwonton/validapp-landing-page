@@ -115,6 +115,8 @@
 .story-bottom > * { pointer-events: auto; }
 .story-item-caption { margin: 0; font-size: 15px; text-align: center; text-shadow: 0 1px 3px rgba(0,0,0,.85); overflow-wrap: anywhere; }
 .story-item-caption:empty { display: none; }
+.story-capture-note { color: rgba(255,255,255,.72); font-size: 11px; line-height: 1.3; text-align: center; text-shadow: 0 1px 2px rgba(0,0,0,.6); pointer-events: none; }
+.story-capture-note[hidden] { display: none; }
 .story-owner-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 4px 6px; }
 .story-views { display: flex; align-items: center; gap: 7px; min-height: 44px; padding: 0 14px; border: 0; border-radius: 999px; background: rgba(0,0,0,.52); color: #fff; font-size: 14px; }
 .story-views .ui-icon { width: 17px; height: 17px; }
