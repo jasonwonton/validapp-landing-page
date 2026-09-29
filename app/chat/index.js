@@ -13,6 +13,7 @@ import {
 } from "./models.js";
 import { thumbHashDataURL } from "./thumbhash.js";
 import { confirmSheet } from "../ui-dialogs.js";
+import { userMessage } from "../user-message.js";
 import { createChatStore } from "./store.js";
 import {
     MAX_AUTOMATIC_ATTEMPTS,
@@ -754,7 +755,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             renderChatList();
             if (store.state.activeChatId) renderMementoToolbar();
         } catch (error) {
-            $(".chat-list-status").textContent = error.message || "Could not load chats.";
+            $(".chat-list-status").textContent = userMessage(error, "Could not load chats.");
         } finally {
             store.state.loadingList = false;
         }
@@ -837,7 +838,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             results.classList.add("hidden");
             $(".chat-list").classList.remove("hidden");
             renderRecentConversations();
-            $(".chat-list-status").textContent = error.message || "Could not search chats.";
+            $(".chat-list-status").textContent = userMessage(error, "Could not search chats.");
         }
     }
 
@@ -939,7 +940,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         } else {
             if ([401, 403, 404].includes(messagesResult.reason?.status)) store.replaceMessages(chatId, []);
             const locked = messagesResult.reason?.status === 403 && /memento/i.test(messagesResult.reason?.message || "");
-            $(".chat-room-status").textContent = locked ? "Take today's Memento to open this chat." : (messagesResult.reason?.message || "Could not load messages.");
+            $(".chat-room-status").textContent = locked ? "Take today's Memento to open this chat." : (userMessage(messagesResult.reason, "Could not load messages."));
         }
         await restorePendingMessages(chatId);
         if (generation !== roomGeneration || store.state.activeChatId !== String(chatId)) return;
@@ -1440,7 +1441,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                     if (chatTextSendIsRetryable(error)) await markChatMediaOutboxAttempt(record.id);
                     else {
                         await removeChatMediaOutbox(record.id);
-                        showToast?.(error.message || "A saved media upload could not be sent.");
+                        showToast?.(userMessage(error, "A saved media upload could not be sent."));
                     }
                 }
             }
@@ -1553,7 +1554,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             } else {
                 await removeChatTextOutbox(userId(), clientRequestId).catch(() => null);
             }
-            store.updateMessage(chatId, { ...optimistic, delivery_state: "failed", error_message: error.message });
+            store.updateMessage(chatId, { ...optimistic, delivery_state: "failed", error_message: userMessage(error, "Not delivered.") });
             if (store.state.activeChatId === chatId) renderMessages(false);
             if (chatTextSendIsRetryable(error)) scheduleOutboxRetry(await listChatTextOutbox(userId()).catch(() => []));
         }
@@ -1649,7 +1650,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             $(".chat-create-status").textContent = "";
             renderPeople();
         } catch (error) {
-            $(".chat-create-status").textContent = error.message || "Could not load classmates.";
+            $(".chat-create-status").textContent = userMessage(error, "Could not load classmates.");
         }
     }
 
@@ -1691,7 +1692,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             inviteMode = false;
             await openChat(targetChatId, { updateHistory: !store.state.activeChatId, force: true });
         } catch (error) {
-            $(".chat-create-status").textContent = error.message || "Could not create the chat.";
+            $(".chat-create-status").textContent = userMessage(error, "Could not create the chat.");
         } finally {
             button.textContent = "Create";
             button.disabled = false;
@@ -1705,7 +1706,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             renderChatList();
             successHaptic?.();
             await openChat(chat.id);
-        } catch (error) { showToast?.(error.message || "Could not accept the invitation."); }
+        } catch (error) { showToast?.(userMessage(error, "Could not accept the invitation.")); }
     }
 
     async function declineInvitation(membershipId) {
@@ -1718,7 +1719,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         try {
             await api.declineChatInvitation(userId(), membershipId);
             await loadChats();
-        } catch (error) { showToast?.(error.message || "Could not decline the invitation."); }
+        } catch (error) { showToast?.(userMessage(error, "Could not decline the invitation.")); }
     }
 
     function openMementoComposer({ showExisting = false } = {}) {
@@ -1759,7 +1760,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             showToast?.("Chat unlocked for today");
             await openChat(chatId, { updateHistory: false, force: true });
         } catch (error) {
-            if (generation === roomGeneration && chatId === store.state.activeChatId) $('.chat-room-status').textContent = error.message || "Could not skip today's Memento.";
+            if (generation === roomGeneration && chatId === store.state.activeChatId) $('.chat-room-status').textContent = userMessage(error, "Could not skip today's Memento.");
         } finally {
             mementoSkipping = false;
             if (store.state.activeChatId) renderDailyRow();
@@ -1795,7 +1796,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             if (generation !== mementoPreparationGeneration) return;
             selectedMementoFile = null;
             selectedMementoSecondaryFile = null;
-            $(".memento-status").textContent = error.message || "Could not prepare that photo.";
+            $(".memento-status").textContent = userMessage(error, "Could not prepare that photo.");
         }
     }
 
@@ -1864,11 +1865,11 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         } catch (error) {
             if (recoverySaved && chatTextSendIsRetryable(error)) {
                 await markChatMediaOutboxAttempt(`${userId()}:memento:${mementoRequestId}`).catch(() => null);
-                $(".memento-status").textContent = `${error.message || "Could not share your Memento."} It is saved on this device and will retry while Valid is open.`;
+                $(".memento-status").textContent = `${userMessage(error, "Could not share your Memento.")} It is saved on this device and will retry while Valid is open.`;
             } else {
                 await removeChatMediaOutbox(`${userId()}:memento:${mementoRequestId}`).catch(() => null);
                 $(".memento-status").textContent = recoverySaved
-                    ? (error.message || "Could not share your Memento.")
+                    ? (userMessage(error, "Could not share your Memento."))
                     : "This Memento could not be saved for a safe retry. Free some device storage and try again.";
             }
         } finally {
@@ -1948,7 +1949,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             container.insertAdjacentHTML('beforeend', `<button class="chat-sticker-new" type="button" data-make-sticker aria-label="Make a sticker"><span>${uiIcon('plus')}</span><small>New</small></button>`);
         } catch (error) {
             if (generation !== stickerLibraryGeneration) return;
-            container.innerHTML = `<small>${escapeChatHTML(error.message || "Could not load stickers.")}</small><button type="button" data-retry-stickers>Try again</button>`;
+            container.innerHTML = `<small>${escapeChatHTML(userMessage(error, "Could not load stickers."))}</small><button type="button" data-retry-stickers>Try again</button>`;
         }
     }
 
@@ -1962,7 +1963,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             await stickerMaker.open(file);
         } catch (error) {
             $("[data-sticker-library-dialog]").showModal();
-            $(".chat-sticker-status").textContent = error.message || "That photo could not be opened.";
+            $(".chat-sticker-status").textContent = userMessage(error, "That photo could not be opened.");
         }
     }
 
@@ -1980,7 +1981,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             showToast?.("Sticker removed");
         } catch (error) {
             item?.querySelectorAll("button").forEach((button) => { button.disabled = false; });
-            $(".chat-sticker-status").textContent = error.message || "Could not remove that sticker.";
+            $(".chat-sticker-status").textContent = userMessage(error, "Could not remove that sticker.");
         }
     }
 
@@ -2020,7 +2021,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             if (!$("[data-sticker-library-dialog]").open) $("[data-sticker-library-dialog]").showModal();
             await loadStickerLibrary();
             $$("[data-send-sticker]").forEach((button) => { button.disabled = false; });
-            $(".chat-sticker-status").textContent = `${error.message || "Could not send that sticker."} Tap the same sticker to retry safely.`;
+            $(".chat-sticker-status").textContent = `${userMessage(error, "Could not send that sticker.")} Tap the same sticker to retry safely.`;
         } finally {
             stickerSending = false;
         }
@@ -2094,7 +2095,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             // Photo editing is loaded on first use; offline, that load can fail.
             $(".chat-media-status").textContent = /dynamically imported module|module script failed/i.test(error?.message || "")
                 ? "Photo editing needs a connection to load. Reconnect and try again."
-                : error.message || "Could not prepare that media.";
+                : userMessage(error, "Could not prepare that media.");
         }
     }
 
@@ -2327,11 +2328,11 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 $(".chat-media-status").textContent = "Upload cancelled. Your selection is still here.";
             } else if (recoverySaved && chatTextSendIsRetryable(error)) {
                 await markChatMediaOutboxAttempt(recordId).catch(() => null);
-                $(".chat-media-status").textContent = `${error.message || "Could not send that media."} It is saved on this device and will retry while Valid is open.`;
+                $(".chat-media-status").textContent = `${userMessage(error, "Could not send that media.")} It is saved on this device and will retry while Valid is open.`;
             } else {
                 await removeChatMediaOutbox(recordId).catch(() => null);
                 $(".chat-media-status").textContent = recoverySaved
-                    ? `${error.message || "Could not send that media."} Your selection is still here to retry.`
+                    ? `${userMessage(error, "Could not send that media.")} Your selection is still here to retry.`
                     : "This media could not be saved for a safe retry. Free some device storage and try again.";
             }
         } finally {
@@ -2407,7 +2408,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             $('.chat-memento-gallery-status').textContent = '';
             renderDailyRow();
         } catch (error) {
-            if (generation === mementoDateGeneration) $('.chat-memento-gallery-status').textContent = error.message || 'Could not load that Memento day.';
+            if (generation === mementoDateGeneration) $('.chat-memento-gallery-status').textContent = userMessage(error, 'Could not load that Memento day.');
         }
     }
 
@@ -2492,7 +2493,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         $("[data-share-viewed-memento]").hidden = !viewedMementoEntryId;
         $("[data-reply-viewed-media]").hidden = !viewedMessageId;
         $("[data-react-viewed-media]").hidden = !viewedMessageId;
-        void showMediaViewer(url, { label: `${owner || "Memento"} · preserved in this chat` }).catch((error) => showToast?.(error.message));
+        void showMediaViewer(url, { label: `${owner || "Memento"} · preserved in this chat` }).catch((error) => showToast?.(userMessage(error, "That Memento could not be opened.")));
     }
 
     async function swapViewedMemento() {
@@ -2514,7 +2515,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             button.setAttribute("aria-label", viewedMementoShowsSwapped ? "Show primary Memento view" : "Show alternate Memento view");
         } catch (error) {
             if (previousURL) image.src = previousURL;
-            showToast?.(error.message || "That Memento view could not be opened.");
+            showToast?.(userMessage(error, "That Memento view could not be opened."));
         } finally {
             button.disabled = false;
         }
@@ -2611,7 +2612,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             .catch(async (error) => {
                 // Signed media URLs expire after ~15 minutes: fetch fresh ones and retry once.
                 if (error.mediaFailed && !retried && await refreshMessageMedia(message)) return openPersistentChatMedia(messageId, { retried: true });
-                showToast?.(error.message);
+                showToast?.(userMessage(error, "That media could not be opened."));
             });
     }
 
@@ -2672,7 +2673,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             if (!current()) return;
             closeMediaViewer();
             viewOnceStates.set(messageId, { failed: true }); renderMessages(false);
-            showToast?.(error.message || 'That view-once media is no longer available.');
+            showToast?.(userMessage(error, 'That view-once media is no longer available.'));
         }
     }
 
@@ -2713,7 +2714,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             const response = await api.getChatViewOnceReceipts(userId(), store.state.activeChatId, messageId);
             $(".chat-readers-content").innerHTML = `<header><button type="button" data-close-readers>Done</button><strong>Opened by</strong><span></span></header><div class="chat-reactors-list">${(response.members || []).map((member) => `<div><span>${escapeChatHTML(displayMember(member))}</span><b>${member.opened ? `${Number(member.view_count || 1)}×` : "Not opened"}</b></div>`).join("") || `<p>No recipients yet.</p>`}</div>`;
         } catch (error) {
-            $(".chat-readers-content p").textContent = error.message || "Could not load view receipts.";
+            $(".chat-readers-content p").textContent = userMessage(error, "Could not load view receipts.");
         }
     }
 
@@ -2867,7 +2868,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             renderRoomHeader(chat);
             showToast?.("Group photo updated");
         } catch (error) {
-            showToast?.(error.message || "Could not update the group photo.");
+            showToast?.(userMessage(error, "Could not update the group photo."));
         } finally {
             input.disabled = false;
             input.value = "";
@@ -2881,7 +2882,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             if (store.state.detail) store.state.detail.chat = chat;
             renderSettings();
             showToast?.("Notification setting updated");
-        } catch (error) { showToast?.(error.message || "Could not update notifications."); }
+        } catch (error) { showToast?.(userMessage(error, "Could not update notifications.")); }
     }
 
     async function reactToMessage(messageId, type) {
@@ -2893,7 +2894,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             store.updateMessage(store.state.activeChatId, updated);
             renderMessages(false);
             softHaptic?.();
-        } catch (error) { showToast?.(error.message || "Could not add that reaction."); }
+        } catch (error) { showToast?.(userMessage(error, "Could not add that reaction.")); }
     }
 
     async function showMessageReactors(messageId) {
@@ -2905,7 +2906,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             const reactors = await api.getChatMessageReactors(userId(), store.state.activeChatId, messageId);
             content.innerHTML = `<header><button type="button" data-close-reactors>Done</button><strong>Reactions</strong><span></span></header><div class="chat-reactors-list">${(reactors || []).map((reactor) => `<div><span>${escapeChatHTML(displayMember(reactor))}</span><b aria-label="${escapeChatHTML(reactor.reaction_type)}">${CHAT_REACTIONS.find(([type]) => type === reactor.reaction_type)?.[1] || uiIcon("smile")}</b></div>`).join("") || `<p>No reactions yet.</p>`}</div>`;
         } catch (error) {
-            content.querySelector(".chat-reactors-status").textContent = error.message || "Could not load reactions.";
+            content.querySelector(".chat-reactors-status").textContent = userMessage(error, "Could not load reactions.");
         }
     }
 
@@ -2924,7 +2925,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             const updated = await api.unsendChatMessage(userId(), store.state.activeChatId, messageId);
             store.updateMessage(store.state.activeChatId, updated);
             renderMessages(false);
-        } catch (error) { showToast?.(error.message || "Could not unsend that message."); }
+        } catch (error) { showToast?.(userMessage(error, "Could not unsend that message.")); }
     }
 
     async function deleteMessageForMe(messageId) {
@@ -2935,7 +2936,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             const remaining = store.messages().filter((message) => message.id !== messageId);
             store.replaceMessages(store.state.activeChatId, remaining, store.state.messagePageByChat.get(String(store.state.activeChatId)) || {});
             renderMessages(false);
-        } catch (error) { showToast?.(error.message || "Could not hide that message."); }
+        } catch (error) { showToast?.(userMessage(error, "Could not hide that message.")); }
     }
 
     async function copyMessage(messageId) {
@@ -3298,7 +3299,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             if (chatMediaPublishing || selectedChatMedia?.kind !== 'photo') return;
             photoStickerMode = true;
             $('[data-save-sticker]').textContent = 'Save and add';
-            return selectedPhotoSourceFile().then(file => stickerMaker.open(file)).catch(error => { $('.chat-media-status').textContent = error.message; });
+            return selectedPhotoSourceFile().then(file => stickerMaker.open(file)).catch(error => { $('.chat-media-status').textContent = userMessage(error, "That photo could not be cut out."); });
         }
         if (target.matches("[data-close-memento]")) return $("[data-memento-dialog]").close();
         if (target.matches("[data-skip-memento]")) return skipMementoForToday();
@@ -3311,7 +3312,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             if (url) {
                 target.disabled = true;
                 return photoStickers.add(url).then(() => $('[data-sticker-library-dialog]').close())
-                    .catch(error => { $('.chat-sticker-status').textContent = error.message; }).finally(() => { target.disabled = false; });
+                    .catch(error => { $('.chat-sticker-status').textContent = userMessage(error, "Could not add that sticker."); }).finally(() => { target.disabled = false; });
             }
             return;
         }
@@ -3346,7 +3347,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 renderRoomHeader(chat);
                 renderSettings();
                 showToast?.("Group name updated");
-            } catch (error) { showToast?.(error.message || "Could not rename this group."); }
+            } catch (error) { showToast?.(userMessage(error, "Could not rename this group.")); }
             return;
         }
         const memberFor = (id) => (store.state.detail?.members || []).find((member) => String(member.user_id) === String(id));
@@ -3368,7 +3369,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 presence?.invalidate();
                 await openChat(store.state.activeChatId, { updateHistory: false, force: true });
                 renderSettings();
-            } catch (error) { showToast?.(error.message || "Could not remove that person."); }
+            } catch (error) { showToast?.(userMessage(error, "Could not remove that person.")); }
             return;
         }
         if (target.dataset.blockChatMember) {
@@ -3385,7 +3386,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 showToast?.("Person blocked");
                 await loadChats({ quiet: true });
                 renderSettings();
-            } catch (error) { showToast?.(error.message || "Could not block this person."); }
+            } catch (error) { showToast?.(userMessage(error, "Could not block this person.")); }
             return;
         }
         if (target.matches("[data-cancel-reply]")) { store.state.replyToMessageId = null; return renderReplyDraft(); }
@@ -3421,7 +3422,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             $("[data-chat-settings-dialog]").close();
             await loadChats({ quiet: true });
             if (store.state.activeChatId === chatId) showChatList();
-        }).catch((error) => showToast?.(error.message || "Could not leave this chat."));
+        }).catch((error) => showToast?.(userMessage(error, "Could not leave this chat.")));
     }
 
     async function reportCurrentChat() {

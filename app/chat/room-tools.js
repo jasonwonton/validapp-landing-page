@@ -3,6 +3,7 @@
 import { uiIcon } from "../ui-icons.js";
 import { setRuntimeStyles } from "../runtime-style.js";
 import { confirmSheet, reasonSheet } from "../ui-dialogs.js";
+import { userMessage } from "../user-message.js";
 
 const VOICE_SPEEDS = [1, 1.5, 2];
 
@@ -159,7 +160,7 @@ export async function reportChatFlow({ chatName, isGroup, submit, leave, showToa
     try {
         if (await submit(reason) === false) return false;
     } catch (error) {
-        showToast?.(error.message || "Could not submit the report. Try again.");
+        showToast?.(userMessage(error, "Could not submit the report. Try again."));
         return false;
     }
     haptic?.("success");

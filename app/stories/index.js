@@ -142,7 +142,7 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, ge
             if (authors.length) void loadViewer().catch(() => null);
             void retryPendingStories();
         } catch (error) {
-            $(".stories-status").textContent = error.message || "Stories unavailable";
+            $(".stories-status").textContent = userMessage(error, "Stories unavailable");
         } finally {
             loading = false;
         }
@@ -217,7 +217,7 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, ge
         } catch (error) {
             if (generation !== storyPreparationGeneration) return;
             selectedStoryMedia = null;
-            $(".story-composer-status").textContent = error.message || "Could not prepare that Story.";
+            $(".story-composer-status").textContent = userMessage(error, "Could not prepare that Story.");
         } finally {
             if (generation === storyPreparationGeneration) {
                 $(".story-overlay").disabled = false;
@@ -272,12 +272,12 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, ge
         } catch (error) {
             if (saved && chatTextSendIsRetryable(error)) {
                 await markChatMediaOutboxAttempt(record.id).catch(() => null);
-                $(".story-composer-status").textContent = `${error.message || "Could not post your Story."} It is saved on this device and will retry while Valid is open.`;
+                $(".story-composer-status").textContent = `${userMessage(error, "Could not post your Story.")} It is saved on this device and will retry while Valid is open.`;
                 scheduleStoryRetry(await listChatMediaOutbox(getUser().id).catch(() => []));
             } else {
                 await removeChatMediaOutbox(record.id).catch(() => null);
                 $(".story-composer-status").textContent = saved
-                    ? (error.message || "Could not post your Story.")
+                    ? (userMessage(error, "Could not post your Story."))
                     : "This Story could not be saved for a safe retry. Free some device storage and try again.";
             }
         } finally {

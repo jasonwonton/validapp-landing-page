@@ -77,6 +77,16 @@ function statusMessage(status, text, fallback) {
 }
 
 /**
+ * The message api.js puts on an APIError when the response has no readable
+ * `detail`: the same status mapping `userMessage` uses, never "Request failed (N)".
+ * @param {number} status HTTP status
+ * @param {string} [text] the server's `detail.message`, kept when it is a sentence
+ */
+export function apiErrorMessage(status, text = "") {
+    return statusMessage(Number(status) || 0, String(text || "").trim(), GENERIC_ERROR_MESSAGE);
+}
+
+/**
  * A message safe to show a person for any thrown value.
  * @param {unknown} error an APIError, DOMException, Error, or string
  * @param {string} [fallback] shown when nothing better is known
@@ -84,7 +94,9 @@ function statusMessage(status, text, fallback) {
 export function userMessage(error, fallback = GENERIC_ERROR_MESSAGE) {
     if (error == null) return fallback;
     if (typeof error === "string") return isHumanSentence(error) ? error.trim() : fallback;
-    const text = String(error.message || "").trim();
+    // api.js's generic sentence carries no detail; the caller's fallback is more specific.
+    const raw = String(error.message || "").trim();
+    const text = raw === GENERIC_ERROR_MESSAGE ? "" : raw;
     const status = Number.isInteger(error.status) ? error.status : null;
     if (status !== null && error.name === "APIError") return statusMessage(status, text, fallback);
     if (isNetworkFailure(error)) return typeof navigator !== "undefined" && navigator.onLine === false ? OFFLINE : UNREACHABLE;

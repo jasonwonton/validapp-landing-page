@@ -2251,7 +2251,7 @@ async function openClassmateProfile(userId) {
             : null;
     }
     $("#classmateProfileStatus").textContent = requests[0].status === "rejected"
-        ? (requests[0].reason?.message || "Could not load this profile.")
+        ? userMessage(requests[0].reason, "Could not load this profile.")
         : "";
     renderClassmateProfile();
 }
@@ -2339,7 +2339,7 @@ async function refreshProfilePanelData() {
         } else if (request.key === "askLink" && result.reason?.status === 404) {
             $("#askLinkSection").classList.add("hidden");
         } else {
-            profileError ||= result.reason?.message || "Could not load all profile details.";
+            profileError ||= userMessage(result.reason, "Could not load all profile details.");
         }
     });
     $("#profileStatus").textContent = profileError;
@@ -2531,7 +2531,7 @@ async function openSignupDialog() {
             if (!await enablePreviewSignup()) return;
         }
         catch (error) {
-            $('#authStatus').textContent = error.message;
+            $('#authStatus').textContent = userMessage(error, "Passkeys aren’t available in this browser right now.");
             showAuthBrowserHelp(error, false);
             const help = $('#authBrowserHelp');
             if (!help.classList.contains('hidden')) help.href = authBrowserURL({ signup: true });
@@ -2998,7 +2998,7 @@ async function createAccount(event) {
         showAuthBrowserHelp(error, true);
         state.signupCompletionUncertain = error.code === 'signup_result_unknown';
         $('#signupRecoverAccount').classList.toggle('hidden', !state.signupCompletionUncertain);
-        $("#signupStatus").textContent = error.message || "Could not create your account.";
+        $("#signupStatus").textContent = userMessage(error, "Could not create your account.");
     } finally {
         setButtonLoading(button, false);
         submitButtons.forEach((candidate) => { candidate.disabled = state.signupCompletionUncertain; });
