@@ -173,7 +173,12 @@ export function reportAuthFailure(error) {
 function sendAuthDiagnostic(error) {
     if (!WEB_ORIGINS.has(location.origin) || diagnosticsSent >= 3) return;
     const code = /^[a-z_]{1,48}$/.test(error.code || '') ? error.code : 'request_failed';
-    const stage = /^[a-z_]{1,48}$/.test(error.stage || '') ? error.stage : 'browser';
+    // A failed API call after the passkey step (loading the app) is not a
+    // browser failure: label it and record which route, ids removed.
+    const route = typeof error.path === 'string'
+        ? error.path.split('?')[0].replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ':id').replace(/\/\d+(?=\/|$)/g, '/:n').slice(0, 80)
+        : null;
+    const stage = /^[a-z_]{1,48}$/.test(error.stage || '') ? error.stage : route ? 'after_signin' : 'browser';
     const key = `${stage}:${code}`;
     if (reported.has(key)) return;
     reported.add(key); diagnosticsSent++;
@@ -182,7 +187,7 @@ function sendAuthDiagnostic(error) {
     const body = JSON.stringify({ id: crypto.randomUUID(), event: 'auth.web_failure', severity: 'warning', message: 'Web authentication could not complete.', occurred_at: new Date().toISOString(), context: {
         app_version: version, build_number: version.match(/\d+/)?.[0] || '0', client_instance_id: instance,
         distribution_channel: 'web_pwa', flow: 'authentication', stage, error_code: code,
-        http_status: String(Number(error.status) || 0), route: location.hostname,
+        http_status: String(Number(error.status) || 0), route: route && !error.stage ? `api${route}` : location.hostname,
         device_model: authDeviceFamily(navigator.userAgent),
         ...(['webauthn.same_rp', 'webauthn.related_origin_supported', 'webauthn.related_origin_unsupported', 'webauthn.related_origin_unknown', 'webauthn.related_origin_unreachable'].includes(error.passkeyContext)
             ? { underlying_error_code: error.passkeyContext } : {}),

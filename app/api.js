@@ -104,6 +104,7 @@ export class ValidAPI {
                 ? new APIError('That request took too long. Check your connection and try again.', 408)
                 : new APIError(navigator.onLine === false ? 'You’re offline. Reconnect, then try again.' : 'Could not reach Valid. Check your connection and try again.', 0);
             failure.routeRecoveryAttempted = error.routeRecoveryAttempted === true;
+            failure.path = path;
             if (authStage(path)) {
                 failure.stage = authStage(path);
                 failure.code = navigator.onLine === false ? 'offline' : failure.status === 408 ? 'request_timeout' : 'network_failure';
@@ -156,6 +157,8 @@ export class ValidAPI {
                 : detail?.message || `Request failed (${response.status})`;
             const failure = new APIError(message, response.status, detail, waitSeconds);
             failure.confirmedSessionInvalid = sessionInvalid;
+            failure.path = path;
+            failure.requestId = response.headers.get('x-request-id');
             if (authStage(path) && !sessionInvalid) {
                 failure.stage = authStage(path);
                 failure.code = authRejectionCode(response.status, detail);
