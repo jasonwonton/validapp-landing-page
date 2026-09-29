@@ -461,7 +461,10 @@ function trackLayoutViewportBaseline() {
         state.layoutBaselineWidth = width;
         state.layoutBaselineHeight = window.innerHeight;
     } else if (state.layoutViewportGap === 0) {
-        state.layoutBaselineHeight = Math.max(state.layoutBaselineHeight, window.innerHeight);
+        // Follow small drift both ways, but never adopt a keyboard-sized drop:
+        // that is exactly the stale state this baseline exists to detect.
+        const height = window.innerHeight;
+        if (height > state.layoutBaselineHeight || state.layoutBaselineHeight - height < 40) state.layoutBaselineHeight = height;
     }
 }
 
@@ -478,13 +481,16 @@ function measureLayoutViewportGap() {
     const [bottomProbe, largeProbe] = layoutViewportProbes;
     const viewport = window.visualViewport;
     const fixedBottom = Math.min(bottomProbe.getBoundingClientRect().bottom, window.innerHeight);
-    const sameWidth = Math.abs(window.innerWidth - state.layoutBaselineWidth) <= 80;
-    const expected = Math.max(
+    // Candidates for the real bottom: the visual viewport, 100lvh and the healthy
+    // layout height seen earlier at this width (WebKit may shrink the first two
+    // as well). Of those that reach clearly past the fixed bottom, trust the
+    // smallest so chrome is never pushed below the screen.
+    const candidates = [
         viewport ? viewport.offsetTop + viewport.height : 0,
         largeProbe.getBoundingClientRect().height,
-        sameWidth ? state.layoutBaselineHeight : 0,
-        sameWidth ? state.viewportBaselineHeight : 0,
-    );
+        Math.abs(window.innerWidth - state.layoutBaselineWidth) <= 80 ? state.layoutBaselineHeight : 0,
+    ].filter((bottom) => bottom - fixedBottom >= 40);
+    const expected = candidates.length ? Math.min(...candidates) : fixedBottom;
     return { gap: Math.round(expected - fixedBottom), expected };
 }
 
