@@ -363,3 +363,23 @@ test.describe("announcement banners", () => {
         expect(headers[0]).toMatch(/^web-v\d+$/);
     });
 });
+
+test.describe("background work", () => {
+    test("returning to the app does not repeat Ask safety reads or double the push status check", async ({ page }) => {
+        await signInToDemo(page);
+        const counts = await page.evaluate(async () => {
+            const { DemoAPI } = await import("/app/demo-api.js");
+            const counts = { safety: 0 };
+            const original = DemoAPI.prototype.getAnonymousAskSafetyNotices;
+            DemoAPI.prototype.getAnonymousAskSafetyNotices = function counted(...args) { counts.safety++; return original.apply(this, args); };
+            window.__counts = counts;
+            for (let i = 0; i < 3; i++) {
+                document.dispatchEvent(new Event("visibilitychange"));
+                window.dispatchEvent(new Event("focus"));
+                await new Promise((resolve) => setTimeout(resolve, 50));
+            }
+            return counts;
+        });
+        expect(counts.safety).toBe(0);
+    });
+});

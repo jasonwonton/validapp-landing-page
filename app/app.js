@@ -883,6 +883,7 @@ async function showSignedIn() {
             state.askAccess = askAccess;
             state.askSafetyNotices = askSafetyNotices;
             state.askSafetyNoticeHistory = askSafetyNoticeHistory;
+            state.askSafetyRefreshedAt = Date.now();
             state.passkeyStatus = passkeyStatus;
             renderPasskeyStatus();
             if (!api.user?.deletion_requested_at) showNextAskSafetyNotice();
@@ -1473,7 +1474,13 @@ async function startGodModeCheckout(button) {
         if (checkoutWindow) checkoutWindow.location.href = checkout.url;
         else window.location.href = checkout.url;
         stopStripeCheckoutPolling();
-        state.stripeCheckoutPollTimer = setInterval(checkStripeCheckout, 4000);
+        // Poll while this tab is visible, for at most 15 minutes; returning to
+        // the tab (focus) still checks once after that.
+        const pollingUntil = Date.now() + 15 * 60_000;
+        state.stripeCheckoutPollTimer = setInterval(() => {
+            if (Date.now() > pollingUntil) return stopStripeCheckoutPolling();
+            if (document.visibilityState === "visible") void checkStripeCheckout();
+        }, 4000);
         status.textContent = "Finish checkout, then return here. God Mode will unlock automatically.";
     } catch (error) {
         checkoutWindow?.close();
@@ -4893,8 +4900,11 @@ function showNextAskSafetyNotice() {
     if (!dialog.open) dialog.showModal();
 }
 
-async function refreshAskSafetyState() {
-    if (!api.user?.id) return;
+async function refreshAskSafetyState({ force = false } = {}) {
+    // Three requests: refresh on foreground at most every 5 minutes.
+    if (!api.user?.id || state.askSafetyRefresh || (!force && Date.now() - (state.askSafetyRefreshedAt || 0) < 300_000)) return;
+    state.askSafetyRefresh = true;
+    state.askSafetyRefreshedAt = Date.now();
     try {
         const [access, notices, history] = await Promise.all([
             api.getAnonymousAskAccess(api.user.id),
@@ -4906,7 +4916,12 @@ async function refreshAskSafetyState() {
         state.askSafetyNoticeHistory = history;
         if (state.askLink) renderAskLink();
         showNextAskSafetyNotice();
-    } catch (_) { /* Keep the last authoritative safety state until the next refresh. */ }
+    } catch (_) {
+        // Keep the last authoritative safety state until the next refresh.
+        state.askSafetyRefreshedAt = 0;
+    } finally {
+        state.askSafetyRefresh = false;
+    }
 }
 
 async function acknowledgeAskSafetyNotice() {
@@ -6776,7 +6791,17 @@ async function syncWebPushSubscription(subscription) {
     return current;
 }
 
-async function refreshWebPushStatus({ sync = false } = {}) {
+// focus and visibilitychange both fire on return; share one status read.
+function refreshWebPushStatus(options = {}) {
+    if (!options.sync && state.webPushStatusRefresh) return state.webPushStatusRefresh;
+    const refresh = readWebPushStatus(options).finally(() => {
+        if (state.webPushStatusRefresh === refresh) state.webPushStatusRefresh = null;
+    });
+    if (!options.sync) state.webPushStatusRefresh = refresh;
+    return refresh;
+}
+
+async function readWebPushStatus({ sync = false } = {}) {
     if (!webPushSupported()) {
         renderWebPushStatus();
         return;
@@ -7517,6 +7542,16 @@ let sessionRestorePending = false;
 let sessionRestoreInFlight = false;
 
 function startApp() {
+    // Start the session check before wiring the UI so a returning user's
+    // request is on the network as early as possible; its result lands after
+    // this synchronous setup.
+    if (!passkeysSupported() && !demoMode) {
+        $("#passkeyButton").disabled = true;
+        $("#authStatus").textContent = "This browser does not support passkeys. Try current Chrome, Safari, or Edge.";
+        showAuthBrowserHelp({ code: 'passkeys_unavailable' }, false);
+    }
+    const androidInstallGate = androidInstallRequested();
+    if (!androidInstallGate) restoreOrStartAuthFlow();
     $$('[data-share-anonymous], [data-share-feed-platform]').forEach((button) => {
         const platform = button.dataset.shareAnonymous || button.dataset.shareFeedPlatform;
         const label = platform ? `${platform[0].toUpperCase()}${platform.slice(1)}` : "Share";
@@ -7552,19 +7587,11 @@ function startApp() {
         document.addEventListener("visibilitychange", reportActiveChat);
         navigator.serviceWorker.addEventListener("controllerchange", reportActiveChat);
     }
-    if (!passkeysSupported() && !demoMode) {
-        $("#passkeyButton").disabled = true;
-        $("#authStatus").textContent = "This browser does not support passkeys. Try current Chrome, Safari, or Edge.";
-        showAuthBrowserHelp({ code: 'passkeys_unavailable' }, false);
-    }
     renderIOSInstallRow();
-    if (androidInstallRequested()) {
+    if (androidInstallGate) {
         showAuthView();
         showAndroidInstallGate();
-    } else {
-        restoreOrStartAuthFlow();
-        if (iosInstallAvailable() && new URLSearchParams(location.search).get("install") === "1") void openIOSInstall();
-    }
+    } else if (iosInstallAvailable() && new URLSearchParams(location.search).get("install") === "1") void openIOSInstall();
 }
 
 async function restoreOrStartAuthFlow() {
