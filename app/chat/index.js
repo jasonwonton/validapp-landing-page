@@ -53,6 +53,18 @@ export async function deliverMementoRecord(api, userId, record, { onProgress } =
 
 // Camera, review editing and uploads load on first use (outside the app shell).
 const loadLiveCamera = () => import("../live-camera.js");
+// Ask for the camera inside the tap itself. iOS (notably an installed web app)
+// can refuse a getUserMedia made after awaiting the camera module; the camera
+// then adopts this stream. Constraints match live-camera.js cameraConstraints.
+function cameraStreamRequest(facing) {
+    if (!navigator.mediaDevices?.getUserMedia) return null;
+    const request = navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1440 } } });
+    request.catch(() => null);
+    return request;
+}
+function releaseStreamRequest(request) {
+    request?.then((stream) => stream?.getTracks().forEach((track) => track.stop())).catch(() => null);
+}
 const cameraHaptic = (kind) => window.ValidPreferences?.haptic?.(kind);
 
 // M4A goes straight to chat-media-uploads (unchanged). Browsers that can only
@@ -295,6 +307,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     }
     // Initialize on first use so opening a chat never requests camera permission.
     let chatCamera = null;
+    let cameraWarmed = false;
     let chatCameraToken = 0;
     let reviewEditor = null;
     let reviewEditorLoading = null;
@@ -361,6 +374,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         if (chatMediaPublishing) return;
         resetChatMediaComposer();
         const token = ++chatCameraToken;
+        const streamRequest = chatCamera ? null : cameraStreamRequest('user');
         $('[data-chat-media-dialog]').classList.add('is-capturing');
         try {
             if (!chatCamera) {
@@ -384,13 +398,14 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 });
             }
         } catch (_) {
+            releaseStreamRequest(streamRequest);
             if (token !== chatCameraToken) return;
             showChatMediaReview();
             $(".chat-media-status").textContent = "The camera needs a connection to load. Choose a photo from your library instead.";
             return;
         }
-        if (token !== chatCameraToken || !$('[data-chat-media-dialog]').open) return;
-        chatCamera.open();
+        if (token !== chatCameraToken || !$('[data-chat-media-dialog]').open) return releaseStreamRequest(streamRequest);
+        chatCamera.open({ stream: streamRequest });
     }
     $('[data-retake-chat-photo]').addEventListener('click', startChatCamera);
     $('[data-chat-photo-library]').addEventListener('click', () => { showChatMediaReview(); $('.chat-media-file-input').click(); });
@@ -398,19 +413,21 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         if (mementoPublishing) return;
         resetMementoComposer();
         const token = ++mementoCameraToken;
+        const streamRequest = mementoCamera ? null : cameraStreamRequest('environment');
         $('[data-memento-dialog]').classList.add('is-capturing');
         $('.memento-photo-fallback').hidden = true;
         try {
             await ensureMementoCamera();
         } catch (_) {
+            releaseStreamRequest(streamRequest);
             if (token !== mementoCameraToken) return;
             $('[data-memento-dialog]').classList.remove('is-capturing');
             $('.memento-photo-fallback').hidden = false;
             $(".memento-status").textContent = "The camera needs a connection to load. Choose a photo instead.";
             return;
         }
-        if (token !== mementoCameraToken || !$('[data-memento-dialog]').open) return;
-        mementoCamera.open();
+        if (token !== mementoCameraToken || !$('[data-memento-dialog]').open) return releaseStreamRequest(streamRequest);
+        mementoCamera.open({ stream: streamRequest });
     }
     $('[data-retake-memento]').addEventListener('click', startMementoCamera);
     let searchGeneration = 0;
@@ -866,6 +883,11 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     }
 
     async function openChat(chatId, { updateHistory = true, force = false, latest = false } = {}) {
+        // Warm the camera module (precached) so the camera button opens at once.
+        if (!cameraWarmed) {
+            cameraWarmed = true;
+            setTimeout(() => { void loadLiveCamera().then((module) => module.ensureCameraStyles()).catch(() => { cameraWarmed = false; }); }, 600);
+        }
         const chat = store.state.chats.find((item) => item.id === String(chatId));
         if (chat?.membership_status === "invited") return;
         const savedPosition = store.state.activeChatId === String(chatId) && !latest ? timelineScroll.capture() : null;
@@ -1126,7 +1148,14 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             key: "window:newer",
             html: historyEdgeMarkup('newer'),
         });
-        reconcileKeyedElements(timeline, entries);
+        reconcileKeyedElements(timeline, entries, { preserveMedia: "img[data-media-key]" });
+        const positions = new Map(visible.items.map((message, offset) => [String(message.id), visible.start + offset + 1]));
+        for (const row of timeline.children) {
+            const position = positions.get(row.dataset.listKey);
+            if (!position) continue;
+            if (row.getAttribute("aria-posinset") !== String(position)) row.setAttribute("aria-posinset", String(position));
+            if (row.getAttribute("aria-setsize") !== String(visible.total)) row.setAttribute("aria-setsize", String(visible.total));
+        }
         $$(".chat-media-text[data-overlay-x]").forEach((overlay) => setRuntimeStyles(overlay, {
             left: `${Number(overlay.dataset.overlayX) * 100}%`,
             top: `${Number(overlay.dataset.overlayY) * 100}%`,
@@ -1277,7 +1306,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         const preview = kind === 'photo' ? safeMediaURL(message.photo_thumbnail_url, api) : '';
         const hash = kind === 'sticker' ? '' : thumbHashDataURL(message.preview_hash);
         const image = mediaImageMarkup(preview && preview !== mediaURL ? [preview, mediaURL] : [mediaURL], {
-            alt, className: 'chat-media-image', attributes: `data-message-media="${escapeChatHTML(message.id)}"`,
+            alt, className: 'chat-media-image', attributes: `data-message-media="${escapeChatHTML(message.id)}" data-media-key="${escapeChatHTML(message.id)}:${escapeChatHTML(kind)}"`,
         });
         const open = kind === "memento"
             ? `data-view-memento="${escapeChatHTML(mediaURL)}" ${mementoSwappedURL ? `data-memento-swapped="${escapeChatHTML(mementoSwappedURL)}"` : ""} data-memento-owner="${escapeChatHTML(message.sender_first_name || "Memento")}" data-memento-entry="${escapeChatHTML(message.daily_entry_id || "")}"`
@@ -1293,7 +1322,10 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     }
 
     function messageMarkup(message, reply, previous, next, index = 0, total = 1, context = {}) {
-        const position = `role="listitem" aria-posinset="${index + 1}" aria-setsize="${total}"`;
+        // aria-posinset/setsize are set after reconciling (renderMessages): they
+        // change for every row on each send and would force every bubble, and
+        // its images, to be rebuilt.
+        const position = `role="listitem"`;
         if (message.kind === "tombstone" || message.status !== "active") return `<article class="chat-system-message" ${position} data-list-key="${escapeChatHTML(message.id)}"><span>Message removed</span></article>`;
         if (!message.call_id && !KNOWN_MESSAGE_KINDS.has(message.kind)) return `<article class="chat-system-message unsupported" ${position} data-list-key="${escapeChatHTML(message.id)}"><span>Update Valid to see this message</span></article>`;
         if (message.call_id) {

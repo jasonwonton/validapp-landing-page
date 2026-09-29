@@ -275,6 +275,36 @@ function feedIsStale(maxAgeMs) {
     return age < 0 || age >= maxAgeMs;
 }
 
+// /config is read at sign-in; features switched on later (or a config request
+// that failed at sign-in) are picked up when the app returns to the foreground.
+let configRefreshedAt = 0;
+let configRefresh = null;
+async function refreshConfig({ force = false } = {}) {
+    if (!api.user?.id) return state.config;
+    if (configRefresh) return configRefresh;
+    if (!force && Date.now() - configRefreshedAt < 60_000) return state.config;
+    configRefresh = (async () => {
+        try {
+            const fresh = await api.getConfig();
+            configRefreshedAt = Date.now();
+            const before = state.config || {};
+            state.config = { ...before, ...fresh };
+            const changed = ["enable_web_comments", "enable_stories", "enable_web_stories", "enable_tbh_requests", "enable_web_media_ingest"]
+                .some((key) => before[key] !== state.config[key]);
+            if (changed && document.body.classList.contains("authenticated")) {
+                if (state.activePanel === "feed") renderFeed();
+                void feedView?.refreshStories?.();
+            }
+        } catch (_) {
+            // Keep the current config; the next foreground retries.
+        } finally {
+            configRefresh = null;
+        }
+        return state.config;
+    })();
+    return configRefresh;
+}
+
 function refreshFeedIfStale(maxAgeMs) {
     if (state.activePanel !== "feed" || !document.body.classList.contains("authenticated")) return;
     if (isFeedVoteLocked() || !state.feedItems.length || !feedIsStale(maxAgeMs)) return;
@@ -588,8 +618,12 @@ function measureLayoutViewportGap() {
         largeProbe.getBoundingClientRect().height,
         Math.abs(window.innerWidth - state.layoutBaselineWidth) <= 80 ? state.layoutBaselineHeight : 0,
     ].filter((bottom) => bottom - fixedBottom >= 40);
-    const expected = candidates.length ? Math.min(...candidates) : fixedBottom;
-    return { gap: Math.round(expected - fixedBottom), expected };
+    // An installed phone app can never extend below the physical screen, so no
+    // estimate may place chrome past it (iOS keeps screen.* in portrait terms).
+    const portrait = window.innerHeight >= window.innerWidth;
+    const screenBottom = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+    const expected = Math.min(candidates.length ? Math.min(...candidates) : fixedBottom, screenBottom || Infinity);
+    return { gap: Math.max(0, Math.round(expected - fixedBottom)), expected };
 }
 
 function applyLayoutViewportGap(gap, expected = 0) {
@@ -3110,7 +3144,9 @@ function prepareCommentsView() {
 }
 
 async function openCommentsForTarget(type, targetId, { commentId = null } = {}) {
-    if (!commentsEnabled() || !targetId) return;
+    if (!targetId) return;
+    if (!commentsEnabled()) await refreshConfig({ force: true });
+    if (!commentsEnabled()) return void showToast("Comments aren't available right now. Try again soon.");
     const item = allCommentTargetItems(type, targetId)[0];
     const subject = type === "poll"
         ? item?.question_text || "Poll discussion"
@@ -7329,6 +7365,7 @@ function bindEvents() {
             refreshWebPushStatus();
             refreshAskSafetyState();
             refreshFeedIfStale(FEED_FOREGROUND_REFRESH_MS);
+            void refreshConfig();
             void refreshBanner();
             // Reset the worker's push counter to what the app shows now.
             state.syncedBadgeCount = null;
