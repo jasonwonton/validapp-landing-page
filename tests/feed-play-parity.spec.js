@@ -277,3 +277,31 @@ test('feed controls answer to 44px hit areas without changing their drawing', as
         expect(box.width, name).toBeGreaterThanOrEqual(44);
     }
 });
+
+test('account deletion is reachable from Profile information like iOS', async ({ page }) => {
+    await signIn(page);
+    await page.getByRole('button', { name: 'Profile', exact: true }).click();
+    await page.getByRole('button', { name: 'Profile information' }).click();
+    const information = page.locator('#profileDialog');
+    await information.getByRole('button', { name: 'Delete account' }).click();
+    await expect(information).toBeHidden();
+    const confirm = page.locator('#deleteAccountDialog');
+    await expect(confirm.getByRole('heading', { name: 'Delete Account?' })).toBeVisible();
+    await expect(confirm).toContainText('permanently delete your account in 5 days');
+    await confirm.getByRole('button', { name: 'Keep my account' }).click();
+    await expect(confirm).toBeHidden();
+});
+
+test('account deletion warns accounts without a passkey first', async ({ page }) => {
+    await signIn(page, '&passkeys=0');
+    const enrollment = page.locator('#passkeyEnrollmentDialog');
+    await expect(enrollment).toBeVisible();
+    await enrollment.getByRole('button', { name: 'Not now' }).click();
+    await page.getByRole('button', { name: 'Profile', exact: true }).click();
+    await page.getByRole('button', { name: 'Profile information' }).click();
+    await page.locator('#profileDialog').getByRole('button', { name: 'Delete account' }).click();
+    const warning = page.locator('.ui-sheet');
+    await expect(warning).toContainText("Don't Lose Your Account");
+    await warning.getByRole('button', { name: 'Delete Anyway' }).click();
+    await expect(page.locator('#deleteAccountDialog').getByRole('heading', { name: 'Delete Account?' })).toBeVisible();
+});

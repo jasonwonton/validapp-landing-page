@@ -5109,6 +5109,7 @@ function renderProfileEditorHub() {
     const changeCount = profileChangedFieldCount();
     $("#profileReviewButton").textContent = changeCount === 1 ? "Review 1 change" : `Review ${changeCount} changes`;
     $("#profileReviewButton").disabled = !profileDraftIsValid();
+    $("#deleteAccountButton").classList.toggle("hidden", state.config?.enable_delete_account === false);
     const unsubscribeButton = $("#godModeUnsubscribeButton");
     const cancellationScheduled = state.godModeCancellation?.cancel_at_period_end === true;
     unsubscribeButton.classList.toggle("hidden", !hasActiveGodMode());
@@ -6155,6 +6156,41 @@ async function shareClassmateInvite() {
     }
 }
 
+// InformationEditSheet.swift "Delete account" → SettingsView: discard pending
+// edits first, warn accounts without a passkey, then confirm the 5-day deletion.
+async function beginAccountDeletion() {
+    if (profileChangedFieldCount() && !await confirmSheet({
+        title: "Discard your changes?",
+        message: "Your profile information changes won't be saved.",
+        confirmLabel: "Discard",
+        cancelLabel: "Keep editing",
+        destructive: true,
+    })) return;
+    state.profileDraft = null;
+    state.pendingProfileInformation = null;
+    if ($("#profileDialog").open) $("#profileDialog").close();
+    const passkeys = state.passkeyStatus;
+    const missingPasskey = passkeys && passkeys.registered !== true && Number(passkeys.credentialCount || 0) < 1;
+    if (missingPasskey) {
+        let setUpPasskey = false;
+        const noteChoice = (event) => { if (event.target.closest?.(".ui-sheet-cancel")) setUpPasskey = true; };
+        document.addEventListener("click", noteChoice, true);
+        const deleteAnyway = await confirmSheet({
+            title: "Don't Lose Your Account",
+            message: "You don't have a passkey. If you lose access to this phone number during the 5-day countdown, you won't be able to recover your account. Set up a passkey first.",
+            confirmLabel: "Delete Anyway",
+            cancelLabel: "Set Up Passkey",
+            destructive: true,
+        });
+        document.removeEventListener("click", noteChoice, true);
+        if (!deleteAnyway) {
+            if (setUpPasskey) void addBackupPasskey();
+            return;
+        }
+    }
+    openDeleteAccountDialog();
+}
+
 function openDeleteAccountDialog() {
     $("#deleteAccountForm").reset();
     $("#deleteAccountStatus").textContent = "";
@@ -7160,6 +7196,7 @@ function bindEvents() {
         state.pendingAuraPurchase = null;
     });
     $("#deleteAccountForm").addEventListener("submit", requestAccountDeletion);
+    $("#deleteAccountButton").addEventListener("click", () => void beginAccountDeletion());
     $("#cancelDeletionButton").addEventListener("click", cancelAccountDeletion);
     $("#pendingDeletionLogout").addEventListener("click", logoutAndReset);
     $("#installAppButton").addEventListener("click", installWebApp);

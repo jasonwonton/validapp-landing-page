@@ -493,6 +493,7 @@
                 <p id="profileGodModeStatus" class="status-message" role="status"></p>
                 <p id="profileEditStatus" class="status-message" role="status"></p>
                 <button id="profileReviewButton" class="primary-button" type="button" disabled>Review changes</button>
+                <button id="deleteAccountButton" class="profile-delete-account-button hidden" type="button"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg><span>Delete account</span></button>
             </section>
 
             <section class="profile-editor-panel hidden" data-profile-panel="name">
@@ -831,17 +832,17 @@
     <dialog id="deleteAccountDialog" class="modal">
         <form id="deleteAccountForm" method="dialog">
             <div class="modal-heading">
-                <h2>Delete your account?</h2>
+                <h2>Delete Account?</h2>
                 <button class="icon-button" aria-label="Close" type="button" data-close-dialog>×</button>
             </div>
             <div class="deletion-warning">
                 <strong>You have 5 days to change your mind.</strong>
-                <p>Your account, profile, votes, questions, and passkeys will then be permanently deleted. Logging in does not cancel the request automatically.</p>
+                <p>We'll permanently delete your account in 5 days. After deletion, you won't receive any more compliments in Valid, but people who have you as a contact can still vote for you. You can keep your account from the countdown screen any time before then.</p>
             </div>
             <label for="deleteConfirmation">Type <strong>DELETE</strong> to confirm</label>
             <input id="deleteConfirmation" autocomplete="off" pattern="DELETE" required>
             <p id="deleteAccountStatus" class="status-message" role="status"></p>
-            <button class="primary-button danger-button" type="submit">Schedule account deletion</button>
+            <button class="primary-button danger-button" type="submit">Delete Account</button>
             <button class="secondary-button" type="button" data-close-dialog>Keep my account</button>
         </form>
     </dialog>

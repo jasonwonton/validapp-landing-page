@@ -822,6 +822,7 @@ export class DemoAPI {
             global_visibility_boost_cost: 400,
             targeted_visibility_boost_cost: 200,
             enable_tbh_requests: true,
+            enable_delete_account: true,
             enable_chats: true,
             enable_web_chats: true,
             enable_chat_daily_ledger: true,
