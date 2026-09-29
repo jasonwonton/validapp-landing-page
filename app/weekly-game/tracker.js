@@ -14,6 +14,11 @@ export class WristContinuity {
     }
 }
 
+// Every detected wrist (0–2), screen-sorted, for games that play with one hand.
+export function detectedHands(hands) {
+    return Array.isArray(hands) && [0,2,4].includes(hands.length) && hands.every(v => Number.isFinite(v) && v >= 0 && v <= 1) ? hands : [];
+}
+
 export class WristTracker {
     constructor(onSample, onError) { this.onSample=onSample; this.onError=onError; this.closed=false; this.busy=false; this.continuity=new WristContinuity(); this.lastVideoTime=-1; this.lastCapture=-Infinity; }
     async start() {
@@ -26,7 +31,7 @@ export class WristTracker {
             this.worker.onmessage=({data})=>{
                 if (this.closed) return;
                 if (data.type==='ready') { clearTimeout(this.startTimeout); this.rejectStart=null; resolve(); }
-                else if (data.type==='sample') { clearTimeout(this.frameTimeout); this.busy=false; this.onSample({...this.continuity.observe(data.pair,data.timestamp),timestamp:data.timestamp}); }
+                else if (data.type==='sample') { clearTimeout(this.frameTimeout); this.busy=false; this.onSample({...this.continuity.observe(data.pair,data.timestamp),hands:detectedHands(data.hands),timestamp:data.timestamp}); }
                 else if (data.type==='error') { const error=new Error(data.message); reject(error); this.onError(error); }
             };
             this.worker.postMessage({type:'init'});
