@@ -33,22 +33,26 @@ async function refreshWeeklyGame() {
     try {
         const result = await api.getWeeklyGame();
         if (generation !== weeklyGameGeneration || !api.user?.id) return;
-        // Follow the selected weekly release, but only show games this web
-        // player can run (not hand-package-v2, touch games or update notices).
-        const { webPlayable } = await import('./weekly-game/compat.js');
+        // Follow the selected weekly release. Games this web player can't run
+        // yet still appear, opening a friendly iOS-app state; only the
+        // server's generic update notice (no game to name) stays hidden.
+        const { weeklyGameEntry } = await import('./weekly-game/compat.js');
         if (generation !== weeklyGameGeneration) return;
-        const available = webPlayable(result.release);
-        if (!available) { document.querySelector('#weeklyGameButton')?.remove(); return; }
+        const entry = weeklyGameEntry(result.release);
+        if (!entry) { document.querySelector('#weeklyGameButton')?.remove(); return; }
         let button = document.querySelector('#weeklyGameButton');
         if (!button) {
             button = document.createElement('button');
             button.id = 'weeklyGameButton'; button.className = 'weekly-game-entry'; button.type = 'button';
-            button.innerHTML = '<span class="weekly-game-entry-art" aria-hidden="true"></span><span><small>WEEKLY GAME</small><strong id="weeklyGameTitle"></strong></span><span class="weekly-game-entry-arrow" aria-hidden="true">›</span>';
+            button.innerHTML = '<span class="weekly-game-entry-art" aria-hidden="true"></span><span><small id="weeklyGameLabel">WEEKLY GAME</small><strong id="weeklyGameTitle"></strong></span><span class="weekly-game-entry-arrow" aria-hidden="true">›</span>';
             button.addEventListener('click', openWeeklyGame);
             document.querySelector('#storiesRoot').insertAdjacentElement('afterend', button);
         }
         document.querySelector('#weeklyGameTitle').textContent = result.release?.title || 'Weekly game';
-        button.querySelector('.weekly-game-entry-art').innerHTML = result.release?.game_id === '67-challenge' ? '67' : result.release?.game_id === 'rose-flight' ? '<img src="/assets/weekly-game/rose.png" alt="" width="48" height="48" decoding="async">' : uiIcon('camera');
+        document.querySelector('#weeklyGameLabel').textContent = entry === 'play' ? 'WEEKLY GAME' : 'WEEKLY GAME · IN THE APP';
+        const artwork = /^https:\/\/validappcdn\.com\/games\/art\/[\w.-]+\.png$/.test(result.release?.artwork_url || '') ? result.release.artwork_url : null;
+        button.querySelector('.weekly-game-entry-art').innerHTML = result.release?.game_id === '67-challenge' ? '67' : result.release?.game_id === 'rose-flight' ? '<img src="/assets/weekly-game/rose.png" alt="" width="48" height="48" decoding="async">'
+            : artwork ? mediaImageMarkup(artwork, { alt: '', className: 'weekly-game-entry-artwork', loading: 'eager', attributes: 'width="52" height="52"' }) : uiIcon('camera');
     } catch (_) { /* Feed remains usable if the optional game request fails. */ }
 }
 
