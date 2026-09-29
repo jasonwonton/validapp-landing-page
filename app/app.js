@@ -949,8 +949,12 @@ function renderProfilePanel() {
 // Memories + Vault live in a lazily loaded module (app/vault/).
 let vaultPromise = null;
 function renderMemoriesEntry() {
-    const entry = $("#memoriesEntry");
-    if (state.config?.enable_vault !== true || !api.user?.id) return entry.classList.add("hidden");
+    let entry = $("#memoriesEntry");
+    if (state.config?.enable_vault !== true || !api.user?.id) return entry?.classList.add("hidden");
+    if (!entry) {
+        entry = Object.assign(document.createElement("div"), { id: "memoriesEntry", className: "hidden" });
+        $("#schoolCard").after(entry);
+    }
     vaultPromise ||= import("./vault/index.js").then(({ createVault }) => createVault({
         api, getUser: () => api.user, openDetailScreen, closeDetailScreen, haptic, mount: $("#commentsRoot").parentElement,
     }));
