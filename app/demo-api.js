@@ -839,10 +839,26 @@ export class DemoAPI {
             { user_id: "demo-user", first_name: "Jules", last_name: "Rivera", username: "jules", profile_picture_url: "../assets/AppIconV2.png", is_owner: true, has_unviewed: false, items: [{ id: "story-jules", media_type: "photo", media_url: "../assets/app/pencil-clipboard.webp", thumbnail_url: null, caption: "Friday energy", text_overlay: "finally ✨", text_overlay_x: 0.5, text_overlay_y: 0.5, published_at: ago(20), expires_at: new Date(Date.now() + 23 * 60 * 60_000).toISOString(), viewer_has_viewed: true, view_count: 2 }] },
             { user_id: "classmate-2", first_name: "Noah", last_name: "Williams", username: "noah", profile_picture_url: "../assets/app/lock.webp", is_owner: false, has_unviewed: true, items: [{ id: "story-noah", media_type: "photo", media_url: "../assets/app/lock.webp", thumbnail_url: null, caption: "Game night", text_overlay: null, text_overlay_x: null, text_overlay_y: null, published_at: ago(5), expires_at: new Date(Date.now() + 23 * 60 * 60_000).toISOString(), viewer_has_viewed: false, view_count: 4 }] },
         ];
+        // `&storyvideo=1` adds browser Story video states (docs/web-media-contract.md).
+        if (new URLSearchParams(location.search).get("storyvideo") === "1" && !this.demoStoryAuthors.some((author) => author.user_id === "classmate-1")) {
+            const expires = new Date(Date.now() + 23 * 60 * 60_000).toISOString();
+            const video = (id, extra) => ({ id, media_type: "video", media_url: "../assets/demo.mp4", thumbnail_url: "../assets/app/aura.webp", video_duration_ms: 2_000, caption: null, text_overlay: null, text_overlay_x: null, text_overlay_y: null, text_overlays: null, published_at: ago(40), expires_at: expires, viewer_has_viewed: false, view_count: 3, ...extra });
+            this.demoStoryAuthors.push({ user_id: "classmate-1", first_name: "Maya", last_name: "Chen", username: "maya_c", profile_picture_url: "../assets/app/anonymous.webp", is_owner: false, has_unviewed: true, items: [
+                video("story-maya-video", { video_state: "ready", text_overlays: [{ text: "pregame 🏀", x: 0.5, y: 0.2 }] }),
+                video("story-maya-processing", { video_state: "processing", media_url: "../assets/demo-original.mov" }),
+                video("story-maya-unavailable", { video_state: "unavailable", media_url: "../assets/app/lock.webp" }),
+            ] });
+        }
         return this.demoStoryAuthors;
     }
 
-    async getStories() { return { authors: structuredClone(this.storyAuthors()), server_time: new Date().toISOString() }; }
+    async getStories() {
+        // A processing Story video finishes on the next feed refresh.
+        this.demoStoryFeedLoads = (this.demoStoryFeedLoads || 0) + 1;
+        const processing = this.storyAuthors().flatMap((author) => author.items).find((item) => item.video_state === "processing");
+        if (processing && this.demoStoryFeedLoads > 1) Object.assign(processing, { video_state: "ready", media_url: "../assets/demo.mp4" });
+        return { authors: structuredClone(this.storyAuthors()), server_time: new Date().toISOString() };
+    }
     async createStoryUpload(_userId, payload) {
         return {
             media_asset_id: `story-media-${payload.clientRequestId}`,
