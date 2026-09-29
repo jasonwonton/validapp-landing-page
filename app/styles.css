@@ -73,6 +73,8 @@ body {
 }
 
 button, textarea, input, select { font: inherit; font-family: var(--app-font); }
+/* iOS Safari zooms into any field under 16px on focus; labels keep their own size. */
+input:not([type=checkbox], [type=radio], [type=range]), textarea, select { font-size: max(16px, 1em); }
 textarea, input, select { scroll-margin-block: 18px; }
 option { font-family: var(--app-font); }
 ::placeholder, ::file-selector-button { font-family: var(--app-font); }
@@ -1743,7 +1745,10 @@ body:has(dialog.ui-sheet[open]) .toast[popover] { top: calc(env(safe-area-inset-
 :root[data-theme="dark"] .play-action-button.nominate:active { background: #63334d; }
 :root[data-theme="dark"] .nav-item { color: var(--muted); }
 :root[data-theme="dark"] .nav-item.active { color: var(--ink); }
-:root[data-theme="dark"] :is(.aura-icon, .play-aura-chip img, .feed-notification-icon, .play-loading-gear) { filter: saturate(.86) brightness(.84) contrast(.94); }
+/* Six7Theme.six7BrandArtwork(): dim every bright brand bitmap in dark mode
+   (saturation .86, brightness -.16, contrast .94); brand share logos stay exact. */
+:root[data-theme="dark"] :is(img[src*="assets/app/"]:not([src$=".svg"], [src*="snapchat"], .share-platform-art), img[src*="valid_logo"], .aura-icon),
+:root[data-theme="dark"] .reveal-sender-button::before { filter: saturate(.86) brightness(.84) contrast(.94); }
 @media (prefers-contrast: more) {
     :root[data-theme="dark"] { --outline: #8aadb0; --control-border: #add1d1; }
 }
@@ -1957,3 +1962,8 @@ body:has(dialog.ui-sheet[open]) .toast[popover] { top: calc(env(safe-area-inset-
 .profile-delete-account-button { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; justify-self: center; gap: 8px; margin-top: 2px; padding: 10px 14px; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 14px; }
 .profile-delete-account-button .ui-icon { width: 16px; height: 16px; }
 .profile-delete-account-button:disabled { opacity: .5; }
+.profile-photo-button.photo-uploading .full-profile-avatar img { opacity: .6; }
+.profile-photo-button.photo-failed .full-profile-avatar img { opacity: .45; }
+.profile-photo-button.photo-failed .photo-edit-badge { background: var(--danger-text); color: #fff; font-weight: 700; }
+.photo-upload-spinner { position: absolute; top: 50%; left: 50%; width: 36px; height: 36px; margin: -18px 0 0 -18px; border: 3px solid rgba(255,255,255,.55); border-top-color: var(--peach); border-radius: 50%; animation: play-gear-spin .8s linear infinite; }
+.settings-row small.settings-row-warning { color: var(--danger-text); }

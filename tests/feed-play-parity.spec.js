@@ -305,3 +305,66 @@ test('account deletion warns accounts without a passkey first', async ({ page })
     await warning.getByRole('button', { name: 'Delete Anyway' }).click();
     await expect(page.locator('#deleteAccountDialog').getByRole('heading', { name: 'Delete Account?' })).toBeVisible();
 });
+
+test('profile photos over 5 MB are circle-cropped and resized to a 1024px JPEG before upload', async ({ page }) => {
+    test.setTimeout(90_000);
+    await patchDemo(page, async () => {
+        const { DemoAPI } = await import('/app/demo-api.js');
+        const original = DemoAPI.prototype.uploadProfilePicture;
+        DemoAPI.prototype.uploadProfilePicture = async function (userId, file) {
+            const bitmap = await createImageBitmap(file);
+            window.__upload = { type: file.type, size: file.size, width: bitmap.width, height: bitmap.height };
+            await new Promise((resolve) => { window.__finishUpload = resolve; });
+            return original.call(this, userId, file);
+        };
+    });
+    await page.getByRole('button', { name: 'Profile', exact: true }).click();
+    // A 3000x2000 PNG of noise is well over 5 MB; hand it to the file input directly.
+    const size = await page.evaluate(async () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 3000; canvas.height = 2000;
+        const context = canvas.getContext('2d');
+        const pixels = context.createImageData(3000, 2000);
+        const words = new Uint32Array(pixels.data.buffer);
+        let seed = 2463534242;
+        for (let index = 0; index < words.length; index += 1) {
+            seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
+            words[index] = seed | 0xff000000;
+        }
+        context.putImageData(pixels, 0, 0);
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+        const transfer = new DataTransfer();
+        transfer.items.add(new File([blob], 'huge.png', { type: 'image/png' }));
+        const input = document.querySelector('#profilePictureInput');
+        input.files = transfer.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        return blob.size;
+    });
+    expect(size).toBeGreaterThan(5 * 1024 * 1024);
+    const crop = page.locator('.avatar-crop-dialog');
+    await expect(crop).toBeVisible();
+    await expect(crop.getByRole('heading', { name: 'Adjust photo' })).toBeVisible();
+    const ring = await crop.locator('.avatar-crop-ring').boundingBox();
+    expect(Math.round(ring.width)).toBe(Math.round(ring.height));
+    // Drag far past the edge: the photo stays clamped over the circle.
+    const stage = await crop.locator('.avatar-crop-stage').boundingBox();
+    await page.mouse.move(stage.x + stage.width / 2, stage.y + stage.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(stage.x + stage.width / 2 + 2000, stage.y + stage.height / 2, { steps: 4 });
+    await page.mouse.up();
+    const image = await crop.locator('.avatar-crop-image').boundingBox();
+    expect(image.x).toBeLessThanOrEqual(ring.x + 1);
+    expect(image.x + image.width).toBeGreaterThanOrEqual(ring.x + ring.width - 1);
+    await crop.getByRole('button', { name: 'Use photo' }).click();
+    await expect(crop).toHaveCount(0);
+    // The new photo shows at once while it uploads.
+    await expect(page.getByRole('button', { name: 'Uploading profile picture' })).toBeVisible();
+    await expect(page.locator('.profile-photo-button img')).toHaveAttribute('src', /^blob:/);
+    await expect.poll(() => page.evaluate(() => Boolean(window.__upload))).toBe(true);
+    const upload = await page.evaluate(() => window.__upload);
+    expect(upload).toMatchObject({ type: 'image/jpeg', width: 1024, height: 1024 });
+    expect(upload.size).toBeLessThan(5 * 1024 * 1024);
+    await page.evaluate(() => window.__finishUpload());
+    await expect(page.locator('#toast')).toContainText('Profile photo updated');
+    await expect(page.getByRole('button', { name: 'Change profile picture' })).toBeVisible();
+});

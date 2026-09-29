@@ -224,6 +224,9 @@ const state = {
     detailReturnFocus: null,
     detailUnderlyingScroll: null,
     feedLoadedAt: 0,
+    pendingProfilePhoto: null,
+    signupPhotoFile: null,
+    signupPhotoURL: null,
     personalFeedItems: [],
     personalFeedHasMore: false,
     personalFeedLoaded: false,
@@ -942,13 +945,16 @@ function renderProfilePanel() {
             : "Profile change currently unavailable")
         : "";
     const streak = Math.max(0, Number(profile.current_streak || 0));
-    const hasProfilePhoto = Boolean(imageURL && !String(profile.profile_picture_url || "").includes("default.png"));
+    const pendingPhoto = state.pendingProfilePhoto;
+    const hasProfilePhoto = Boolean(pendingPhoto || (imageURL && !String(profile.profile_picture_url || "").includes("default.png")));
     $("#profileCard").innerHTML = `<article class="full-profile-card">
-        <button class="profile-photo-button" type="button" data-edit-photo aria-label="Change profile picture">
-            <span class="full-profile-avatar">${imageURL ? profileImageMarkup(profile, [profile.profile_picture_url_medium, profile.profile_picture_url]) : `<span>${escapeHTML(initials(profile))}</span>`}</span>
-            <span class="photo-edit-badge" aria-hidden="true">${uiIcon("edit")}</span>
+        <button class="profile-photo-button ${pendingPhoto ? `photo-${pendingPhoto.status}` : ""}" type="button" data-edit-photo aria-label="${pendingPhoto?.status === "failed" ? "Photo upload failed. Try again" : pendingPhoto ? "Uploading profile picture" : "Change profile picture"}" ${pendingPhoto?.status === "uploading" ? 'aria-busy="true"' : ""}>
+            <span class="full-profile-avatar">${pendingPhoto ? `<img decoding="async" src="${escapeHTML(pendingPhoto.url)}" alt="">` : imageURL ? profileImageMarkup(profile, [profile.profile_picture_url_medium, profile.profile_picture_url]) : `<span>${escapeHTML(initials(profile))}</span>`}</span>
+            ${pendingPhoto?.status === "uploading" ? '<span class="photo-upload-spinner" aria-hidden="true"></span>' : ""}
+            <span class="photo-edit-badge" aria-hidden="true">${pendingPhoto?.status === "failed" ? "!" : uiIcon("edit")}</span>
         </button>
-        ${hasProfilePhoto ? "" : '<p class="profile-photo-warning">Users without profile pictures receive less votes.</p>'}
+        ${pendingPhoto?.status === "failed" ? '<p class="profile-photo-warning" role="status">Upload failed. Tap your photo to try again.</p>' : ""}
+        ${hasProfilePhoto ? "" : '<p class="profile-photo-warning">Users without profile pictures receive fewer votes.</p>'}
         <h3>${escapeHTML(displayName(profile))}</h3>
         <div class="profile-identity-line"><span class="profile-handle">@${escapeHTML(profile.username || "valid")}</span>${streak ? `<span class="profile-streak ${profile.streak_needs_activity ? "needs-activity" : ""}" aria-label="${streak} day streak">${uiIcon("fire")} ${streak}</span>` : ""}</div>
         <button class="profile-bio-button ${profile.bio ? "" : "empty"}" type="button" data-edit-bio>${profile.bio ? escapeHTML(profile.bio) : '<span>Add bio</span><span class="profile-add-bio-icon" aria-hidden="true">+</span>'}</button>
@@ -2592,7 +2598,7 @@ async function createAccount(event) {
         $("#signupStatus").textContent = "Verify your phone number before creating your account.";
         return;
     }
-    const profilePicture = $("#signupPicture").files[0];
+    const profilePicture = state.signupPhotoFile;
     const submitButtons = [...form.querySelectorAll("button[type=submit]")];
     submitButtons.forEach((candidate) => { candidate.disabled = true; });
     setButtonLoading(button, true, "Creating your account...");
@@ -3020,7 +3026,7 @@ async function sendContentLink(button) {
 function questionSubmitterMarkup(item) {
     if (item.question_school_id == null || item.question_is_user_submitted === false) return '';
     const anonymous = (item.question_is_anonymous ?? !item.question_submitted_by_display_name) && !item.question_submitter_revealed;
-    const name = anonymous ? 'Someone at your school' : item.question_submitted_by_display_name || 'A classmate';
+    const name = anonymous ? 'Someone at your school' : item.question_submitted_by_display_name || 'Someone at your school';
     const content = `${avatarMarkup({ first_name: name, profile_picture_url: anonymous ? '../assets/app/anonymous.webp' : item.question_submitted_by_profile_picture_url }, 'attribution-avatar')}<span><small>Question submitted by</small><strong>${escapeHTML(name)}</strong></span>`;
     return anonymous && item.can_reveal_question_submitter ? `<button class="poll-submitter-row" data-reveal-question-submitter type="button">${content}<span class="submitter-reveal-label">Reveal</span></button>` : `<div class="poll-submitter-row">${content}</div>`;
 }
@@ -3056,7 +3062,7 @@ function renderFeedDetail() {
     const selectedName = item.selected_contact_name
         || item.voted_for_name
         || item.contact_name
-        || (item.item_type === "received_vote" ? displayName(state.profile) : "A classmate");
+        || (item.item_type === "received_vote" ? displayName(state.profile) : "Someone");
     const options = Array.isArray(item.presented_options) ? item.presented_options : [];
     const artworkURL = api.assetURL(item.image_url);
     const revealed = item.voter_name ? `<div class="revealed-sender-row">${avatarMarkup({ first_name: item.voter_name, profile_picture_url: item.voter_profile_picture_url }, "row-avatar")}<strong>Sent by ${escapeHTML(item.voter_name)}</strong></div>` : "";
@@ -3068,7 +3074,7 @@ function renderFeedDetail() {
         ${item.is_nomination ? "" : questionSubmitterMarkup(item)}</div>
         <div class="feed-detail-art-frame"><div class="feed-detail-art">${artworkURL ? mediaImageMarkup(artworkURL) : `<div class="artwork-placeholder"><img loading="lazy" decoding="async" src="../assets/app/pencil-clipboard.webp" alt=""><span>Image unavailable</span></div>`}</div></div>
         ${item.is_nomination ? `<div class="feed-nomination-card"><strong>${escapeHTML(selectedName)}</strong><p>got nominated${item.voter_gender ? ` by ${escapeHTML(formatVoterHint(item).replace(/^(from|by) /, ""))}` : item.voter_name ? ` by ${escapeHTML(item.voter_name)}` : ""}</p><span aria-hidden="true">🎉</span></div>` : options.length ? `<div class="feed-detail-options">${options.map((option, index) => {
-            const name = option.name || option.contact_name || "A classmate";
+            const name = option.name || option.contact_name || "Someone";
             const explicit = options.findIndex(candidate => candidate.is_selected === true);
             const selected = index === (explicit >= 0 ? explicit : options.findIndex(candidate => (candidate.name || candidate.contact_name) === selectedName));
             return `<div class="feed-detail-option ${selected ? "selected" : ""}"><strong>${escapeHTML(name)}</strong>${selected ? `<span class="feed-detail-selection-indicator" aria-label="Picked">👆</span>` : ""}</div>`;
@@ -3223,7 +3229,7 @@ async function createPollShareFile(item) {
     const selectedName = item.selected_contact_name
         || item.voted_for_name
         || item.contact_name
-        || (item.item_type === "received_vote" ? displayName(state.profile) : "A classmate");
+        || (item.item_type === "received_vote" ? displayName(state.profile) : "Someone");
     const isNomination = item.is_nomination === true;
     const options = !isNomination && Array.isArray(item.presented_options) ? item.presented_options.slice(0, 4) : [];
     const artwork = await loadPollShareArtwork(item);
@@ -3294,7 +3300,7 @@ async function createPollShareFile(item) {
         const cardWidth = 400;
         const cardHeight = 200;
         options.forEach((option, index) => {
-            const name = option.name || option.contact_name || "A classmate";
+            const name = option.name || option.contact_name || "Someone";
             const selected = option.is_selected === true || name === selectedName;
             const column = index % 2;
             const row = Math.floor(index / 2);
@@ -4423,7 +4429,7 @@ function renderPlay() {
         return;
     }
     const artworkURL = api.assetURL(question.image_url);
-    const attribution = question.is_user_submitted ? `<div class="question-attribution">${question.is_anonymous ? avatarMarkup({ first_name: "Anonymous", profile_picture_url: "../assets/app/anonymous.webp" }, "attribution-avatar") : avatarMarkup({ first_name: question.submitted_by_name || "A classmate", profile_picture_url: question.submitted_by_avatar_url }, "attribution-avatar")}<span><small>Question submitted by</small><strong>${escapeHTML(question.is_anonymous ? "Someone at your school" : question.submitted_by_name || "A classmate")}</strong></span><div class="detail-overflow play-overflow"><button class="detail-overflow-button play-overflow-button" type="button" data-toggle-play-menu aria-label="More question actions" aria-expanded="false">•••</button><div class="detail-overflow-menu hidden" role="menu" aria-label="Question actions"><button type="button" role="menuitem" data-play-question-action="report">Report question</button>${question.is_anonymous ? "" : `<button type="button" role="menuitem" data-play-question-action="block">Block submitter</button>`}</div></div></div>` : "";
+    const attribution = question.is_user_submitted ? `<div class="question-attribution">${question.is_anonymous ? avatarMarkup({ first_name: "Anonymous", profile_picture_url: "../assets/app/anonymous.webp" }, "attribution-avatar") : avatarMarkup({ first_name: question.submitted_by_name || "Someone at your school", profile_picture_url: question.submitted_by_avatar_url }, "attribution-avatar")}<span><small>Question submitted by</small><strong>${escapeHTML(question.is_anonymous ? "Someone at your school" : question.submitted_by_name || "Someone at your school")}</strong></span><div class="detail-overflow play-overflow"><button class="detail-overflow-button play-overflow-button" type="button" data-toggle-play-menu aria-label="More question actions" aria-expanded="false">•••</button><div class="detail-overflow-menu hidden" role="menu" aria-label="Question actions"><button type="button" role="menuitem" data-play-question-action="report">Report question</button>${question.is_anonymous ? "" : `<button type="button" role="menuitem" data-play-question-action="block">Block submitter</button>`}</div></div></div>` : "";
     const remainingSkips = Math.max(0, Number(state.config?.max_skips_per_set ?? 3) - state.skipsUsedInSet);
     const previousCard = card.dataset.questionId && card.dataset.questionId !== String(question.id) ? card.querySelector(":scope > .play-card") : null;
     card.innerHTML = `<article class="play-card">
@@ -5493,22 +5499,48 @@ async function submitFeedback(event) {
     }
 }
 
-async function changeProfilePicture(event) {
-    const input = event.currentTarget;
-    const file = input.files[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-        input.value = "";
-        return showToast("Profile photos must be 5 MB or smaller.");
+// Profile photos go through the iOS circle crop and upload format (≤1024 px JPEG
+// 0.82), so large camera photos no longer hit a 5 MB wall. The new photo shows
+// at once with an uploading state, and a failed upload stays retryable.
+async function cropProfilePhoto(file) {
+    try {
+        const { cropAvatar } = await import("./avatar-crop.js");
+        return await cropAvatar(file);
+    } catch (error) {
+        showToast(userMessage(error, "That photo could not be opened. Choose a JPEG or PNG."));
+        return null;
     }
-    showToast("Uploading photo...");
+}
+
+function setPendingProfilePhoto(next) {
+    if (state.pendingProfilePhoto?.url && state.pendingProfilePhoto.url !== next?.url) URL.revokeObjectURL(state.pendingProfilePhoto.url);
+    state.pendingProfilePhoto = next;
+    renderProfilePanel();
+}
+
+async function uploadProfilePhoto(file) {
+    const pending = { file, url: state.pendingProfilePhoto?.file === file ? state.pendingProfilePhoto.url : URL.createObjectURL(file), status: "uploading" };
+    setPendingProfilePhoto(pending);
     try {
         await api.uploadProfilePicture(api.user.id, file);
         await refreshProfile();
+        if (state.pendingProfilePhoto === pending) setPendingProfilePhoto(null);
+        successHaptic();
         showToast("Profile photo updated");
     } catch (error) {
-        showToast(userMessage(error, "Could not update your photo."));
-    } finally { input.value = ""; }
+        if (state.pendingProfilePhoto !== pending) return;
+        setPendingProfilePhoto({ ...pending, status: "failed" });
+        showToast(userMessage(error, "Couldn't upload your photo. Tap it to try again."));
+    }
+}
+
+async function changeProfilePicture(event) {
+    const input = event.currentTarget;
+    const file = input.files[0];
+    input.value = "";
+    if (!file) return;
+    const cropped = await cropProfilePhoto(file);
+    if (cropped) await uploadProfilePhoto(cropped);
 }
 
 function questionSubmissionCost() {
@@ -6016,27 +6048,23 @@ function openQuestionDialog({ section = "submit", submissionId = null } = {}) {
 }
 
 function resetSignupPhotoPreview() {
+    if (state.signupPhotoURL) URL.revokeObjectURL(state.signupPhotoURL);
+    state.signupPhotoURL = null;
+    state.signupPhotoFile = null;
     $("#signupPhotoPreview").innerHTML = `<span class="signup-photo-placeholder"><span class="signup-photo-person-icon"></span><small>Tap to add photo</small></span>`;
 }
 
-function previewSignupPhoto() {
+async function previewSignupPhoto() {
     const input = $("#signupPicture");
     const file = input.files[0];
-    const preview = $("#signupPhotoPreview");
-    if (!file) {
-        resetSignupPhotoPreview();
-        return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-        input.value = "";
-        resetSignupPhotoPreview();
-        $("#signupStatus").textContent = "Profile photos must be 5 MB or smaller.";
-        return;
-    }
-    const reader = new FileReader();
-    reader.addEventListener("load", () => { preview.innerHTML = `<img loading="lazy" decoding="async" src="${escapeHTML(reader.result)}" alt="">`; }, { once: true });
-    reader.addEventListener("error", resetSignupPhotoPreview, { once: true });
-    reader.readAsDataURL(file);
+    input.value = "";
+    if (!file) return;
+    const cropped = await cropProfilePhoto(file);
+    if (!cropped) return;
+    if (state.signupPhotoURL) URL.revokeObjectURL(state.signupPhotoURL);
+    state.signupPhotoFile = cropped;
+    state.signupPhotoURL = URL.createObjectURL(cropped);
+    $("#signupPhotoPreview").innerHTML = `<img decoding="async" src="${escapeHTML(state.signupPhotoURL)}" alt="">`;
 }
 
 function contactsPickerSupported() {
@@ -6583,6 +6611,10 @@ function renderWebPushStatus() {
     } else {
         status.textContent = "Off · tap to turn on";
     }
+    // The switch already shows on/off; surface the states that need attention.
+    const attention = Notification.permission === "denied" || ["syncing", "error"].includes(state.webPushRegistrationState) && Boolean(state.webPushSubscription);
+    status.classList.toggle("visually-hidden", !attention);
+    status.classList.toggle("settings-row-warning", attention && status.textContent !== "Finishing setup…");
     renderFeedNotificationPrompt();
 }
 
@@ -7054,7 +7086,11 @@ function bindEvents() {
     });
     $("#profilePanel").addEventListener("click", (event) => {
         if (event.target.closest("[data-open-god-mode]")) openGodModePitch();
-        if (event.target.closest("[data-edit-photo]")) $("#profilePictureInput").click();
+        if (event.target.closest("[data-edit-photo]")) {
+            if (state.pendingProfilePhoto?.status === "uploading") return;
+            if (state.pendingProfilePhoto?.status === "failed") return void uploadProfilePhoto(state.pendingProfilePhoto.file);
+            $("#profilePictureInput").click();
+        }
         if (event.target.closest("[data-edit-bio]")) openBioDialog();
         if (event.target.closest("[data-edit-profile]")) openProfileDialog();
         if (event.target.closest("#viewClassmatesButton")) openClassmateDirectory();

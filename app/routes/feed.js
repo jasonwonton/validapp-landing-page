@@ -32,7 +32,7 @@ export function createFeedView(context) {
     const cardOpenButton = (label) => `<button class="feed-card-open" type="button" aria-label="${escapeHTML(label)}"></button>`;
     const tbhAvatarMarkup = (profile, request = false) => `<span class="tbh-avatar-shell ${request ? "request" : "response"}">${avatarMarkup(profile, "row-avatar tbh-avatar")}<span class="tbh-avatar-badge" aria-hidden="true">TBH</span></span>`;
     const inboxAvatar = (avatar, kind) => `<span class="inbox-avatar-shell">${avatar}<span class="inbox-content-badge ${kind}" aria-hidden="true">${kind === "poll" ? "POLL" : "ASK ME"}</span></span>`;
-    const feedAvatar = (item) => inboxAvatar(state.feedType === "personal" ? avatarMarkup(state.profile) : avatarMarkup({ first_name: item.voted_for_name || item.contact_name || "Student", profile_picture_url: item.voted_for_profile_picture_url }), "poll");
+    const feedAvatar = (item) => inboxAvatar(state.feedType === "personal" ? avatarMarkup(state.profile) : avatarMarkup({ first_name: item.voted_for_name || item.contact_name || "Someone", profile_picture_url: item.voted_for_profile_picture_url }), "poll");
 
     function pendingTbhRows() {
         if (state.feedType !== "personal" || !tbhRequestsEnabled() || state.feedSearch.trim()) return [];
@@ -125,7 +125,7 @@ export function createFeedView(context) {
         }
         const voteRows = filteredVotes.map((item) => {
             normalizeReactionState(item);
-            const title = state.feedType === "personal" ? `${item.is_nomination ? `<img class="feed-nomination-icon" src="../assets/app/crown.webp" alt="" width="22" height="22" decoding="async"> ` : ""}<strong>You</strong> got ${item.is_nomination ? "nominated" : "voted"}` : `<strong>${escapeHTML(item.voted_for_name || item.contact_name || "A classmate")}</strong> got voted`;
+            const title = state.feedType === "personal" ? `${item.is_nomination ? `<img class="feed-nomination-icon" src="../assets/app/crown.webp" alt="" width="22" height="22" decoding="async"> ` : ""}<strong>You</strong> got ${item.is_nomination ? "nominated" : "voted"}` : `<strong>${escapeHTML(item.voted_for_name || item.contact_name || "Someone")}</strong> got voted`;
             const detail = context.formatVoterHint(item);
             return { key: `poll:${item.question_answer_id}`, timestamp: item.timestamp, item, html: `<article class="feed-card vote-feed-row" data-answer-id="${item.question_answer_id}" data-feed-detail="${item.question_answer_id}">${cardOpenButton(`Open poll details: ${item.question_text}`)}${feedAvatar(item)}<div class="feed-body"><div class="feed-meta"><span>${title}</span></div><div class="feed-question">${escapeHTML(item.question_text)}</div><div class="feed-detail-row">${detail ? `<span class="feed-answer">${escapeHTML(detail)}</span>` : "<span></span>"}<time>${escapeHTML(relativeTime(item.timestamp))}</time></div></div>${reactionControlMarkup(item, "poll", item.question_answer_id)}${commentControlMarkup(item, "poll", item.question_answer_id)}</article>` };
         });
