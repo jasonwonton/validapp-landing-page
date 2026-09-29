@@ -26,7 +26,7 @@
    caption dragged here lands on the same spot of the media in the viewer. */
 .story-composer-preview { position: relative; container-type: inline-size; justify-self: center; height: min(46dvh, 440px); aspect-ratio: 9 / 19.5; display: grid; align-content: center; justify-items: center; gap: 8px; overflow: hidden; border: 3px solid var(--outline); border-radius: 20px; background: var(--white); text-align: center; }
 .story-composer-preview p { margin: 0 10px; font-size: .78rem; }
-.story-composer-preview img, .story-composer-preview video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.story-composer-preview img, .story-composer-preview video, .story-composer-preview .story-filter-canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
 .story-composer-preview .media-overlay-positioner { width: 100%; max-width: none; min-height: 0; padding: 3px 8px; border-radius: 0; background: rgba(0,0,0,.42); font-size: max(10px, 5.35cqw); font-weight: 500; line-height: 1.2; }
 .story-source-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .story-composer .story-source-button { position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 12px; border: 2px solid var(--outline); border-radius: 14px; background: var(--white); color: var(--ink); font-size: 1rem; cursor: pointer; }
@@ -207,3 +207,12 @@ label.failed .story-share-check .ui-icon { width: 28px; height: 28px; stroke-wid
     :where(.story-stage), .story-zones button > span { transition: none; }
     .story-sheet[open] { animation: none; }
 }
+/* Swipe colour looks on a Story photo (stories/photo-filter.js), as in the chat review. */
+.story-composer-preview .story-filter-canvas { pointer-events: none; }
+.story-composer-preview:has(.story-filter-canvas) { touch-action: pan-y; }
+.story-filter-name { position: absolute; z-index: 2; inset: 50% 0 auto; margin: 0; transform: translateY(-50%); color: #fff; text-align: center; font-size: 22px; font-weight: 900; text-shadow: 0 1px 6px rgba(0,0,0,.45); opacity: 0; pointer-events: none; }
+.story-filter-name.show { animation: story-filter-flash 1.37s both; }
+/* Same timing as .review-filter-name (camera.css), which isn't loaded here. */
+@keyframes story-filter-flash { 0% { opacity: 0; animation-timing-function: ease-out; } 8.76% { opacity: 1; animation-timing-function: linear; } 74.45% { opacity: 1; animation-timing-function: ease-in; } 100% { opacity: 0; } }
+@keyframes story-filter-flash-reduced { 0%, 74% { opacity: 1; } 75%, 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .story-filter-name.show { animation-name: story-filter-flash-reduced; } }

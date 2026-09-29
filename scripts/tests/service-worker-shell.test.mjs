@@ -24,6 +24,7 @@ const NETWORK_ONLY_DYNAMIC_IMPORTS = new Map([
     ["share-cards.js", "share images are drawn only when sharing, which needs the network"],
     ["avatar-crop.js", "the crop step precedes an upload"],
     ["media-delivery.js", "delivers queued media; runs only online"],
+    ["stories/photo-filter.js", "optional Story photo looks; offline, the original photo still posts"],
     ["chat/room-tools.js", "reporting and voice playback in an open chat need the network"],
     ["chat/viewer-gestures.js", "the media viewer shows network media"],
     ["stories/viewer.js", "Stories are network media"],

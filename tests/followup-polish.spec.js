@@ -116,3 +116,48 @@ test.describe("poll share copies the validapp.lol link like iOS", () => {
         expect(await page.evaluate(() => window.__shareLog)).toEqual([["copy", "https://validapp.lol"]]);
     });
 });
+
+test("Story photos get the chat review's swipe colour looks, burned into the posted photo", async ({ page }) => {
+    await page.goto("/app/?demo=1&signin=1&stories=1");
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await expect(page.getByRole("region", { name: "Stories" })).toBeVisible({ timeout: 20_000 });
+    await page.evaluate(async () => {
+        const { DemoAPI } = await import("/app/demo-api.js");
+        const original = DemoAPI.prototype.putDirectUpload;
+        window.__storyUploads = [];
+        DemoAPI.prototype.putDirectUpload = async function (file, ...rest) { window.__storyUploads.push(file); return original.call(this, file, ...rest); };
+    });
+    await page.getByRole("button", { name: "Add Story" }).click();
+    const composer = page.getByRole("dialog", { name: "Create Story" });
+    await composer.locator(".story-file-input").setInputFiles("assets/AppIconV2.png");
+    await expect(composer.getByText("Photo ready to post")).toBeVisible();
+    const photo = composer.getByRole("img", { name: /Story photo preview/ });
+    await expect(photo).toHaveAccessibleName(/Swipe or use the left and right arrow keys/);
+
+    // A horizontal swipe on the preview moves to the next look and flashes its name.
+    const box = await composer.locator(".story-composer-preview").boundingBox();
+    await page.mouse.move(box.x + box.width * 0.8, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.2, box.y + box.height / 2, { steps: 6 });
+    await page.mouse.up();
+    await expect(composer.locator(".story-filter-name")).toHaveText("Golden Hour");
+    await expect(composer.locator(".story-filter-canvas")).toBeVisible();
+
+    // Arrow keys reach Mono (sixth look), which is what gets posted.
+    for (let step = 0; step < 5; step++) await photo.press("ArrowRight");
+    await expect(composer.locator(".story-filter-name")).toHaveText("Mono");
+    await composer.getByRole("button", { name: "Post Story" }).click();
+    await expect(page.getByText("Story posted", { exact: true })).toBeVisible();
+    const saturation = await page.evaluate(async () => {
+        const bitmap = await createImageBitmap(window.__storyUploads[0]);
+        const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+        const context = canvas.getContext("2d");
+        context.drawImage(bitmap, 0, 0);
+        const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height);
+        let spread = 0;
+        for (let index = 0; index < data.length; index += 4 * 97) spread = Math.max(spread, Math.max(data[index], data[index + 1], data[index + 2]) - Math.min(data[index], data[index + 1], data[index + 2]));
+        return { type: window.__storyUploads[0].type, spread };
+    });
+    expect(saturation.type).toBe("image/jpeg");
+    expect(saturation.spread).toBeLessThan(12);
+});
