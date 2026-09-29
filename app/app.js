@@ -4082,12 +4082,17 @@ async function loadFeed(reset = false) {
     }
 }
 
-function softHaptic(duration = 8) {
-    window.ValidPreferences?.haptic(duration);
+// Kinds: selection | light | medium | heavy | success | warning | error (preferences.js).
+function haptic(kind = "light") {
+    return window.ValidPreferences?.haptic(kind) ?? false;
+}
+
+function softHaptic(kind = "light") {
+    return haptic(typeof kind === "string" ? kind : "light");
 }
 
 function successHaptic() {
-    window.ValidPreferences?.haptic([10, 35, 18]);
+    return haptic("success");
 }
 
 function expectedAuraPerAnswer() {
@@ -6074,7 +6079,7 @@ function activatePanelRoute(panel) {
 }
 
 async function refreshActivePanel() {
-    softHaptic(12);
+    softHaptic("medium");
     if (state.activePanel === "feed") {
         await loadFeed(true);
         await (await prepareFeedView()).refreshStories?.();
