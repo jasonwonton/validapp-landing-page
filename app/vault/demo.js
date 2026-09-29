@@ -18,19 +18,28 @@ const PALETTES = [
     ["#fbc2eb", "#a6c1ee", "#fdf0ff"], ["#43e97b", "#38f9d7", "#e9fff6"], ["#fa709a", "#fee140", "#fff2e0"],
     ["#30cfd0", "#330867", "#d7f7ff"],
 ];
-const SCENES = ["🏀", "🍕", "🎸", "🐶", "🌊", "🎡", "📚", "🎉", "🌸", "🏈", "🍦", "🚗", "🎨", "⛰️", "🌅", "📸"];
-const CAPTIONS = ["best day ever", "homecoming 🏈", "beach crew", "finally friday", "study grind", "road trip!"];
+// Simple drawn subjects (no emoji: tests/interface-assets.spec.js scans app/).
+const MOTIFS = [
+    '<circle cx="300" cy="440" r="90" fill="#ff8a3d"/><path d="M210 440h180M300 350v180M236 376q64 64 0 128M364 376q-64 64 0 128" stroke="#5b2a0c" stroke-width="7" fill="none"/>',
+    '<path d="M300 330l33 70 77 9-57 52 16 76-69-39-69 39 16-76-57-52 77-9z" fill="#fff6a8"/>',
+    '<path d="M300 540c-90-60-140-110-140-160a70 70 0 0 1 140-20 70 70 0 0 1 140 20c0 50-50 100-140 160z" fill="#ff5c8a"/>',
+    '<path d="M300 320l100 170H200z" fill="#1f7a4d"/><path d="M300 380l80 150H220z" fill="#23915a"/><rect x="286" y="530" width="28" height="40" fill="#6b3f1d"/>',
+    '<rect x="190" y="400" width="60" height="170" fill="#2b3a55"/><rect x="260" y="340" width="80" height="230" fill="#34466b"/><rect x="350" y="420" width="60" height="150" fill="#2b3a55"/><path d="M280 370h40M280 410h40M280 450h40M280 490h40" stroke="#ffd66b" stroke-width="10"/>',
+    '<g fill="#fff"><circle cx="300" cy="380" r="42"/><circle cx="358" cy="440" r="42"/><circle cx="300" cy="500" r="42"/><circle cx="242" cy="440" r="42"/></g><circle cx="300" cy="440" r="34" fill="#ffc83d"/>',
+    '<circle cx="290" cy="440" r="95" fill="#fff4c9"/><circle cx="335" cy="405" r="82" fill="url(#g)"/>',
+    '<path d="M270 360l110-26v150" stroke="#1d1d3b" stroke-width="16" fill="none"/><ellipse cx="250" cy="520" rx="34" ry="26" fill="#1d1d3b"/><ellipse cx="360" cy="490" rx="34" ry="26" fill="#1d1d3b"/>',
+];
+const CAPTIONS = ["best day ever", "homecoming", "beach crew", "finally friday", "study grind", "road trip!"];
 
 function art(index) {
     const [from, to, glow] = PALETTES[index % PALETTES.length];
-    const scene = SCENES[index % SCENES.length];
     const sunX = 120 + ((index * 97) % 360);
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 800" width="600" height="800">
 <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient></defs>
 <rect width="600" height="800" fill="url(#g)"/><circle cx="${sunX}" cy="210" r="96" fill="${glow}" opacity=".75"/>
 <path d="M0 600 Q150 ${520 + (index % 4) * 20} 300 590 T600 560 V800 H0Z" fill="#000" opacity=".16"/>
 <path d="M0 680 Q200 ${620 + (index % 3) * 25} 400 690 T600 670 V800 H0Z" fill="#000" opacity=".22"/>
-<text x="300" y="470" font-size="170" text-anchor="middle">${scene}</text>
+${MOTIFS[index % MOTIFS.length]}
 </svg>`;
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
