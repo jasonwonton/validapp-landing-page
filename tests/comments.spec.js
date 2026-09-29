@@ -38,13 +38,16 @@ test("poll comments support bounded threads, replies, reactions, deletion, and r
     await expect(reactors.getByText("Maya Chen").first()).toBeVisible();
     await reactors.getByRole("button", { name: "Done" }).click();
 
-    page.once("dialog", (dialog) => dialog.accept());
     await comments.locator(`[data-comment-id='${OWN_POLL_ROOT}']`).getByRole("button", { name: "Delete" }).click();
+    await page.locator(".ui-sheet").getByRole("button", { name: "Delete" }).click();
     await expect(comments.locator(`[data-comment-id='${OWN_POLL_ROOT}']`)).toHaveCount(0);
     await expect(poll.locator("[data-comment-count]")).toHaveText("4");
 
-    page.once("dialog", (dialog) => dialog.accept());
     await root.getByRole("button", { name: "Report" }).click();
+    const report = page.locator(".ui-sheet");
+    await expect(report).toContainText("Report this comment?");
+    await report.getByText("Harassment or bullying").click();
+    await report.getByRole("button", { name: "Report and hide" }).click();
     await expect(root).toHaveCount(0);
     await expect(poll.locator("[data-comment-count]")).toHaveText("0");
 });

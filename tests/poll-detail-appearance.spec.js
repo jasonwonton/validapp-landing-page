@@ -44,7 +44,9 @@ for (const theme of ['light', 'dark']) for (const width of [320, 393, 440]) for 
         await expect(detail.locator('.feed-detail-option.selected')).toHaveCSS('box-shadow', 'none');
         const badge = await detail.locator('.feed-detail-selection-indicator').boundingBox();
         const secondRow = await detail.locator('.feed-detail-option').nth(2).boundingBox();
-        expect(badge.y + badge.height + 4).toBeLessThanOrEqual(secondRow.y);
+        // PollOptionButton offsets the 👆 15pt below the option with 10pt row spacing,
+        // so it may overlap the next row by a few points (drawn above it, like iOS).
+        expect(badge.y + badge.height).toBeLessThanOrEqual(secondRow.y + 8);
         const art = await detail.locator('.feed-detail-art').boundingBox();
         expect(art.width).toBeLessThanOrEqual(width - 47);
         expect(art.width).toBeGreaterThanOrEqual(120);

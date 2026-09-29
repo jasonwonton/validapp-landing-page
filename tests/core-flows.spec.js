@@ -60,6 +60,9 @@ test("new users can complete passkey-only school onboarding", async ({ page }) =
     await expect(dialog.getByText("No password. No phone number.", { exact: true })).toHaveCount(0);
     await expect(dialog.getByText("Choose from Library", { exact: true })).toBeVisible();
     await dialog.getByLabel(/Profile photo/).setInputFiles("assets/valid_logo.png");
+    // Profile photos go through the iOS circle crop before they are used.
+    await page.locator(".avatar-crop-dialog").getByRole("button", { name: "Use photo" }).click();
+    await expect(dialog.locator("#signupPhotoPreview img")).toHaveAttribute("src", /^blob:/);
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(page.locator("#appView")).toBeVisible();
     const contacts = page.locator("#classmatesDialog");
@@ -466,7 +469,8 @@ test("feed polls open the iOS-style detail and moderation flow", async ({ page }
     await page.locator("[data-feed-detail='9001']").click();
     const dialog = page.locator("#feedDetailDialog");
     await expect(dialog).toHaveCSS("position", "fixed");
-    await expect(dialog.locator(".detail-screen-header > strong")).toContainText("Sophomore");
+    // QuestionDetailView voterInfoText hides the grade until it is safe, like the feed row.
+    await expect(dialog.locator(".detail-screen-header > strong")).toHaveText("A 👧💗 Girl said");
     await expect(dialog.locator(".feed-detail-result")).toHaveCount(0);
     await expect(dialog.locator(".feed-detail-art")).toBeVisible();
     await expect(dialog.locator(".feed-detail-option")).toHaveCount(4);
@@ -756,7 +760,7 @@ test("completing a poll set celebrates earned aura before cooldown", async ({ pa
     await expect(page.locator("#auraCount")).toHaveText("1,300");
     await page.getByRole("button", { name: "W aura" }).click();
     await expect(page.getByRole("heading", { name: "Next Poll Set Locked" })).toBeVisible();
-    await expect(page.locator("#playLockMessage")).toContainText(/Unlocks in (0:5\d|1:00)/);
+    await expect(page.locator("#playLockMessage")).toContainText(/Unlocks in (\d+s|1m)$/);
 });
 
 test("profile information matches the iOS correction and school-change flow", async ({ page }) => {

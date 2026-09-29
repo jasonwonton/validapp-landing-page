@@ -1,6 +1,6 @@
 import { ValidAPI } from "./api.js";
 import { uiIcon } from "./ui-icons.js";
-import { feedVoterLine, senderGradeIsSafe, tbhSenderLine } from "./feed-sender.js";
+import { feedVoterLine, senderGradeIsSafe, senderStatement, tbhSenderLine } from "./feed-sender.js";
 import { DemoAPI, localDemoAllowed } from "./demo-api.js";
 import { createAdditionalPasskey, createSignupPasskey, passkeysSupported, signInWithPasskey } from "./passkeys.js";
 import { authBrowserURL, checkPasskeyEnvironment, completeSignupSafely, enablePreviewSignup, reportAuthFailure, needsPhoneReverification } from './auth-reliability.js';
@@ -8,7 +8,7 @@ import { startPerformanceMonitoring } from "./performance.js";
 import { createRealtimeList } from "./realtime-list.js";
 import { activateRoute, preloadRoute } from "./routes/route-loader.js";
 import { clearRuntimeStyles, setRuntimeStyles } from "./runtime-style.js";
-import { configureMediaFallback, installMediaImageFallback, mediaImageMarkup } from "./media-url.js";
+import { configureMediaFallback, imageCandidates, installMediaImageFallback, mediaImageMarkup } from "./media-url.js";
 import { confirmSheet } from "./ui-dialogs.js";
 import { showToast } from "./toast.js";
 import { userMessage } from "./user-message.js";
@@ -146,6 +146,7 @@ const state = {
     playComplete: false,
     playAuraEarned: 0,
     skipsUsedInSet: 0,
+    playTransition: null,
     playLockTimer: null,
     inviteStatus: null,
     config: null,
@@ -221,6 +222,16 @@ const state = {
     feedbackHistoryGeneration: 0,
     highlightedFeedbackId: null,
     detailReturnFocus: null,
+    detailUnderlyingScroll: null,
+    feedLoadedAt: 0,
+    pendingProfilePhoto: null,
+    signupPhotoFile: null,
+    signupPhotoURL: null,
+    personalFeedItems: [],
+    personalFeedHasMore: false,
+    personalFeedLoaded: false,
+    personalInboxVisible: false,
+    personalInboxCutoff: null,
     tabScrollPositions: { feed: 0, play: 0, chats: 0, profile: 0 },
     navigationInitialized: false,
     handlingPopState: false,
@@ -241,16 +252,22 @@ function commitFeedItems(items, { reset = false } = {}) {
     return state.feedItems;
 }
 
-let feedRealtimeRenderFrame = null;
+// FeedViewModel.swift: a foreground refreshes a Feed older than 60 s; a tab
+// return reuses anything loaded within tabReturnFreshness (120 s).
+const FEED_FOREGROUND_REFRESH_MS = 60_000;
+const FEED_TAB_RETURN_FRESHNESS_MS = 120_000;
 
-function applyFeedRealtimeEvent(event) {
-    feedItemsStore.apply(event);
-    if (feedRealtimeRenderFrame !== null) return;
-    feedRealtimeRenderFrame = requestAnimationFrame(() => {
-        feedRealtimeRenderFrame = null;
-        state.feedItems = feedItemsStore.snapshot();
-        if (state.activePanel === "feed" && document.body.classList.contains("authenticated")) renderFeed();
-    });
+function feedIsStale(maxAgeMs) {
+    const loadedAt = state.feedLoadedAt;
+    if (!loadedAt) return true;
+    const age = Date.now() - loadedAt;
+    return age < 0 || age >= maxAgeMs;
+}
+
+function refreshFeedIfStale(maxAgeMs) {
+    if (state.activePanel !== "feed" || !document.body.classList.contains("authenticated")) return;
+    if (isFeedVoteLocked() || !state.feedItems.length || !feedIsStale(maxAgeMs)) return;
+    void loadFeed(true);
 }
 
 startPerformanceMonitoring({ disabled: demoMode, getRoute: () => state.activePanel });
@@ -352,7 +369,10 @@ function restoreCachedAppState() {
     const cachedClassmates = readAppCache("classmates");
     const cachedContactClassmateIds = readAppCache("contact-classmates");
     if (cachedProfile) state.profile = cachedProfile;
-    if (Array.isArray(cachedFeed)) commitFeedItems(cachedFeed, { reset: true });
+    if (Array.isArray(cachedFeed)) {
+        commitFeedItems(cachedFeed, { reset: true });
+        state.personalFeedItems = state.feedItems.slice();
+    }
     if (Array.isArray(cachedClassmates)) {
         state.classmates = cachedClassmates;
         state.classmateDirectory = cachedClassmates;
@@ -395,7 +415,9 @@ function handleAppPopState(event) {
     closeVisibleDetailScreens({ fromHistory: true });
     const requestedPanel = event.state?.panel || new URLSearchParams(location.search).get("tab");
     const panel = ["feed", "play", "chats", "profile"].includes(requestedPanel) ? requestedPanel : "feed";
-    switchPanel(panel, { historyMode: "none", restoreScroll: true });
+    // Closing a detail screen returns to the same tab: keep its live scroll
+    // position instead of restoring one saved at the last tab switch.
+    if (panel !== state.activePanel) switchPanel(panel, { historyMode: "none", restoreScroll: true });
     const detail = event.state?.detail ? document.getElementById(event.state.detail) : null;
     if (detail?.classList.contains("detail-screen")) openDetailScreen(detail, { historyMode: "none" });
     state.handlingPopState = false;
@@ -478,6 +500,18 @@ function relativeTime(value) {
     return "recently";
 }
 
+// PollCommentsView.swift / ReactionViews.swift timestamp: "now", "5m", "3h", "2d", then "Sep 3".
+function shortRelativeTime(value) {
+    const time = new Date(value).getTime();
+    if (!Number.isFinite(time)) return "";
+    const elapsed = Math.max(0, (Date.now() - time) / 1000);
+    if (elapsed < 60) return "now";
+    if (elapsed < 3_600) return `${Math.floor(elapsed / 60)}m`;
+    if (elapsed < 86_400) return `${Math.floor(elapsed / 3_600)}h`;
+    if (elapsed < 604_800) return `${Math.floor(elapsed / 86_400)}d`;
+    return new Date(time).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 function setButtonLoading(button, loading, loadingLabel = "Working...") {
     if (!button.dataset.label) button.dataset.label = button.textContent.trim();
     button.disabled = loading;
@@ -535,14 +569,17 @@ function sortClassmatesLikeIOS(classmates) {
         .map(({ classmate }) => classmate);
 }
 
+// Brand artwork from the iOS asset catalog (SocialSharingButtons.swift: SnapchatGlyph,
+// InstagramIconButton, TikTokIconButton) instead of redrawn marks.
+const SHARE_PLATFORM_ARTWORK = {
+    snapchat: "snapchat-logo.webp",
+    instagram: "instagram.webp",
+    tiktok: "tiktok-icon-black-square.webp",
+};
+
 function shareIconMarkup(platform) {
-    if (platform === "instagram") {
-        return `<svg viewBox="0 0 64 64" role="img" aria-label="Instagram"><rect x="15" y="15" width="34" height="34" rx="10" fill="none" stroke="white" stroke-width="4"/><circle cx="32" cy="32" r="8" fill="none" stroke="white" stroke-width="4"/><circle cx="44" cy="20" r="2.5" fill="white"/></svg>`;
-    }
-    if (platform === "tiktok") {
-        return `<svg viewBox="0 0 64 64" role="img" aria-label="TikTok"><rect width="64" height="64" rx="15" fill="#000"/><path d="M37 14c1 7 5 11 12 12v8c-5 0-9-2-12-4v13c0 9-7 14-15 12-7-2-11-9-9-16 2-6 7-10 14-10v8c-4 0-6 2-6 5 0 4 3 6 6 5 2-1 3-3 3-6V14h7Z" fill="#25f4ee" transform="translate(-2 1)"/><path d="M39 13c1 7 5 11 12 12v7c-5 0-9-2-12-4v14c0 8-7 14-15 12-6-2-10-8-9-14 1-7 7-11 14-11v7c-4 0-6 2-6 5 0 4 3 6 6 5 2-1 3-3 3-6V13h7Z" fill="#fe2c55" transform="translate(2 -1)"/><path d="M38 14c1 6 5 10 11 11v6c-4 0-8-1-11-4v14c0 7-6 12-13 11-6-1-10-7-8-13 1-5 5-8 11-8v6c-3 0-5 2-5 5 0 3 3 5 6 4 2-1 3-3 3-6V14h6Z" fill="#fff"/></svg>`;
-    }
-    return `<img loading="lazy" decoding="async" src="../assets/app/snapchat-logo.webp" alt="Snapchat">`;
+    const file = SHARE_PLATFORM_ARTWORK[platform] || SHARE_PLATFORM_ARTWORK.snapchat;
+    return `<img class="share-platform-art" loading="lazy" decoding="async" src="../assets/app/${file}" alt="" width="58" height="58">`;
 }
 
 function appSymbolMarkup(symbol, className = "app-symbol") {
@@ -561,6 +598,7 @@ function openDetailScreen(screen, { historyMode = "push" } = {}) {
     mountUIRoot(screen);
     closeDetailActionMenus();
     state.detailReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (!$(".detail-screen:not(.hidden)")) state.detailUnderlyingScroll = { panel: state.activePanel, y: window.scrollY };
     screen.classList.remove("hidden");
     screen.classList.remove("detail-screen-closing");
     screen.classList.add("detail-screen-opening");
@@ -574,7 +612,13 @@ function openDetailScreen(screen, { historyMode = "push" } = {}) {
 function closeDetailScreen(screen, { fromHistory = false } = {}) {
     closeDetailActionMenus();
     screen.classList.add("hidden");
-    if (!$(".detail-screen:not(.hidden)")) document.body.classList.remove("detail-screen-open");
+    if (!$(".detail-screen:not(.hidden)")) {
+        document.body.classList.remove("detail-screen-open");
+        // Some engines reset the page while it is scroll-locked; put it back exactly.
+        const underlying = state.detailUnderlyingScroll;
+        state.detailUnderlyingScroll = null;
+        if (underlying?.panel === state.activePanel && Math.abs(window.scrollY - underlying.y) > 1) window.scrollTo(0, underlying.y);
+    }
     state.detailReturnFocus?.focus?.({ preventScroll: true });
     state.detailReturnFocus = null;
     if (!fromHistory && history.state?.detail === screen.id) history.back();
@@ -610,6 +654,13 @@ function showSignedOut(message = "") {
     document.body.classList.remove("authenticated", "play-active");
     state.navigationInitialized = false;
     state.tabScrollPositions = { feed: 0, play: 0, chats: 0, profile: 0 };
+    state.feedLoadedAt = 0;
+    state.playTransition = null;
+    state.personalFeedItems = [];
+    state.personalFeedHasMore = false;
+    state.personalFeedLoaded = false;
+    state.personalInboxVisible = false;
+    state.personalInboxCutoff = null;
     void commentsViewPromise?.then((view) => view.clear()).catch(() => null);
     $("#authStatus").textContent = friendlyErrorMessage(message, "");
 }
@@ -838,29 +889,7 @@ function formatVoterHint(item) {
 }
 
 function formatVoterDemographicsStatement(item) {
-    const gender = String(item.voter_gender || "").toLowerCase();
-    const genderWord = ["female", "girl"].includes(gender) ? "Girl" : ["male", "boy"].includes(gender) ? "Boy" : gender === "non-binary" ? "Person" : "";
-    const rawGrade = formatGrade(item.voter_grade || "").replace(/\s*\([^)]*\)\s*$/, "").trim();
-    const normalizedGrade = rawGrade.toLowerCase();
-    const grade = normalizedGrade.includes("6th") || normalizedGrade === "6" || normalizedGrade.startsWith("grade 6")
-        ? "6th grader"
-        : normalizedGrade.includes("7th") || normalizedGrade === "7" || normalizedGrade.startsWith("grade 7")
-            ? "7th grader"
-            : normalizedGrade.includes("8th") || normalizedGrade === "8" || normalizedGrade.startsWith("grade 8")
-                ? "8th grader"
-                : normalizedGrade.includes("9th") || normalizedGrade.includes("freshman") || normalizedGrade === "9" || normalizedGrade.startsWith("grade 9")
-                    ? "Freshman"
-                    : normalizedGrade.includes("10th") || normalizedGrade.includes("sophomore") || normalizedGrade === "10" || normalizedGrade.startsWith("grade 10")
-                        ? "Sophomore"
-                        : normalizedGrade.includes("11th") || normalizedGrade.includes("junior") || normalizedGrade === "11" || normalizedGrade.startsWith("grade 11")
-                            ? "Junior"
-                            : normalizedGrade.includes("12th") || normalizedGrade.includes("senior") || normalizedGrade === "12" || normalizedGrade.startsWith("grade 12")
-                                ? "Senior"
-                                : rawGrade;
-    const article = /^[aeiou8]/i.test(grade) || /^(11|18)/.test(grade) ? "An" : "A";
-    if (grade && genderWord) return `${article} ${grade} ${genderWord} said`;
-    if (genderWord) return `A ${genderWord} said`;
-    return "Poll";
+    return senderStatement(item, { safeGrade: senderGradeIsSafe(item.voter_grade, state.classmates) }) || "Poll";
 }
 
 function formatVoterStatement(item) {
@@ -916,13 +945,16 @@ function renderProfilePanel() {
             : "Profile change currently unavailable")
         : "";
     const streak = Math.max(0, Number(profile.current_streak || 0));
-    const hasProfilePhoto = Boolean(imageURL && !String(profile.profile_picture_url || "").includes("default.png"));
+    const pendingPhoto = state.pendingProfilePhoto;
+    const hasProfilePhoto = Boolean(pendingPhoto || (imageURL && !String(profile.profile_picture_url || "").includes("default.png")));
     $("#profileCard").innerHTML = `<article class="full-profile-card">
-        <button class="profile-photo-button" type="button" data-edit-photo aria-label="Change profile picture">
-            <span class="full-profile-avatar">${imageURL ? profileImageMarkup(profile, [profile.profile_picture_url_medium, profile.profile_picture_url]) : `<span>${escapeHTML(initials(profile))}</span>`}</span>
-            <span class="photo-edit-badge" aria-hidden="true">${uiIcon("edit")}</span>
+        <button class="profile-photo-button ${pendingPhoto ? `photo-${pendingPhoto.status}` : ""}" type="button" data-edit-photo aria-label="${pendingPhoto?.status === "failed" ? "Photo upload failed. Try again" : pendingPhoto ? "Uploading profile picture" : "Change profile picture"}" ${pendingPhoto?.status === "uploading" ? 'aria-busy="true"' : ""}>
+            <span class="full-profile-avatar">${pendingPhoto ? `<img decoding="async" src="${escapeHTML(pendingPhoto.url)}" alt="">` : imageURL ? profileImageMarkup(profile, [profile.profile_picture_url_medium, profile.profile_picture_url]) : `<span>${escapeHTML(initials(profile))}</span>`}</span>
+            ${pendingPhoto?.status === "uploading" ? '<span class="photo-upload-spinner" aria-hidden="true"></span>' : ""}
+            <span class="photo-edit-badge" aria-hidden="true">${pendingPhoto?.status === "failed" ? "!" : uiIcon("edit")}</span>
         </button>
-        ${hasProfilePhoto ? "" : '<p class="profile-photo-warning">Users without profile pictures receive less votes.</p>'}
+        ${pendingPhoto?.status === "failed" ? '<p class="profile-photo-warning" role="status">Upload failed. Tap your photo to try again.</p>' : ""}
+        ${hasProfilePhoto ? "" : '<p class="profile-photo-warning">Users without profile pictures receive fewer votes.</p>'}
         <h3>${escapeHTML(displayName(profile))}</h3>
         <div class="profile-identity-line"><span class="profile-handle">@${escapeHTML(profile.username || "valid")}</span>${streak ? `<span class="profile-streak ${profile.streak_needs_activity ? "needs-activity" : ""}" aria-label="${streak} day streak">${uiIcon("fire")} ${streak}</span>` : ""}</div>
         <button class="profile-bio-button ${profile.bio ? "" : "empty"}" type="button" data-edit-bio>${profile.bio ? escapeHTML(profile.bio) : '<span>Add bio</span><span class="profile-add-bio-icon" aria-hidden="true">+</span>'}</button>
@@ -1034,8 +1066,71 @@ async function shareProfileInvite(button, channel) {
     }
 }
 
+// FeedViewModel+InboxVisit.swift: "seen" is a screen-level event. Opening the
+// Inbox marks everything loaded as read (a per-user last-opened time) and
+// clears the badge; during the visit, polls newer than the moment it began keep
+// counting on the Polls chip, and that cutoff stays put until the user leaves.
+// The /feed API has no per-item unread flag, so this mirrors iOS exactly.
+const PERSONAL_FEED_PAGE_SIZE = 20;
+
+function feedItemTime(item) {
+    return Date.parse(item?.timestamp) || 0;
+}
+
+function personalInboxLastOpenedKey() {
+    return api.user?.id ? `valid:pwa:v1:${api.user.id}:inbox-last-opened` : null;
+}
+
+function readPersonalInboxLastOpened() {
+    const key = personalInboxLastOpenedKey();
+    if (!key) return null;
+    try {
+        const value = Number(localStorage.getItem(key));
+        return value > 0 ? value : null;
+    } catch (_) { return null; }
+}
+
+function personalInboxReadReference() {
+    const stored = readPersonalInboxLastOpened();
+    if (stored) return stored;
+    // First visit on this device: the first page is new, older pages are not.
+    const items = state.personalFeedItems;
+    if (items.length > PERSONAL_FEED_PAGE_SIZE) return feedItemTime(items[PERSONAL_FEED_PAGE_SIZE]);
+    if (state.personalFeedHasMore && items.length) return feedItemTime(items.at(-1)) - 1;
+    return 0;
+}
+
+function markLoadedPersonalItemsRead() {
+    const key = personalInboxLastOpenedKey();
+    if (!key) return;
+    const readThrough = Math.max(Date.now(), feedItemTime(state.personalFeedItems[0]));
+    const previous = readPersonalInboxLastOpened();
+    if (previous && readThrough - previous < 1000) return;
+    try { localStorage.setItem(key, String(readThrough)); } catch (_) { /* The badge simply stays until the next visit. */ }
+}
+
+function syncPersonalInboxVisit() {
+    const showing = document.body.classList.contains("authenticated")
+        && state.activePanel === "feed" && state.feedType === "personal"
+        && document.visibilityState !== "hidden" && !isFeedVoteLocked();
+    if (!showing) {
+        state.personalInboxVisible = false;
+        return;
+    }
+    if (!state.personalInboxVisible) {
+        state.personalInboxVisible = true;
+        state.personalInboxCutoff = null;
+    }
+    if (state.personalInboxCutoff === null && (state.personalFeedLoaded || state.personalFeedItems.length)) {
+        state.personalInboxCutoff = personalInboxReadReference();
+    }
+    if (state.personalInboxCutoff !== null) markLoadedPersonalItemsRead();
+}
+
 function personalInboxUnreadCounts() {
-    const polls = state.feedItems.filter((item) => item.is_new === true || item.unread === true).length;
+    syncPersonalInboxVisit();
+    const cutoff = state.personalInboxVisible ? state.personalInboxCutoff : personalInboxReadReference();
+    const polls = cutoff === null ? 0 : state.personalFeedItems.filter((item) => feedItemTime(item) > cutoff).length;
     const tbhs = state.tbhPendingRequests.filter((item) => !item.opened_at).length
         + state.tbhInboxItems.filter((item) => !item.opened_at).length;
     const askMe = (state.anonymousInbox?.questions || []).filter((item) => !item.opened_at).length;
@@ -1043,7 +1138,9 @@ function personalInboxUnreadCounts() {
 }
 
 function renderTabBadges() {
-    const unread = personalInboxUnreadCounts().all;
+    const counts = personalInboxUnreadCounts();
+    // While the Inbox is on screen its loaded polls count as read for the tab badge.
+    const unread = counts.all - (state.personalInboxVisible ? counts.polls : 0);
     const feedBadge = $("#feedTabBadge");
     feedBadge.textContent = unread > 9 ? "9+" : String(unread || "");
     feedBadge.classList.toggle("hidden", unread < 1);
@@ -1575,6 +1672,7 @@ async function shareTbhDetail(platform) {
     try {
         const { tbhShareContent, createTbhShareFile } = await import('./tbh-share.js');
         const content = tbhShareContent(kind, item, promptForKey(item.prompt_key).title, tbhAuthorLine(item));
+        const { loadShareArtwork } = await shareCards();
         const file = await createTbhShareFile(content, { loadArtwork: loadShareArtwork, assetURL: url => api.assetURL(url) });
         if (navigator.share && navigator.canShare?.({ files: [file] })) {
             await navigator.share({ files: [file], title: 'A TBH on Valid' });
@@ -1979,7 +2077,7 @@ async function addBackupPasskey(trigger = null) {
         successHaptic();
         showToast("Backup passkey added");
     } catch (error) {
-        const message = error.message || "Could not add that passkey.";
+        const message = userMessage(error, "Could not add that passkey.");
         $("#passkeyEnrollmentStatus").textContent = message;
         showToast(message);
     } finally {
@@ -2517,7 +2615,7 @@ async function createAccount(event) {
         $("#signupStatus").textContent = "Verify your phone number before creating your account.";
         return;
     }
-    const profilePicture = $("#signupPicture").files[0];
+    const profilePicture = state.signupPhotoFile;
     const submitButtons = [...form.querySelectorAll("button[type=submit]")];
     submitButtons.forEach((candidate) => { candidate.disabled = true; });
     setButtonLoading(button, true, "Creating your account...");
@@ -2641,7 +2739,8 @@ function commentControlMarkup(item, targetType, targetId) {
 function commentDetailButtonMarkup(item, targetType, targetId, className) {
     if (!commentsEnabled() || !targetId) return "";
     const count = Math.max(0, Number(item.comment_count || 0));
-    return `<button class="secondary-button ${className}" type="button" data-comments-target="${escapeHTML(`${targetType}:${targetId}`)}" aria-label="Open ${count} comments">${commentBubbleMarkup()}<span class="visually-hidden">Comments</span><strong data-comment-count>${count}</strong></button>`;
+    // FeedEngagementCountControl: 44pt icon, hairline divider, 40pt count in one capsule.
+    return `<button class="engagement-count-button ${className}" type="button" data-comments-target="${escapeHTML(`${targetType}:${targetId}`)}" aria-label="Open ${count} comments">${commentBubbleMarkup()}<span class="reaction-divider" aria-hidden="true"></span><strong data-comment-count>${count}</strong></button>`;
 }
 
 let feedView = null;
@@ -2655,10 +2754,10 @@ function prepareFeedView() {
                 $, $$, state, api,
                 personalInboxFilters: PERSONAL_INBOX_FILTERS,
                 reactionByType: REACTION_BY_TYPE,
-                avatarMarkup, displayName, escapeHTML, formatGrade, relativeTime,
+                avatarMarkup, displayName, escapeHTML, formatGrade, relativeTime: shortRelativeTime,
                 normalizeReactionState, dominantReaction, promptForKey, tbhAuthorLine,
                 tbhRequestsEnabled, renderTabBadges, formatVoterHint, showToast,
-                commentControlMarkup,
+                commentControlMarkup, personalInboxUnreadCounts,
             });
             return feedView;
         });
@@ -2695,8 +2794,8 @@ function updateCommentCount(type, targetId, delta) {
 function prepareCommentsView() {
     if (!commentsViewPromise) {
         commentsViewPromise = import("./comments/index.js").then(({ createCommentsView }) => createCommentsView({
-            root: $("#commentsRoot"), api, getUser: () => api.user,
-            escapeHTML, avatarMarkup, relativeTime, openDetailScreen, closeDetailScreen, showToast,
+            root: $("#commentsRoot"), api, getUser: () => api.user, getProfile: () => state.profile || api.user,
+            escapeHTML, avatarMarkup, relativeTime: shortRelativeTime, openDetailScreen, closeDetailScreen, showToast,
         }));
     }
     return commentsViewPromise;
@@ -2944,7 +3043,7 @@ async function sendContentLink(button) {
 function questionSubmitterMarkup(item) {
     if (item.question_school_id == null || item.question_is_user_submitted === false) return '';
     const anonymous = (item.question_is_anonymous ?? !item.question_submitted_by_display_name) && !item.question_submitter_revealed;
-    const name = anonymous ? 'Someone at your school' : item.question_submitted_by_display_name || 'A classmate';
+    const name = anonymous ? 'Someone at your school' : item.question_submitted_by_display_name || 'Someone at your school';
     const content = `${avatarMarkup({ first_name: name, profile_picture_url: anonymous ? '../assets/app/anonymous.webp' : item.question_submitted_by_profile_picture_url }, 'attribution-avatar')}<span><small>Question submitted by</small><strong>${escapeHTML(name)}</strong></span>`;
     return anonymous && item.can_reveal_question_submitter ? `<button class="poll-submitter-row" data-reveal-question-submitter type="button">${content}<span class="submitter-reveal-label">Reveal</span></button>` : `<div class="poll-submitter-row">${content}</div>`;
 }
@@ -2980,7 +3079,7 @@ function renderFeedDetail() {
     const selectedName = item.selected_contact_name
         || item.voted_for_name
         || item.contact_name
-        || (item.item_type === "received_vote" ? displayName(state.profile) : "A classmate");
+        || (item.item_type === "received_vote" ? displayName(state.profile) : "Someone");
     const options = Array.isArray(item.presented_options) ? item.presented_options : [];
     const artworkURL = api.assetURL(item.image_url);
     const revealed = item.voter_name ? `<div class="revealed-sender-row">${avatarMarkup({ first_name: item.voter_name, profile_picture_url: item.voter_profile_picture_url }, "row-avatar")}<strong>Sent by ${escapeHTML(item.voter_name)}</strong></div>` : "";
@@ -2990,9 +3089,9 @@ function renderFeedDetail() {
     $("#feedDetailBody").innerHTML = `<article class="feed-detail-card">
         <div class="feed-detail-prompt"><h3>${escapeHTML(item.question_text)}</h3>
         ${item.is_nomination ? "" : questionSubmitterMarkup(item)}</div>
-        <div class="feed-detail-art">${artworkURL ? mediaImageMarkup(artworkURL) : `<div class="artwork-placeholder"><img loading="lazy" decoding="async" src="../assets/app/pencil-clipboard.webp" alt=""><span>Image unavailable</span></div>`}</div>
+        <div class="feed-detail-art-frame"><div class="feed-detail-art">${artworkURL ? mediaImageMarkup(artworkURL) : `<div class="artwork-placeholder"><img loading="lazy" decoding="async" src="../assets/app/pencil-clipboard.webp" alt=""><span>Image unavailable</span></div>`}</div></div>
         ${item.is_nomination ? `<div class="feed-nomination-card"><strong>${escapeHTML(selectedName)}</strong><p>got nominated${item.voter_gender ? ` by ${escapeHTML(formatVoterHint(item).replace(/^(from|by) /, ""))}` : item.voter_name ? ` by ${escapeHTML(item.voter_name)}` : ""}</p><span aria-hidden="true">🎉</span></div>` : options.length ? `<div class="feed-detail-options">${options.map((option, index) => {
-            const name = option.name || option.contact_name || "A classmate";
+            const name = option.name || option.contact_name || "Someone";
             const explicit = options.findIndex(candidate => candidate.is_selected === true);
             const selected = index === (explicit >= 0 ? explicit : options.findIndex(candidate => (candidate.name || candidate.contact_name) === selectedName));
             return `<div class="feed-detail-option ${selected ? "selected" : ""}"><strong>${escapeHTML(name)}</strong>${selected ? `<span class="feed-detail-selection-indicator" aria-label="Picked">👆</span>` : ""}</div>`;
@@ -3024,536 +3123,20 @@ async function openFeedDetail(answerId) {
     openDetailScreen($("#feedDetailDialog"));
 }
 
-function canvasRoundedRect(context, x, y, width, height, radius) {
-    const corner = Math.min(radius, width / 2, height / 2);
-    context.beginPath();
-    context.moveTo(x + corner, y);
-    context.arcTo(x + width, y, x + width, y + height, corner);
-    context.arcTo(x + width, y + height, x, y + height, corner);
-    context.arcTo(x, y + height, x, y, corner);
-    context.arcTo(x, y, x + width, y, corner);
-    context.closePath();
-}
-
-function canvasTextLines(context, text, maxWidth, maxLines = Infinity) {
-    const words = String(text || "").trim().split(/\s+/).filter(Boolean);
-    if (!words.length) return [];
-    const lines = [];
-    let current = words.shift();
-    for (const word of words) {
-        const candidate = `${current} ${word}`;
-        if (context.measureText(candidate).width <= maxWidth || !current) current = candidate;
-        else {
-            lines.push(current);
-            current = word;
-        }
-    }
-    lines.push(current);
-    if (lines.length <= maxLines) return lines;
-    const visible = lines.slice(0, maxLines);
-    let last = visible[maxLines - 1];
-    while (last && context.measureText(`${last}…`).width > maxWidth) last = last.slice(0, -1);
-    visible[maxLines - 1] = `${last}…`;
-    return visible;
-}
-
-function drawCenteredCanvasText(context, text, centerX, top, maxWidth, lineHeight, maxLines = Infinity) {
-    const lines = canvasTextLines(context, text, maxWidth, maxLines);
-    context.textAlign = "center";
-    context.textBaseline = "top";
-    lines.forEach((line, index) => context.fillText(line, centerX, top + index * lineHeight));
-    return top + lines.length * lineHeight;
-}
-
-async function loadShareArtwork(url) {
-    if (!url) return Promise.resolve(null);
-    try {
-        const response = await fetch(url, { credentials: "omit", mode: "cors" });
-        if (response.ok) {
-            const objectURL = URL.createObjectURL(await response.blob());
-            const image = await new Promise((resolve) => {
-                const candidate = new Image();
-                candidate.onload = () => resolve(candidate);
-                candidate.onerror = () => resolve(null);
-                candidate.src = objectURL;
-            });
-            URL.revokeObjectURL(objectURL);
-            if (image) return image;
-        }
-    } catch (_) {
-        // The direct image path below still works for same-origin and CORS-enabled assets.
-    }
-    return new Promise((resolve) => {
-        const image = new Image();
-        image.crossOrigin = "anonymous";
-        image.onload = () => resolve(image);
-        image.onerror = () => resolve(null);
-        image.src = url;
-    });
-}
-
-function pollShareArtworkFallback(url) {
-    // Use the existing public-image API, never a general-purpose URL proxy.
-    const source = new URL(url, location.href);
-    if (source.protocol !== "https:" || source.username || source.password || source.port
-        || !["validappcdn.com", "media.six7.lol", "staging.validappcdn.com"].includes(source.hostname)) return null;
-    let key;
-    try { key = decodeURIComponent(source.pathname.slice(1)); } catch (_) { return null; }
-    if (!/^(questions\/images|question-images)\//.test(key) || key.length > 512
-        || key.includes("\\") || key.split("/").some(part => !part || part === "." || part === "..")) return null;
-    const base = api.baseURL || new URL("/api/v1", location.origin).href;
-    return `${base.replace(/\/$/, "")}/media/${key.split("/").map(encodeURIComponent).join("/")}`;
-}
-
-async function loadPollShareArtwork(item) {
-    const displayedArtwork = $("#feedDetailBody .feed-detail-art > img")?.currentSrc;
-    const candidates = [api.assetURL(item.image_url), displayedArtwork]
-        .filter((url, index, urls) => url && urls.indexOf(url) === index);
-    for (const url of candidates) {
-        const artwork = await loadShareArtwork(url);
-        if (artwork) return artwork;
-        // Public CDN images can display as images without CORS but cannot be
-        // copied into a canvas. The API returns the same bytes with valid CORS.
-        const fallback = pollShareArtworkFallback(url);
-        if (fallback) {
-            const recovered = await loadShareArtwork(fallback);
-            if (recovered) return recovered;
-        }
-    }
-    if (candidates.length) throw new Error("Poll artwork is unavailable. Please try again.");
-    return null;
-}
-
 function canvasBlob(canvas, type = "image/png", quality) {
     return new Promise((resolve, reject) => {
         canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Could not render image.")), type, quality);
     });
 }
 
-function pollShareNominationSubtitle(item) {
-    const voter = formatVoterDemographicsStatement(item);
-    if (voter === "Poll") return "got nominated";
-    const demographic = voter.replace(/ said$/, "").replace(/^(A|An)\s/, (article) => article.toLowerCase());
-    return `got nominated by ${demographic}`;
-}
+let shareCardsPromise = null;
 
-async function createPollShareFile(item) {
-    await document.fonts?.ready;
-    const canvas = document.createElement("canvas");
-    canvas.width = 900;
-    canvas.height = 1600;
-    const context = canvas.getContext("2d");
-    const centerX = canvas.width / 2;
-    const selectedName = item.selected_contact_name
-        || item.voted_for_name
-        || item.contact_name
-        || (item.item_type === "received_vote" ? displayName(state.profile) : "A classmate");
-    const isNomination = item.is_nomination === true;
-    const options = !isNomination && Array.isArray(item.presented_options) ? item.presented_options.slice(0, 4) : [];
-    const artwork = await loadPollShareArtwork(item);
-
-    context.fillStyle = "#ccf7f4";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = "#000000";
-    // iOS keeps the shared image anonymous even after a sender is revealed.
-    const voterStatement = formatVoterDemographicsStatement(item);
-    const showsVoterStatement = voterStatement && voterStatement !== "Poll";
-    const gridRows = options.length ? Math.ceil(options.length / 2) : 0;
-    const gridHeight = isNomination ? 400 : options.length ? gridRows * 200 + Math.max(0, gridRows - 1) * 20 : 0;
-    const brandingHeight = 62;
-    const brandingGap = 63;
-    const contentTop = artwork ? 60 : 260;
-
-    context.font = '44px "Jua", "Apple Color Emoji", sans-serif';
-    let contentBottom = showsVoterStatement
-        ? drawCenteredCanvasText(context, voterStatement, centerX, contentTop, 820, 52, 2)
-        : 0;
-    context.font = '56px "Jua", "Apple Color Emoji", sans-serif';
-    const questionTop = showsVoterStatement ? contentBottom + 40 : contentTop;
-    contentBottom = drawCenteredCanvasText(context, item.question_text, centerX, questionTop, 820, 63, 3);
-
-    if (artwork) {
-        const y = contentBottom + 40;
-        const availableHeight = Math.max(260, canvas.height - y - 24 - gridHeight - brandingGap - brandingHeight);
-        const scale = Math.min(780 / artwork.naturalWidth, Math.min(780, availableHeight) / artwork.naturalHeight);
-        const width = artwork.naturalWidth * scale;
-        const height = artwork.naturalHeight * scale;
-        const x = centerX - width / 2;
-        canvasRoundedRect(context, x, y, width, height, 24);
-        context.save();
-        context.clip();
-        context.drawImage(artwork, x, y, width, height);
-        context.restore();
-        context.strokeStyle = "#000000";
-        context.lineWidth = 6;
-        canvasRoundedRect(context, x, y, width, height, 24);
-        context.stroke();
-        contentBottom = y + height;
-    }
-
-    const gridTop = contentBottom + 24;
-    let selectedPointer = null;
-    if (isNomination) {
-        const x = 40;
-        const y = gridTop;
-        const width = 820;
-        const height = 400;
-        context.fillStyle = "#ffb15e";
-        canvasRoundedRect(context, x, y, width, height, 32);
-        context.fill();
-        context.strokeStyle = "#000000";
-        context.lineWidth = 8;
-        context.stroke();
-        context.fillStyle = "#000000";
-        context.font = '64px "Jua", "Apple Color Emoji", sans-serif';
-        const nameLines = canvasTextLines(context, selectedName, width - 70, 2);
-        const nameTop = y + 105 - (nameLines.length - 1) * 32;
-        context.textAlign = "center";
-        context.textBaseline = "top";
-        nameLines.forEach((line, index) => context.fillText(line, centerX, nameTop + index * 72));
-        context.font = '36px "Jua", "Apple Color Emoji", sans-serif';
-        drawCenteredCanvasText(context, pollShareNominationSubtitle(item), centerX, y + 280, width - 70, 44, 2);
-    } else if (options.length) {
-        const gap = 20;
-        const cardWidth = 400;
-        const cardHeight = 200;
-        options.forEach((option, index) => {
-            const name = option.name || option.contact_name || "A classmate";
-            const selected = option.is_selected === true || name === selectedName;
-            const column = index % 2;
-            const row = Math.floor(index / 2);
-            const x = 40 + column * (cardWidth + gap);
-            const y = gridTop + row * (cardHeight + gap);
-            context.fillStyle = "#ffb15e";
-            canvasRoundedRect(context, x, y, cardWidth, cardHeight, 24);
-            context.fill();
-            context.strokeStyle = selected ? "#ffff00" : "#000000";
-            context.lineWidth = 6;
-            context.stroke();
-            context.fillStyle = "#000000";
-            context.font = '44px "Jua", "Apple Color Emoji", sans-serif';
-            const lines = canvasTextLines(context, name, cardWidth - 40, 2);
-            const nameTop = y + (cardHeight - lines.length * 52) / 2;
-            context.textAlign = "center";
-            context.textBaseline = "top";
-            lines.forEach((line, lineIndex) => context.fillText(line, x + cardWidth / 2, nameTop + lineIndex * 52));
-            if (selected) {
-                selectedPointer = { x: x + cardWidth / 2, y: y + cardHeight + 29 };
-            }
-        });
-        if (selectedPointer) {
-            context.font = '60px "Apple Color Emoji", sans-serif';
-            context.textAlign = "center";
-            context.textBaseline = "middle";
-            context.fillText("👆", selectedPointer.x, selectedPointer.y);
-        }
-    }
-
-    context.fillStyle = "#000000";
-    context.font = '52px "Jua", sans-serif';
-    context.textAlign = "center";
-    context.textBaseline = "top";
-    context.fillText("validapp.lol", centerX, gridTop + gridHeight + brandingGap);
-    const blob = await canvasBlob(canvas);
-    const identifier = String(item.question_answer_id || item.question_id || "poll").replace(/[^a-z0-9_-]/gi, "");
-    return new File([blob], `valid-poll-${identifier}.png`, { type: "image/png" });
-}
-
-function fitCanvasStoryText(context, text, maxWidth, maxHeight, preferredSize, minimumSize = 30, maxLines = 10) {
-    const value = String(text || "").trim();
-    for (let size = preferredSize; size >= minimumSize; size -= 2) {
-        context.font = `${size}px "Jua", "Apple Color Emoji", sans-serif`;
-        const lineHeight = Math.round(size * 1.16);
-        const lines = canvasTextLines(context, value, maxWidth, maxLines + 1);
-        if (lines.length <= maxLines && lines.length * lineHeight <= maxHeight) return { lines, lineHeight };
-    }
-    context.font = `${minimumSize}px "Jua", "Apple Color Emoji", sans-serif`;
-    return {
-        lines: canvasTextLines(context, value, maxWidth, maxLines),
-        lineHeight: Math.round(minimumSize * 1.16),
-    };
-}
-
-function drawAnonymousAnswerStoryCard(context, { badge, text, fill, y, height, preferredSize }) {
-    const x = 64;
-    const width = 772;
-    context.fillStyle = "#000000";
-    canvasRoundedRect(context, x + 14, y + 16, width, height, 48);
-    context.fill();
-    context.fillStyle = fill;
-    canvasRoundedRect(context, x, y, width, height, 48);
-    context.fill();
-    context.strokeStyle = "#000000";
-    context.lineWidth = 7;
-    context.stroke();
-
-    const fitted = fitCanvasStoryText(context, text, width - 108, height - 96, preferredSize);
-    const textTop = y + (height - fitted.lines.length * fitted.lineHeight) / 2;
-    context.fillStyle = "#000000";
-    context.textAlign = "center";
-    context.textBaseline = "top";
-    fitted.lines.forEach((line, index) => {
-        context.fillText(line, x + width / 2, textTop + index * fitted.lineHeight);
+function shareCards() {
+    shareCardsPromise ||= import("./share-cards.js").then((module) => {
+        module.configureShareCards({ api, state, displayName, formatVoterDemographicsStatement });
+        return module;
     });
-
-    context.beginPath();
-    context.arc(x + 12, y + 10, 32, 0, Math.PI * 2);
-    context.fillStyle = "#000000";
-    context.fill();
-    context.fillStyle = "#ffffff";
-    context.font = '34px "Jua", sans-serif';
-    context.textAlign = "center";
-    context.textBaseline = "middle";
-    context.fillText(badge, x + 12, y + 12);
-}
-
-async function createAnonymousAnswerShareFile(question) {
-    await document.fonts?.ready;
-    const canvas = document.createElement("canvas");
-    canvas.width = 900;
-    canvas.height = 1600;
-    const context = canvas.getContext("2d");
-    const centerX = canvas.width / 2;
-
-    context.fillStyle = "#ccf7f4";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = "rgba(255,184,214,.62)";
-    context.beginPath();
-    context.arc(830, -440, 260, 0, Math.PI * 2);
-    context.fill();
-    context.fillStyle = "rgba(255,177,94,.46)";
-    context.beginPath();
-    context.arc(-180, 1500, 240, 0, Math.PI * 2);
-    context.fill();
-
-    const askerLabel = question.provenance_label || "Anonymous";
-    context.font = '30px "Jua", "Apple Color Emoji", sans-serif';
-    const labelWidth = Math.min(760, Math.max(210, context.measureText(askerLabel).width + 56));
-    context.fillStyle = "#ffb8d6";
-    canvasRoundedRect(context, centerX - labelWidth / 2, 118, labelWidth, 60, 30);
-    context.fill();
-    context.strokeStyle = "#000000";
-    context.lineWidth = 5;
-    context.stroke();
-    context.fillStyle = "#000000";
-    context.textAlign = "center";
-    context.textBaseline = "middle";
-    context.fillText(askerLabel, centerX, 149);
-
-    drawAnonymousAnswerStoryCard(context, {
-        badge: "M",
-        text: question.body,
-        fill: "#ffffff",
-        y: 220,
-        height: 390,
-        preferredSize: String(question.body || "").length > 130 ? 45 : 54,
-    });
-
-    context.strokeStyle = "#ffb15e";
-    context.fillStyle = "#ffb15e";
-    context.lineWidth = 18;
-    context.lineCap = "round";
-    context.beginPath();
-    context.moveTo(centerX, 642);
-    context.lineTo(centerX, 692);
-    context.stroke();
-    context.beginPath();
-    context.moveTo(centerX - 22, 676);
-    context.lineTo(centerX, 702);
-    context.lineTo(centerX + 22, 676);
-    context.closePath();
-    context.fill();
-
-    drawAnonymousAnswerStoryCard(context, {
-        badge: "R",
-        text: question.answer_text,
-        fill: "#ffb15e",
-        y: 730,
-        height: 500,
-        preferredSize: String(question.answer_text || "").length > 260 ? 42 : 55,
-    });
-
-    const username = state.profile?.username || api.user?.username;
-    if (username) {
-        context.fillStyle = "#3d7777";
-        context.font = '34px "Jua", sans-serif';
-        context.textAlign = "center";
-        context.textBaseline = "top";
-        context.fillText(`@${username}`, centerX, 1262);
-    }
-
-    const logo = await loadShareArtwork(new URL("/assets/valid_logo.png", import.meta.url).href);
-    if (logo) {
-        const logoWidth = 250;
-        const logoHeight = Math.min(96, logoWidth * (logo.naturalHeight / logo.naturalWidth));
-        context.drawImage(logo, centerX - logoWidth / 2, 1390, logoWidth, logoHeight);
-    } else {
-        context.fillStyle = "#000000";
-        context.font = '58px "Jua", sans-serif';
-        context.textAlign = "center";
-        context.textBaseline = "top";
-        context.fillText("Valid", centerX, 1390);
-    }
-
-    const blob = await canvasBlob(canvas);
-    const identifier = String(question.id || "reply").replace(/[^a-z0-9_-]/gi, "");
-    return new File([blob], `valid-reply-${identifier}.png`, { type: "image/png" });
-}
-
-function drawAskStoryBubble(context, x, y, width, height, color, rotation = 0) {
-    context.save();
-    context.translate(x + width / 2, y + height / 2);
-    context.rotate(rotation * Math.PI / 180);
-    context.translate(-width / 2, -height / 2);
-    context.fillStyle = "#000000";
-    canvasRoundedRect(context, 14, 16, width, height, 54);
-    context.fill();
-    context.fillStyle = color;
-    canvasRoundedRect(context, 0, 0, width, height, 54);
-    context.fill();
-    context.strokeStyle = "#000000";
-    context.lineWidth = 8;
-    context.stroke();
-    context.fillStyle = "rgba(0,0,0,.72)";
-    [width / 2 - 52, width / 2, width / 2 + 52].forEach((dotX) => {
-        context.beginPath();
-        context.arc(dotX, height / 2, 17, 0, Math.PI * 2);
-        context.fill();
-    });
-    context.restore();
-}
-
-function drawAskStoryArrow(context, x, y, direction, color, rotation = 0) {
-    context.save();
-    context.translate(x, y);
-    context.rotate(rotation * Math.PI / 180);
-    context.strokeStyle = "rgba(0,0,0,.2)";
-    context.fillStyle = "rgba(0,0,0,.2)";
-    context.lineWidth = 17;
-    context.lineCap = "round";
-    context.beginPath();
-    context.moveTo(5, direction === "down" ? 5 : 73);
-    context.lineTo(5, direction === "down" ? 73 : 5);
-    context.stroke();
-    context.beginPath();
-    if (direction === "down") {
-        context.moveTo(-25, 51);
-        context.lineTo(5, 86);
-        context.lineTo(35, 51);
-    } else {
-        context.moveTo(-25, 27);
-        context.lineTo(5, -8);
-        context.lineTo(35, 27);
-    }
-    context.closePath();
-    context.fill();
-    context.translate(-4, -5);
-    context.strokeStyle = color;
-    context.fillStyle = color;
-    context.beginPath();
-    context.moveTo(5, direction === "down" ? 5 : 73);
-    context.lineTo(5, direction === "down" ? 73 : 5);
-    context.stroke();
-    context.beginPath();
-    if (direction === "down") {
-        context.moveTo(-25, 51);
-        context.lineTo(5, 86);
-        context.lineTo(35, 51);
-    } else {
-        context.moveTo(-25, 27);
-        context.lineTo(5, -8);
-        context.lineTo(35, 27);
-    }
-    context.closePath();
-    context.fill();
-    context.restore();
-}
-
-async function createAskStoryFile(platform) {
-    await document.fonts?.ready;
-    const canvas = document.createElement("canvas");
-    canvas.width = 1080;
-    canvas.height = 1920;
-    const context = canvas.getContext("2d");
-    const centerX = canvas.width / 2;
-    const username = state.profile?.username || api.user?.username || "valid";
-
-    context.fillStyle = "#ccf7f4";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = "rgba(255,184,214,.5)";
-    context.beginPath();
-    context.arc(970, -40, 310, 0, Math.PI * 2);
-    context.fill();
-    context.fillStyle = "rgba(255,177,94,.45)";
-    context.beginPath();
-    context.arc(-70, 1680, 260, 0, Math.PI * 2);
-    context.fill();
-
-    drawAskStoryBubble(context, 20, 255, 410, 175, "#ffb8d6", -10);
-    drawAskStoryBubble(context, 700, 850, 360, 155, "#ffb15e", 9);
-
-    context.fillStyle = "#000000";
-    canvasRoundedRect(context, 137, 374, 850, 610, 76);
-    context.fill();
-    context.fillStyle = "#ffffff";
-    canvasRoundedRect(context, 115, 350, 850, 610, 76);
-    context.fill();
-    context.strokeStyle = "#000000";
-    context.lineWidth = 10;
-    context.stroke();
-
-    context.fillStyle = "#000000";
-    context.font = '94px "Jua", "Apple Color Emoji", sans-serif';
-    const titleBottom = drawCenteredCanvasText(context, "send me anonymous messages", centerX, 490, 735, 106, 3);
-    context.fillStyle = "#3d7777";
-    context.font = '46px "Jua", sans-serif';
-    drawCenteredCanvasText(context, `@${username}`, centerX, titleBottom + 42, 710, 54, 1);
-
-    const targetWidth = platform === "snapchat" ? 600 : 650;
-    const targetHeight = platform === "snapchat" ? 132 : 126;
-    const targetX = centerX - targetWidth / 2;
-    const targetY = platform === "snapchat" ? 1280 : 1245;
-    [centerX - 230, centerX, centerX + 230].forEach((x, index) => {
-        drawAskStoryArrow(context, x, targetY - 120, "down", index === 1 ? "#ffb15e" : "#ffb8d6", (index - 1) * 12);
-        drawAskStoryArrow(context, x, targetY + targetHeight + 46, "up", index === 1 ? "#ffb8d6" : "#ffb15e", (1 - index) * 12);
-    });
-    context.fillStyle = "#000000";
-    canvasRoundedRect(context, targetX + 13, targetY + 15, targetWidth, targetHeight, targetHeight / 2);
-    context.fill();
-    canvasRoundedRect(context, targetX, targetY, targetWidth, targetHeight, targetHeight / 2);
-    context.fill();
-    context.strokeStyle = platform === "snapchat" ? "#ffb15e" : "#000000";
-    context.lineWidth = 8;
-    context.stroke();
-    if (platform === "instagram") {
-        context.fillStyle = "#ffffff";
-        context.font = '35px "Jua", sans-serif';
-        context.textAlign = "center";
-        context.textBaseline = "middle";
-        context.fillText("ADD LINK STICKER HERE", centerX, targetY + targetHeight / 2 + 2);
-    } else {
-        context.fillStyle = "#ffb8d6";
-        context.font = '35px "Jua", sans-serif';
-        context.textAlign = "center";
-        context.textBaseline = "middle";
-        context.fillText("ADD LINK STICKER HERE", centerX, targetY + targetHeight / 2 + 2);
-    }
-
-    const logo = await loadShareArtwork(new URL("/assets/valid_logo.png", import.meta.url).href);
-    if (logo) {
-        const logoWidth = 324;
-        const logoHeight = logoWidth * (logo.naturalHeight / logo.naturalWidth);
-        context.drawImage(logo, centerX - logoWidth / 2, 1550, logoWidth, logoHeight);
-    } else {
-        context.fillStyle = "#000000";
-        context.font = '72px "Jua", sans-serif';
-        context.textAlign = "center";
-        context.textBaseline = "top";
-        context.fillText("Valid", centerX, 1550);
-    }
-
-    const blob = await canvasBlob(canvas);
-    return new File([blob], `valid-ask-${platform}.png`, { type: "image/png" });
+    return shareCardsPromise;
 }
 
 async function copyShareLink(text) {
@@ -3600,7 +3183,7 @@ async function shareFeedItem(platform = "other") {
     }
     $("#feedDetailStatus").textContent = `Creating poll photo for ${platformLabel}…`;
     try {
-        const file = await createPollShareFile(item);
+        const file = await (await shareCards()).createPollShareFile(item);
         if (navigator.share && navigator.canShare?.({ files: [file] })) {
             $("#feedDetailStatus").textContent = `Choose ${platformLabel} in the share sheet.`;
             await navigator.share({
@@ -3895,7 +3478,7 @@ async function shareAnonymousAnswer(platform) {
     status.classList.add("share-progress");
     status.textContent = `Creating your reply image for ${platformLabel}…`;
     try {
-        const file = await createAnonymousAnswerShareFile(question);
+        const file = await (await shareCards()).createAnonymousAnswerShareFile(question);
         if (navigator.share && navigator.canShare?.({ files: [file] })) {
             status.textContent = `Choose ${platformLabel} in the share sheet.`;
             await navigator.share({
@@ -4089,6 +3672,7 @@ async function loadFeed(reset = false) {
         const currentSearch = currentRawSearch.length >= 2 ? currentRawSearch : "";
         if (generation !== state.feedGeneration || feedType !== state.feedType || myVotesOnly !== state.myVotesOnly || schoolSort !== state.schoolFeedSort || schoolContent !== state.schoolFeedContent || search !== currentSearch) return;
         commitFeedItems(items, { reset });
+        if (reset) state.feedLoadedAt = Date.now();
         if (feedType === "personal") state.feedOffset += items.length;
         else if (items.length) {
             const last = items.at(-1);
@@ -4096,8 +3680,13 @@ async function loadFeed(reset = false) {
         }
         status.textContent = "";
         state.feedAppliedSearch = search;
+        if (feedType === "personal" && !search) {
+            state.personalFeedItems = state.feedItems.slice();
+            state.personalFeedHasMore = items.length >= PERSONAL_FEED_PAGE_SIZE;
+            state.personalFeedLoaded = true;
+            writeAppCache("feed-personal", state.feedItems.slice(0, 60));
+        }
         renderFeed();
-        if (feedType === "personal" && !search) writeAppCache("feed-personal", state.feedItems.slice(0, 60));
         loadMore.classList.toggle("hidden", schoolSort === "hottest" || schoolContent === "tbhs" || items.length < 20);
     } catch (error) {
         if (generation !== state.feedGeneration) return;
@@ -4183,18 +3772,27 @@ function animateAuraChange(amount, sourceElement = null) {
         setTimeout(() => chip.classList.remove("aura-arrived"), 1400);
         return;
     }
-    chip.animate([
-        { transform: "scale(1)", background: "rgba(255,255,255,.92)" },
-        { transform: "scale(1.16)", background: Number(amount) > 0 ? "#ccf7f4" : "#ffb8d6", offset: .45 },
-        { transform: "scale(1)", background: "rgba(255,255,255,.92)" },
-    ], { duration: 520, easing: "cubic-bezier(.2,.8,.2,1)" });
+    restartChipAnimation(chip, Number(amount) > 0 ? "aura-gain" : "aura-spend");
+}
+
+function prefersReducedMotion() {
+    return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+}
+
+// Class-driven so the keyframes follow the theme and the reduced-motion rule.
+function restartChipAnimation(chip, className) {
+    if (!chip || prefersReducedMotion()) return;
+    chip.classList.remove(className);
+    void chip.offsetWidth;
+    chip.classList.add(className);
+    chip.addEventListener("animationend", () => chip.classList.remove(className), { once: true });
 }
 
 function showStreakCelebration(streak, multiplier) {
     const overlay = $("#streakCelebration");
     if (!overlay || Number(streak) < 1) return;
     const milestone = [7, 14, 30, 50, 100].includes(Number(streak));
-    $("#streakCelebrationFire").innerHTML = uiIcon("fire");
+    $("#streakCelebrationFire").innerHTML = uiIcon("fire").repeat(milestone ? 3 : 1);
     $("#streakCelebrationFire").classList.toggle("milestone", milestone);
     $("#streakCelebrationTitle").textContent = `${Number(streak).toLocaleString()} Day Streak!`;
     const multiplierLabel = $("#streakCelebrationMultiplier");
@@ -4256,6 +3854,17 @@ function renderInviteUnlock() {
     </div>`;
 }
 
+// PlayLockedView.swift formatTime: "1h 5m", "1h", "4m 30s", "4m", "12s".
+function formatLockRemaining(totalSeconds) {
+    const seconds = Math.max(0, Math.floor(totalSeconds));
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const rest = seconds % 60;
+    if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+    if (minutes > 0) return rest > 0 ? `${minutes}m ${rest}s` : `${minutes}m`;
+    return `${rest}s`;
+}
+
 function renderLockedPlay() {
     const until = state.playLocked?.locked_until;
     clearInterval(state.playLockTimer);
@@ -4272,7 +3881,7 @@ function renderLockedPlay() {
             const remaining = Math.max(0, Math.ceil((new Date(until).getTime() - Date.now()) / 1000));
             const message = $("#playLockMessage");
             if (message) message.textContent = remaining
-                ? `Unlocks in ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`
+                ? `Unlocks in ${formatLockRemaining(remaining)}`
                 : "Unlocking your next polls...";
             if (remaining > 0) return;
             clearInterval(state.playLockTimer);
@@ -4321,11 +3930,12 @@ function renderPlay() {
         return;
     }
     const artworkURL = api.assetURL(question.image_url);
-    const attribution = question.is_user_submitted ? `<div class="question-attribution">${question.is_anonymous ? avatarMarkup({ first_name: "Anonymous", profile_picture_url: "../assets/app/anonymous.webp" }, "attribution-avatar") : avatarMarkup({ first_name: question.submitted_by_name || "A classmate", profile_picture_url: question.submitted_by_avatar_url }, "attribution-avatar")}<span><small>Question submitted by</small><strong>${escapeHTML(question.is_anonymous ? "Someone at your school" : question.submitted_by_name || "A classmate")}</strong></span><div class="detail-overflow play-overflow"><button class="detail-overflow-button play-overflow-button" type="button" data-toggle-play-menu aria-label="More question actions" aria-expanded="false">•••</button><div class="detail-overflow-menu hidden" role="menu" aria-label="Question actions"><button type="button" role="menuitem" data-play-question-action="report">Report question</button>${question.is_anonymous ? "" : `<button type="button" role="menuitem" data-play-question-action="block">Block submitter</button>`}</div></div></div>` : "";
+    const attribution = question.is_user_submitted ? `<div class="question-attribution">${question.is_anonymous ? avatarMarkup({ first_name: "Anonymous", profile_picture_url: "../assets/app/anonymous.webp" }, "attribution-avatar") : avatarMarkup({ first_name: question.submitted_by_name || "Someone at your school", profile_picture_url: question.submitted_by_avatar_url }, "attribution-avatar")}<span><small>Question submitted by</small><strong>${escapeHTML(question.is_anonymous ? "Someone at your school" : question.submitted_by_name || "Someone at your school")}</strong></span><div class="detail-overflow play-overflow"><button class="detail-overflow-button play-overflow-button" type="button" data-toggle-play-menu aria-label="More question actions" aria-expanded="false">•••</button><div class="detail-overflow-menu hidden" role="menu" aria-label="Question actions"><button type="button" role="menuitem" data-play-question-action="report">Report question</button>${question.is_anonymous ? "" : `<button type="button" role="menuitem" data-play-question-action="block">Block submitter</button>`}</div></div></div>` : "";
     const remainingSkips = Math.max(0, Number(state.config?.max_skips_per_set ?? 3) - state.skipsUsedInSet);
+    const previousCard = card.dataset.questionId && card.dataset.questionId !== String(question.id) ? card.querySelector(":scope > .play-card") : null;
     card.innerHTML = `<article class="play-card">
         <div class="play-question-copy"><h3>${escapeHTML(question.question_text)}</h3>${attribution}</div>
-        <div class="question-artwork">${artworkURL ? mediaImageMarkup(artworkURL) : `<div class="artwork-placeholder"><img loading="lazy" decoding="async" src="../assets/app/pencil-clipboard.webp" alt=""><span>Question artwork</span></div>`}</div>
+        <div class="question-artwork">${artworkURL ? mediaImageMarkup(artworkURL, { loading: "eager", attributes: 'fetchpriority="high"' }) : `<div class="artwork-placeholder"><img decoding="async" src="../assets/app/pencil-clipboard.webp" alt=""><span>Question artwork</span></div>`}</div>
         <div class="choice-grid">${choices.map(choiceMarkup).join("")}</div>
         <div class="play-actions">
             <button class="play-action-button" data-shuffle type="button">${uiIcon("shuffle-circle")} Shuffle</button>
@@ -4337,8 +3947,35 @@ function renderPlay() {
     if (card.dataset.questionId !== String(question.id)) {
         card.scrollTop = 0;
         card.dataset.questionId = String(question.id);
+        crossFadePlayCard(card, previousCard);
+        preloadPlayArtwork(state.questions[state.questionIndex + 1]);
     }
 }
+
+// PlayGameView.swift cross-fades the artwork and answer grid over 0.35 s when
+// the question changes. The outgoing card stays inert underneath while it fades.
+function crossFadePlayCard(card, previousCard) {
+    card.querySelectorAll(":scope > .play-card-leaving").forEach((node) => node.remove());
+    if (!previousCard || prefersReducedMotion()) return;
+    previousCard.classList.add("play-card-leaving");
+    previousCard.setAttribute("aria-hidden", "true");
+    previousCard.inert = true;
+    card.querySelector(":scope > .play-card")?.classList.add("play-card-entering");
+    card.append(previousCard);
+    setTimeout(() => previousCard.remove(), 400);
+}
+
+// PlayViewModel prefetches upcoming artwork so the next question never opens on an empty tile.
+function preloadPlayArtwork(question) {
+    const url = question?.image_url ? api.assetURL(question.image_url) : "";
+    const source = url ? imageCandidates(url)[0] : "";
+    if (!source || preloadPlayArtwork.loaded.has(source)) return;
+    preloadPlayArtwork.loaded.add(source);
+    const image = new Image();
+    image.decoding = "async";
+    image.src = source;
+}
+preloadPlayArtwork.loaded = new Set();
 
 async function loadPlay() {
     if (state.questions.length || state.playLocked) return renderPlay();
@@ -4444,21 +4081,42 @@ async function submitNomination({ candidate, question }) {
     refreshFeedGateStatus();
 }
 
+// iOS PlayViewModel.selectAnswer: medium haptic, instant selection, every choice
+// locked, and a fixed 1.2 s hold before advancing whatever the network does
+// (scheduleAdvance ~1180). The server response only reconciles aura and streak.
+const PLAY_ANSWER_HOLD_MS = 1200;
+const PLAY_SKIP_HOLD_MS = 500;
+
+function beginPlayTransition(question) {
+    if (state.playTransition || !question) return false;
+    state.playTransition = { questionId: question.id };
+    $$("#playCard .choice-button, #playCard .play-action-button, #playCard .play-overflow-button").forEach((button) => { button.disabled = true; });
+    return true;
+}
+
+function schedulePlayAdvance(question, delay) {
+    setTimeout(() => {
+        if (state.playTransition?.questionId !== question.id) return;
+        state.playTransition = null;
+        if (state.questions[state.questionIndex] !== question) return;
+        state.questionIndex += 1;
+        renderPlay();
+    }, delay);
+}
+
 async function answerPlayQuestion(choiceId) {
     const question = state.questions[state.questionIndex];
+    if (!question || state.playTransition) return;
     const choices = choicesForQuestion(question);
     const selected = choices.find((choice) => String(choice.user_id) === choiceId);
-    if (!selected) return;
+    if (!selected || !beginPlayTransition(question)) return;
     const selectedButton = $(`[data-choice="${CSS.escape(choiceId)}"]`);
     const previousAura = Math.max(0, Number(state.profile?.aura_points || 0));
     const previousStreak = Math.max(0, Number(state.profile?.current_streak || 0));
     const previousMultiplier = Math.max(1, Number(state.profile?.streak_multiplier || 1));
     const expectedAura = expectedAuraPerAnswer();
-    $$(".choice-button").forEach((button) => {
-        button.disabled = true;
-        button.classList.toggle("selected", button.dataset.choice === choiceId);
-    });
-    softHaptic();
+    $$(".choice-button").forEach((button) => button.classList.toggle("selected", button.dataset.choice === choiceId));
+    haptic("medium");
     if (state.profile && expectedAura > 0) {
         state.profile.aura_points = previousAura + expectedAura;
         state.playAuraEarned += expectedAura;
@@ -4466,6 +4124,7 @@ async function answerPlayQuestion(choiceId) {
         renderProfileHeader();
         animateAuraChange(expectedAura, selectedButton);
     }
+    schedulePlayAdvance(question, PLAY_ANSWER_HOLD_MS);
     try {
         const result = await api.answerQuestion(api.user.id, {
             question_id: question.id,
@@ -4474,37 +4133,37 @@ async function answerPlayQuestion(choiceId) {
             presented_options: choices.map((choice) => ({ phone: "", name: displayName(choice) })),
             is_nomination: false,
         });
-        const auraEarned = Math.max(0, Number(result.aura_points_earned || 0));
+        const auraEarned = Math.max(0, Number(result.aura_points_earned ?? expectedAura));
         const earnedDifference = auraEarned - expectedAura;
-        state.playAuraEarned += earnedDifference;
+        state.playAuraEarned = Math.max(0, state.playAuraEarned + earnedDifference);
         if (state.profile) {
-            const reconciledAura = previousAura + auraEarned;
             const serverTotal = Number(result.total_aura_points);
+            const reconciledAura = Math.max(0, Number(state.profile.aura_points || 0) + earnedDifference);
             state.profile.aura_points = Number.isFinite(serverTotal) ? Math.max(reconciledAura, serverTotal) : reconciledAura;
-            state.profile.current_streak = Math.max(0, Number(result.current_streak ?? previousStreak));
-            state.profile.streak_multiplier = Math.max(1, Number(result.streak_multiplier ?? previousMultiplier));
+            state.profile.current_streak = Math.max(0, Number(result.current_streak ?? state.profile.current_streak ?? previousStreak));
+            state.profile.streak_multiplier = Math.max(1, Number(result.streak_multiplier ?? state.profile.streak_multiplier ?? previousMultiplier));
             protectOptimisticEarnedProfile(state.profile.aura_points, state.profile.current_streak, state.profile.streak_multiplier);
             renderProfileHeader();
         }
         if (earnedDifference !== 0) animateAuraChange(earnedDifference);
+        if (state.playComplete && !state.playTransition) renderPlayCongrats();
         if (Number(state.profile?.current_streak || 0) > previousStreak) {
             showStreakCelebration(state.profile.current_streak, state.profile.streak_multiplier);
         }
-        state.questionIndex += 1;
-        renderPlay();
         refreshProfile();
         refreshFeedGateStatus();
     } catch (error) {
-        if (state.profile) {
-            state.profile.aura_points = previousAura;
-            state.profile.current_streak = previousStreak;
-            state.profile.streak_multiplier = previousMultiplier;
-            state.playAuraEarned = Math.max(0, state.playAuraEarned - expectedAura);
+        // Keep moving like iOS; only take back the aura this vote promised.
+        state.playAuraEarned = Math.max(0, state.playAuraEarned - expectedAura);
+        if (state.profile && expectedAura > 0) {
+            state.profile.aura_points = Math.max(previousAura, Number(state.profile.aura_points || 0) - expectedAura);
             clearOptimisticEarnedProfile();
             renderProfileHeader();
+            animateAuraChange(-expectedAura);
         }
-        showToast(userMessage(error, "Could not save your answer."));
-        renderPlay();
+        if (state.playComplete && !state.playTransition) renderPlayCongrats();
+        const fallback = "Your vote didn't go through. That poll will come back in a later set.";
+        showToast(error?.status >= 400 && error.status < 500 ? userMessage(error, fallback) : fallback);
     }
 }
 
@@ -4520,14 +4179,48 @@ function finishPlaySet() {
     renderLockedPlay();
 }
 
-async function skipPlayQuestion(questionId) {
+// PlayViewModel.skipQuestion: shake the aura counter, record the skip in the
+// background, and advance after 0.5 s. Failed skips retry until they land.
+function skipPlayQuestion(questionId) {
+    const question = state.questions[state.questionIndex];
+    if (!question || String(question.id) !== String(questionId) || state.playTransition) return;
     const remaining = Math.max(0, Number(state.config?.max_skips_per_set ?? 3) - state.skipsUsedInSet);
     if (remaining < 1) return showToast("You've used all skips for this poll set.");
+    if (!beginPlayTransition(question)) return;
     state.skipsUsedInSet += 1;
-    state.questionIndex += 1;
-    renderPlay();
-    try { await api.skipQuestion(api.user.id, questionId); }
-    catch (_) { showToast("Skipped here. We'll sync it when the connection recovers."); }
+    restartChipAnimation($("#auraCount")?.closest(".play-aura-chip"), "aura-shake");
+    schedulePlayAdvance(question, PLAY_SKIP_HOLD_MS);
+    void recordPlaySkip(question.id);
+}
+
+const pendingPlaySkips = new Map();
+
+async function recordPlaySkip(questionId, attempt = 0) {
+    const userId = api.user?.id;
+    if (!userId) return;
+    try {
+        await api.skipQuestion(userId, questionId);
+        pendingPlaySkips.delete(questionId);
+    } catch (error) {
+        if (error?.status && error.status < 500 && error.status !== 408 && error.status !== 429) {
+            pendingPlaySkips.delete(questionId);
+            return;
+        }
+        if (!pendingPlaySkips.has(questionId) && attempt === 0) showToast("Skipped. We'll save it when your connection is back.");
+        pendingPlaySkips.set(questionId, { userId, attempt: attempt + 1 });
+        if (attempt < 4 && navigator.onLine !== false) {
+            setTimeout(() => {
+                const pending = pendingPlaySkips.get(questionId);
+                if (pending && api.user?.id === pending.userId) void recordPlaySkip(questionId, pending.attempt);
+            }, 2000 * 2 ** attempt);
+        }
+    }
+}
+
+function retryPendingPlaySkips() {
+    for (const [questionId, pending] of pendingPlaySkips) {
+        if (api.user?.id === pending.userId) void recordPlaySkip(questionId, pending.attempt);
+    }
 }
 
 async function moderatePlayQuestion(action) {
@@ -4752,7 +4445,7 @@ async function prepareAskStoryShare() {
     try {
         const share = await api.trackAskShare(api.user.id, platform);
         const shareURL = share?.share_url || state.askLink.share_url;
-        const file = await createAskStoryFile(platform);
+        const file = await (await shareCards()).createAskStoryFile(platform);
         const copied = await copyShareLink(shareURL);
         state.askStoryFile = file;
         state.askStoryShareURL = shareURL;
@@ -4923,6 +4616,7 @@ function renderProfileEditorHub() {
     const changeCount = profileChangedFieldCount();
     $("#profileReviewButton").textContent = changeCount === 1 ? "Review 1 change" : `Review ${changeCount} changes`;
     $("#profileReviewButton").disabled = !profileDraftIsValid();
+    $("#deleteAccountButton").classList.toggle("hidden", state.config?.enable_delete_account === false);
     const unsubscribeButton = $("#godModeUnsubscribeButton");
     const cancellationScheduled = state.godModeCancellation?.cancel_at_period_end === true;
     unsubscribeButton.classList.toggle("hidden", !hasActiveGodMode());
@@ -5306,22 +5000,48 @@ async function submitFeedback(event) {
     }
 }
 
-async function changeProfilePicture(event) {
-    const input = event.currentTarget;
-    const file = input.files[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-        input.value = "";
-        return showToast("Profile photos must be 5 MB or smaller.");
+// Profile photos go through the iOS circle crop and upload format (≤1024 px JPEG
+// 0.82), so large camera photos no longer hit a 5 MB wall. The new photo shows
+// at once with an uploading state, and a failed upload stays retryable.
+async function cropProfilePhoto(file) {
+    try {
+        const { cropAvatar } = await import("./avatar-crop.js");
+        return await cropAvatar(file);
+    } catch (error) {
+        showToast(userMessage(error, "That photo could not be opened. Choose a JPEG or PNG."));
+        return null;
     }
-    showToast("Uploading photo...");
+}
+
+function setPendingProfilePhoto(next) {
+    if (state.pendingProfilePhoto?.url && state.pendingProfilePhoto.url !== next?.url) URL.revokeObjectURL(state.pendingProfilePhoto.url);
+    state.pendingProfilePhoto = next;
+    renderProfilePanel();
+}
+
+async function uploadProfilePhoto(file) {
+    const pending = { file, url: state.pendingProfilePhoto?.file === file ? state.pendingProfilePhoto.url : URL.createObjectURL(file), status: "uploading" };
+    setPendingProfilePhoto(pending);
     try {
         await api.uploadProfilePicture(api.user.id, file);
         await refreshProfile();
+        if (state.pendingProfilePhoto === pending) setPendingProfilePhoto(null);
+        successHaptic();
         showToast("Profile photo updated");
     } catch (error) {
-        showToast(userMessage(error, "Could not update your photo."));
-    } finally { input.value = ""; }
+        if (state.pendingProfilePhoto !== pending) return;
+        setPendingProfilePhoto({ ...pending, status: "failed" });
+        showToast(userMessage(error, "Couldn't upload your photo. Tap it to try again."));
+    }
+}
+
+async function changeProfilePicture(event) {
+    const input = event.currentTarget;
+    const file = input.files[0];
+    input.value = "";
+    if (!file) return;
+    const cropped = await cropProfilePhoto(file);
+    if (cropped) await uploadProfilePhoto(cropped);
 }
 
 function questionSubmissionCost() {
@@ -5829,27 +5549,23 @@ function openQuestionDialog({ section = "submit", submissionId = null } = {}) {
 }
 
 function resetSignupPhotoPreview() {
+    if (state.signupPhotoURL) URL.revokeObjectURL(state.signupPhotoURL);
+    state.signupPhotoURL = null;
+    state.signupPhotoFile = null;
     $("#signupPhotoPreview").innerHTML = `<span class="signup-photo-placeholder"><span class="signup-photo-person-icon"></span><small>Tap to add photo</small></span>`;
 }
 
-function previewSignupPhoto() {
+async function previewSignupPhoto() {
     const input = $("#signupPicture");
     const file = input.files[0];
-    const preview = $("#signupPhotoPreview");
-    if (!file) {
-        resetSignupPhotoPreview();
-        return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-        input.value = "";
-        resetSignupPhotoPreview();
-        $("#signupStatus").textContent = "Profile photos must be 5 MB or smaller.";
-        return;
-    }
-    const reader = new FileReader();
-    reader.addEventListener("load", () => { preview.innerHTML = `<img loading="lazy" decoding="async" src="${escapeHTML(reader.result)}" alt="">`; }, { once: true });
-    reader.addEventListener("error", resetSignupPhotoPreview, { once: true });
-    reader.readAsDataURL(file);
+    input.value = "";
+    if (!file) return;
+    const cropped = await cropProfilePhoto(file);
+    if (!cropped) return;
+    if (state.signupPhotoURL) URL.revokeObjectURL(state.signupPhotoURL);
+    state.signupPhotoFile = cropped;
+    state.signupPhotoURL = URL.createObjectURL(cropped);
+    $("#signupPhotoPreview").innerHTML = `<img decoding="async" src="${escapeHTML(state.signupPhotoURL)}" alt="">`;
 }
 
 function contactsPickerSupported() {
@@ -5969,6 +5685,41 @@ async function shareClassmateInvite() {
     }
 }
 
+// InformationEditSheet.swift "Delete account" → SettingsView: discard pending
+// edits first, warn accounts without a passkey, then confirm the 5-day deletion.
+async function beginAccountDeletion() {
+    if (profileChangedFieldCount() && !await confirmSheet({
+        title: "Discard your changes?",
+        message: "Your profile information changes won't be saved.",
+        confirmLabel: "Discard",
+        cancelLabel: "Keep editing",
+        destructive: true,
+    })) return;
+    state.profileDraft = null;
+    state.pendingProfileInformation = null;
+    if ($("#profileDialog").open) $("#profileDialog").close();
+    const passkeys = state.passkeyStatus;
+    const missingPasskey = passkeys && passkeys.registered !== true && Number(passkeys.credentialCount || 0) < 1;
+    if (missingPasskey) {
+        let setUpPasskey = false;
+        const noteChoice = (event) => { if (event.target.closest?.(".ui-sheet-cancel")) setUpPasskey = true; };
+        document.addEventListener("click", noteChoice, true);
+        const deleteAnyway = await confirmSheet({
+            title: "Don't Lose Your Account",
+            message: "You don't have a passkey. If you lose access to this phone number during the 5-day countdown, you won't be able to recover your account. Set up a passkey first.",
+            confirmLabel: "Delete Anyway",
+            cancelLabel: "Set Up Passkey",
+            destructive: true,
+        });
+        document.removeEventListener("click", noteChoice, true);
+        if (!deleteAnyway) {
+            if (setUpPasskey) void addBackupPasskey();
+            return;
+        }
+    }
+    openDeleteAccountDialog();
+}
+
 function openDeleteAccountDialog() {
     $("#deleteAccountForm").reset();
     $("#deleteAccountStatus").textContent = "";
@@ -6062,6 +5813,9 @@ function switchPanel(panel, { historyMode = "push", restoreScroll = true } = {})
     if (historyMode !== "none") writeNavigationState(historyMode);
     const targetScroll = restoreScroll ? state.tabScrollPositions[panel] || 0 : 0;
     restorePanelScroll(panel, targetScroll);
+    renderTabBadges();
+    // A return to the Inbox starts a new visit; redraw its chip counts.
+    if (panel === "feed" && previousPanel !== panel && state.feedItems.length) renderFeed();
     void activatePanelRoute(panel);
 }
 
@@ -6087,6 +5841,7 @@ function activatePanelRoute(panel) {
         refreshGate: refreshFeedGateStatus,
         isLocked: isFeedVoteLocked,
         hasItems: () => state.feedItems.length > 0,
+        isStale: () => feedIsStale(FEED_TAB_RETURN_FRESHNESS_MS),
         load: loadFeed,
     });
     if (panel === "play") context.load = loadPlay;
@@ -6357,6 +6112,10 @@ function renderWebPushStatus() {
     } else {
         status.textContent = "Off · tap to turn on";
     }
+    // The switch already shows on/off; surface the states that need attention.
+    const attention = Notification.permission === "denied" || ["syncing", "error"].includes(state.webPushRegistrationState) && Boolean(state.webPushSubscription);
+    status.classList.toggle("visually-hidden", !attention);
+    status.classList.toggle("settings-row-warning", attention && status.textContent !== "Finishing setup…");
     renderFeedNotificationPrompt();
 }
 
@@ -6709,20 +6468,6 @@ function bindEvents() {
         const detail = event.target.closest("[data-feed-detail]");
         if (detail) openFeedDetail(detail.dataset.feedDetail);
     });
-    $("#feedList").addEventListener("keydown", (event) => {
-        if (!["Enter", " "].includes(event.key)) return;
-        const detail = event.target.closest("[data-feed-detail]");
-        const tbhDetail = event.target.closest("[data-tbh-detail]");
-        if (tbhDetail) {
-            event.preventDefault();
-            openTbhDetail(tbhDetail.dataset.tbhDetail);
-            return;
-        }
-        if (detail) {
-            event.preventDefault();
-            openFeedDetail(detail.dataset.feedDetail);
-        }
-    });
     $("#feedDetailDialog").addEventListener("click", (event) => {
         const commentsTarget = event.target.closest("[data-comments-target]");
         if (commentsTarget) return void openCommentsFromValue(commentsTarget.dataset.commentsTarget);
@@ -6842,7 +6587,11 @@ function bindEvents() {
     });
     $("#profilePanel").addEventListener("click", (event) => {
         if (event.target.closest("[data-open-god-mode]")) openGodModePitch();
-        if (event.target.closest("[data-edit-photo]")) $("#profilePictureInput").click();
+        if (event.target.closest("[data-edit-photo]")) {
+            if (state.pendingProfilePhoto?.status === "uploading") return;
+            if (state.pendingProfilePhoto?.status === "failed") return void uploadProfilePhoto(state.pendingProfilePhoto.file);
+            $("#profilePictureInput").click();
+        }
         if (event.target.closest("[data-edit-bio]")) openBioDialog();
         if (event.target.closest("[data-edit-profile]")) openProfileDialog();
         if (event.target.closest("#viewClassmatesButton")) openClassmateDirectory();
@@ -6984,6 +6733,7 @@ function bindEvents() {
         state.pendingAuraPurchase = null;
     });
     $("#deleteAccountForm").addEventListener("submit", requestAccountDeletion);
+    $("#deleteAccountButton").addEventListener("click", () => void beginAccountDeletion());
     $("#cancelDeletionButton").addEventListener("click", cancelAccountDeletion);
     $("#pendingDeletionLogout").addEventListener("click", logoutAndReset);
     $("#installAppButton").addEventListener("click", installWebApp);
@@ -7093,10 +6843,10 @@ function bindEvents() {
     $("#bioForm").addEventListener("submit", saveBio);
     $$("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
     addEventListener("valid:session-expired", () => showSignedOut("Your session expired. Sign in with your passkey again."));
-    addEventListener("valid:feed-update", (event) => applyFeedRealtimeEvent(event.detail));
     addEventListener("popstate", handleAppPopState);
     addEventListener("offline", updateNetworkStatus);
     addEventListener("online", updateNetworkStatus);
+    addEventListener("online", retryPendingPlaySkips);
     addEventListener("online", () => { if (sessionRestorePending) void restoreOrStartAuthFlow(); });
     $("#retrySessionButton").addEventListener("click", restoreOrStartAuthFlow);
     addEventListener("focus", checkStripeCheckout);
@@ -7105,6 +6855,11 @@ function bindEvents() {
         if (document.visibilityState === "visible") {
             refreshWebPushStatus();
             refreshAskSafetyState();
+            refreshFeedIfStale(FEED_FOREGROUND_REFRESH_MS);
+        }
+        if (document.body.classList.contains("authenticated")) {
+            renderTabBadges();
+            if (state.activePanel === "feed") renderFeed();
         }
     });
     $("#appView").addEventListener("touchstart", beginPullRefresh, { passive: true });

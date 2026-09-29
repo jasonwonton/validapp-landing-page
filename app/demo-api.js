@@ -732,7 +732,7 @@ export class DemoAPI {
     async setPollCommentReaction(_userId, targetId, commentId, reaction) { return this.mutateDemoCommentReaction("poll", targetId, commentId, reaction); }
     async removePollCommentReaction(_userId, targetId, commentId) { return this.mutateDemoCommentReaction("poll", targetId, commentId, null); }
     async getPollCommentReactors(_userId, targetId, commentId, offset, limit) { return this.getDemoCommentReactors("poll", targetId, commentId, offset, limit); }
-    async reportPollComment(_userId, targetId, commentId) { return this.hideDemoComment("poll", targetId, commentId, "reported_hidden"); }
+    async reportPollComment(_userId, targetId, commentId, reason) { this.lastCommentReportReason = reason; return this.hideDemoComment("poll", targetId, commentId, "reported_hidden"); }
     async deletePollComment(_userId, targetId, commentId) { return this.hideDemoComment("poll", targetId, commentId, "author_deleted"); }
     async listFeedActivityComments(_userId, targetId, before, limit) { return this.listDemoComments("activity", targetId, before, limit); }
     async getFeedActivityComment(_userId, targetId, commentId) { return this.getDemoComment("activity", targetId, commentId); }
@@ -741,7 +741,7 @@ export class DemoAPI {
     async setFeedActivityCommentReaction(_userId, targetId, commentId, reaction) { return this.mutateDemoCommentReaction("activity", targetId, commentId, reaction); }
     async removeFeedActivityCommentReaction(_userId, targetId, commentId) { return this.mutateDemoCommentReaction("activity", targetId, commentId, null); }
     async getFeedActivityCommentReactors(_userId, targetId, commentId, offset, limit) { return this.getDemoCommentReactors("activity", targetId, commentId, offset, limit); }
-    async reportFeedActivityComment(_userId, targetId, commentId) { return this.hideDemoComment("activity", targetId, commentId, "reported_hidden"); }
+    async reportFeedActivityComment(_userId, targetId, commentId, reason) { this.lastCommentReportReason = reason; return this.hideDemoComment("activity", targetId, commentId, "reported_hidden"); }
     async deleteFeedActivityComment(_userId, targetId, commentId) { return this.hideDemoComment("activity", targetId, commentId, "author_deleted"); }
 
     async createFeedShareLink(_userId, type, id) { return { share_url: `https://validapp.lol/${type === 'poll' ? 'poll' : 'tbh'}/demo-${id}` }; }
@@ -822,6 +822,7 @@ export class DemoAPI {
             global_visibility_boost_cost: 400,
             targeted_visibility_boost_cost: 200,
             enable_tbh_requests: true,
+            enable_delete_account: true,
             enable_chats: true,
             enable_web_chats: true,
             enable_chat_daily_ledger: true,
