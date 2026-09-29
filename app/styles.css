@@ -886,6 +886,36 @@ body.play-active .play-actions { margin: 0; }
 @keyframes modal-enter { from { opacity: 0; scale: .97; translate: 0 12px; } to { opacity: 1; scale: 1; translate: 0 0; } }
 @keyframes modal-backdrop-enter { from { opacity: 0; } to { opacity: 1; } }
 .modal form { display: grid; gap: 12px; padding: 22px; }
+/* ui-dialogs.js: in-app confirm and reason sheets (bottom sheet on phones, card on wide screens). */
+.ui-sheet { width: min(560px, calc(100% - 16px)); max-width: none; max-height: calc(100dvh - 24px - env(safe-area-inset-top)); margin: auto auto calc(8px + var(--safe-bottom)); padding: 0; overflow: auto; overscroll-behavior: contain; border: 0; border-radius: 28px; background: var(--aqua); color: var(--ink); box-shadow: 0 -6px 30px rgba(0,0,0,.2); }
+.ui-sheet[open] { animation: ui-sheet-enter .26s cubic-bezier(.2,.8,.2,1); }
+.ui-sheet::backdrop { background: rgba(5,9,20,.55); backdrop-filter: blur(3px); animation: modal-backdrop-enter .18s ease-out; }
+@keyframes ui-sheet-enter { from { opacity: .4; translate: 0 40px; } to { opacity: 1; translate: 0 0; } }
+.ui-sheet-content { display: grid; gap: 12px; padding: 10px 20px 20px; text-align: center; }
+.ui-sheet-grabber { justify-self: center; width: 36px; height: 5px; margin-bottom: 4px; border-radius: 999px; background: rgba(5,9,20,.2); }
+.ui-sheet h2 { margin: 0; font-size: 1.45rem; line-height: 1.15; overflow-wrap: anywhere; }
+.ui-sheet-message { margin: 0; color: var(--muted); font-size: 1rem; line-height: 1.35; overflow-wrap: anywhere; }
+.ui-sheet-actions { display: grid; gap: 10px; margin-top: 6px; }
+.ui-sheet-actions button { width: 100%; min-height: var(--button-height-small); border-radius: var(--button-radius-capsule); font-size: 1.1rem; }
+.ui-sheet-actions .danger-button { border: 0; cursor: pointer; }
+.ui-sheet-actions button:disabled { opacity: var(--button-disabled-opacity); cursor: default; }
+.ui-sheet-reasons { display: grid; gap: 8px; margin: 0; padding: 0; border: 0; text-align: left; }
+.ui-sheet-reasons label { display: flex; align-items: center; gap: 10px; min-height: 46px; padding: 10px 12px; border: 2px solid rgba(5,9,20,.18); border-radius: 12px; background: var(--white); cursor: pointer; }
+.ui-sheet-reasons label:has(input:checked) { border-color: var(--outline); }
+.ui-sheet-reasons input { flex: 0 0 auto; width: 20px; height: 20px; margin: 0; accent-color: var(--ink); }
+.ui-sheet-details { display: grid; gap: 6px; text-align: left; color: var(--muted); font-size: .94rem; }
+.ui-sheet-details[hidden] { display: none; }
+.ui-sheet-details textarea { width: 100%; min-height: 88px; resize: vertical; padding: 11px; border: 2px solid var(--outline); border-radius: 14px; background: var(--white); color: var(--ink); font-size: 1rem; }
+:root[data-theme="dark"] .ui-sheet-grabber { background: rgba(255,255,255,.28); }
+:root[data-theme="dark"] .ui-sheet-reasons label { border-color: rgba(255,255,255,.18); }
+@media (min-width: 700px) {
+    .ui-sheet { width: min(440px, calc(100% - 28px)); margin: auto; box-shadow: 0 12px 30px rgba(0,0,0,.15); }
+    .ui-sheet-grabber { display: none; }
+    .ui-sheet-content { padding-top: 22px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .ui-sheet[open], .ui-sheet::backdrop { animation: none; }
+}
 .modal-heading { display: flex; justify-content: space-between; align-items: start; }
 .modal-heading .icon-button { position: relative; z-index: 2; flex: 0 0 44px; width: 44px; height: 44px; display: grid; place-items: center; margin: 0 0 0 8px; }
 .modal-title-row { display: flex; align-items: center; gap: 10px; }
@@ -1217,7 +1247,7 @@ body.play-active .play-actions { margin: 0; }
 .deletion-warning { padding: 16px; border: 2px solid #a3293c; border-radius: 15px; background: #fff0f2; }
 .deletion-warning strong { display: block; margin-bottom: 6px; color: var(--danger-text); font-size: 1.12rem; }
 .deletion-warning p { margin: 0; color: #5d4045; font-size: .86rem; line-height: 1.4; }
-.danger-button { background: #ff0000; color: var(--white); }
+.danger-button { background: #ff0000; color: #fff; }
 .danger-button:active { background: #d90000; }
 .pending-deletion-content { display: grid; gap: 14px; padding: 24px; }
 .pending-deletion-content h2 { line-height: 1.05; }

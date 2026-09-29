@@ -9,6 +9,7 @@ import { createRealtimeList } from "./realtime-list.js";
 import { activateRoute, preloadRoute } from "./routes/route-loader.js";
 import { clearRuntimeStyles, setRuntimeStyles } from "./runtime-style.js";
 import { configureMediaFallback, installMediaImageFallback, mediaImageMarkup } from "./media-url.js";
+import { confirmSheet } from "./ui-dialogs.js";
 
 const demoMode = localDemoAllowed();
 const api = demoMode ? new DemoAPI() : new ValidAPI();
@@ -1289,6 +1290,7 @@ async function shareGodModeInvite(button, channel) {
 function auraCost(kind) {
     if (kind === "global") return Math.max(0, Number(state.config?.global_visibility_boost_cost ?? 400));
     if (kind === "targeted") return Math.max(0, Number(state.config?.targeted_visibility_boost_cost ?? 200));
+    if (kind === "nominate") return Math.max(0, Number(state.config?.nomination_aura_cost ?? 100));
     return questionSubmissionCost();
 }
 
@@ -1633,12 +1635,15 @@ function openAuraSpend(kind, target = null) {
         ? ["Get Boosted", "Jump to the top of your classmates' polls for 5 days or until you get voted 10 times."]
         : kind === "reveal"
             ? ["Reveal who sent this?", `Spend ${cost.toLocaleString()} aura to see who voted for you.`]
+            : kind === "nominate"
+            ? [`Nominate ${displayName(target.candidate)}?`, "They'll see they got nominated for this poll. Your name stays private."]
             : ["Boost toward your crush", `Show up more often in ${displayName(target)}'s polls. They will not be told.`];
     state.pendingAuraPurchase = { kind, target };
     const spendIcon = $("#auraSpendIcon");
-    const targetImage = ["targeted", "tbh"].includes(kind) ? api.assetURL(target?.profile_picture_url_medium || target?.profile_picture_url) : null;
-    spendIcon.src = targetImage || (kind === "reveal" ? "../assets/app/magnifying_glass.webp" : "../assets/app/rocket.webp");
-    spendIcon.alt = kind === "global" ? "Get Boosted" : kind === "reveal" ? "Reveal sender" : displayName(target);
+    const person = kind === "nominate" ? target.candidate : target;
+    const targetImage = ["targeted", "tbh", "nominate"].includes(kind) ? api.assetURL(person?.profile_picture_url_medium || person?.profile_picture_url) : null;
+    spendIcon.src = targetImage || (kind === "reveal" ? "../assets/app/magnifying_glass.webp" : kind === "nominate" ? "../assets/app/crown.webp" : "../assets/app/rocket.webp");
+    spendIcon.alt = kind === "global" ? "Get Boosted" : kind === "reveal" ? "Reveal sender" : displayName(person);
     spendIcon.closest(".aura-spend-icon").classList.toggle("profile", Boolean(targetImage));
     $("#auraSpendTitle").textContent = details[0];
     $("#auraSpendMessage").textContent = details[1];
@@ -1655,7 +1660,7 @@ async function confirmAuraSpend() {
     const purchase = state.pendingAuraPurchase;
     if (!purchase) return;
     const button = $("#confirmAuraSpend");
-    setButtonLoading(button, true, purchase.kind === "reveal" ? "Revealing..." : purchase.kind === "tbh" ? "Sending…" : "Purchasing...");
+    setButtonLoading(button, true, purchase.kind === "reveal" ? "Revealing..." : purchase.kind === "tbh" ? "Sending…" : purchase.kind === "nominate" ? "Nominating..." : "Purchasing...");
     $("#auraSpendStatus").textContent = "";
     try {
         let tbhResponse = null;
@@ -1667,17 +1672,18 @@ async function confirmAuraSpend() {
         } else if (purchase.kind === "reveal") {
             const result = await api.revealSender(api.user.id, purchase.target.question_answer_id);
             applyFeedSenderReveal(purchase.target, result);
-        } else if (purchase.kind === "global") await api.purchaseGlobalBoost(api.user.id);
+        } else if (purchase.kind === "nominate") await submitNomination(purchase.target);
+        else if (purchase.kind === "global") await api.purchaseGlobalBoost(api.user.id);
         else await api.purchaseTargetedBoost(api.user.id, purchase.target.user_id);
         clearOptimisticEarnedProfile();
         $("#auraSpendDialog").close();
         successHaptic();
         state.pendingAuraPurchase = null;
-        if (!["reveal", "tbh"].includes(purchase.kind)) await refreshProfile();
+        if (!["reveal", "tbh", "nominate"].includes(purchase.kind)) await refreshProfile();
         if (purchase.kind === "tbh") {
             $("#tbhRequestTitle").textContent = "Request sent";
             $("#tbhRequestBody").innerHTML = `<div class="tbh-success"><span class="tbh-detail-quote" aria-hidden="true">❞</span><h2>Request sent to ${escapeHTML(purchase.target.first_name)}</h2><p>If they answer, your name and their TBH will be posted in School for classmates to see and react to. Their name stays private.</p><button class="primary-button" type="button" data-close-tbh-request>Done</button></div>`;
-        } else showToast(purchase.kind === "reveal"
+        } else if (purchase.kind !== "nominate") showToast(purchase.kind === "reveal"
             ? `Revealed: ${purchase.target.voter_name}`
             : purchase.kind === "global"
                 ? "You're boosted"
@@ -1685,7 +1691,7 @@ async function confirmAuraSpend() {
     } catch (error) {
         $("#auraSpendStatus").textContent = error.message || (purchase.kind === "reveal"
             ? "Could not reveal this sender."
-            : "Could not purchase this boost.");
+            : purchase.kind === "nominate" ? "Could not save your nomination." : "Could not purchase this boost.");
     } finally {
         setButtonLoading(button, false);
         if (state.pendingAuraPurchase) {
@@ -1850,7 +1856,12 @@ async function moderateSelectedClassmate(action) {
     const profile = state.selectedClassmateProfile;
     if (!profile?.user_id) return;
     const verb = action === "block" ? "block" : "report";
-    if (!confirm(`${verb === "block" ? "Block" : "Report"} ${displayName(profile)}?${verb === "block" ? " They will be removed from your Valid experience." : " Valid will review this profile."}`)) return;
+    if (!await confirmSheet({
+        title: `${verb === "block" ? "Block" : "Report"} ${displayName(profile)}?`,
+        message: verb === "block" ? "They will be removed from your Valid experience." : "Valid will review this profile.",
+        confirmLabel: verb === "block" ? "Block" : "Report",
+        destructive: true,
+    })) return;
     $("#classmateProfileStatus").textContent = verb === "block" ? "Blocking profile…" : "Sending report…";
     try {
         if (verb === "block") {
@@ -2937,7 +2948,11 @@ async function revealQuestionSubmitter(button) {
     const remaining = Number(state.profile?.remaining_reveals || 0);
     const cost = Number(state.config?.full_reveal_aura_cost ?? DEFAULT_FULL_REVEAL_AURA_COST);
     if (remaining <= 0 && Number(state.profile?.aura_points || 0) < cost) return showToast('You need another reveal or more aura to do that.');
-    if (!confirm(`Reveal who submitted this question? ${remaining > 0 ? 'Use 1 reveal.' : `Spend ${cost.toLocaleString()} aura.`}`)) return;
+    if (!await confirmSheet({
+        title: "Reveal who submitted this question?",
+        message: remaining > 0 ? "This uses 1 of your reveals." : `This spends ${cost.toLocaleString()} aura.`,
+        confirmLabel: remaining > 0 ? "Use 1 reveal" : `Spend ${cost.toLocaleString()} aura`,
+    })) return;
     button.disabled = true;
     try {
         const result = await api.revealQuestionSubmitter(api.user.id, item.question_id);
@@ -3648,14 +3663,14 @@ function applyFeedSenderReveal(item, result) {
 async function moderateFeedItem(action) {
     const item = selectedFeedItem();
     if (!item) return;
-    const messages = {
-        block: "Block this question submitter? Their submitted questions will be hidden from you.",
-        dismiss: "Delete this question? This question and its votes will be deleted from your Inbox and School Feed. It won't be reported or affect anyone else.",
-        report: "Report this question to Valid's moderation team?",
+    const sheets = {
+        block: { title: "Block this question submitter?", message: "Their submitted questions will be hidden from you.", confirmLabel: "Block" },
+        dismiss: { title: "Delete this question?", message: "This question and its votes will be deleted from your Inbox and School Feed. It won't be reported or affect anyone else.", confirmLabel: "Delete" },
+        report: { title: "Report this question?", message: "Valid's moderation team will review it.", confirmLabel: "Report" },
     };
-    const message = messages[action];
-    if (!message) return;
-    if (!confirm(message)) return;
+    const sheet = sheets[action];
+    if (!sheet) return;
+    if (!await confirmSheet({ ...sheet, destructive: true })) return;
     try {
         if (action === "block") await api.blockQuestionSubmitter(api.user.id, item.question_id);
         else if (action === "dismiss") await api.dismissFeedQuestion(api.user.id, item.question_id);
@@ -3967,7 +3982,7 @@ async function handleAnonymousSafetyAction(action) {
         openAnonymousReportDialog(question);
         return;
     }
-    if (!confirm("Delete this question? This cannot be undone.")) return;
+    if (!await confirmSheet({ title: "Delete this question?", message: "This cannot be undone.", confirmLabel: "Delete", destructive: true })) return;
     try {
         await api.deleteAnonymousQuestion(api.user.id, question.id);
         state.anonymousInbox.questions = state.anonymousInbox.questions.filter((item) => String(item.id) !== String(question.id));
@@ -4381,45 +4396,44 @@ function openNominationDialog() {
     $("#nominationSearch").focus();
 }
 
-async function nominateClassmate(candidateId) {
+function nominateClassmate(candidateId) {
     const question = state.questions[state.questionIndex];
     const candidate = state.classmates.find((item) => String(item.user_id) === candidateId);
     if (!question || !candidate) return;
-    const cost = Number(state.config?.nomination_aura_cost ?? 100);
+    const cost = auraCost("nominate");
     if (Number(state.profile?.aura_points || 0) < cost) {
         $("#nominationStatus").textContent = `You need ${cost} aura to nominate someone.`;
         return;
     }
-    if (!confirm(`Nominate ${displayName(candidate)} for ${cost} aura?`)) return;
-    const button = $(`[data-nomination="${CSS.escape(candidateId)}"]`);
-    if (button) setButtonLoading(button, true, "Nominating...");
-    try {
-        const result = await api.answerQuestion(api.user.id, {
-            question_id: question.id,
-            selected_contact_user_id: candidate.user_id,
-            selected_contact_name: displayName(candidate),
-            presented_options: choicesForQuestion(question).map((choice) => ({ phone: "", name: displayName(choice) })),
-            is_nomination: true,
-        });
-        clearOptimisticEarnedProfile();
-        if (state.profile && Number.isFinite(Number(result.total_aura_points))) {
-            state.profile.aura_points = Number(result.total_aura_points);
-            state.profile.current_streak = Math.max(0, Number(result.current_streak ?? state.profile.current_streak ?? 0));
-            state.profile.streak_multiplier = Math.max(1, Number(result.streak_multiplier ?? state.profile.streak_multiplier ?? 1));
-            renderProfileHeader();
-        }
-        $("#nominationDialog").close();
-        showToast(`You nominated ${displayName(candidate)}`);
-        animateAuraChange(-Math.max(0, Number(state.config?.nomination_aura_cost ?? 100)));
-        softHaptic();
+    $("#nominationStatus").textContent = "";
+    // Same confirm-and-spend sheet as boosts and reveals; it calls submitNomination.
+    openAuraSpend("nominate", { candidate, question });
+}
+
+async function submitNomination({ candidate, question }) {
+    const result = await api.answerQuestion(api.user.id, {
+        question_id: question.id,
+        selected_contact_user_id: candidate.user_id,
+        selected_contact_name: displayName(candidate),
+        presented_options: choicesForQuestion(question).map((choice) => ({ phone: "", name: displayName(choice) })),
+        is_nomination: true,
+    });
+    clearOptimisticEarnedProfile();
+    if (state.profile && Number.isFinite(Number(result.total_aura_points))) {
+        state.profile.aura_points = Number(result.total_aura_points);
+        state.profile.current_streak = Math.max(0, Number(result.current_streak ?? state.profile.current_streak ?? 0));
+        state.profile.streak_multiplier = Math.max(1, Number(result.streak_multiplier ?? state.profile.streak_multiplier ?? 1));
+        renderProfileHeader();
+    }
+    $("#nominationDialog").close();
+    showToast(`You nominated ${displayName(candidate)}`);
+    animateAuraChange(-auraCost("nominate"));
+    if (state.questions[state.questionIndex] === question) {
         state.questionIndex += 1;
         renderPlay();
-        refreshProfile();
-        refreshFeedGateStatus();
-    } catch (error) {
-        $("#nominationStatus").textContent = error.message || "Could not save your nomination.";
-        if (button) setButtonLoading(button, false);
     }
+    refreshProfile();
+    refreshFeedGateStatus();
 }
 
 async function answerPlayQuestion(choiceId) {
@@ -4511,10 +4525,10 @@ async function skipPlayQuestion(questionId) {
 async function moderatePlayQuestion(action) {
     const question = state.questions[state.questionIndex];
     if (!question?.is_user_submitted) return;
-    const prompt = action === "block"
-        ? "Block this question's submitter and skip the poll?"
-        : "Report this question to Valid and skip the poll?";
-    if (!confirm(prompt)) return;
+    const confirmed = await confirmSheet(action === "block"
+        ? { title: "Block this question's submitter?", message: "You'll skip this poll and won't see their questions again.", confirmLabel: "Block", destructive: true }
+        : { title: "Report this question?", message: "Valid will review it, and you'll skip this poll.", confirmLabel: "Report", destructive: true });
+    if (!confirmed) return;
     try {
         if (action === "block") await api.blockQuestionSubmitter(api.user.id, question.id);
         else await api.reportQuestion(api.user.id, question.id);
@@ -4803,7 +4817,7 @@ async function toggleAskLink() {
 }
 
 async function rotateAskLink() {
-    if (!confirm("Replace your current ask link? The old link will stop working.")) return;
+    if (!await confirmSheet({ title: "Replace your ask link?", message: "The old link will stop working.", confirmLabel: "Replace link", destructive: true })) return;
     try {
         state.askLink = await api.rotateAskLink(api.user.id);
         renderAskLink();
@@ -4917,7 +4931,13 @@ function renderProfileEditorHub() {
 
 async function unsubscribeFromGodMode() {
     if (!hasActiveGodMode()) return;
-    const confirmed = confirm("Unsubscribe from God Mode? You’ll keep God Mode through the end of your current billing period, and then it won’t renew.");
+    const confirmed = await confirmSheet({
+        title: "Unsubscribe from God Mode?",
+        message: "You’ll keep God Mode through the end of your current billing period, and then it won’t renew.",
+        confirmLabel: "Unsubscribe",
+        cancelLabel: "Keep God Mode",
+        destructive: true,
+    });
     if (!confirmed) return;
     const button = $("#godModeUnsubscribeButton");
     const status = $("#profileGodModeStatus");
@@ -5081,8 +5101,14 @@ function openProfileDialog() {
     $("#profileDialog").showModal();
 }
 
-function cancelProfileEditor() {
-    if (profileChangedFieldCount() && !confirm("Discard your profile information changes?")) return;
+async function cancelProfileEditor() {
+    if (profileChangedFieldCount() && !await confirmSheet({
+        title: "Discard your changes?",
+        message: "Your profile information changes won't be saved.",
+        confirmLabel: "Discard",
+        cancelLabel: "Keep editing",
+        destructive: true,
+    })) return;
     state.profileDraft = null;
     state.pendingProfileInformation = null;
     $("#profileDialog").close();

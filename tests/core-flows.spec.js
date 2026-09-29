@@ -482,8 +482,8 @@ test("feed polls open the iOS-style detail and moderation flow", async ({ page }
     await dialog.getByRole("button", { name: "More poll actions" }).click();
     await expect(dialog.getByRole("menuitem", { name: "Delete This Question" })).toBeVisible();
     await expect(dialog.getByRole("menuitem", { name: "Report question" })).toBeVisible();
-    page.once("dialog", (confirmation) => confirmation.accept());
     await dialog.getByRole("menuitem", { name: "Report question" }).click();
+    await page.locator(".ui-sheet").getByRole("button", { name: "Report" }).click();
     await expect(dialog).toBeHidden();
     await expect(page.locator("#toast")).toContainText("Question reported");
     await expect(page.locator("[data-feed-detail='9001']")).toHaveCount(0);
@@ -495,11 +495,9 @@ test("feed polls can be privately deleted without reporting", async ({ page }) =
     const dialog = page.locator("#feedDetailDialog");
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "More poll actions" }).click();
-    page.once("dialog", async (confirmation) => {
-        expect(confirmation.message()).toContain("It won't be reported or affect anyone else.");
-        await confirmation.accept();
-    });
     await dialog.getByRole("menuitem", { name: "Delete This Question" }).click();
+    await expect(page.locator(".ui-sheet")).toContainText("It won't be reported or affect anyone else.");
+    await page.locator(".ui-sheet").getByRole("button", { name: "Delete" }).click();
     await expect(dialog).toBeHidden();
     await expect(page.locator("#toast")).toContainText("Question deleted");
     await expect(page.locator("[data-feed-detail='9002']")).toHaveCount(0);
@@ -715,8 +713,9 @@ test("play supports shuffle and paid classmate nominations", async ({ page }) =>
     await expect(dialog.getByText("100").first()).toBeVisible();
     const candidate = dialog.locator("[data-nomination]").first();
     const name = await candidate.locator("strong").textContent();
-    page.once("dialog", (confirmation) => confirmation.accept());
     await candidate.click();
+    await expect(page.locator("#auraSpendTitle")).toHaveText(`Nominate ${name}?`);
+    await page.locator("#confirmAuraSpend").click();
     await expect(page.locator("#toast")).toContainText(`You nominated ${name}`);
 });
 
@@ -740,8 +739,8 @@ test("play exposes safety controls for classmate-submitted polls", async ({ page
     await page.getByRole("button", { name: "More question actions" }).click();
     await expect(page.getByRole("menuitem", { name: "Report question" })).toBeVisible();
     await expect(page.getByRole("menuitem", { name: "Block submitter" })).toBeVisible();
-    page.once("dialog", (confirmation) => confirmation.accept());
     await page.getByRole("menuitem", { name: "Report question" }).click();
+    await page.locator(".ui-sheet").getByRole("button", { name: "Report" }).click();
     await expect(page.locator("#toast")).toContainText("Reported to Valid");
     await expect(page.getByText("Who gives the best advice?")).toBeVisible();
 });
@@ -890,8 +889,8 @@ test("God Mode subscribers can unsubscribe from edit profile details", async ({ 
     const informationDialog = page.getByRole("dialog");
     const unsubscribe = informationDialog.getByRole("button", { name: /Unsubscribe from God Mode/ });
     await expect(unsubscribe).toBeVisible();
-    page.once("dialog", (dialog) => dialog.accept());
     await unsubscribe.click();
+    await page.locator(".ui-sheet").getByRole("button", { name: "Unsubscribe" }).click();
     await expect(informationDialog.getByText(/Unsubscribed\. God Mode stays active through/)).toBeVisible();
     await expect(informationDialog.getByRole("button", { name: /God Mode cancellation scheduled/ })).toBeDisabled();
 });

@@ -296,8 +296,8 @@ test("Ask Me link can be paused, resumed, and reset from Settings", async ({ pag
     await expect(askCard.getByText("Ask Me is off.", { exact: false })).toBeVisible();
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-checked", "true");
-    page.once("dialog", (dialog) => dialog.accept());
     await askCard.getByRole("button", { name: "Reset ask link" }).click();
+    await page.locator(".ui-sheet").getByRole("button", { name: "Replace link" }).click();
     await expect(page.locator("#toast")).toContainText("New ask me link created");
 });
 
