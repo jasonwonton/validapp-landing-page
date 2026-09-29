@@ -74,7 +74,7 @@ test("app surfaces never show a raw error.message", async () => {
     for (const file of files) {
         const source = await readFile(new URL(`../../${file}`, import.meta.url), "utf8");
         const raw = source.split("\n").map((line, index) => [index + 1, line])
-            .filter(([, line]) => /(error|reason)\??\.message\s*(\|\||\)|;|\})/.test(line) && !/\.test\(|=\s*(navigator|['"])/.test(line));
+            .filter(([, line]) => /(error|reason|lastError)\??\.message\s*(\|\||\)|;|\})/.test(line) && !/\.test\(|=\s*(navigator|['"])/.test(line));
         assert.deepEqual(raw, [], `${file} shows raw error text`);
         assert.doesNotMatch(source, /Request failed \(/, file);
     }

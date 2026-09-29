@@ -710,7 +710,7 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
                     if (attempt + 1 < attempts) await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
                 }
             }
-            if (lastError && !keepalive) showToast?.(lastError.message || "The server could not confirm that you left.");
+            if (lastError && !keepalive) showToast?.(userMessage(lastError, "The server could not confirm that you left."));
         }
         if (call && !notifyBackend && !keepalive) notifyHistory(call);
         currentCall = null;
