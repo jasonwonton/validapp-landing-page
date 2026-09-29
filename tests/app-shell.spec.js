@@ -383,3 +383,11 @@ test.describe("background work", () => {
         expect(counts.safety).toBe(0);
     });
 });
+
+test("the app view is not one big live region; refresh progress has its own", async ({ page }) => {
+    await signInToDemo(page);
+    await expect(page.locator("#appView")).not.toHaveAttribute("aria-live");
+    await expect(page.locator("#pullRefreshStatus")).toHaveAttribute("role", "status");
+    const copy = await (await page.request.get("/app/auth-reliability.js")).text();
+    expect(copy).not.toContain("Six7 passkey");
+});

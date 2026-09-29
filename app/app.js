@@ -6484,6 +6484,7 @@ async function endPullRefresh() {
     // Hold a spinner at the threshold until the refresh finishes.
     state.pullRefreshing = true;
     indicator.classList.add("refreshing");
+    $("#pullRefreshStatus").textContent = "Refreshing…";
     setRuntimeStyles(indicator, { "--pull-distance": "64px", "--pull-opacity": "1" });
     try {
         await refreshActivePanel();
@@ -6492,6 +6493,7 @@ async function endPullRefresh() {
     } finally {
         state.pullRefreshing = false;
         indicator.classList.remove("refreshing");
+        $("#pullRefreshStatus").textContent = "Updated";
         clearRuntimeStyles(indicator, "--pull-distance", "--pull-opacity");
     }
 }
