@@ -131,6 +131,21 @@ body:not(.authenticated) .app-update-prompt { bottom: calc(18px + var(--safe-bot
 .app-update-prompt small { color: var(--muted); font-size: .76rem; }
 .app-update-prompt button { min-height: 40px; padding: 7px 13px; border: 0; border-radius: 12px; background: var(--peach); color: var(--on-peach); }
 .pull-refresh-indicator { position: fixed; z-index: 54; top: calc(env(safe-area-inset-top) - 42px); left: 50%; width: 36px; height: 36px; display: grid; place-items: center; border: 2px solid var(--outline); border-radius: 50%; background: var(--white); opacity: var(--pull-opacity, 0); pointer-events: none; transform: translate(-50%, var(--pull-distance, 0px)) rotate(0deg); transition: transform .15s ease, opacity .15s ease; }
+.app-banner { position: fixed; z-index: 56; top: calc(env(safe-area-inset-top, 0px) + 8px); left: 50%; width: min(560px, calc(100% - 32px)); display: flex; align-items: center; border: 3px solid #000; border-radius: 12px; background: var(--peach); color: var(--on-peach); box-shadow: 0 4px 8px rgba(0,0,0,.2); transform: translateX(-50%); animation: app-banner-in .45s cubic-bezier(.34,1.4,.64,1); }
+.app-banner.leaving { opacity: 0; transform: translate(-50%, -100px); transition: opacity .3s ease, transform .3s ease; }
+@keyframes app-banner-in { from { opacity: 0; transform: translate(-50%, -100px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.app-banner-body { min-width: 0; min-height: 60px; flex: 1 1 auto; display: flex; align-items: center; gap: 12px; padding: 12px 8px 12px 14px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; }
+button.app-banner-body { cursor: pointer; }
+.app-banner-icon { flex: 0 0 36px; width: 36px; height: 20px; fill: currentColor; }
+.app-banner-icon .banner-icon-cut { fill: none; stroke: var(--peach); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.app-banner-copy { min-width: 0; flex: 1 1 auto; display: grid; gap: 2px; }
+.app-banner-copy strong { overflow: hidden; font-size: 16px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.app-banner-copy small { display: -webkit-box; overflow: hidden; font-size: 13px; opacity: .85; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.app-banner-chevron { flex: 0 0 auto; font-size: 22px; font-weight: 700; opacity: .7; }
+.app-banner-close { flex: 0 0 44px; width: 44px; height: 44px; display: grid; place-items: center; margin-right: 6px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; }
+.app-banner-close svg { width: 20px; height: 20px; fill: currentColor; opacity: .8; }
+.app-banner-close path { fill: none; stroke: var(--peach); stroke-width: 2.4; stroke-linecap: round; }
+@media (prefers-reduced-motion: reduce) { .app-banner { animation: none; } .app-banner.leaving { transition: none; } }
 .pull-refresh-indicator.dragging { transition: none; }
 .pull-refresh-indicator.ready span { transform: rotate(180deg); }
 .pull-refresh-indicator span { transition: transform .15s ease; }

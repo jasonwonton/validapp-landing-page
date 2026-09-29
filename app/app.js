@@ -765,6 +765,7 @@ function showSignedOut(message = "") {
     clearInterval(state.playLockTimer);
     state.playLockTimer = null;
     stopStripeCheckoutPolling();
+    document.querySelector(".app-banner")?.remove();
     showAuthView();
     $("#appView").classList.add("hidden");
     $("#bottomNav").classList.add("hidden");
@@ -873,6 +874,7 @@ async function showSignedIn() {
         renderProfileHeader();
         renderFeedGate();
         initializeAppNavigation();
+        void refreshBanner({ force: true });
         refreshWebPushStatus({ sync: true });
         if (!isFeedVoteLocked()) await loadFeed(true);
         await handleNotificationRoute();
@@ -1049,6 +1051,21 @@ function reportActiveChat() {
         chatId: document.documentElement.dataset.activeChatId || null,
         visible: document.visibilityState === "visible",
     });
+}
+
+// Server announcement banners (iOS BannerNotificationView parity): at launch
+// and when the app returns to the foreground, at most every 10 minutes.
+let bannerCheckedAt = 0;
+
+async function refreshBanner({ force = false } = {}) {
+    if (!api?.user?.id || !api.getActiveBanner || (!force && Date.now() - bannerCheckedAt < 600_000)) return;
+    bannerCheckedAt = Date.now();
+    try {
+        const banner = await api.getActiveBanner();
+        if (!document.body.classList.contains("authenticated")) return;
+        if (!banner) document.querySelector(".app-banner")?.remove();
+        else (await import("./banner.js")).showBanner(banner);
+    } catch (_) { /* Banners are optional; keep whatever is showing. */ }
 }
 
 function renderProfileHeader() {
@@ -7470,6 +7487,7 @@ function bindEvents() {
         if (document.visibilityState === "visible") {
             refreshWebPushStatus();
             refreshAskSafetyState();
+            void refreshBanner();
         }
     });
     $("#appView").addEventListener("touchstart", beginPullRefresh, { passive: true });

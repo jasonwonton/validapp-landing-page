@@ -28,6 +28,7 @@ const APP_SHELL = [
     "./tbh-share.js",
     "./blocked-users.js",
     "./ios-install.js",
+    "./banner.js",
     "./feed-sender.js",
     "./live-camera.js",
     "./media-overlay-positioner.js",

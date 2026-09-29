@@ -315,3 +315,51 @@ test.describe("install and update", () => {
         }
     });
 });
+
+test.describe("announcement banners", () => {
+    test("show like iOS, open links in a new tab, and stay dismissed", async ({ page, context }) => {
+        await signInToDemo(page, "&banner=1");
+        const banner = page.getByRole("status", { name: "Announcement" });
+        await expect(banner).toBeVisible();
+        await expect(banner).toContainText("Spirit Week is here");
+        await expect(banner.locator(".app-banner-chevron")).toBeVisible();
+        const box = await banner.boundingBox();
+        expect(box.y).toBeLessThan(80);
+
+        const popup = context.waitForEvent("page");
+        await banner.locator(".app-banner-body").click();
+        expect((await popup).url()).toContain("community-guidelines");
+        await expect(banner).toBeHidden();
+        expect(await page.evaluate(() => localStorage.getItem("valid:dismissed-banners"))).toContain("7");
+
+        await page.reload();
+        await page.getByRole("button", { name: /^sign in$/i }).click();
+        await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
+        await page.waitForTimeout(500);
+        await expect(page.locator(".app-banner")).toHaveCount(0);
+    });
+
+    test("a non-dismissible banner has no close button", async ({ page }) => {
+        await signInToDemo(page, "&banner=locked");
+        const banner = page.getByRole("status", { name: "Announcement" });
+        await expect(banner).toContainText("Scheduled maintenance");
+        await expect(banner.getByRole("button", { name: "Dismiss" })).toHaveCount(0);
+        await expect(banner.locator(".app-banner-chevron")).toHaveCount(0);
+    });
+
+    test("the web client identifies itself to the banner endpoint and treats 404 as none", async ({ page }) => {
+        const headers = [];
+        await page.route("**/api/v1/banner-notifications/active", (route) => {
+            headers.push(route.request().headers()["x-client-version"]);
+            return route.fulfill({ status: 404, json: { detail: "No active banner notification" } });
+        });
+        await page.route("**/api/v1/auth/session", (route) => route.fulfill({ status: 401, headers: { "WWW-Authenticate": "Bearer" }, json: { detail: "Authentication required" } }));
+        await page.goto("/app/?signin=1");
+        const result = await page.evaluate(async () => {
+            const { ValidAPI } = await import("/app/api.js");
+            return new ValidAPI().getActiveBanner();
+        });
+        expect(result).toBeNull();
+        expect(headers[0]).toMatch(/^web-v\d+$/);
+    });
+});
