@@ -16,7 +16,7 @@ test('the live 67 Challenge (hand-package-v1, mirrored) and Rose Flight are play
 });
 
 test('releases the web player cannot run never show a Feed entry', () => {
-    // hand-package-v2 (e.g. Scuba) is iOS-only.
+    // An unreviewed hand-package-v2 package has no web sandbox host (it opens the app-only state instead).
     assert.equal(webPlayable({ ...sixtySeven, id, camera_mode: 'hand-package-v2', score_validator: 'self-reported-v1', bundle: { sha256: 'b'.repeat(64), byte_size: 1 } }), false);
     // The server's update notice for clients that lack a mode.
     assert.equal(webPlayable({ id, runtime: 'web-v1', renderer_version: 1, game_id: 'update-required', score_validator: 'update-required-v1', bundle: { sha256: 'c'.repeat(64), byte_size: 1 } }), false);

@@ -179,7 +179,8 @@ export class ValidAPI {
 
     getWeeklyGame(options = {}) {
         return this.request('/easter-egg/featured', {
-            ...options, headers: { 'X-Easter-Egg-Camera-Modes': 'hand-package-v1' },
+            // Keep in sync with CAMERA_MODES in weekly-game/compat.js.
+            ...options, headers: { 'X-Easter-Egg-Camera-Modes': 'hand-package-v1,hand-package-v2' },
         });
     }
 
