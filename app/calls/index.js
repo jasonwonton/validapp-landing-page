@@ -1,4 +1,5 @@
 import { uiIcon } from '../ui-icons.js';
+import { userMessage } from '../user-message.js';
 import { confirmSheet } from '../ui-dialogs.js';
 import { createRingback, createRingtone } from './ringback.js';
 const TERMINAL_STATES = new Set(["ended", "declined", "missed", "cancelled", "failed"]);
@@ -16,7 +17,7 @@ function permissionMessage(error, mediaType) {
         return `Allow ${mediaType === "video" ? "camera and microphone" : "microphone"} access in your browser settings, then try again.`;
     }
     if (error?.name === "NotFoundError") return "No usable microphone was found on this device.";
-    return error?.message || "This device could not start the call.";
+    return userMessage(error, "This device could not start the call.");
 }
 
 export function createCallsController({ api, getUser, getConfig, showToast, onCallChanged }) {
@@ -505,7 +506,7 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         } catch (error) {
             if (!isCurrent(token)) return;
             if (currentCall) await finish({ notifyBackend: true });
-            showToast?.(error.message || "That call is no longer available.");
+            showToast?.(userMessage(error, "That call is no longer available."));
         } finally { if (isCurrent(token)) { operationInFlight = false; updateControls(); } }
     }
 
@@ -545,7 +546,7 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
             await api.declineCall(userId(), currentCall.id);
             declined = true;
         }
-        catch (error) { showToast?.(error.message || "Could not decline the call."); }
+        catch (error) { showToast?.(userMessage(error, "Could not decline the call.")); }
         finally {
             if (isCurrent(token)) {
                 operationInFlight = false;
@@ -671,7 +672,7 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
             await room.localParticipant.setMicrophoneEnabled(muted);
             if (!isCurrent(token)) return;
             muted = !muted;
-        } catch (error) { showToast?.(error.message || "Could not change the microphone."); }
+        } catch (error) { showToast?.(userMessage(error, "Could not change the microphone.")); }
         finally { if (isCurrent(token)) { operationInFlight = false; updateControls(); } }
     }
 
@@ -709,7 +710,7 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
                     if (attempt + 1 < attempts) await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
                 }
             }
-            if (lastError && !keepalive) showToast?.(lastError.message || "The server could not confirm that you left.");
+            if (lastError && !keepalive) showToast?.(userMessage(lastError, "The server could not confirm that you left."));
         }
         if (call && !notifyBackend && !keepalive) notifyHistory(call);
         currentCall = null;
@@ -783,6 +784,12 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
     });
     window.addEventListener("valid:session-expired", () => {
         if (currentCall || operationInFlight) void finish({ notifyBackend: false });
+    });
+    // Reloading or closing the tab ends the call: ask first, but only during one.
+    window.addEventListener("beforeunload", (event) => {
+        if (!currentCall || TERMINAL_STATES.has(currentCall.state)) return;
+        event.preventDefault();
+        event.returnValue = "";
     });
 
     return { enabled, start, open, handleRealtimeEvent, isActive: () => Boolean(currentCall || operationInFlight || ending), beforeSessionEnd: () => finish({ notifyBackend: true }) };

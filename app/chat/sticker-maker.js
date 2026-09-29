@@ -1,3 +1,4 @@
+import { userMessage } from "../user-message.js";
 const DISPLAY_SIZE = 720;
 const MAX_SOURCE_BYTES = 20 * 1024 * 1024;
 const MAX_STICKER_BYTES = 2 * 1024 * 1024;
@@ -306,7 +307,7 @@ export function createStickerMaker({
             setStatus("A center cut is ready. Draw around your subject to refine it.");
             canvas.focus();
         } catch (error) {
-            setStatus(error.message || "That photo could not be read.");
+            setStatus(userMessage(error, "That photo could not be read."));
             setReady(false);
         }
     }
@@ -332,7 +333,7 @@ export function createStickerMaker({
             }
             saving = false;
             setReady(true);
-            setStatus(error.message || "That sticker could not be saved.");
+            setStatus(userMessage(error, "That sticker could not be saved."));
         }
     });
 

@@ -13,6 +13,7 @@ import {
 } from "./models.js";
 import { thumbHashDataURL } from "./thumbhash.js";
 import { confirmSheet } from "../ui-dialogs.js";
+import { userMessage } from "../user-message.js";
 import { createChatStore } from "./store.js";
 import {
     MAX_AUTOMATIC_ATTEMPTS,
@@ -67,8 +68,10 @@ function releaseStreamRequest(request) {
 }
 const cameraHaptic = (kind) => window.ValidPreferences?.haptic?.(kind);
 
+// Voice notes are only ever recorded in the app, never picked from files.
 // M4A goes straight to chat-media-uploads (unchanged). Browsers that can only
 // record Opus send it through the server ingest when /config enables it.
+// With neither, the mic button is hidden (syncVoiceComposer).
 function voiceRecordingFormat(ingestEnabled = false) {
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") return null;
     const supported = (type) => { try { return MediaRecorder.isTypeSupported?.(type) === true; } catch (_) { return false; } };
@@ -88,7 +91,7 @@ function localLedgerDate(date = new Date()) {
     return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 }
 
-export function createChatsView({ root, api, getUser, getConfig, presence, softHaptic, successHaptic, haptic, showToast, onUnreadChange, onPlay }) {
+export function createChatsView({ root, api, getUser, getConfig, presence, softHaptic, successHaptic, haptic, showToast, installSwipeBack, onUnreadChange, onPlay }) {
     const feedback = (kind) => (haptic || globalThis.ValidPreferences?.haptic)?.(kind);
     const attentionPriority = chat => chatAttentionPriority(chat, {
         dailyLedgerEnabled: dailyLedgerEnabled(),
@@ -244,7 +247,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 <section class="live-camera" data-chat-camera tabindex="-1" hidden aria-label="Message camera"></section>
                 <section class="chat-media-editor">
                 <div class="chat-photo-tools"><button type="button" data-retake-chat-photo>${uiIcon('flip')} Retake</button><span></span><button type="button" data-close-chat-media aria-label="Close photo">${uiIcon('close')}</button></div>
-                <div class="chat-media-preview"><span aria-hidden="true">${uiIcon("plus")}</span><p>Choose a photo, an MP4 video, or an M4A voice recording.</p></div>
+                <div class="chat-media-preview"><span aria-hidden="true">${uiIcon("plus")}</span><p>Choose a photo or video.</p></div>
                 <div class="chat-review-tools" data-review-tools hidden><button type="button" data-photo-cutout aria-label="Make a sticker from this photo">${uiIcon('scissors')}</button><button type="button" data-photo-stickers aria-label="Open My Stickers"><span class="native-sticker-icon" aria-hidden="true"></span></button><button type="button" data-photo-text aria-label="Add caption">Aa</button><button type="button" data-photo-draw aria-label="Draw on this" aria-pressed="false"></button><div class="review-draw-tools" hidden></div><button type="button" data-undo-zoom aria-label="Undo zoom" hidden>${uiIcon('back')}</button></div>
                 <p class="chat-media-send-count" hidden></p>
                 <button type="button" data-cancel-chat-upload hidden>Cancel upload</button>
@@ -254,7 +257,6 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 <div class="chat-media-review-actions"><button class="primary-button chat-media-publish" type="submit" aria-label="Send" disabled>${uiIcon('send')}</button></div>
                 </section>
                 <input class="chat-media-file-input" type="file" accept="image/*,video/mp4" hidden aria-label="Photo or video file">
-                <input class="chat-audio-file-input" type="file" accept="audio/mp4,.m4a" hidden aria-label="Voice recording file">
             </form>
         </dialog>
         <dialog class="chat-sheet chat-stickers-sheet" data-sticker-library-dialog aria-label="Send a sticker"><section class="chat-stickers-content"><header><button type="button" data-close-stickers>Close</button><strong>Send a Sticker</strong><button type="button" data-edit-stickers aria-pressed="false">Edit</button></header><p>Tap a sticker to send it.</p><p class="chat-sticker-status" role="status"></p><section class="chat-sticker-library"><input class="chat-sticker-file-input visually-hidden" type="file" accept="image/*" capture="environment"><div><small>Loading…</small></div></section></section></dialog>
@@ -276,7 +278,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         <dialog class="chat-sheet" data-chat-settings-dialog aria-label="Chat settings"><div class="chat-settings-content"></div></dialog>
         <dialog class="chat-sheet" data-chat-reactors-dialog aria-label="Message reactions"><div class="chat-reactors-content"></div></dialog>
         <dialog class="chat-sheet" data-chat-readers-dialog aria-label="Read receipts"><div class="chat-readers-content"></div></dialog>
-        <dialog class="chat-media-viewer" data-chat-media-viewer aria-label="Chat media" aria-describedby="chatViewerHint"><span class="visually-hidden" id="chatViewerHint">Drag down to close. Pinch or double-tap to zoom.</span><button type="button" data-close-media aria-label="Close">${uiIcon('close')}</button><div class="chat-viewer-stage"><div class="chat-viewer-media"><img class="chat-viewer-placeholder" alt="" aria-hidden="true" hidden><img alt="" hidden><video playsinline controls hidden></video><div class="chat-viewer-overlay" hidden></div></div></div><progress class="chat-ephemeral-progress" max="1" value="0" aria-label="Media time remaining" hidden></progress><button type="button" data-pause-ephemeral aria-label="Pause media" hidden>${uiIcon("pause")}</button><p></p><div class="chat-viewer-actions"><button type="button" data-swap-viewed-memento aria-label="Swap front and back photos" hidden>⇄ Swap views</button><button type="button" data-share-viewed-memento hidden>Share</button><button type="button" data-reply-viewed-media hidden>Reply</button><button type="button" data-react-viewed-media hidden>${uiIcon("heart")} React</button></div></dialog>`;
+        <dialog class="chat-media-viewer" data-chat-media-viewer aria-label="Chat media" aria-describedby="chatViewerHint"><span class="visually-hidden" id="chatViewerHint">Drag down to close. Pinch or double-tap to zoom.</span><button type="button" data-close-media aria-label="Close">${uiIcon('close')}</button><div class="chat-viewer-stage"><div class="chat-viewer-media"><img class="chat-viewer-placeholder" alt="" aria-hidden="true" hidden><img alt="" hidden><video playsinline controls hidden></video><div class="chat-viewer-overlay" hidden></div></div></div><progress class="chat-ephemeral-progress" max="1" value="0" aria-label="Media time remaining" hidden></progress><small class="chat-capture-note" hidden>Screenshots aren’t detected on the web</small><button type="button" data-pause-ephemeral aria-label="Pause media" hidden>${uiIcon("pause")}</button><p></p><div class="chat-viewer-actions"><button type="button" data-swap-viewed-memento aria-label="Swap front and back photos" hidden>⇄ Swap views</button><button type="button" data-share-viewed-memento hidden>Share</button><button type="button" data-reply-viewed-media hidden>Reply</button><button type="button" data-react-viewed-media hidden>${uiIcon("heart")} React</button></div></dialog>`;
 
     const $ = (selector) => root.querySelector(selector);
     const $$ = (selector) => [...root.querySelectorAll(selector)];
@@ -346,6 +348,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         return roomTools;
     }
     function syncVoiceComposer() {
+        $('[data-record-voice]').classList.toggle('hidden', !voiceMode && !voiceRecordingFormat(ingestEnabled(getConfig())));
         $('.chat-composer').classList.toggle('voice-mode', voiceMode);
         $('.chat-voice-inline').classList.toggle('hidden', !voiceMode);
         const audio = $('.chat-inline-audio');
@@ -588,6 +591,12 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     });
     root.addEventListener("click", handleClick);
     root.addEventListener("dblclick", handleMessageDoubleClick);
+    // The room pops like a detail screen: it follows the finger over the chat
+    // list and, when released past the threshold, leaves exactly like Back.
+    installSwipeBack?.($(".chat-room-screen"), backFromRoom, {
+        onTrack: () => $(".chat-shell").classList.add("chat-swipe-reveal"),
+        onSettle: () => $(".chat-shell").classList.remove("chat-swipe-reveal"),
+    });
     const messageActions = bindMessageActions(root, { onOpen: () => softHaptic?.() });
     const timelineScroll = createTimelineScroll($('.chat-timeline'), {
         onEdge: direction => void advanceHistory(direction),
@@ -627,7 +636,6 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         if (mementoPublishing) event.preventDefault();
     });
     $(".chat-media-file-input").addEventListener("change", selectChatMedia);
-    $(".chat-audio-file-input").addEventListener("change", selectChatMedia);
     $(".chat-sticker-file-input").addEventListener("change", selectStickerSource);
     $(".chat-media-form").addEventListener("submit", publishChatMedia);
     $("[data-chat-media-dialog]").addEventListener("close", resetChatMediaComposer);
@@ -756,6 +764,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         if (name !== 'room' && voiceMode) resetChatMediaComposer();
         $$('[data-chat-screen]').forEach((screen) => screen.classList.toggle("hidden", screen.dataset.chatScreen !== name));
         root.closest(".panel")?.classList.toggle("chat-room-open", name === "room");
+        if (name === "room") syncVoiceComposer();
         observePresence();
         reportActiveChat();
     }
@@ -771,7 +780,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             renderChatList();
             if (store.state.activeChatId) renderMementoToolbar();
         } catch (error) {
-            $(".chat-list-status").textContent = error.message || "Could not load chats.";
+            $(".chat-list-status").textContent = userMessage(error, "Could not load chats.");
         } finally {
             store.state.loadingList = false;
         }
@@ -854,7 +863,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             results.classList.add("hidden");
             $(".chat-list").classList.remove("hidden");
             renderRecentConversations();
-            $(".chat-list-status").textContent = error.message || "Could not search chats.";
+            $(".chat-list-status").textContent = userMessage(error, "Could not search chats.");
         }
     }
 
@@ -961,7 +970,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         } else {
             if ([401, 403, 404].includes(messagesResult.reason?.status)) store.replaceMessages(chatId, []);
             const locked = messagesResult.reason?.status === 403 && /memento/i.test(messagesResult.reason?.message || "");
-            $(".chat-room-status").textContent = locked ? "Take today's Memento to open this chat." : (messagesResult.reason?.message || "Could not load messages.");
+            $(".chat-room-status").textContent = locked ? "Take today's Memento to open this chat." : (userMessage(messagesResult.reason, "Could not load messages."));
         }
         await restorePendingMessages(chatId);
         if (generation !== roomGeneration || store.state.activeChatId !== String(chatId)) return;
@@ -1472,7 +1481,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                     if (chatTextSendIsRetryable(error)) await markChatMediaOutboxAttempt(record.id);
                     else {
                         await removeChatMediaOutbox(record.id);
-                        showToast?.(error.message || "A saved media upload could not be sent.");
+                        showToast?.(userMessage(error, "A saved media upload could not be sent."));
                     }
                 }
             }
@@ -1585,7 +1594,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             } else {
                 await removeChatTextOutbox(userId(), clientRequestId).catch(() => null);
             }
-            store.updateMessage(chatId, { ...optimistic, delivery_state: "failed", error_message: error.message });
+            store.updateMessage(chatId, { ...optimistic, delivery_state: "failed", error_message: userMessage(error, "Not delivered.") });
             if (store.state.activeChatId === chatId) renderMessages(false);
             if (chatTextSendIsRetryable(error)) scheduleOutboxRetry(await listChatTextOutbox(userId()).catch(() => []));
         }
@@ -1681,7 +1690,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             $(".chat-create-status").textContent = "";
             renderPeople();
         } catch (error) {
-            $(".chat-create-status").textContent = error.message || "Could not load classmates.";
+            $(".chat-create-status").textContent = userMessage(error, "Could not load classmates.");
         }
     }
 
@@ -1723,7 +1732,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             inviteMode = false;
             await openChat(targetChatId, { updateHistory: !store.state.activeChatId, force: true });
         } catch (error) {
-            $(".chat-create-status").textContent = error.message || "Could not create the chat.";
+            $(".chat-create-status").textContent = userMessage(error, "Could not create the chat.");
         } finally {
             button.textContent = "Create";
             button.disabled = false;
@@ -1737,7 +1746,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             renderChatList();
             successHaptic?.();
             await openChat(chat.id);
-        } catch (error) { showToast?.(error.message || "Could not accept the invitation."); }
+        } catch (error) { showToast?.(userMessage(error, "Could not accept the invitation.")); }
     }
 
     async function declineInvitation(membershipId) {
@@ -1750,7 +1759,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         try {
             await api.declineChatInvitation(userId(), membershipId);
             await loadChats();
-        } catch (error) { showToast?.(error.message || "Could not decline the invitation."); }
+        } catch (error) { showToast?.(userMessage(error, "Could not decline the invitation.")); }
     }
 
     function openMementoComposer({ showExisting = false } = {}) {
@@ -1791,7 +1800,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             showToast?.("Chat unlocked for today");
             await openChat(chatId, { updateHistory: false, force: true });
         } catch (error) {
-            if (generation === roomGeneration && chatId === store.state.activeChatId) $('.chat-room-status').textContent = error.message || "Could not skip today's Memento.";
+            if (generation === roomGeneration && chatId === store.state.activeChatId) $('.chat-room-status').textContent = userMessage(error, "Could not skip today's Memento.");
         } finally {
             mementoSkipping = false;
             if (store.state.activeChatId) renderDailyRow();
@@ -1827,7 +1836,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             if (generation !== mementoPreparationGeneration) return;
             selectedMementoFile = null;
             selectedMementoSecondaryFile = null;
-            $(".memento-status").textContent = error.message || "Could not prepare that photo.";
+            $(".memento-status").textContent = userMessage(error, "Could not prepare that photo.");
         }
     }
 
@@ -1896,11 +1905,11 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         } catch (error) {
             if (recoverySaved && chatTextSendIsRetryable(error)) {
                 await markChatMediaOutboxAttempt(`${userId()}:memento:${mementoRequestId}`).catch(() => null);
-                $(".memento-status").textContent = `${error.message || "Could not share your Memento."} It is saved on this device and will retry while Valid is open.`;
+                $(".memento-status").textContent = `${userMessage(error, "Could not share your Memento.")} It is saved on this device and will retry while Valid is open.`;
             } else {
                 await removeChatMediaOutbox(`${userId()}:memento:${mementoRequestId}`).catch(() => null);
                 $(".memento-status").textContent = recoverySaved
-                    ? (error.message || "Could not share your Memento.")
+                    ? (userMessage(error, "Could not share your Memento."))
                     : "This Memento could not be saved for a safe retry. Free some device storage and try again.";
             }
         } finally {
@@ -1980,7 +1989,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             container.insertAdjacentHTML('beforeend', `<button class="chat-sticker-new" type="button" data-make-sticker aria-label="Make a sticker"><span>${uiIcon('plus')}</span><small>New</small></button>`);
         } catch (error) {
             if (generation !== stickerLibraryGeneration) return;
-            container.innerHTML = `<small>${escapeChatHTML(error.message || "Could not load stickers.")}</small><button type="button" data-retry-stickers>Try again</button>`;
+            container.innerHTML = `<small>${escapeChatHTML(userMessage(error, "Could not load stickers."))}</small><button type="button" data-retry-stickers>Try again</button>`;
         }
     }
 
@@ -1994,7 +2003,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             await stickerMaker.open(file);
         } catch (error) {
             $("[data-sticker-library-dialog]").showModal();
-            $(".chat-sticker-status").textContent = error.message || "That photo could not be opened.";
+            $(".chat-sticker-status").textContent = userMessage(error, "That photo could not be opened.");
         }
     }
 
@@ -2012,7 +2021,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             showToast?.("Sticker removed");
         } catch (error) {
             item?.querySelectorAll("button").forEach((button) => { button.disabled = false; });
-            $(".chat-sticker-status").textContent = error.message || "Could not remove that sticker.";
+            $(".chat-sticker-status").textContent = userMessage(error, "Could not remove that sticker.");
         }
     }
 
@@ -2052,7 +2061,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             if (!$("[data-sticker-library-dialog]").open) $("[data-sticker-library-dialog]").showModal();
             await loadStickerLibrary();
             $$("[data-send-sticker]").forEach((button) => { button.disabled = false; });
-            $(".chat-sticker-status").textContent = `${error.message || "Could not send that sticker."} Tap the same sticker to retry safely.`;
+            $(".chat-sticker-status").textContent = `${userMessage(error, "Could not send that sticker.")} Tap the same sticker to retry safely.`;
         } finally {
             stickerSending = false;
         }
@@ -2126,7 +2135,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             // Photo editing is loaded on first use; offline, that load can fail.
             $(".chat-media-status").textContent = /dynamically imported module|module script failed/i.test(error?.message || "")
                 ? "Photo editing needs a connection to load. Reconnect and try again."
-                : error.message || "Could not prepare that media.";
+                : userMessage(error, "Could not prepare that media.");
         }
     }
 
@@ -2151,7 +2160,15 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     }
 
     async function selectChatMedia(event) {
-        await prepareSelectedChatMedia(event.target.files?.[0]);
+        const file = event.target.files?.[0];
+        // The library is for photos and videos; voice notes are recorded here.
+        if (file && (/^audio\//.test(file.type) || /\.(m4a|mp3|wav|aac|ogg|opus)$/i.test(file.name || ""))) {
+            event.target.value = "";
+            showChatMediaReview();
+            $(".chat-media-status").textContent = "Choose a photo or video.";
+            return;
+        }
+        await prepareSelectedChatMedia(file);
     }
 
     function voiceRecordingElapsed() {
@@ -2195,13 +2212,9 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             stopVoiceRecorder();
             return;
         }
-        resetChatMediaComposer({ keepGesture: true }); voiceMode = true; syncVoiceComposer();
         const format = voiceRecordingFormat(ingestEnabled(getConfig()));
-        if (!format) {
-            $(".chat-media-status").textContent = "Live recording is unavailable here. Choose an M4A voice recording instead.";
-            $('.chat-audio-file-input').click();
-            return;
-        }
+        if (!format) return syncVoiceComposer(); // no recording path: the mic hides
+        resetChatMediaComposer({ keepGesture: true }); voiceMode = true; syncVoiceComposer();
         const { mimeType } = format;
         // M4A uses the direct 4 MB path; Opus goes through the ingest (10 MB).
         const maxBytes = format.ingest ? 10 * 1024 * 1024 : 4 * 1024 * 1024;
@@ -2231,7 +2244,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 chunks.push(event.data);
             });
             recorder.addEventListener("error", () => {
-                $(".chat-media-status").textContent = "Voice recording stopped unexpectedly. Try again or choose an M4A file.";
+                $(".chat-media-status").textContent = "Voice recording stopped unexpectedly. Try again.";
                 recorder.stream.getTracks().forEach((track) => track.stop());
                 clearVoiceRecordingState();
             }, { once: true });
@@ -2269,8 +2282,8 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         } catch (error) {
             clearVoiceRecordingState();
             $(".chat-media-status").textContent = error?.name === "NotAllowedError"
-                ? "Microphone access was not allowed. Choose an M4A voice recording instead."
-                : "Could not start voice recording. Choose an M4A voice recording instead.";
+                ? "Microphone access was not allowed. Allow it in your browser settings, then try again."
+                : userMessage(error, "Could not start voice recording. Try again.");
         }
     }
 
@@ -2291,9 +2304,8 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         const recordId = `${senderId}:chat-media:${uploadRequestId}`;
         button.disabled = true;
         button.textContent = "Sending…";
-        root.querySelectorAll('[data-retake-chat-photo], [data-chat-photo-library], [data-chat-audio-library], [data-record-voice]').forEach(control => { control.disabled = true; });
+        root.querySelectorAll('[data-retake-chat-photo], [data-chat-photo-library], [data-record-voice]').forEach(control => { control.disabled = true; });
         $(".chat-media-file-input").disabled = true;
-        $(".chat-audio-file-input").disabled = true;
         $("[data-chat-view-once]").disabled = true;
         $(".chat-media-progress").classList.remove("hidden");
         $(".chat-media-status").textContent = media.kind === "photo" ? "Preparing photo…" : "Starting secure upload…";
@@ -2359,18 +2371,18 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 $(".chat-media-status").textContent = "Upload cancelled. Your selection is still here.";
             } else if (recoverySaved && chatTextSendIsRetryable(error)) {
                 await markChatMediaOutboxAttempt(recordId).catch(() => null);
-                $(".chat-media-status").textContent = `${error.message || "Could not send that media."} It is saved on this device and will retry while Valid is open.`;
+                $(".chat-media-status").textContent = `${userMessage(error, "Could not send that media.")} It is saved on this device and will retry while Valid is open.`;
             } else {
                 await removeChatMediaOutbox(recordId).catch(() => null);
                 $(".chat-media-status").textContent = recoverySaved
-                    ? `${error.message || "Could not send that media."} Your selection is still here to retry.`
+                    ? `${userMessage(error, "Could not send that media.")} Your selection is still here to retry.`
                     : "This media could not be saved for a safe retry. Free some device storage and try again.";
             }
         } finally {
             chatMediaPublishing = false;
             if (chatMediaAbort === abort) chatMediaAbort = null;
             $("[data-cancel-chat-upload]").hidden = true;
-            root.querySelectorAll('[data-retake-chat-photo], [data-chat-photo-library], [data-chat-audio-library], [data-record-voice]').forEach(control => { control.disabled = false; });
+            root.querySelectorAll('[data-retake-chat-photo], [data-chat-photo-library], [data-record-voice]').forEach(control => { control.disabled = false; });
             button.innerHTML = uiIcon('send');
             button.disabled = !selectedChatMedia;
         }
@@ -2394,13 +2406,11 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         resetChatMediaRequestIds();
         $(".chat-media-file-input").value = "";
         $(".chat-media-file-input").disabled = false;
-        $(".chat-audio-file-input").value = "";
-        $(".chat-audio-file-input").disabled = false;
         $("[data-chat-view-once]").checked = false;
         $("[data-chat-view-once]").disabled = false;
         $("[data-review-tools]").hidden = true;
         $(".chat-media-send-count").hidden = true;
-        $(".chat-media-preview").innerHTML = `<span aria-hidden="true">${uiIcon("plus")}</span><p>Choose a photo, an MP4 video, or an M4A voice recording.</p>`;
+        $(".chat-media-preview").innerHTML = `<span aria-hidden="true">${uiIcon("plus")}</span><p>Choose a photo or video.</p>`;
         $(".chat-media-status").textContent = "";
         $(".chat-media-progress").classList.add("hidden");
         setRuntimeStyles($(".chat-media-progress span"), { width: "0" });
@@ -2439,7 +2449,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             $('.chat-memento-gallery-status').textContent = '';
             renderDailyRow();
         } catch (error) {
-            if (generation === mementoDateGeneration) $('.chat-memento-gallery-status').textContent = error.message || 'Could not load that Memento day.';
+            if (generation === mementoDateGeneration) $('.chat-memento-gallery-status').textContent = userMessage(error, 'Could not load that Memento day.');
         }
     }
 
@@ -2479,6 +2489,8 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         if (preview) still.src = preview;
         else still.removeAttribute("src");
         if (kind === "video" && poster) video.poster = poster;
+        // Kept videos loop like iOS (ChatMediaPlayback AVPlayerLooper); view once plays once.
+        video.loop = kind === "video";
         dialog.classList.add("is-loading");
         const settle = () => { if (target.getAttribute("src") === url) { dialog.classList.remove("is-loading"); still.hidden = true; } };
         if (kind === "video") video.addEventListener("loadeddata", settle, { once: true });
@@ -2524,7 +2536,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         $("[data-share-viewed-memento]").hidden = !viewedMementoEntryId;
         $("[data-reply-viewed-media]").hidden = !viewedMessageId;
         $("[data-react-viewed-media]").hidden = !viewedMessageId;
-        void showMediaViewer(url, { label: `${owner || "Memento"} · preserved in this chat` }).catch((error) => showToast?.(error.message));
+        void showMediaViewer(url, { label: `${owner || "Memento"} · preserved in this chat` }).catch((error) => showToast?.(userMessage(error, "That Memento could not be opened.")));
     }
 
     async function swapViewedMemento() {
@@ -2546,7 +2558,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             button.setAttribute("aria-label", viewedMementoShowsSwapped ? "Show primary Memento view" : "Show alternate Memento view");
         } catch (error) {
             if (previousURL) image.src = previousURL;
-            showToast?.(error.message || "That Memento view could not be opened.");
+            showToast?.(userMessage(error, "That Memento view could not be opened."));
         } finally {
             button.disabled = false;
         }
@@ -2564,10 +2576,12 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         clearInterval(ephemeralTimer); ephemeralTimer = null; ephemeralPaused = false;
         $('[data-pause-ephemeral]').hidden = true;
         $('.chat-ephemeral-progress').hidden = true;
+        $('.chat-capture-note').hidden = true;
         const dialog = $("[data-chat-media-viewer]");
         const video = dialog.querySelector("video");
         video.pause();
         video.controls = true;
+        video.loop = false;
         video.onended = null;
         video.removeAttribute("src");
         video.removeAttribute("poster");
@@ -2643,7 +2657,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             .catch(async (error) => {
                 // Signed media URLs expire after ~15 minutes: fetch fresh ones and retry once.
                 if (error.mediaFailed && !retried && await refreshMessageMedia(message)) return openPersistentChatMedia(messageId, { retried: true });
-                showToast?.(error.message);
+                showToast?.(userMessage(error, "That media could not be opened."));
             });
     }
 
@@ -2704,7 +2718,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             if (!current()) return;
             closeMediaViewer();
             viewOnceStates.set(messageId, { failed: true }); renderMessages(false);
-            showToast?.(error.message || 'That view-once media is no longer available.');
+            showToast?.(userMessage(error, 'That view-once media is no longer available.'));
         }
     }
 
@@ -2722,9 +2736,12 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         clearInterval(ephemeralTimer); ephemeralPaused = false;
         const progress = $('.chat-ephemeral-progress'), video = $('[data-chat-media-viewer] video');
         progress.hidden = false; progress.value = 0;
+        // iOS logs view-once screenshots in the chat; a browser can't see them.
+        $('.chat-capture-note').hidden = false;
         $('[data-pause-ephemeral]').hidden = false;
         $('[data-pause-ephemeral]').setAttribute('aria-label', 'Pause media');
         $('[data-pause-ephemeral]').innerHTML = uiIcon('pause');
+        video.loop = false;
         video.onended = kind === 'video' ? closeMediaViewer : null;
         if (kind === 'video' && video.ended) { closeMediaViewer(); return; }
         let elapsed = 0, previous = performance.now();
@@ -2745,7 +2762,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             const response = await api.getChatViewOnceReceipts(userId(), store.state.activeChatId, messageId);
             $(".chat-readers-content").innerHTML = `<header><button type="button" data-close-readers>Done</button><strong>Opened by</strong><span></span></header><div class="chat-reactors-list">${(response.members || []).map((member) => `<div><span>${escapeChatHTML(displayMember(member))}</span><b>${member.opened ? `${Number(member.view_count || 1)}×` : "Not opened"}</b></div>`).join("") || `<p>No recipients yet.</p>`}</div>`;
         } catch (error) {
-            $(".chat-readers-content p").textContent = error.message || "Could not load view receipts.";
+            $(".chat-readers-content p").textContent = userMessage(error, "Could not load view receipts.");
         }
     }
 
@@ -2899,7 +2916,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             renderRoomHeader(chat);
             showToast?.("Group photo updated");
         } catch (error) {
-            showToast?.(error.message || "Could not update the group photo.");
+            showToast?.(userMessage(error, "Could not update the group photo."));
         } finally {
             input.disabled = false;
             input.value = "";
@@ -2913,7 +2930,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             if (store.state.detail) store.state.detail.chat = chat;
             renderSettings();
             showToast?.("Notification setting updated");
-        } catch (error) { showToast?.(error.message || "Could not update notifications."); }
+        } catch (error) { showToast?.(userMessage(error, "Could not update notifications.")); }
     }
 
     async function reactToMessage(messageId, type) {
@@ -2925,7 +2942,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             store.updateMessage(store.state.activeChatId, updated);
             renderMessages(false);
             softHaptic?.();
-        } catch (error) { showToast?.(error.message || "Could not add that reaction."); }
+        } catch (error) { showToast?.(userMessage(error, "Could not add that reaction.")); }
     }
 
     async function showMessageReactors(messageId) {
@@ -2937,7 +2954,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             const reactors = await api.getChatMessageReactors(userId(), store.state.activeChatId, messageId);
             content.innerHTML = `<header><button type="button" data-close-reactors>Done</button><strong>Reactions</strong><span></span></header><div class="chat-reactors-list">${(reactors || []).map((reactor) => `<div><span>${escapeChatHTML(displayMember(reactor))}</span><b aria-label="${escapeChatHTML(reactor.reaction_type)}">${CHAT_REACTIONS.find(([type]) => type === reactor.reaction_type)?.[1] || uiIcon("smile")}</b></div>`).join("") || `<p>No reactions yet.</p>`}</div>`;
         } catch (error) {
-            content.querySelector(".chat-reactors-status").textContent = error.message || "Could not load reactions.";
+            content.querySelector(".chat-reactors-status").textContent = userMessage(error, "Could not load reactions.");
         }
     }
 
@@ -2956,7 +2973,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             const updated = await api.unsendChatMessage(userId(), store.state.activeChatId, messageId);
             store.updateMessage(store.state.activeChatId, updated);
             renderMessages(false);
-        } catch (error) { showToast?.(error.message || "Could not unsend that message."); }
+        } catch (error) { showToast?.(userMessage(error, "Could not unsend that message.")); }
     }
 
     async function deleteMessageForMe(messageId) {
@@ -2967,7 +2984,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             const remaining = store.messages().filter((message) => message.id !== messageId);
             store.replaceMessages(store.state.activeChatId, remaining, store.state.messagePageByChat.get(String(store.state.activeChatId)) || {});
             renderMessages(false);
-        } catch (error) { showToast?.(error.message || "Could not hide that message."); }
+        } catch (error) { showToast?.(userMessage(error, "Could not hide that message.")); }
     }
 
     async function copyMessage(messageId) {
@@ -3231,6 +3248,15 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         return chatId;
     }
 
+    // The Back button and the interactive edge swipe share this path.
+    function backFromRoom() {
+        if (inviteMode && store.state.activeChatId) {
+            inviteMode = false;
+            return showScreen("room");
+        }
+        return showChatList();
+    }
+
     function showChatList() {
         // Only this view pushes entries with a chatId: pop that entry instead of
         // stacking a second list entry on top of it.
@@ -3255,13 +3281,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         if (!target) { if (!event.target.closest(".chat-message-actions")) closeMessageActions(); return; }
         if (!target.matches("[data-message-menu]")) closeMessageActions();
         if (target.matches("[data-new-chat]")) return openCreateChat();
-        if (target.matches("[data-chat-list]")) {
-            if (inviteMode && store.state.activeChatId) {
-                inviteMode = false;
-                return showScreen("room");
-            }
-            return showChatList();
-        }
+        if (target.matches("[data-chat-list]")) return backFromRoom();
         if (target.matches("[data-create-submit]")) return createChat();
         if (target.dataset.searchChat) return openSearchResult(target.dataset.searchChat, target.dataset.searchMessage || null);
         if (target.dataset.returnMissedCall) {
@@ -3330,7 +3350,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             if (chatMediaPublishing || selectedChatMedia?.kind !== 'photo') return;
             photoStickerMode = true;
             $('[data-save-sticker]').textContent = 'Save and add';
-            return selectedPhotoSourceFile().then(file => stickerMaker.open(file)).catch(error => { $('.chat-media-status').textContent = error.message; });
+            return selectedPhotoSourceFile().then(file => stickerMaker.open(file)).catch(error => { $('.chat-media-status').textContent = userMessage(error, "That photo could not be cut out."); });
         }
         if (target.matches("[data-close-memento]")) return $("[data-memento-dialog]").close();
         if (target.matches("[data-skip-memento]")) return skipMementoForToday();
@@ -3343,7 +3363,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             if (url) {
                 target.disabled = true;
                 return photoStickers.add(url).then(() => $('[data-sticker-library-dialog]').close())
-                    .catch(error => { $('.chat-sticker-status').textContent = error.message; }).finally(() => { target.disabled = false; });
+                    .catch(error => { $('.chat-sticker-status').textContent = userMessage(error, "Could not add that sticker."); }).finally(() => { target.disabled = false; });
             }
             return;
         }
@@ -3378,7 +3398,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 renderRoomHeader(chat);
                 renderSettings();
                 showToast?.("Group name updated");
-            } catch (error) { showToast?.(error.message || "Could not rename this group."); }
+            } catch (error) { showToast?.(userMessage(error, "Could not rename this group.")); }
             return;
         }
         const memberFor = (id) => (store.state.detail?.members || []).find((member) => String(member.user_id) === String(id));
@@ -3400,7 +3420,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 presence?.invalidate();
                 await openChat(store.state.activeChatId, { updateHistory: false, force: true });
                 renderSettings();
-            } catch (error) { showToast?.(error.message || "Could not remove that person."); }
+            } catch (error) { showToast?.(userMessage(error, "Could not remove that person.")); }
             return;
         }
         if (target.dataset.blockChatMember) {
@@ -3417,7 +3437,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 showToast?.("Person blocked");
                 await loadChats({ quiet: true });
                 renderSettings();
-            } catch (error) { showToast?.(error.message || "Could not block this person."); }
+            } catch (error) { showToast?.(userMessage(error, "Could not block this person.")); }
             return;
         }
         if (target.matches("[data-cancel-reply]")) { store.state.replyToMessageId = null; return renderReplyDraft(); }
@@ -3453,7 +3473,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             $("[data-chat-settings-dialog]").close();
             await loadChats({ quiet: true });
             if (store.state.activeChatId === chatId) showChatList();
-        }).catch((error) => showToast?.(error.message || "Could not leave this chat."));
+        }).catch((error) => showToast?.(userMessage(error, "Could not leave this chat.")));
     }
 
     async function reportCurrentChat() {

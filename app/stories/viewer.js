@@ -118,6 +118,7 @@ export function createStoryViewer({
                 </div>
                 <div class="story-bottom">
                     <p class="story-item-caption"></p>
+                    <small class="story-capture-note" hidden>Screenshots aren’t detected on the web</small>
                     <div class="story-owner-bar" hidden>
                         <button type="button" class="story-views" data-story-viewers aria-describedby="story-views-hint">${icon("eye")}<span></span></button>
                         <span id="story-views-hint" hidden>Shows who viewed this Story</span>
@@ -301,6 +302,8 @@ export function createStoryViewer({
         $(".story-item-caption").textContent = item.caption || "";
         const chats = chatsEnabled();
         $(".story-owner-bar").hidden = !author.is_owner;
+        // iOS tells the author about screenshots of their Story; a browser can't see them.
+        $(".story-capture-note").hidden = author.is_owner;
         $(".story-owner-bar [data-share-story]").hidden = !chats;
         const views = Number(item.view_count || 0);
         $(".story-views span").textContent = `${views} ${views === 1 ? "view" : "views"}`;

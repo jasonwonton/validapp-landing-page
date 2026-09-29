@@ -2,7 +2,7 @@ import { confirmsInvalidSession, fetchSessionRequest } from './session-recovery.
 import { permitsAuthRouteRecovery, fetchAuthWithRecovery } from './auth-route-recovery.js';
 import { reportAuthFailure } from './auth-reliability.js';
 import { authStage, authRejectionCode } from './auth-diagnostics.js';
-import { validationMessage } from './user-message.js';
+import { apiErrorMessage, validationMessage } from './user-message.js';
 
 function apiBaseURL() {
     // Browser auth is first-party: production hosting must reverse-proxy this
@@ -61,6 +61,8 @@ export class ValidAPI {
         this.sessionRevision++;
         this.token = null;
         this.user = null;
+        // Private chat/Story photos cached by the worker leave with the session.
+        globalThis.navigator?.serviceWorker?.controller?.postMessage({ type: "VALID_CLEAR_MEDIA_CACHE" });
     }
 
     async request(path, options = {}) {
@@ -153,7 +155,7 @@ export class ValidAPI {
                 ? detail
                 : Array.isArray(detail)
                 ? validationMessage(detail) || "Some details aren’t valid. Check them and try again."
-                : detail?.message || `Request failed (${response.status})`;
+                : apiErrorMessage(response.status, detail?.message);
             const failure = new APIError(message, response.status, detail, waitSeconds);
             failure.confirmedSessionInvalid = sessionInvalid;
             if (authStage(path) && !sessionInvalid) {

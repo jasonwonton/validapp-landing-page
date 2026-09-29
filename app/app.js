@@ -7,7 +7,7 @@ import { startPerformanceMonitoring } from "./performance.js";
 import { createRealtimeList } from "./realtime-list.js";
 import { activateRoute, preloadRoute } from "./routes/route-loader.js";
 import { clearRuntimeStyles, setRuntimeStyles } from "./runtime-style.js";
-import { configureMediaFallback, imageCandidates, installMediaImageFallback, mediaImageMarkup } from "./media-url.js";
+import { configureMediaFallback, imageCandidates, installMediaImageFallback, mediaImageMarkup, setMediaImageSource } from "./media-url.js";
 import { confirmSheet } from "./ui-dialogs.js";
 import { showToast } from "./toast.js";
 import { userMessage } from "./user-message.js";
@@ -872,7 +872,7 @@ function showSignedOut(message = "") {
     void presenceLifecycle?.stop();
     document.querySelectorAll(".activity-settings-dialog").forEach(dialog => dialog.close());
     clearInterval(state.playLockTimer);
-    state.playLockTimer = null;
+    state.playLockTimer = state.playLockTick = null;
     stopStripeCheckoutPolling();
     document.querySelector(".app-banner")?.remove();
     showAuthView();
@@ -1986,7 +1986,7 @@ async function openTbhDetail(value) {
     const name = displayName(profile);
     const title = received ? `${name} sent you a TBH` : kind === 'sent' ? `You sent ${name} a TBH` : `${name} got a TBH`;
     const footer = kind === 'school' ? tbhAuthorLine(item) : kind === 'sent' ? `${profile.first_name} sees your name. School sees your TBH without your name.` : '';
-    $("#tbhDetailBody").innerHTML = `<article class="tbh-detail-card"><div class="tbh-detail-hero">${avatarMarkup(profile, "row-avatar tbh-detail-avatar")}<div><div class="tbh-detail-title-row"><h2 id="tbhDetailTitle">${escapeHTML(title)}</h2><time>${escapeHTML(relativeTime(item.created_at))}</time></div><p>${escapeHTML(promptForKey(item.prompt_key).title)}</p></div></div><blockquote>${escapeHTML(item.body)}</blockquote>${footer ? `<small>${escapeHTML(footer)}</small>` : ''}</article><div class="detail-engagement-row">${feedView.reactionControlMarkup(item, "activity", item.activity_id)}${commentDetailButtonMarkup(item, "activity", item.activity_id, "tbh-detail-comment-button")}${detailSendButton("activity", item.activity_id)}</div><div class="share-platform-row detail-share-row tbh-share-row">${['snapchat','instagram','tiktok'].map(platform => `<button class="share-platform-button ${platform} ${platform === 'snapchat' ? 'expanded' : ''}" type="button" data-share-tbh="${platform}" aria-label="Share TBH to ${platform === 'tiktok' ? 'TikTok' : platform[0].toUpperCase()+platform.slice(1)}">${shareIconMarkup(platform)}${platform === 'snapchat' ? '<span>Share on Snapchat</span>' : ''}</button>`).join('')}</div><p id="tbhShareStatus" class="status-message" role="status"></p>`;
+    $("#tbhDetailBody").innerHTML = `<article class="tbh-detail-card"><div class="tbh-detail-hero">${avatarMarkup(profile, "row-avatar tbh-detail-avatar")}<div><div class="tbh-detail-title-row"><h2 id="tbhDetailTitle">${escapeHTML(title)}</h2><time>${escapeHTML(shortRelativeTime(item.created_at))}</time></div><p>${escapeHTML(promptForKey(item.prompt_key).title)}</p></div></div><blockquote>${escapeHTML(item.body)}</blockquote>${footer ? `<small>${escapeHTML(footer)}</small>` : ''}</article><div class="detail-engagement-row">${feedView.reactionControlMarkup(item, "activity", item.activity_id)}${commentDetailButtonMarkup(item, "activity", item.activity_id, "tbh-detail-comment-button")}${detailSendButton("activity", item.activity_id)}</div><div class="share-platform-row detail-share-row tbh-share-row">${['snapchat','instagram','tiktok'].map(platform => `<button class="share-platform-button ${platform} ${platform === 'snapchat' ? 'expanded' : ''}" type="button" data-share-tbh="${platform}" aria-label="Share TBH to ${platform === 'tiktok' ? 'TikTok' : platform[0].toUpperCase()+platform.slice(1)}">${shareIconMarkup(platform)}${platform === 'snapchat' ? '<span>Share on Snapchat</span>' : ''}</button>`).join('')}</div><p id="tbhShareStatus" class="status-message" role="status"></p>`;
     openDetailScreen($("#tbhDetailDialog"));
     if (kind === "received" && !item.opened_at) {
         try {
@@ -2090,7 +2090,7 @@ function openAuraSpend(kind, target = null) {
     const spendIcon = $("#auraSpendIcon");
     const person = kind === "nominate" ? target.candidate : target;
     const targetImage = ["targeted", "tbh", "nominate"].includes(kind) ? api.assetURL(person?.profile_picture_url_medium || person?.profile_picture_url) : null;
-    spendIcon.src = targetImage || (kind === "reveal" ? "../assets/app/magnifying_glass.webp" : kind === "nominate" ? "../assets/app/crown.webp" : "../assets/app/rocket.webp");
+    setMediaImageSource(spendIcon, targetImage || (kind === "reveal" ? "../assets/app/magnifying_glass.webp" : kind === "nominate" ? "../assets/app/crown.webp" : "../assets/app/rocket.webp"));
     spendIcon.alt = kind === "global" ? "Get Boosted" : kind === "reveal" ? "Reveal sender" : displayName(person);
     spendIcon.closest(".aura-spend-icon").classList.toggle("profile", Boolean(targetImage));
     $("#auraSpendTitle").textContent = details[0];
@@ -2285,7 +2285,7 @@ async function openClassmateProfile(userId) {
             : null;
     }
     $("#classmateProfileStatus").textContent = requests[0].status === "rejected"
-        ? (requests[0].reason?.message || "Could not load this profile.")
+        ? userMessage(requests[0].reason, "Could not load this profile.")
         : "";
     renderClassmateProfile();
 }
@@ -2373,7 +2373,7 @@ async function refreshProfilePanelData() {
         } else if (request.key === "askLink" && result.reason?.status === 404) {
             $("#askLinkSection").classList.add("hidden");
         } else {
-            profileError ||= result.reason?.message || "Could not load all profile details.";
+            profileError ||= userMessage(result.reason, "Could not load all profile details.");
         }
     });
     $("#profileStatus").textContent = profileError;
@@ -2565,7 +2565,7 @@ async function openSignupDialog() {
             if (!await enablePreviewSignup()) return;
         }
         catch (error) {
-            $('#authStatus').textContent = error.message;
+            $('#authStatus').textContent = userMessage(error, "Passkeys aren’t available in this browser right now.");
             showAuthBrowserHelp(error, false);
             const help = $('#authBrowserHelp');
             if (!help.classList.contains('hidden')) help.href = authBrowserURL({ signup: true });
@@ -3032,7 +3032,7 @@ async function createAccount(event) {
         showAuthBrowserHelp(error, true);
         state.signupCompletionUncertain = error.code === 'signup_result_unknown';
         $('#signupRecoverAccount').classList.toggle('hidden', !state.signupCompletionUncertain);
-        $("#signupStatus").textContent = error.message || "Could not create your account.";
+        $("#signupStatus").textContent = userMessage(error, "Could not create your account.");
     } finally {
         setButtonLoading(button, false);
         submitButtons.forEach((candidate) => { candidate.disabled = state.signupCompletionUncertain; });
@@ -3483,6 +3483,10 @@ function shareCards() {
     return shareCardsPromise;
 }
 
+// PollShareBranding.contentURL on iOS.
+const POLL_SHARE_URL = "https://validapp.lol";
+const POLL_SHARE_COPIES_LINK = new Set(["instagram", "tiktok"]);
+
 async function copyShareLink(text) {
     try {
         await navigator.clipboard.writeText(text);
@@ -3525,21 +3529,34 @@ async function shareFeedItem(platform = "other") {
         button.disabled = true;
         button.setAttribute("aria-busy", "true");
     }
+    // iOS copies the validapp.lol link before handing the photo to Instagram
+    // (link sticker) or TikTok (caption), since the share can't carry it.
+    // Copy inside the tap, before any await can spend the user activation.
+    const linkCopy = POLL_SHARE_COPIES_LINK.has(platform) ? copyShareLink(POLL_SHARE_URL) : null;
     $("#feedDetailStatus").textContent = `Creating poll photo for ${platformLabel}…`;
     try {
         const file = await (await shareCards()).createPollShareFile(item);
         if (navigator.share && navigator.canShare?.({ files: [file] })) {
-            $("#feedDetailStatus").textContent = `Choose ${platformLabel} in the share sheet.`;
+            const copied = await linkCopy;
+            if (copied) showToast("Link copied");
+            $("#feedDetailStatus").textContent = copied
+                ? `Link copied. Choose ${platformLabel} in the share sheet, then paste it.`
+                : `Choose ${platformLabel} in the share sheet.`;
             await navigator.share({
                 files: [file],
                 title: `Share to ${platformLabel}`,
-                text: "A poll on Valid · https://validapp.lol",
+                text: `A poll on Valid · ${POLL_SHARE_URL}`,
             });
             $("#feedDetailStatus").textContent = "";
-            showToast("Poll photo shared");
+            showToast(copied ? "Poll photo shared • Link copied" : "Poll photo shared");
         } else {
+            // No Web Share (most desktops): save the photo and keep the link on the clipboard.
+            const copied = await (linkCopy || copyShareLink(POLL_SHARE_URL));
             downloadShareFile(file);
-            $("#feedDetailStatus").textContent = `Poll photo saved. Open ${platformLabel} to post it.`;
+            showToast(copied ? "Image saved • Link copied" : "Image saved");
+            $("#feedDetailStatus").textContent = copied
+                ? `Poll photo saved and link copied. Open ${platformLabel} to post it.`
+                : `Poll photo saved. Open ${platformLabel} to post it.`;
         }
     } catch (error) {
         if (error.name === "AbortError") $("#feedDetailStatus").textContent = "";
@@ -4249,7 +4266,7 @@ function formatLockRemaining(totalSeconds) {
 function renderLockedPlay() {
     const until = state.playLocked?.locked_until;
     clearInterval(state.playLockTimer);
-    state.playLockTimer = null;
+    state.playLockTimer = state.playLockTick = null;
     $("#playCard").innerHTML = `<article class="locked-play-card">
         <h3>Next Poll Set Locked</h3>
         <img loading="lazy" decoding="async" class="lock-art" src="../assets/app/lock.webp" alt="">
@@ -4266,7 +4283,7 @@ function renderLockedPlay() {
                 : "Unlocking your next polls...";
             if (remaining > 0) return;
             clearInterval(state.playLockTimer);
-            state.playLockTimer = null;
+            state.playLockTimer = state.playLockTick = null;
             state.playLocked = null;
             state.questions = [];
             state.questionIndex = 0;
@@ -4275,7 +4292,11 @@ function renderLockedPlay() {
             loadPlay();
         };
         tick();
-        if (state.playLocked?.locked_until === until) state.playLockTimer = setInterval(tick, 1000);
+        // Ticks only while the page is visible (see the visibilitychange listener).
+        if (state.playLocked?.locked_until === until) {
+            state.playLockTick = tick;
+            if (!document.hidden) state.playLockTimer = setInterval(tick, 1000);
+        }
     }
 }
 
@@ -6249,6 +6270,7 @@ function activatePanelRoute(panel) {
         getUser: () => api.user,
         getConfig: () => state.config,
         softHaptic, successHaptic, haptic, showToast,
+        installSwipeBack: edgeSwipeBackSupported() ? installEdgeSwipeBack : null,
         onUnreadChange: renderChatUnreadBadge,
         onPlay: async () => {
             if (!state.profile?.school_id) return showToast('Join a school to play the Game of the Week.');
@@ -6353,8 +6375,13 @@ async function endPullRefresh() {
     }
 }
 
+// Screens that pop like a UINavigationController (detail screens, the chat room).
+function edgeSwipeBackSupported() {
+    return isAndroidDevice() || (isStandaloneApp() && isAppleTouchDevice());
+}
+
 function installNativeSheetGestures() {
-    if (isAndroidDevice() || (isStandaloneApp() && isAppleTouchDevice())) {
+    if (edgeSwipeBackSupported()) {
         for (const screen of $$(".detail-screen")) installEdgeSwipeBack(screen, () => closeDetailScreen(screen));
     }
     if (!isAndroidDevice()) return;
@@ -6408,7 +6435,9 @@ function isAppleTouchDevice() {
 // UIKit-style interactive pop: a drag from the left edge moves the screen with
 // the finger (rubber-banding past the edge) and completes past a third of the
 // width or on a fast flick. Installed iPhone apps have no browser back gesture.
-function installEdgeSwipeBack(screen, onBack) {
+// `onTrack` runs when a drag is recognised (e.g. to reveal the screen below);
+// `onSettle(complete)` runs once it has finished, before `onBack`.
+function installEdgeSwipeBack(screen, onBack, { onTrack, onSettle } = {}) {
     const EDGE = 24;
     let gesture = null;
     const setOffset = (x) => setRuntimeStyles(screen, { "--swipe-x": `${x}px` });
@@ -6419,6 +6448,7 @@ function installEdgeSwipeBack(screen, onBack) {
         const settle = () => {
             screen.classList.remove("swipe-settling");
             clearRuntimeStyles(screen, "--swipe-x");
+            onSettle?.(complete);
             if (complete) onBack();
         };
         if (reduceMotion) return settle();
@@ -6443,6 +6473,7 @@ function installEdgeSwipeBack(screen, onBack) {
             if (dx < 8) return;
             gesture.tracking = true;
             screen.classList.add("swipe-tracking");
+            onTrack?.();
         }
         event.preventDefault();
         // Past the left edge the screen resists like a rubber band.
@@ -7361,6 +7392,13 @@ function bindEvents() {
     addEventListener("focus", checkStripeCheckout);
     addEventListener("focus", () => refreshWebPushStatus());
     document.addEventListener("visibilitychange", () => {
+        clearInterval(state.playLockTimer);
+        state.playLockTimer = null;
+        const tick = state.playLockTick;
+        if (!document.hidden && tick) {
+            tick();
+            if (state.playLockTick === tick) state.playLockTimer = setInterval(tick, 1000);
+        }
         if (document.visibilityState === "visible") {
             refreshWebPushStatus();
             refreshAskSafetyState();

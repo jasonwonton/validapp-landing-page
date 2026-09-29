@@ -1975,7 +1975,9 @@ body:has(dialog.ui-sheet[open]) .toast[popover] { top: calc(env(safe-area-inset-
 .reaction-control button::after, .comment-count-button::after, .tbh-row-menu summary::after, .detail-overflow-button::after { content: ""; position: absolute; }
 .reaction-control .reaction-picker-button::after { inset: -6px 0 -6px -8px; }
 .reaction-control .reaction-count-button::after { inset: -6px -18px -6px 0; }
-.detail-engagement-row .reaction-control button::after { inset: 0; }
+/* 42px-high drawing in the detail row: reach 44px without covering the neighbouring button. */
+.detail-engagement-row .reaction-control button::after { inset: -1px 0; }
+.detail-engagement-row .reaction-control .reaction-count-button::after { inset: -1px -4px -1px 0; }
 /* Extend upward: the card clips below (content-visibility paint containment). */
 .comment-count-button::after { inset: -12px -3px -2px; }
 /* 36px chip drawn inside a 44px target (transparent border, inset-shadow outline). */
