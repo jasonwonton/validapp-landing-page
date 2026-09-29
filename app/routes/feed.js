@@ -15,9 +15,15 @@ export function createFeedView(context) {
         normalizeReactionState, dominantReaction, promptForKey, tbhAuthorLine,
         tbhRequestsEnabled, renderTabBadges, showToast, commentControlMarkup, personalInboxUnreadCounts,
     } = context;
-    const storiesView = state.config?.enable_stories === true && state.config?.enable_web_stories === true
-        ? createStoriesView({ root: $("#storiesRoot"), api, getUser: () => api.user, getProfile: () => state.profile, getConfig: () => state.config, escapeHTML, showToast })
-        : null;
+    // Created when /config allows Stories, which may only be known after a
+    // later config refresh (the Feed view itself is built once).
+    let storiesView = null;
+    const ensureStoriesView = () => {
+        if (!storiesView && state.config?.enable_stories === true && state.config?.enable_web_stories === true) {
+            storiesView = createStoriesView({ root: $("#storiesRoot"), api, getUser: () => api.user, getProfile: () => state.profile, getConfig: () => state.config, escapeHTML, showToast });
+        }
+        return storiesView;
+    };
 
     const reactionControlMarkup = (item, targetType, targetId) => {
         normalizeReactionState(item);
@@ -103,7 +109,7 @@ export function createFeedView(context) {
     }
 
     function renderFeed() {
-        void storiesView?.activate();
+        void ensureStoriesView()?.activate();
         const list = $("#feedList");
         const query = state.feedSearch.trim().toLowerCase();
         renderPersonalInboxControls();
@@ -135,5 +141,5 @@ export function createFeedView(context) {
         renderTabBadges();
     }
 
-    return { reactionControlMarkup, renderFeed, renderFeedClassmateResults, refreshStories: () => storiesView?.refresh() };
+    return { reactionControlMarkup, renderFeed, renderFeedClassmateResults, refreshStories: () => ensureStoriesView()?.refresh() };
 }
