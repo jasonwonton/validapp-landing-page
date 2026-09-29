@@ -8,6 +8,8 @@ async function mount(page, { host = 'validapp.lol', capabilities = true, ua = ''
         if (path === '/api/v1/client-logs') return route.fulfill({ status: 201, json: {} });
         return route.fulfill({ contentType: 'text/html', body: '<meta name="valid-app-version" content="web-v82"><title>Auth fixture</title>' });
     });
+    // Related-origin SecurityErrors probe the RP's document; tests override this to simulate a blocked network.
+    await page.route('https://six7.lol/.well-known/webauthn', route => route.fulfill({ contentType: 'application/json', json: { origins: ['https://validapp.lol'] } }));
     await page.goto(`https://${host}/app/?phone=must-not-leak&token=private`);
     await page.evaluate(({ capabilities, ua }) => {
         if (ua) Object.defineProperty(navigator, 'userAgent', { value: ua, configurable: true });
@@ -160,6 +162,36 @@ test('browser SecurityError is actionable without changing RP or verification re
     expect(result.message).toContain('updated Chrome or Safari');
     expect(result.message).not.toContain('not enabled');
     expect(result.rp).toBe('six7.lol'); expect(result.uv).toBe('required');
+});
+
+test('SecurityError on a network that blocks six7.lol says so, skips the retry and reports it', async ({ page }) => {
+    await mount(page);
+    await page.route('https://six7.lol/.well-known/webauthn', route => route.abort('blockedbyclient'));
+    const reports = [];
+    page.on('request', request => { if (request.url().endsWith('/client-logs')) reports.push(request.postDataJSON()); });
+    const result = await page.evaluate(async () => {
+        const { signInWithPasskey } = await import('/app/passkeys.js');
+        const { reportAuthFailure } = await import('/app/auth-reliability.js');
+        let ceremonies = 0;
+        navigator.credentials.get = async () => { ceremonies++; throw new DOMException('domain check failed', 'SecurityError'); };
+        try { await signInWithPasskey({ getPasskeyChallenge: async () => ({ challenge: 'AQID', rpId: 'six7.lol' }) }); }
+        catch (error) { reportAuthFailure(error); return { ceremonies, code: error.code, context: error.passkeyContext, message: error.message }; }
+    });
+    expect(result).toMatchObject({ ceremonies: 1, code: 'passkey_security', context: 'webauthn.related_origin_unreachable' });
+    expect(result.message).toContain('blocking six7.lol');
+    await expect.poll(() => reports.length).toBe(1);
+    expect(reports[0].context).toMatchObject({ error_code: 'passkey_security', stage: 'credential_get', underlying_error_code: 'webauthn.related_origin_unreachable' });
+});
+
+test('SecurityError with six7.lol reachable keeps the browser guidance', async ({ page }) => {
+    await mount(page);
+    const result = await page.evaluate(async () => {
+        const { passkeySecurityFailure } = await import('/app/auth-reliability.js');
+        const error = await passkeySecurityFailure('six7.lol', 'credential_create');
+        return { context: error.passkeyContext, message: error.message };
+    });
+    expect(result.context).toBe('webauthn.related_origin_supported');
+    expect(result.message).toContain('updated Chrome or Safari');
 });
 
 test('diagnostics are capped, deduplicated and omit personal and credential data', async ({ page }) => {

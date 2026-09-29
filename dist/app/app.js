@@ -2097,7 +2097,9 @@ function selectSignupGender(value) {
 
 function showAuthBrowserHelp(error, signup) {
     const link = $(signup ? '#signupBrowserHelp' : '#authBrowserHelp');
-    const recoverable = ['embedded_browser', 'passkeys_unavailable', 'related_origins_unavailable', 'unsupported_origin', 'secure_context', 'passkey_security'].includes(error?.code);
+    // Another browser on the same blocked network would fail the same way.
+    const recoverable = ['embedded_browser', 'passkeys_unavailable', 'related_origins_unavailable', 'unsupported_origin', 'secure_context', 'passkey_security'].includes(error?.code)
+        && error?.passkeyContext !== 'webauthn.related_origin_unreachable';
     link.classList.toggle('hidden', !recoverable);
     if (recoverable) {
         link.href = authBrowserURL({ signup });

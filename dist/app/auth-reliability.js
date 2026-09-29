@@ -132,8 +132,26 @@ export function needsPhoneReverification(error) {
     return ['phone_verification_expired', 'phone_not_verified'].includes(error?.code);
 }
 
+// The browser fetches https://{rpId}/.well-known/webauthn itself before a
+// related-origin ceremony, and some networks block six7.lol while allowing
+// validapp.lol. The document has no CORS headers, so a no-cors fetch can only
+// tell a network-level failure from "something answered"; a filter's block
+// page or a bot challenge still counts as reachable.
+export async function relatedOriginReachable(rpId, timeoutMs = 3000) {
+    try {
+        await fetch(`https://${rpId}/.well-known/webauthn`, { mode: 'no-cors', credentials: 'omit',
+            cache: 'no-store', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(timeoutMs) });
+        return true;
+    } catch (_) { return false; }
+}
+
 export async function passkeySecurityFailure(rpId, stage) {
     const sameRP = location.hostname === rpId || location.hostname.endsWith(`.${rpId}`);
+    if (!sameRP && navigator.onLine !== false && !await relatedOriginReachable(rpId)) {
+        const error = authError('passkey_security', `Your network is blocking ${rpId}, which Valid needs to check your passkey. Turn off Wi-Fi to use mobile data, or try another network.`, stage);
+        error.passkeyContext = 'webauthn.related_origin_unreachable';
+        return error;
+    }
     let related = 'unknown';
     try {
         const caps = await PublicKeyCredential.getClientCapabilities?.();
@@ -166,7 +184,7 @@ function sendAuthDiagnostic(error) {
         distribution_channel: 'web_pwa', flow: 'authentication', stage, error_code: code,
         http_status: String(Number(error.status) || 0), route: location.hostname,
         device_model: authDeviceFamily(navigator.userAgent),
-        ...(['webauthn.same_rp', 'webauthn.related_origin_supported', 'webauthn.related_origin_unsupported', 'webauthn.related_origin_unknown'].includes(error.passkeyContext)
+        ...(['webauthn.same_rp', 'webauthn.related_origin_supported', 'webauthn.related_origin_unsupported', 'webauthn.related_origin_unknown', 'webauthn.related_origin_unreachable'].includes(error.passkeyContext)
             ? { underlying_error_code: error.passkeyContext } : {}),
         ...( /^[a-f0-9-]{12,36}$/i.test(error.requestId || '') ? { server_request_id: error.requestId } : {} ),
         network_connected: String(navigator.onLine),
