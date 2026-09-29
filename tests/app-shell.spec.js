@@ -158,3 +158,68 @@ test.describe("notification taps", () => {
         await expect(page).not.toHaveURL(/signin=1/);
     });
 });
+
+test.describe("history and Back", () => {
+    test("tabs keep Feed as the root: tab switches and re-taps never grow history", async ({ page }) => {
+        await signInToDemo(page);
+        const start = await page.evaluate(() => history.length);
+        const nav = (name) => page.locator("#bottomNav").getByRole("button", { name, exact: true }).click();
+        await nav("Play");
+        await nav("Chats");
+        await nav("Profile");
+        await nav("Profile");
+        expect(await page.evaluate(() => history.length)).toBe(start + 1);
+        await page.goBack();
+        await expect(page.locator("#feedPanel")).toBeVisible();
+        await expect(page).not.toHaveURL(/tab=/);
+        // Tapping Feed from another tab also returns to the root entry.
+        await nav("Play");
+        await nav("Feed");
+        await expect(page.locator("#feedPanel")).toBeVisible();
+        await expect.poll(() => page.evaluate(() => history.state?.tabOverFeed)).toBe(false);
+    });
+
+    test("Back closes an open sheet before leaving the screen", async ({ page }) => {
+        await signInToDemo(page);
+        await page.locator("#bottomNav").getByRole("button", { name: "Profile", exact: true }).click();
+        await page.getByRole("button", { name: /Choose a crush/ }).click();
+        const sheet = page.locator("#targetedBoostDialog");
+        await expect(sheet).toBeVisible();
+        await page.goBack();
+        await expect(sheet).toBeHidden();
+        await expect(page.locator("#profilePanel")).toBeVisible();
+        // Closing the sheet from its own button leaves no stale history entry.
+        await page.getByRole("button", { name: /Choose a crush/ }).click();
+        await expect(sheet).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(sheet).toBeHidden();
+        await expect.poll(() => page.evaluate(() => history.state?.sheet ?? null)).toBe(null);
+        await expect(page.locator("#profilePanel")).toBeVisible();
+    });
+
+    test("an edge swipe follows the finger and pops the detail screen", async ({ page, context }, testInfo) => {
+        test.skip(testInfo.project.name !== "android", "Touch gesture");
+        await signInToDemo(page);
+        const detail = page.locator("#feedDetailDialog");
+        await page.locator("[data-feed-detail='9001']").click();
+        await expect(detail).toBeVisible();
+        const cdp = await context.newCDPSession(page);
+        const touch = (type, x) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints: type === "touchEnd" ? [] : [{ x, y: 400 }] });
+
+        // A short, slow drag springs back.
+        await touch("touchStart", 6);
+        for (let x = 16; x <= 90; x += 10) { await touch("touchMove", x); await page.waitForTimeout(30); }
+        const midDrag = await detail.evaluate((screen) => new DOMMatrix(getComputedStyle(screen).transform).m41);
+        expect(midDrag).toBeGreaterThan(60);
+        await touch("touchEnd", 90);
+        await page.waitForTimeout(400);
+        await expect(detail).toBeVisible();
+
+        // Past a third of the width it completes and pops history.
+        await touch("touchStart", 6);
+        for (let x = 30; x <= 300; x += 30) { await touch("touchMove", x); await page.waitForTimeout(16); }
+        await touch("touchEnd", 300);
+        await expect(detail).toBeHidden();
+        await expect(page).not.toHaveURL(/#screen=/);
+    });
+});

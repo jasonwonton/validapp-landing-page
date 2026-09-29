@@ -495,6 +495,6 @@ test("push worker preserves separate notifications unless the server supplies a 
     expect(worker).toContain("tag,");
     expect(worker).toContain("renotify: Boolean(tag)");
     expect(worker).not.toContain('tag: payload.tag || "valid-notification"');
-    expect(worker).toContain('payload.data?.type === "incoming_call"');
-    expect(worker).toContain('title: "Open call"');
+    expect(worker).toContain('type === "incoming_call"');
+    expect(worker).toContain('{ action: "answer", title: "Answer" }, { action: "decline", title: "Decline" }');
 });

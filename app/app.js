@@ -314,8 +314,49 @@ HTMLDialogElement.prototype.show = function showMountedDialog() {
 };
 HTMLDialogElement.prototype.showModal = function showMountedModal() {
     mountUIRoot(this);
-    return nativeShowModal.call(this);
+    const result = nativeShowModal.call(this);
+    trackSheetHistory(this);
+    return result;
 };
+
+// Android Back (and browser Back) closes the top sheet instead of leaving the
+// screen: each app sheet gets a history entry while it is open.
+const BACK_CLOSES_SHEET = "dialog.modal, dialog.ui-sheet";
+const SHEET_REQUIRES_ACTION = "#askSafetyNoticeDialog, #pendingDeletionDialog";
+let sheetSerial = 0;
+
+function historyBack() {
+    state.historyTraversalPending = true;
+    history.back();
+}
+
+function trackSheetHistory(dialog) {
+    if (!document.body.classList.contains("authenticated") || !dialog.matches(BACK_CLOSES_SHEET)
+        || dialog.matches(SHEET_REQUIRES_ACTION)) return;
+    if (!dialog.id) dialog.id = `valid-sheet-${++sheetSerial}`;
+    // A pending Back (e.g. a detail screen returning to this sheet) must land
+    // first, or the new entry would be the one it pops.
+    if (state.historyTraversalPending) {
+        (state.deferredSheets ||= new Set()).add(dialog);
+        return;
+    }
+    if (history.state?.sheet !== dialog.id) history.pushState({ ...history.state, validApp: true, sheet: dialog.id }, "", location.href);
+    dialog.addEventListener("close", () => {
+        if (history.state?.sheet !== dialog.id) return;
+        state.ignoreSheetPopState = true;
+        historyBack();
+    }, { once: true });
+}
+
+function closeTopSheetFromHistory(entry) {
+    const sheet = [...$$(BACK_CLOSES_SHEET)].reverse().find((dialog) => dialog.open && !dialog.matches(SHEET_REQUIRES_ACTION));
+    // Returning to the sheet's own entry keeps it; going below it closes it.
+    if (!sheet || entry?.sheet === sheet.id) return false;
+    // Run the sheet's own cancel handling (drafts, confirmations) like Escape does.
+    if (sheet.dispatchEvent(new Event("cancel", { cancelable: true }))) sheet.close();
+    if (sheet.open) history.pushState({ ...history.state, validApp: true, sheet: sheet.id }, "", location.href);
+    return true;
+}
 
 // Kept for existing call sites; see user-message.js.
 function friendlyErrorMessage(error, fallback = "Something went wrong. Please try again.") {
@@ -380,7 +421,13 @@ function navigationURL(panel = state.activePanel, detail = null) {
 
 function writeNavigationState(mode, detail = null) {
     if (state.handlingPopState) return;
-    const payload = { validApp: true, panel: state.activePanel, detail };
+    // Tabs behave like the native app: Feed is the root, another tab sits one
+    // entry above it (Back returns to Feed, then leaves), and re-taps or
+    // tab-to-tab switches replace that entry instead of growing history.
+    const tabOverFeed = detail ? false
+        : mode === "replace" ? history.state?.tabOverFeed === true && state.activePanel !== "feed"
+        : state.activePanel !== "feed";
+    const payload = { validApp: true, panel: state.activePanel, detail, tabOverFeed };
     history[mode === "replace" ? "replaceState" : "pushState"](payload, "", navigationURL(state.activePanel, detail));
 }
 
@@ -397,15 +444,24 @@ function closeVisibleDetailScreens({ fromHistory = false } = {}) {
 }
 
 function handleAppPopState(event) {
+    state.historyTraversalPending = false;
+    const deferredSheets = [...(state.deferredSheets || [])];
+    state.deferredSheets = null;
     if (!document.body.classList.contains("authenticated")) return;
-    state.handlingPopState = true;
-    closeVisibleDetailScreens({ fromHistory: true });
-    const requestedPanel = event.state?.panel || new URLSearchParams(location.search).get("tab");
-    const panel = ["feed", "play", "chats", "profile"].includes(requestedPanel) ? requestedPanel : "feed";
-    switchPanel(panel, { historyMode: "none", restoreScroll: true });
-    const detail = event.state?.detail ? document.getElementById(event.state.detail) : null;
-    if (detail?.classList.contains("detail-screen")) openDetailScreen(detail, { historyMode: "none" });
-    state.handlingPopState = false;
+    if (state.ignoreSheetPopState) {
+        state.ignoreSheetPopState = false;
+    } else if (!closeTopSheetFromHistory(event.state)) {
+        state.handlingPopState = true;
+        const keepDetail = event.state?.detail ? document.getElementById(event.state.detail) : null;
+        for (const screen of $$(".detail-screen:not(.hidden)")) if (screen !== keepDetail) closeDetailScreen(screen, { fromHistory: true });
+        const requestedPanel = event.state?.panel || new URLSearchParams(location.search).get("tab");
+        const panel = ["feed", "play", "chats", "profile"].includes(requestedPanel) ? requestedPanel : "feed";
+        if (panel !== state.activePanel || !event.state?.sheet) switchPanel(panel, { historyMode: "none", restoreScroll: true });
+        const detail = event.state?.detail ? document.getElementById(event.state.detail) : null;
+        if (detail?.classList.contains("detail-screen") && detail.classList.contains("hidden")) openDetailScreen(detail, { historyMode: "none" });
+        state.handlingPopState = false;
+    }
+    deferredSheets.filter((dialog) => dialog.open).forEach(trackSheetHistory);
 }
 
 function syncVisualViewport() {
@@ -683,7 +739,7 @@ function closeDetailScreen(screen, { fromHistory = false } = {}) {
     if (!$(".detail-screen:not(.hidden)")) document.body.classList.remove("detail-screen-open");
     state.detailReturnFocus?.focus?.({ preventScroll: true });
     state.detailReturnFocus = null;
-    if (!fromHistory && history.state?.detail === screen.id) history.back();
+    if (!fromHistory && history.state?.detail === screen.id) historyBack();
 }
 
 function closeDetailActionMenus() {
@@ -6219,7 +6275,7 @@ function switchPanel(panel, { historyMode = "push", restoreScroll = true } = {})
     if (panel === "chats" && !(state.config?.enable_chats === true && state.config?.enable_web_chats === true)) return;
     const previousPanel = state.activePanel;
     if (previousPanel !== panel) state.tabScrollPositions[previousPanel] = window.scrollY;
-    else if (historyMode === "push") state.tabScrollPositions[panel] = 0;
+    else if (historyMode !== "none") state.tabScrollPositions[panel] = 0;
     state.activePanel = panel;
     if (panel !== "chats") chatPresence?.setWatched([]);
     document.body.classList.toggle("play-active", panel === "play");
@@ -6341,6 +6397,9 @@ function endPullRefresh() {
 }
 
 function installNativeSheetGestures() {
+    if (isAndroidDevice() || (isStandaloneApp() && isAppleTouchDevice())) {
+        for (const screen of $$(".detail-screen")) installEdgeSwipeBack(screen, () => closeDetailScreen(screen));
+    }
     if (!isAndroidDevice()) return;
     for (const dialog of $$("dialog.modal")) {
         if (dialog.dataset.sheetGesture === "1" || dialog.classList.contains("reaction-picker-dialog")) continue;
@@ -6383,17 +6442,69 @@ function installNativeSheetGestures() {
         });
     }
 
-    for (const screen of $$(".detail-screen")) {
-        let startX = null;
-        screen.addEventListener("pointerdown", (event) => {
-            if (event.clientX <= 24 && !event.target.closest("input, textarea, select")) startX = event.clientX;
-        });
-        screen.addEventListener("pointerup", (event) => {
-            if (startX !== null && event.clientX - startX > 88) closeDetailScreen(screen);
-            startX = null;
-        });
-        screen.addEventListener("pointercancel", () => { startX = null; });
-    }
+}
+
+function isAppleTouchDevice() {
+    return /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+}
+
+// UIKit-style interactive pop: a drag from the left edge moves the screen with
+// the finger (rubber-banding past the edge) and completes past a third of the
+// width or on a fast flick. Installed iPhone apps have no browser back gesture.
+function installEdgeSwipeBack(screen, onBack) {
+    const EDGE = 24;
+    let gesture = null;
+    const setOffset = (x) => setRuntimeStyles(screen, { "--swipe-x": `${x}px` });
+    const finish = (complete) => {
+        const width = screen.getBoundingClientRect().width;
+        const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+        screen.classList.remove("swipe-tracking");
+        const settle = () => {
+            screen.classList.remove("swipe-settling");
+            clearRuntimeStyles(screen, "--swipe-x");
+            if (complete) onBack();
+        };
+        if (reduceMotion) return settle();
+        screen.classList.add("swipe-settling");
+        setOffset(complete ? width : 0);
+        setTimeout(settle, 240);
+    };
+    screen.addEventListener("touchstart", (event) => {
+        const touch = event.touches[0];
+        if (event.touches.length !== 1 || touch.clientX > EDGE || screen.classList.contains("swipe-settling")
+            || event.target.closest("input, textarea, select, [contenteditable='true']")) return;
+        gesture = { x: touch.clientX, y: touch.clientY, dx: 0, tracking: false, samples: [[touch.clientX, event.timeStamp]] };
+    }, { passive: true });
+    screen.addEventListener("touchmove", (event) => {
+        if (!gesture) return;
+        const touch = event.touches[0];
+        const dx = touch.clientX - gesture.x;
+        const dy = touch.clientY - gesture.y;
+        if (!gesture.tracking) {
+            // Decide once: a mostly vertical drag is a scroll, not a back swipe.
+            if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { gesture = null; return; }
+            if (dx < 8) return;
+            gesture.tracking = true;
+            screen.classList.add("swipe-tracking");
+        }
+        event.preventDefault();
+        // Past the left edge the screen resists like a rubber band.
+        gesture.dx = dx >= 0 ? dx : -Math.sqrt(-dx) * 2;
+        gesture.samples = [...gesture.samples.slice(-4), [touch.clientX, event.timeStamp]];
+        setOffset(gesture.dx);
+    }, { passive: false });
+    const end = (event) => {
+        if (!gesture) return;
+        const { tracking, dx, samples } = gesture;
+        gesture = null;
+        if (!tracking) return;
+        const [[firstX, firstTime], [lastX, lastTime]] = [samples[0], samples.at(-1)];
+        const velocity = (lastX - firstX) / Math.max(1, lastTime - firstTime);
+        const width = screen.getBoundingClientRect().width;
+        finish(event.type === "touchend" && dx > 0 && (dx > width / 3 || velocity > 0.5));
+    };
+    screen.addEventListener("touchend", end, { passive: true });
+    screen.addEventListener("touchcancel", end, { passive: true });
 }
 
 function updateNetworkStatus() {
@@ -6957,15 +7068,25 @@ function bindEvents() {
         button.addEventListener("pointerenter", preload, { passive: true });
         button.addEventListener("focus", preload);
         button.addEventListener("click", (event) => {
-            let historyMode = "push";
-            if (button.dataset.panel === "chats" && state.activePanel === "chats" && new URLSearchParams(location.search).has("chat")) {
-                const url = new URL(location.href);
-                url.searchParams.delete("chat");
-                history.pushState({ validApp: true, panel: "chats" }, "", `${url.pathname}${url.search}`);
-                historyMode = "none";
-            }
-            switchPanel(button.dataset.panel, { historyMode });
+            const panel = button.dataset.panel;
             if (event.detail > 0) button.blur();
+            if (panel === state.activePanel) {
+                // Re-tap: back to the tab's root and top, without a new history entry.
+                if (panel === "chats" && new URLSearchParams(location.search).has("chat")) {
+                    const url = new URL(location.href);
+                    url.searchParams.delete("chat");
+                    url.searchParams.delete("message");
+                    url.searchParams.delete("call");
+                    history.replaceState({ ...history.state, validApp: true, panel: "chats" }, "", `${url.pathname}${url.search}`);
+                }
+                switchPanel(panel, { historyMode: "replace", restoreScroll: false });
+                return;
+            }
+            if (panel === "feed" && history.state?.tabOverFeed === true) {
+                history.back();
+                return;
+            }
+            switchPanel(panel, { historyMode: state.activePanel === "feed" ? "push" : "replace" });
         });
     });
     $("#playCard").addEventListener("click", (event) => {

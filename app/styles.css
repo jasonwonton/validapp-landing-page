@@ -1352,6 +1352,9 @@ body.play-active .play-actions { margin: 0; }
 .anonymous-detail-content > .status-message.share-progress { color: var(--muted); }
 .anonymous-detail-content #anonymousAnswerButton { min-height: var(--button-height-large); }
 body.detail-screen-open { overflow: hidden; }
+/* Interactive edge swipe-back (app.js installEdgeSwipeBack). */
+.detail-screen.swipe-tracking, .detail-screen.swipe-settling { animation: none; transform: translateX(var(--swipe-x, 0px)); box-shadow: -10px 0 28px rgba(0,0,0,.22); }
+.detail-screen.swipe-settling { transition: transform .24s cubic-bezier(.2,.8,.2,1); }
 .keyboard-open .bottom-nav { visibility: hidden; pointer-events: none; }
 .keyboard-open .signup-flow { height: var(--visual-viewport-height, 100dvh); }
 .keyboard-open .signup-step { align-content: start; padding-top: 58px; padding-bottom: 24px; }
