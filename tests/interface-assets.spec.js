@@ -32,7 +32,7 @@ test('interface source has no decorative emoji; product reactions remain intact'
 test('imported iOS artwork has pinned provenance and stays outside the offline shell', async () => {
     const manifest = JSON.parse(await readFile(new URL('../assets/app/ios-interface-provenance.json', import.meta.url), 'utf8'));
     const worker = await readFile(new URL('../app/service-worker.js', import.meta.url), 'utf8');
-    expect(manifest).toHaveLength(3);
+    expect(manifest).toHaveLength(5);
     for (const entry of manifest) {
         const bytes = await readFile(new URL(`../${entry.web}`, import.meta.url));
         expect(createHash('sha256').update(bytes).digest('hex')).toBe(entry.webSHA256);

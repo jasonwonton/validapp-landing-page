@@ -49,3 +49,15 @@ export function tbhSenderLine(item, { safeGrade = false } = {}) {
     if (!safeGrade) return `from a classmate ${emoji} (grade hidden until more classmates join)`;
     return `from ${article(grade)} ${grade} ${emoji}`;
 }
+
+// QuestionDetailView.swift voterInfoText: "A Sophomore 👧💗 Girl said", or
+// "A 👧💗 Girl said" when the grade is missing or not yet safe to show.
+export function senderStatement(item, { safeGrade = false } = {}) {
+    const gender = String(item?.voter_gender || '').trim().toLowerCase();
+    const word = ['male', 'boy'].includes(gender) ? 'Boy' : ['female', 'girl'].includes(gender) ? 'Girl' : ['non-binary', 'nonbinary'].includes(gender) ? 'Person' : '';
+    if (!word) return '';
+    const emoji = senderEmoji(gender);
+    const grade = senderGrade(item.voter_grade);
+    if (grade && safeGrade) return `${article(grade) === 'an' ? 'An' : 'A'} ${grade} ${emoji} ${word} said`;
+    return `A ${emoji} ${word} said`;
+}

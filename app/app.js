@@ -1,6 +1,6 @@
 import { ValidAPI } from "./api.js";
 import { uiIcon } from "./ui-icons.js";
-import { feedVoterLine, senderGradeIsSafe, tbhSenderLine } from "./feed-sender.js";
+import { feedVoterLine, senderGradeIsSafe, senderStatement, tbhSenderLine } from "./feed-sender.js";
 import { DemoAPI, localDemoAllowed } from "./demo-api.js";
 import { createAdditionalPasskey, createSignupPasskey, passkeysSupported, signInWithPasskey } from "./passkeys.js";
 import { authBrowserURL, checkPasskeyEnvironment, completeSignupSafely, enablePreviewSignup, reportAuthFailure, needsPhoneReverification } from './auth-reliability.js';
@@ -535,14 +535,17 @@ function sortClassmatesLikeIOS(classmates) {
         .map(({ classmate }) => classmate);
 }
 
+// Brand artwork from the iOS asset catalog (SocialSharingButtons.swift: SnapchatGlyph,
+// InstagramIconButton, TikTokIconButton) instead of redrawn marks.
+const SHARE_PLATFORM_ARTWORK = {
+    snapchat: "snapchat-logo.webp",
+    instagram: "instagram.webp",
+    tiktok: "tiktok-icon-black-square.webp",
+};
+
 function shareIconMarkup(platform) {
-    if (platform === "instagram") {
-        return `<svg viewBox="0 0 64 64" role="img" aria-label="Instagram"><rect x="15" y="15" width="34" height="34" rx="10" fill="none" stroke="white" stroke-width="4"/><circle cx="32" cy="32" r="8" fill="none" stroke="white" stroke-width="4"/><circle cx="44" cy="20" r="2.5" fill="white"/></svg>`;
-    }
-    if (platform === "tiktok") {
-        return `<svg viewBox="0 0 64 64" role="img" aria-label="TikTok"><rect width="64" height="64" rx="15" fill="#000"/><path d="M37 14c1 7 5 11 12 12v8c-5 0-9-2-12-4v13c0 9-7 14-15 12-7-2-11-9-9-16 2-6 7-10 14-10v8c-4 0-6 2-6 5 0 4 3 6 6 5 2-1 3-3 3-6V14h7Z" fill="#25f4ee" transform="translate(-2 1)"/><path d="M39 13c1 7 5 11 12 12v7c-5 0-9-2-12-4v14c0 8-7 14-15 12-6-2-10-8-9-14 1-7 7-11 14-11v7c-4 0-6 2-6 5 0 4 3 6 6 5 2-1 3-3 3-6V13h7Z" fill="#fe2c55" transform="translate(2 -1)"/><path d="M38 14c1 6 5 10 11 11v6c-4 0-8-1-11-4v14c0 7-6 12-13 11-6-1-10-7-8-13 1-5 5-8 11-8v6c-3 0-5 2-5 5 0 3 3 5 6 4 2-1 3-3 3-6V14h6Z" fill="#fff"/></svg>`;
-    }
-    return `<img loading="lazy" decoding="async" src="../assets/app/snapchat-logo.webp" alt="Snapchat">`;
+    const file = SHARE_PLATFORM_ARTWORK[platform] || SHARE_PLATFORM_ARTWORK.snapchat;
+    return `<img class="share-platform-art" loading="lazy" decoding="async" src="../assets/app/${file}" alt="" width="58" height="58">`;
 }
 
 function appSymbolMarkup(symbol, className = "app-symbol") {
@@ -838,29 +841,7 @@ function formatVoterHint(item) {
 }
 
 function formatVoterDemographicsStatement(item) {
-    const gender = String(item.voter_gender || "").toLowerCase();
-    const genderWord = ["female", "girl"].includes(gender) ? "Girl" : ["male", "boy"].includes(gender) ? "Boy" : gender === "non-binary" ? "Person" : "";
-    const rawGrade = formatGrade(item.voter_grade || "").replace(/\s*\([^)]*\)\s*$/, "").trim();
-    const normalizedGrade = rawGrade.toLowerCase();
-    const grade = normalizedGrade.includes("6th") || normalizedGrade === "6" || normalizedGrade.startsWith("grade 6")
-        ? "6th grader"
-        : normalizedGrade.includes("7th") || normalizedGrade === "7" || normalizedGrade.startsWith("grade 7")
-            ? "7th grader"
-            : normalizedGrade.includes("8th") || normalizedGrade === "8" || normalizedGrade.startsWith("grade 8")
-                ? "8th grader"
-                : normalizedGrade.includes("9th") || normalizedGrade.includes("freshman") || normalizedGrade === "9" || normalizedGrade.startsWith("grade 9")
-                    ? "Freshman"
-                    : normalizedGrade.includes("10th") || normalizedGrade.includes("sophomore") || normalizedGrade === "10" || normalizedGrade.startsWith("grade 10")
-                        ? "Sophomore"
-                        : normalizedGrade.includes("11th") || normalizedGrade.includes("junior") || normalizedGrade === "11" || normalizedGrade.startsWith("grade 11")
-                            ? "Junior"
-                            : normalizedGrade.includes("12th") || normalizedGrade.includes("senior") || normalizedGrade === "12" || normalizedGrade.startsWith("grade 12")
-                                ? "Senior"
-                                : rawGrade;
-    const article = /^[aeiou8]/i.test(grade) || /^(11|18)/.test(grade) ? "An" : "A";
-    if (grade && genderWord) return `${article} ${grade} ${genderWord} said`;
-    if (genderWord) return `A ${genderWord} said`;
-    return "Poll";
+    return senderStatement(item, { safeGrade: senderGradeIsSafe(item.voter_grade, state.classmates) }) || "Poll";
 }
 
 function formatVoterStatement(item) {
@@ -2625,7 +2606,8 @@ function commentControlMarkup(item, targetType, targetId) {
 function commentDetailButtonMarkup(item, targetType, targetId, className) {
     if (!commentsEnabled() || !targetId) return "";
     const count = Math.max(0, Number(item.comment_count || 0));
-    return `<button class="secondary-button ${className}" type="button" data-comments-target="${escapeHTML(`${targetType}:${targetId}`)}" aria-label="Open ${count} comments">${commentBubbleMarkup()}<span class="visually-hidden">Comments</span><strong data-comment-count>${count}</strong></button>`;
+    // FeedEngagementCountControl: 44pt icon, hairline divider, 40pt count in one capsule.
+    return `<button class="engagement-count-button ${className}" type="button" data-comments-target="${escapeHTML(`${targetType}:${targetId}`)}" aria-label="Open ${count} comments">${commentBubbleMarkup()}<span class="reaction-divider" aria-hidden="true"></span><strong data-comment-count>${count}</strong></button>`;
 }
 
 let feedView = null;
@@ -2974,7 +2956,7 @@ function renderFeedDetail() {
     $("#feedDetailBody").innerHTML = `<article class="feed-detail-card">
         <div class="feed-detail-prompt"><h3>${escapeHTML(item.question_text)}</h3>
         ${item.is_nomination ? "" : questionSubmitterMarkup(item)}</div>
-        <div class="feed-detail-art">${artworkURL ? mediaImageMarkup(artworkURL) : `<div class="artwork-placeholder"><img loading="lazy" decoding="async" src="../assets/app/pencil-clipboard.webp" alt=""><span>Image unavailable</span></div>`}</div>
+        <div class="feed-detail-art-frame"><div class="feed-detail-art">${artworkURL ? mediaImageMarkup(artworkURL) : `<div class="artwork-placeholder"><img loading="lazy" decoding="async" src="../assets/app/pencil-clipboard.webp" alt=""><span>Image unavailable</span></div>`}</div></div>
         ${item.is_nomination ? `<div class="feed-nomination-card"><strong>${escapeHTML(selectedName)}</strong><p>got nominated${item.voter_gender ? ` by ${escapeHTML(formatVoterHint(item).replace(/^(from|by) /, ""))}` : item.voter_name ? ` by ${escapeHTML(item.voter_name)}` : ""}</p><span aria-hidden="true">🎉</span></div>` : options.length ? `<div class="feed-detail-options">${options.map((option, index) => {
             const name = option.name || option.contact_name || "A classmate";
             const explicit = options.findIndex(candidate => candidate.is_selected === true);
