@@ -122,3 +122,39 @@ test.describe("cold start", () => {
         await expect(page.locator("#signupDialog")).not.toBeVisible();
     });
 });
+
+test.describe("notification taps", () => {
+    const tap = (page, url) => page.evaluate((href) => navigator.serviceWorker.dispatchEvent(
+        new MessageEvent("message", { data: { type: "VALID_NOTIFICATION_CLICK", url: new URL(href, location.origin).href } })), url);
+
+    test("route inside the running app without reloading it", async ({ page }) => {
+        await signInToDemo(page);
+        await page.evaluate(() => { window.__sameDocument = true; });
+
+        await tap(page, "/app/?demo=1&signin=1&tab=chats&chat=chat-friends&message=msg-2");
+        await expect(page.locator("#chatsPanel")).toBeVisible();
+        await expect(page.locator(".chat-room-screen")).toBeVisible();
+        await expect(page).toHaveURL(/tab=chats&chat=chat-friends&message=msg-2/);
+        await expect(page).not.toHaveURL(/signin=1/);
+
+        await tap(page, "/app/?demo=1&signin=1&notification=feed_item&question_answer_id=9001");
+        await expect(page.locator("#feedDetailDialog")).toBeVisible();
+
+        await tap(page, "/app/?demo=1&signin=1&tab=profile");
+        await expect(page.locator("#profilePanel")).toBeVisible();
+        await expect(page.locator("#feedDetailDialog")).toBeHidden();
+
+        expect(await page.evaluate(() => window.__sameDocument)).toBe(true);
+        // Back returns to where the user was before the tap.
+        await page.goBack();
+        await expect(page.locator("#profilePanel")).toBeHidden();
+    });
+
+    test("a notification link opened cold lands on the same place", async ({ page }) => {
+        await page.goto("/app/?demo=1&signin=1&tab=chats&chat=chat-noah&message=msg-n3");
+        await page.getByRole("button", { name: /^sign in$/i }).click();
+        await expect(page.locator(".chat-room-screen")).toBeVisible();
+        await expect(page.locator(".chat-room-title strong")).toHaveText("Noah Williams");
+        await expect(page).not.toHaveURL(/signin=1/);
+    });
+});

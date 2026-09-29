@@ -747,6 +747,12 @@ async function showSignedIn() {
     $("#authView").classList.add("hidden");
     hideLaunchSplash();
     try { localStorage.setItem(PRIOR_SESSION_KEY, "1"); } catch (_) { /* First-visit detection falls back to the installation id. */ }
+    // Notification links carry ?signin=1 for signed-out devices; drop it once in.
+    const launchURL = new URL(location.href);
+    if (launchURL.searchParams.has("signin")) {
+        launchURL.searchParams.delete("signin");
+        history.replaceState(history.state, "", `${launchURL.pathname}${launchURL.search}${launchURL.hash}`);
+    }
     $("#appView").classList.remove("hidden");
     $("#bottomNav").classList.remove("hidden");
     $("#logoutButton").classList.remove("hidden");
@@ -936,6 +942,57 @@ async function handleNotificationRoute() {
     params.delete("boost_type");
     params.delete("target_user_id");
     history.replaceState(history.state, "", `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`);
+}
+
+// Notification taps route inside the running app (no reload). The URL contract
+// is the backend's web push `url`: ?tab=, &chat=&message=, &call=, &story=
+// (&viewers=1 from the worker), or ?notification=<type>&... for detail routes.
+async function routeToAppURL(href) {
+    let target;
+    try { target = new URL(href, location.origin); } catch (_) { return; }
+    if (target.origin !== location.origin || !target.pathname.startsWith("/app/")) return;
+    target.searchParams.delete("signin");
+    const requested = target.searchParams.get("tab");
+    const panel = ["feed", "play", "chats", "profile"].includes(requested) ? requested : "feed";
+    const url = `${target.pathname}${target.search}`;
+    if (!api?.hasSession() || !document.body.classList.contains("authenticated")) {
+        // Signed-out or still starting: sign-in picks the route up from the URL.
+        history.replaceState(history.state, "", url);
+        return;
+    }
+    closeVisibleDetailScreens({ fromHistory: true });
+    for (const dialog of $$("dialog.modal[open]")) {
+        if (!dialog.matches("#pendingDeletionDialog, #askSafetyNoticeDialog")) dialog.close();
+    }
+    history.pushState({ validApp: true, panel }, "", url);
+    if (target.searchParams.has("notification")) {
+        await handleNotificationRoute();
+        return;
+    }
+    // Switching (even to the current tab) re-activates the route, which reads
+    // ?chat=/&message=/&call= itself.
+    switchPanel(panel, { historyMode: "none", restoreScroll: false });
+    if (panel === "feed" && target.searchParams.has("story")) await (await prepareFeedView()).refreshStories?.();
+}
+
+function handleServiceWorkerMessage(event) {
+    const message = event.data || {};
+    if (message.type === "VALID_NOTIFICATION_CLICK") void routeToAppURL(message.url || "./");
+    else if (message.type === "VALID_CALL_DECLINE" && api?.user?.id && message.callId) {
+        api.declineCall(api.user.id, message.callId).catch(() => showToast("Could not decline the call."));
+    } else if (message.type === "VALID_PUSH_IN_ACTIVE_CHAT") {
+        // The open room already shows the message through realtime.
+        dispatchEvent(new CustomEvent("valid:push-in-active-chat", { detail: message }));
+    }
+}
+
+// Lets the worker skip the system notification for the chat on screen.
+function reportActiveChat() {
+    navigator.serviceWorker?.controller?.postMessage({
+        type: "VALID_ACTIVE_CHAT",
+        chatId: document.documentElement.dataset.activeChatId || null,
+        visible: document.visibilityState === "visible",
+    });
 }
 
 function renderProfileHeader() {
@@ -1163,6 +1220,11 @@ function renderTabBadges() {
         const totalUnread = unread + Number(state.chatUnreadCount || 0);
         const badgePromise = totalUnread > 0 ? navigator.setAppBadge(totalUnread) : navigator.clearAppBadge?.();
         Promise.resolve(badgePromise).catch(() => null);
+        // The worker counts pushes on top of what the page last showed.
+        if (state.syncedBadgeCount !== totalUnread) {
+            state.syncedBadgeCount = totalUnread;
+            navigator.serviceWorker?.controller?.postMessage({ type: "VALID_BADGE_SYNC", count: totalUnread });
+        }
     }
     const profileIncomplete = !state.profile?.profile_picture_url || !String(state.profile?.bio || "").trim();
     $("#profileTabBadge").classList.toggle("hidden", !profileIncomplete);
@@ -7270,13 +7332,12 @@ function startApp() {
     installNativeSheetGestures();
     initializeParkedUI();
     if (!navigator.onLine) updateNetworkStatus();
-    if ("serviceWorker" in navigator && !demoMode) {
-        registerAppServiceWorker();
-        navigator.serviceWorker.addEventListener("message", (event) => {
-            if (event.data?.type !== "VALID_NOTIFICATION_CLICK") return;
-            const target = new URL(event.data.url || "./", location.origin);
-            if (target.origin === location.origin && target.pathname.startsWith("/app/")) location.href = target.href;
-        });
+    if ("serviceWorker" in navigator) {
+        if (!demoMode) registerAppServiceWorker();
+        navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage);
+        addEventListener("valid:active-chat", reportActiveChat);
+        document.addEventListener("visibilitychange", reportActiveChat);
+        navigator.serviceWorker.addEventListener("controllerchange", reportActiveChat);
     }
     if (!passkeysSupported() && !demoMode) {
         $("#passkeyButton").disabled = true;

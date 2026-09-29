@@ -305,7 +305,8 @@ test("PWA ships install icons and Web Push worker handlers", async ({ request })
     expect(worker).toContain('addEventListener("notificationclick"');
     expect(worker).toContain("safeNotificationURL");
     expect(worker).toContain("SKIP_WAITING");
-    expect(worker).toContain('{ action: "play", title: "Play" }');
+    expect(worker).toContain('/assets/pwa/badge-96.png');
+    expect(worker).not.toContain('title: "Play"');
     expect(worker).toContain('url.pathname.startsWith("/api/")');
     expect(worker).not.toContain("cache.put(");
     expect(worker).not.toContain("Jua-Regular.ttf");

@@ -119,6 +119,113 @@ function safeNotificationURL(value) {
     return new URL("/app/", self.location.origin).href;
 }
 
+// The page reports which chat it shows (VALID_ACTIVE_CHAT). Worker memory can be
+// dropped between pushes, so a focused client's URL (?chat=) is the fallback.
+const activeChats = new Map();
+
+self.addEventListener("message", (event) => {
+    const clientId = event.source?.id;
+    if (event.data?.type === "VALID_ACTIVE_CHAT" && clientId) {
+        activeChats.set(clientId, event.data.visible && event.data.chatId ? String(event.data.chatId) : null);
+    } else if (event.data?.type === "VALID_BADGE_SYNC") {
+        event.waitUntil(writeBadgeCount(Math.max(0, Number(event.data.count) || 0)));
+    }
+});
+
+function badgeStore(mode, operation) {
+    return new Promise((resolve, reject) => {
+        const open = indexedDB.open("valid-worker", 1);
+        open.onupgradeneeded = () => open.result.createObjectStore("state");
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+            const transaction = open.result.transaction("state", mode);
+            const request = operation(transaction.objectStore("state"));
+            transaction.oncomplete = () => { open.result.close(); resolve(request.result); };
+            transaction.onerror = () => { open.result.close(); reject(transaction.error); };
+        };
+    });
+}
+
+const readBadgeCount = () => badgeStore("readonly", (store) => store.get("badge")).then((value) => Number(value) || 0).catch(() => 0);
+const writeBadgeCount = (count) => badgeStore("readwrite", (store) => store.put(count, "badge")).catch(() => null);
+
+async function updateAppBadge(payload) {
+    if (!self.navigator || !("setAppBadge" in self.navigator)) return;
+    // Prefer the server's unread count; otherwise count pushes since the page
+    // last reported its own badge (VALID_BADGE_SYNC).
+    const explicit = Number(payload.badge ?? payload.data?.badge ?? payload.data?.badge_count);
+    const count = Number.isFinite(explicit) && explicit >= 0 ? explicit : await readBadgeCount() + 1;
+    await writeBadgeCount(count);
+    await Promise.resolve(count > 0 ? self.navigator.setAppBadge(count) : self.navigator.clearAppBadge?.()).catch(() => null);
+}
+
+function notificationType(payload) {
+    return String(payload.type || payload.data?.type || "");
+}
+
+async function clientViewingChat(chatId) {
+    if (!chatId) return null;
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    return windows.find((client) => {
+        if (!client.focused || client.visibilityState !== "visible") return false;
+        if (activeChats.has(client.id)) return activeChats.get(client.id) === chatId;
+        try { return new URL(client.url).searchParams.get("chat") === chatId; } catch (_) { return false; }
+    }) || null;
+}
+
+// Safari revokes a subscription whose pushes show nothing, so on WebKit a
+// suppressed chat push is still shown silently and closed at once.
+const appleWebKit = () => /AppleWebKit/.test(self.navigator?.userAgent || "") && !/Chrome|Chromium|Edg\//.test(self.navigator.userAgent);
+
+async function presentPush(payload) {
+    const type = notificationType(payload);
+    const url = new URL(safeNotificationURL(payload.url));
+    // Story screenshot notices open that Story's viewers list.
+    if (type === "story_capture" && url.searchParams.has("story")) url.searchParams.set("viewers", "1");
+    const data = { url: url.href, type };
+    const title = payload.title || "Valid";
+    const tag = typeof payload.tag === "string" && payload.tag.trim() ? payload.tag.trim() : undefined;
+
+    if (type.startsWith("chat_")) {
+        const chatId = String(payload.data?.chat_id || url.searchParams.get("chat") || "");
+        const viewer = await clientViewingChat(chatId);
+        if (viewer) {
+            viewer.postMessage({ type: "VALID_PUSH_IN_ACTIVE_CHAT", chatId, payload: { title, body: payload.body, type, url: data.url } });
+            if (!appleWebKit()) return;
+            const shown = `valid-suppressed-${Date.now()}`;
+            await self.registration.showNotification(title, { body: payload.body || "", tag: shown, silent: true, data });
+            (await self.registration.getNotifications({ tag: shown })).forEach((notification) => notification.close());
+            return;
+        }
+    }
+
+    const options = {
+        body: payload.body || "You have a new update.",
+        icon: "/assets/pwa/icon-192.png",
+        // Android draws the badge from its alpha channel: a white glyph on transparency.
+        badge: "/assets/pwa/badge-96.png",
+        tag,
+        renotify: Boolean(tag),
+        timestamp: Number(payload.timestamp) || Date.now(),
+        data,
+    };
+    if (type === "incoming_call") {
+        const callId = String(payload.data?.call_id || "");
+        const chatId = String(payload.data?.chat_id || url.searchParams.get("chat") || "");
+        const callURL = new URL("/app/", self.location.origin);
+        callURL.search = new URLSearchParams({ signin: "1", tab: "chats", chat: chatId, call: callId }).toString();
+        Object.assign(options, {
+            tag: tag || `valid-call-${callId}`,
+            renotify: true,
+            requireInteraction: true,
+            vibrate: [400, 200, 400, 200, 400, 200, 400],
+            actions: [{ action: "answer", title: "Answer" }, { action: "decline", title: "Decline" }],
+            data: { ...data, url: callURL.href, callId, chatId },
+        });
+    }
+    await Promise.all([self.registration.showNotification(title, options), updateAppBadge(payload)]);
+}
+
 self.addEventListener("push", (event) => {
     let payload = {};
     try {
@@ -126,34 +233,49 @@ self.addEventListener("push", (event) => {
     } catch (_) {
         payload = { body: event.data?.text() || "You have a new update." };
     }
-    const tag = typeof payload.tag === "string" && payload.tag.trim() ? payload.tag.trim() : undefined;
-    const incomingCall = payload.data?.type === "incoming_call";
-    event.waitUntil(self.registration.showNotification(payload.title || "Valid", {
-        body: payload.body || "You have a new update.",
-        icon: "/assets/pwa/icon-192.png",
-        badge: "/assets/pwa/icon-192.png",
-        tag,
-        renotify: Boolean(tag),
-        timestamp: Number(payload.timestamp) || Date.now(),
-        actions: incomingCall
-            ? [{ action: "open", title: "Open call" }]
-            : [{ action: "open", title: "Open Valid" }, { action: "play", title: "Play" }],
-        data: { url: safeNotificationURL(payload.url) },
-    }));
+    event.waitUntil(presentPush(payload));
 });
+
+async function appWindows() {
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    return windows.filter((client) => {
+        const url = new URL(client.url);
+        return url.origin === self.location.origin && url.pathname.startsWith("/app/");
+    }).sort((left, right) => Number(right.focused) - Number(left.focused)
+        || Number(right.visibilityState === "visible") - Number(left.visibilityState === "visible"));
+}
+
+async function declineCall(data) {
+    const [client] = await appWindows();
+    // An open page declines with its signed-in API client.
+    if (client) return client.postMessage({ type: "VALID_CALL_DECLINE", callId: data.callId, chatId: data.chatId });
+    // Otherwise use the first-party session cookie: same-origin, never a stored token.
+    if (!/^[\w-]{1,64}$/.test(data.callId || "")) return;
+    const session = await fetch("/api/v1/auth/session", { credentials: "include", cache: "no-store" })
+        .then((response) => response.ok ? response.json() : null).catch(() => null);
+    const userId = session?.user?.id;
+    if (!/^[\w-]{1,64}$/.test(String(userId || ""))) return;
+    await fetch(`/api/v1/users/${encodeURIComponent(userId)}/calls/${encodeURIComponent(data.callId)}/decline`, {
+        method: "POST", credentials: "include", headers: { Accept: "application/json" },
+    }).catch(() => null);
+}
+
+async function openNotificationTarget(url) {
+    const [client] = await appWindows();
+    if (client) {
+        // Route inside the running app instead of reloading it.
+        client.postMessage({ type: "VALID_NOTIFICATION_CLICK", url });
+        return client.focus();
+    }
+    return self.clients.openWindow(url);
+}
 
 self.addEventListener("notificationclick", (event) => {
     event.notification.close();
-    const url = event.action === "play"
-        ? safeNotificationURL("/app/?tab=play")
-        : safeNotificationURL(event.notification.data?.url);
-    event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clients) => {
-        for (const client of clients) {
-            const clientURL = new URL(client.url);
-            if (clientURL.origin !== self.location.origin || !clientURL.pathname.startsWith("/app/")) continue;
-            client.postMessage({ type: "VALID_NOTIFICATION_CLICK", url });
-            return client.focus();
-        }
-        return self.clients.openWindow(url);
-    }));
+    const data = event.notification.data || {};
+    if (event.action === "decline") {
+        event.waitUntil(declineCall(data));
+        return;
+    }
+    event.waitUntil(openNotificationTarget(safeNotificationURL(data.url)));
 });
