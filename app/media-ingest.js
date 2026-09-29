@@ -1,72 +1,111 @@
-// Client for the server media ingest (`/config.enable_web_media_ingest`), per
-// the backend's docs/web-media-contract.md: create → PUT the original to R2 →
-// finalize → poll until `ready`, then send each segment. Loaded on demand.
+// Browser media ingest client (docs/web-media-contract.md, "Ingest sequence"),
+// behind `/config.enable_web_media_ingest`. Used by chat media, Stories and voice.
+// For anything the small upload path cannot take: MediaRecorder output, long or
+// large clips, non-fast-start MP4/MOV, Opus voice. The server transcodes and
+// splits it into iOS-compatible segments that are then sent like any media.
 
-const DEFAULT_POLL_MS = 2000;
-const MAX_WAIT_MS = 5 * 60_000;
+const POLL_TIMEOUT_MS = 5 * 60_000;
 
-function baseType(value) {
-    return String(value || "").split(";")[0].trim().toLowerCase();
+export function ingestBaseType(type) {
+    const base = String(type || "").split(";")[0].trim().toLowerCase();
+    return base === "audio/x-m4a" || base === "audio/aac" ? "audio/mp4" : base;
 }
 
 export function ingestError(status) {
-    const error = new Error(status?.failure_message || "This recording could not be processed. Try again.");
-    error.code = status?.failure_code || "media_ingest_failed";
-    // Only a processing failure may be retried, and only with a new request id.
-    error.status = status?.failure_code === "processing_failed" ? 500 : 422;
-    return error;
+    return new IngestFailedError(status);
 }
 
-/** `purpose`: "chat" | "story". Repeating a `clientRequestId` returns the same ingest. */
+export class IngestFailedError extends Error {
+    constructor(status) {
+        super(status?.failure_message || "That media could not be processed.");
+        this.name = "IngestFailedError";
+        this.code = status?.failure_code || "processing_failed";
+        // Only a processing failure is worth a fresh attempt (new client_request_id).
+        this.status = this.code === "processing_failed" ? 0 : 422;
+        this.retryWithNewRequest = this.code === "processing_failed";
+        this.ingest = status || null;
+    }
+}
+
+// 1. Create (idempotent per client_request_id; repeat it to resume).
 export function createIngest(api, userId, { purpose = "chat", contentType, sizeBytes, durationMs = null, viewOnce = false, clientRequestId }) {
-    const payload = {
+    const body = {
         purpose,
         content_type: contentType,
         size_bytes: sizeBytes,
-        view_once: Boolean(viewOnce),
+        view_once: purpose === "chat" && Boolean(viewOnce),
         client_request_id: clientRequestId,
     };
-    if (Number.isFinite(durationMs) && durationMs > 0) payload.duration_ms = Math.round(durationMs);
-    if (typeof api.createMediaIngest === "function") return api.createMediaIngest(userId, payload);
-    return api.request(`/users/${userId}/media-ingests`, { method: "POST", body: JSON.stringify(payload) });
+    if (Number.isFinite(Number(durationMs)) && Number(durationMs) > 0) body.duration_ms = Math.round(Number(durationMs));
+    if (typeof api.createMediaIngest === "function") return api.createMediaIngest(userId, body);
+    return api.request(`/users/${userId}/media-ingests`, { method: "POST", body: JSON.stringify(body) });
 }
 
-/** PUTs the original (unless already uploaded) and finalizes. Safe to repeat. */
-export async function uploadIngest(api, userId, ingest, file, { onProgress } = {}) {
-    if (!ingest.already_uploaded && ingest.upload_url) {
+// 2 + 3. PUT the original with exactly `required_headers`, then finalize.
+// A finalize that races the PUT (409 media_ingest_upload_missing) is retried.
+export async function uploadIngest(api, userId, session, blob, { onProgress, signal } = {}) {
+    if (!session?.ingest_id) throw new Error("The upload session was invalid.");
+    const pending = session.state == null || session.state === "upload_pending";
+    if (!session.already_uploaded && pending) {
+        if (!session.upload_url) throw new Error("The upload session was invalid.");
         // Content-Type must be the base type from required_headers, never the Blob's `;codecs=`.
-        const headers = { ...(ingest.required_headers || {}) };
-        if (!headers["Content-Type"]) headers["Content-Type"] = baseType(file.type);
-        await api.putDirectUpload(file, {
-            upload_url: ingest.upload_url,
-            upload_method: ingest.upload_method || "PUT",
+        const headers = { ...(session.required_headers || {}) };
+        if (!headers["Content-Type"]) headers["Content-Type"] = ingestBaseType(blob?.type);
+        await api.putDirectUpload(blob, {
+            upload_url: session.upload_url,
+            upload_method: session.upload_method || "PUT",
             required_headers: headers,
-        }, { onProgress });
+        }, { onProgress, signal });
     }
     onProgress?.(1);
-    const path = `/users/${userId}/media-ingests/${ingest.ingest_id}/finalize`;
-    return typeof api.finalizeMediaIngest === "function"
-        ? api.finalizeMediaIngest(userId, ingest.ingest_id)
-        : api.request(path, { method: "POST" });
+    if (!pending && session.already_uploaded) return session;
+    if (typeof api.finalizeMediaIngest === "function") return api.finalizeMediaIngest(userId, session.ingest_id);
+    for (let attempt = 0; ; attempt++) {
+        try {
+            return await api.request(`/users/${userId}/media-ingests/${session.ingest_id}/finalize`, { method: "POST", signal, timeoutMs: 30_000 });
+        } catch (error) {
+            if (error?.detail?.code !== "media_ingest_upload_missing" || attempt >= 3) throw error;
+            await delay(1000 * (attempt + 1), signal);
+        }
+    }
 }
 
-/** Polls until `ready` (returns the status with `segments`) or throws on `failed`/timeout. */
-export async function waitForIngest(api, userId, ingestId, { initial = null, signal, sleep, now = () => Date.now(), maxWaitMs = MAX_WAIT_MS } = {}) {
-    const wait = sleep || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+export function getIngest(api, userId, ingestId, { signal } = {}) {
+    if (typeof api.getMediaIngest === "function") return api.getMediaIngest(userId, ingestId);
+    return api.request(`/users/${userId}/media-ingests/${ingestId}`, { signal });
+}
+
+// 4. Poll every `poll_after_ms` until ready (returns the status with segments)
+// or failed (throws IngestFailedError). Stops after about five minutes.
+export async function waitForIngest(api, userId, ingestId, { signal, onState, initial = null, timeoutMs, maxWaitMs, sleep, now = () => Date.now() } = {}) {
+    const limit = timeoutMs ?? maxWaitMs ?? POLL_TIMEOUT_MS;
+    const wait = sleep || ((ms) => delay(ms, signal));
     const started = now();
     let status = initial;
-    for (;;) {
-        if (status?.state === "ready") return status;
-        if (status?.state === "failed") throw ingestError(status);
-        if (signal?.aborted) throw new DOMException("The upload was cancelled.", "AbortError");
-        if (now() - started > maxWaitMs) {
-            const error = new Error("This recording is taking too long to process. Try again.");
-            error.status = 504;
+    while (true) {
+        if (status) {
+            onState?.(status);
+            if (status.state === "ready") {
+                if (!Array.isArray(status.segments) || !status.segments.length) throw new IngestFailedError({ failure_code: "processing_failed", failure_message: "That media could not be processed." });
+                return status;
+            }
+            if (status.state === "failed") throw new IngestFailedError(status);
+        }
+        if (signal?.aborted) throw signal.reason || new DOMException("The upload was cancelled.", "AbortError");
+        if (now() - started > limit) {
+            const error = new Error("This is taking longer than usual. Try again in a minute.");
+            error.status = 0;
             throw error;
         }
-        if (status) await wait(Math.max(500, Math.min(10_000, Number(status.poll_after_ms) || DEFAULT_POLL_MS)));
-        status = typeof api.getMediaIngest === "function"
-            ? await api.getMediaIngest(userId, ingestId)
-            : await api.request(`/users/${userId}/media-ingests/${ingestId}`);
+        if (status) await wait(Math.min(10_000, Math.max(500, Number(status.poll_after_ms) || 2000)));
+        status = await getIngest(api, userId, ingestId, { signal });
     }
+}
+
+function delay(ms, signal) {
+    return new Promise((resolve, reject) => {
+        if (signal?.aborted) return reject(signal.reason || new DOMException("Aborted", "AbortError"));
+        const timer = setTimeout(resolve, ms);
+        signal?.addEventListener("abort", () => { clearTimeout(timer); reject(signal.reason || new DOMException("Aborted", "AbortError")); }, { once: true });
+    });
 }

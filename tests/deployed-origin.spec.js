@@ -77,7 +77,8 @@ test("Chromium installs the service worker without persistent private responses"
     expect(result.cacheNames).toEqual(["valid-web-v67"]);
     expect(result.cachedURLs.length).toBeGreaterThan(0);
     expect(result.cachedURLs).toContain(new URL("/app/media-overlay-positioner.js", test.info().project.use.baseURL).href);
-    expect(result.cachedURLs).toContain(new URL("/app/camera-effects.js", test.info().project.use.baseURL).href);
+    // Camera, review editing and media uploads load on demand, outside the shell.
+    expect(result.cachedURLs).not.toContain(new URL("/app/camera-effects.js", test.info().project.use.baseURL).href);
     expect(result.cachedURLs).toContain(new URL("/app/chat/message-window.js", test.info().project.use.baseURL).href);
     expect(result.cachedURLs).toContain(new URL("/app/chat/appearance.js", test.info().project.use.baseURL).href);
     expect(result.cachedURLs).toContain(new URL("/app/chat/sticker-maker.js", test.info().project.use.baseURL).href);
