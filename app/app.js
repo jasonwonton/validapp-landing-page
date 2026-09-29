@@ -963,6 +963,8 @@ async function showSignedIn() {
         state.profile = profile;
         state.classmatesStatus = classmatesStatus;
         state.config = config;
+        // The Feed may have activated before config arrived: build Stories now.
+        void feedView?.refreshStories?.();
         const chatsEnabled = config.enable_chats === true && config.enable_web_chats === true;
         if (chatsEnabled && !chatPresence) {
             const { createChatPresence, bindPresenceLifecycle } = await import('./chat/presence.js');
