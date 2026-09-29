@@ -7,7 +7,7 @@ import { startPerformanceMonitoring } from "./performance.js";
 import { createRealtimeList } from "./realtime-list.js";
 import { activateRoute, preloadRoute } from "./routes/route-loader.js";
 import { clearRuntimeStyles, setRuntimeStyles } from "./runtime-style.js";
-import { configureMediaFallback, imageCandidates, installMediaImageFallback, mediaImageMarkup } from "./media-url.js";
+import { configureMediaFallback, imageCandidates, installMediaImageFallback, mediaImageMarkup, setMediaImageSource } from "./media-url.js";
 import { confirmSheet } from "./ui-dialogs.js";
 import { showToast } from "./toast.js";
 import { userMessage } from "./user-message.js";
@@ -838,7 +838,7 @@ function showSignedOut(message = "") {
     void presenceLifecycle?.stop();
     document.querySelectorAll(".activity-settings-dialog").forEach(dialog => dialog.close());
     clearInterval(state.playLockTimer);
-    state.playLockTimer = null;
+    state.playLockTimer = state.playLockTick = null;
     stopStripeCheckoutPolling();
     document.querySelector(".app-banner")?.remove();
     showAuthView();
@@ -1952,7 +1952,7 @@ async function openTbhDetail(value) {
     const name = displayName(profile);
     const title = received ? `${name} sent you a TBH` : kind === 'sent' ? `You sent ${name} a TBH` : `${name} got a TBH`;
     const footer = kind === 'school' ? tbhAuthorLine(item) : kind === 'sent' ? `${profile.first_name} sees your name. School sees your TBH without your name.` : '';
-    $("#tbhDetailBody").innerHTML = `<article class="tbh-detail-card"><div class="tbh-detail-hero">${avatarMarkup(profile, "row-avatar tbh-detail-avatar")}<div><div class="tbh-detail-title-row"><h2 id="tbhDetailTitle">${escapeHTML(title)}</h2><time>${escapeHTML(relativeTime(item.created_at))}</time></div><p>${escapeHTML(promptForKey(item.prompt_key).title)}</p></div></div><blockquote>${escapeHTML(item.body)}</blockquote>${footer ? `<small>${escapeHTML(footer)}</small>` : ''}</article><div class="detail-engagement-row">${feedView.reactionControlMarkup(item, "activity", item.activity_id)}${commentDetailButtonMarkup(item, "activity", item.activity_id, "tbh-detail-comment-button")}${detailSendButton("activity", item.activity_id)}</div><div class="share-platform-row detail-share-row tbh-share-row">${['snapchat','instagram','tiktok'].map(platform => `<button class="share-platform-button ${platform} ${platform === 'snapchat' ? 'expanded' : ''}" type="button" data-share-tbh="${platform}" aria-label="Share TBH to ${platform === 'tiktok' ? 'TikTok' : platform[0].toUpperCase()+platform.slice(1)}">${shareIconMarkup(platform)}${platform === 'snapchat' ? '<span>Share on Snapchat</span>' : ''}</button>`).join('')}</div><p id="tbhShareStatus" class="status-message" role="status"></p>`;
+    $("#tbhDetailBody").innerHTML = `<article class="tbh-detail-card"><div class="tbh-detail-hero">${avatarMarkup(profile, "row-avatar tbh-detail-avatar")}<div><div class="tbh-detail-title-row"><h2 id="tbhDetailTitle">${escapeHTML(title)}</h2><time>${escapeHTML(shortRelativeTime(item.created_at))}</time></div><p>${escapeHTML(promptForKey(item.prompt_key).title)}</p></div></div><blockquote>${escapeHTML(item.body)}</blockquote>${footer ? `<small>${escapeHTML(footer)}</small>` : ''}</article><div class="detail-engagement-row">${feedView.reactionControlMarkup(item, "activity", item.activity_id)}${commentDetailButtonMarkup(item, "activity", item.activity_id, "tbh-detail-comment-button")}${detailSendButton("activity", item.activity_id)}</div><div class="share-platform-row detail-share-row tbh-share-row">${['snapchat','instagram','tiktok'].map(platform => `<button class="share-platform-button ${platform} ${platform === 'snapchat' ? 'expanded' : ''}" type="button" data-share-tbh="${platform}" aria-label="Share TBH to ${platform === 'tiktok' ? 'TikTok' : platform[0].toUpperCase()+platform.slice(1)}">${shareIconMarkup(platform)}${platform === 'snapchat' ? '<span>Share on Snapchat</span>' : ''}</button>`).join('')}</div><p id="tbhShareStatus" class="status-message" role="status"></p>`;
     openDetailScreen($("#tbhDetailDialog"));
     if (kind === "received" && !item.opened_at) {
         try {
@@ -2056,7 +2056,7 @@ function openAuraSpend(kind, target = null) {
     const spendIcon = $("#auraSpendIcon");
     const person = kind === "nominate" ? target.candidate : target;
     const targetImage = ["targeted", "tbh", "nominate"].includes(kind) ? api.assetURL(person?.profile_picture_url_medium || person?.profile_picture_url) : null;
-    spendIcon.src = targetImage || (kind === "reveal" ? "../assets/app/magnifying_glass.webp" : kind === "nominate" ? "../assets/app/crown.webp" : "../assets/app/rocket.webp");
+    setMediaImageSource(spendIcon, targetImage || (kind === "reveal" ? "../assets/app/magnifying_glass.webp" : kind === "nominate" ? "../assets/app/crown.webp" : "../assets/app/rocket.webp"));
     spendIcon.alt = kind === "global" ? "Get Boosted" : kind === "reveal" ? "Reveal sender" : displayName(person);
     spendIcon.closest(".aura-spend-icon").classList.toggle("profile", Boolean(targetImage));
     $("#auraSpendTitle").textContent = details[0];
@@ -4230,7 +4230,7 @@ function formatLockRemaining(totalSeconds) {
 function renderLockedPlay() {
     const until = state.playLocked?.locked_until;
     clearInterval(state.playLockTimer);
-    state.playLockTimer = null;
+    state.playLockTimer = state.playLockTick = null;
     $("#playCard").innerHTML = `<article class="locked-play-card">
         <h3>Next Poll Set Locked</h3>
         <img loading="lazy" decoding="async" class="lock-art" src="../assets/app/lock.webp" alt="">
@@ -4247,7 +4247,7 @@ function renderLockedPlay() {
                 : "Unlocking your next polls...";
             if (remaining > 0) return;
             clearInterval(state.playLockTimer);
-            state.playLockTimer = null;
+            state.playLockTimer = state.playLockTick = null;
             state.playLocked = null;
             state.questions = [];
             state.questionIndex = 0;
@@ -4256,7 +4256,11 @@ function renderLockedPlay() {
             loadPlay();
         };
         tick();
-        if (state.playLocked?.locked_until === until) state.playLockTimer = setInterval(tick, 1000);
+        // Ticks only while the page is visible (see the visibilitychange listener).
+        if (state.playLocked?.locked_until === until) {
+            state.playLockTick = tick;
+            if (!document.hidden) state.playLockTimer = setInterval(tick, 1000);
+        }
     }
 }
 
@@ -7352,6 +7356,13 @@ function bindEvents() {
     addEventListener("focus", checkStripeCheckout);
     addEventListener("focus", () => refreshWebPushStatus());
     document.addEventListener("visibilitychange", () => {
+        clearInterval(state.playLockTimer);
+        state.playLockTimer = null;
+        const tick = state.playLockTick;
+        if (!document.hidden && tick) {
+            tick();
+            if (state.playLockTick === tick) state.playLockTimer = setInterval(tick, 1000);
+        }
         if (document.visibilityState === "visible") {
             refreshWebPushStatus();
             refreshAskSafetyState();

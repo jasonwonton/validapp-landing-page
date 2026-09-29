@@ -57,7 +57,8 @@ test.describe("chat room edge swipe-back", () => {
     test("a fast flick completes even when short", async ({ page }) => {
         await openChats(page);
         await openNoahRoom(page);
-        const flick = await edgeDrag(page, { toX: 80, steps: 4, stepMs: 8 });
+        // Two quick moves, no pauses: well over 0.5 px/ms even on a loaded machine.
+        const flick = await edgeDrag(page, { toX: 80, steps: 2, stepMs: 0 });
         await flick.release();
         await expect(page.locator(".chat-room-screen")).toBeHidden();
         await expect(page.locator(".chat-list-screen")).toBeVisible();
@@ -185,4 +186,75 @@ test.describe("honest screenshot notes where iOS would report a capture", () => 
         await expect(viewer.locator(".story-owner-bar")).toBeVisible();
         await expect(viewer.locator(".story-capture-note")).toBeHidden();
     });
+});
+
+test.describe("small parity fixes", () => {
+    test("Android haptics: selection is at least 15 ms and heavy at most 25 ms", async ({ page }) => {
+        await page.addInitScript(() => {
+            Object.defineProperty(navigator, "userAgent", { configurable: true, value: "Android test browser" });
+            window.pulses = [];
+            Object.defineProperty(navigator, "vibrate", { configurable: true, value: (pattern) => { window.pulses.push(pattern); return true; } });
+        });
+        await signIn(page);
+        const pulse = (kind) => page.evaluate((name) => { window.pulses.length = 0; window.ValidPreferences.haptic(name); return [].concat(window.pulses[0])[0]; }, kind);
+        expect(await pulse("selection")).toBeGreaterThanOrEqual(15);
+        await page.waitForTimeout(120); // haptic() drops pulses closer than 80 ms apart
+        expect(await pulse("heavy")).toBeLessThanOrEqual(25);
+    });
+
+    test("poll-detail reaction controls have 44 px hit areas without covering each other", async ({ page }) => {
+        await page.setViewportSize({ width: 375, height: 812 });
+        await signIn(page);
+        await page.locator('[data-feed-detail="9001"]').click();
+        const row = page.locator("#feedDetailDialog .detail-engagement-row");
+        await expect(row).toBeVisible();
+        const areas = await row.evaluate((node) => [...node.querySelectorAll(".reaction-control button")].map((button) => {
+            const box = button.getBoundingClientRect();
+            const after = getComputedStyle(button, "::after");
+            const px = (value) => parseFloat(value) || 0;
+            return { width: box.width - px(after.left) - px(after.right), height: box.height - px(after.top) - px(after.bottom), right: box.right - px(after.right), left: box.left + px(after.left) };
+        }));
+        for (const area of areas) {
+            expect(area.width).toBeGreaterThanOrEqual(44);
+            expect(area.height).toBeGreaterThanOrEqual(44);
+        }
+        expect(areas[1].left).toBeGreaterThanOrEqual(areas[0].right);
+    });
+
+    test("the view-once viewer never loops a video", async ({ page }) => {
+        await openChats(page);
+        await openNoahRoom(page);
+        await page.getByRole("button", { name: "Photo · Tap to view", exact: true }).click();
+        const viewer = page.getByRole("dialog", { name: "Chat media", exact: true });
+        await expect(viewer.locator(".chat-ephemeral-progress")).toBeVisible();
+        await expect(viewer.locator("video")).toHaveJSProperty("loop", false);
+    });
+
+    test("the TBH detail header uses the short iOS timestamp", async ({ page }) => {
+        await signIn(page);
+        const card = page.locator("[data-tbh-detail]").first();
+        await card.click();
+        await expect(page.locator("#tbhDetailBody time")).toHaveText(/^(now|\d+[mhd]|[A-Z][a-z]{2} \d{1,2})$/);
+    });
+});
+
+test("the Play lock countdown stops ticking while the page is hidden", async ({ page }) => {
+    await signIn(page);
+    await page.getByRole("button", { name: "Play", exact: true }).click();
+    for (let answered = 0; answered < 4; answered += 1) await page.locator("[data-choice]").first().click();
+    await page.getByRole("button", { name: "W aura" }).click();
+    await expect(page.locator("#playLockMessage")).toContainText(/Unlocks in/);
+    const setHidden = (hidden) => page.evaluate((value) => {
+        Object.defineProperty(document, "hidden", { configurable: true, get: () => value });
+        Object.defineProperty(document, "visibilityState", { configurable: true, get: () => value ? "hidden" : "visible" });
+        document.dispatchEvent(new Event("visibilitychange"));
+    }, hidden);
+    await setHidden(true);
+    await page.evaluate(() => { document.querySelector("#playLockMessage").textContent = "paused"; });
+    await page.waitForTimeout(1_300);
+    await expect(page.locator("#playLockMessage")).toHaveText("paused");
+    await setHidden(false);
+    await expect(page.locator("#playLockMessage")).toContainText(/Unlocks in/);
+    await page.evaluate(() => { document.querySelector("#playLockMessage").textContent = "ticking"; });
+    await expect(page.locator("#playLockMessage")).toContainText(/Unlocks in/, { timeout: 2_000 });
 });

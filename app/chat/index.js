@@ -2457,6 +2457,8 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         if (preview) still.src = preview;
         else still.removeAttribute("src");
         if (kind === "video" && poster) video.poster = poster;
+        // Kept videos loop like iOS (ChatMediaPlayback AVPlayerLooper); view once plays once.
+        video.loop = kind === "video";
         dialog.classList.add("is-loading");
         const settle = () => { if (target.getAttribute("src") === url) { dialog.classList.remove("is-loading"); still.hidden = true; } };
         if (kind === "video") video.addEventListener("loadeddata", settle, { once: true });
@@ -2547,6 +2549,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         const video = dialog.querySelector("video");
         video.pause();
         video.controls = true;
+        video.loop = false;
         video.onended = null;
         video.removeAttribute("src");
         video.removeAttribute("poster");
@@ -2706,6 +2709,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         $('[data-pause-ephemeral]').hidden = false;
         $('[data-pause-ephemeral]').setAttribute('aria-label', 'Pause media');
         $('[data-pause-ephemeral]').innerHTML = uiIcon('pause');
+        video.loop = false;
         video.onended = kind === 'video' ? closeMediaViewer : null;
         if (kind === 'video' && video.ended) { closeMediaViewer(); return; }
         let elapsed = 0, previous = performance.now();

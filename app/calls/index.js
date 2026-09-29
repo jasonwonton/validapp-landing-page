@@ -785,6 +785,12 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
     window.addEventListener("valid:session-expired", () => {
         if (currentCall || operationInFlight) void finish({ notifyBackend: false });
     });
+    // Reloading or closing the tab ends the call: ask first, but only during one.
+    window.addEventListener("beforeunload", (event) => {
+        if (!currentCall || TERMINAL_STATES.has(currentCall.state)) return;
+        event.preventDefault();
+        event.returnValue = "";
+    });
 
     return { enabled, start, open, handleRealtimeEvent, isActive: () => Boolean(currentCall || operationInFlight || ending), beforeSessionEnd: () => finish({ notifyBackend: true }) };
 }

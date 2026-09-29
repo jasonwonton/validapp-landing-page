@@ -285,7 +285,7 @@ test("chat appearance matches iOS and stays private to the user and conversation
     page.on("request", (request) => {
         if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method())) writes.push(request.url());
     });
-    await expect(font.locator("option")).toHaveText(["Six7", "System", "Rounded", "Serif", "Mono"]);
+    await expect(font.locator("option")).toHaveText(["Valid", "System", "Rounded", "Serif", "Mono"]);
     await expect(settings.getByRole("group", { name: "Chat color" }).getByRole("button")).toHaveCount(6);
     await font.selectOption("serif");
     await settings.getByRole("button", { name: "Purple chat color" }).click();

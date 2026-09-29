@@ -357,3 +357,19 @@ test('available browser audio-output picker applies to remote audio without stor
     expect(await page.evaluate(() => JSON.stringify(localStorage).includes('headphones-fixture'))).toBe(false);
     await page.getByRole('button', {name:'End call',exact:true}).click();
 });
+
+test("leaving the page asks for confirmation only while a call is in progress", async ({ page }) => {
+    await installCallHarness(page);
+    const leaveBlocked = () => page.evaluate(() => {
+        const event = new Event("beforeunload", { cancelable: true });
+        window.dispatchEvent(event);
+        return event.defaultPrevented;
+    });
+    expect(await leaveBlocked()).toBe(false);
+    await page.evaluate(() => window.__calls.start("audio", { id: "chat-1", display_name: "Maya", accepted_count: 2 }));
+    await expect(page.locator(".call-overlay")).toBeVisible();
+    expect(await leaveBlocked()).toBe(true);
+    await page.locator("[data-call-hangup]").click();
+    await expect(page.locator(".call-overlay")).not.toBeVisible();
+    expect(await leaveBlocked()).toBe(false);
+});

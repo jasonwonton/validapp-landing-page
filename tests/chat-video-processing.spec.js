@@ -63,6 +63,8 @@ test("a processing video waits, then plays its H.264 rendition", async ({ page }
     await bubble.click();
     const video = page.locator("[data-chat-media-viewer] video");
     await expect(video).toHaveAttribute("src", "https://media.example/renditions/web.mp4");
+    // A kept video loops in the viewer like iOS (AVPlayerLooper).
+    await expect(video).toHaveJSProperty("loop", true);
     const playback = await video.evaluate(async (element) => {
         element.muted = true;
         if (element.readyState < 3) await new Promise((resolve, reject) => {
