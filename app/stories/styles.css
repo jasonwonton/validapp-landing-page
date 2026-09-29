@@ -22,13 +22,24 @@
 .story-composer form { display: grid; gap: 12px; padding: 16px; }
 .story-composer header { display: grid; grid-template-columns: 70px minmax(0, 1fr) 70px; align-items: center; text-align: center; }
 .story-composer header button { min-height: 40px; padding: 4px; border: 0; background: transparent; color: inherit; text-align: left; }
-.story-composer-preview { position: relative; aspect-ratio: 4 / 5; display: grid; align-content: center; justify-items: center; gap: 8px; overflow: hidden; border: 3px solid var(--outline); border-radius: 20px; background: var(--white); }
-.story-composer-preview img, .story-composer-preview video { width: 100%; height: 100%; object-fit: contain; background: #050914; }
-.story-file-input { width: 100%; padding: 10px; border: 2px dashed var(--outline); border-radius: 13px; background: var(--white); }
+/* The composer frame has the viewer's shape (an iPhone screen, 9 : 19.5), so a
+   caption dragged here lands on the same spot of the media in the viewer. */
+.story-composer-preview { position: relative; container-type: inline-size; justify-self: center; height: min(46dvh, 440px); aspect-ratio: 9 / 19.5; display: grid; align-content: center; justify-items: center; gap: 8px; overflow: hidden; border: 3px solid var(--outline); border-radius: 20px; background: var(--white); text-align: center; }
+.story-composer-preview p { margin: 0 10px; font-size: .78rem; }
+.story-composer-preview img, .story-composer-preview video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.story-composer-preview .media-overlay-positioner { width: 100%; max-width: none; min-height: 0; padding: 3px 8px; border-radius: 0; background: rgba(0,0,0,.42); font-size: max(10px, 5.35cqw); font-weight: 500; line-height: 1.2; }
+.story-source-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.story-composer .story-source-button { position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 12px; border: 2px solid var(--outline); border-radius: 14px; background: var(--white); color: var(--ink); font-size: 1rem; cursor: pointer; }
+.story-source-button .ui-icon { width: 20px; height: 20px; }
+.story-source-button input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.story-source-button:focus-within { outline: 3px solid var(--peach); outline-offset: 2px; }
 .story-composer label { display: grid; gap: 5px; font-size: .8rem; }
-.story-composer label input { min-height: 46px; padding: 8px 11px; border: 2px solid var(--outline); border-radius: 12px; background: var(--white); color: var(--ink); }
+.story-composer label input { font-size: 16px; min-height: 46px; padding: 8px 11px; border: 2px solid var(--outline); border-radius: 12px; background: var(--white); color: var(--ink); }
 .story-upload-progress { height: 8px; overflow: hidden; border-radius: 99px; background: rgba(5,9,20,.12); }
-.story-upload-progress span { display: block; width: 0; height: 100%; background: #1eb780; transition: width .15s linear; }
+.story-upload-progress span { display: block; height: 100%; background: #1eb780; transition: width .15s linear; }
+/* Runtime styles (runtime-style.js) are single-attribute rules in the app
+   stylesheet, which loads first: defaults they override stay at zero specificity. */
+:where(.story-upload-progress span) { width: 0; }
 .story-composer-status { min-height: 1.3em; margin: -3px 0; color: var(--muted); font-size: .78rem; text-align: center; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -36,7 +47,7 @@
 }
 
 :root[data-theme="dark"] .story-composer-preview,
-:root[data-theme="dark"] .story-file-input,
+:root[data-theme="dark"] .story-source-button,
 :root[data-theme="dark"] .story-composer label input,
 :root[data-theme="dark"] .story-share-search,
 :root[data-theme="dark"] .story-share-preview,

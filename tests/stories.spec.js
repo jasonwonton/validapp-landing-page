@@ -157,8 +157,16 @@ test("Story composer prepares and publishes a photo through the feature-gated su
     await signInWithStories(page);
     await page.getByRole("button", { name: "Add Story" }).click();
     const composer = page.getByRole("dialog", { name: "Create Story" });
+    // Camera and library, like iOS: only the camera input forces capture.
+    await expect(composer.locator(".story-camera-input")).toHaveAttribute("capture", "environment");
+    await expect(composer.locator(".story-file-input")).not.toHaveAttribute("capture", /.*/);
+    await expect(composer.getByText("Camera", { exact: true })).toBeVisible();
+    await expect(composer.getByText("Library", { exact: true })).toBeVisible();
     await composer.locator(".story-file-input").setInputFiles("assets/AppIconV2.png");
     await expect(composer.getByText("Photo ready to post")).toBeVisible();
+    // The composer frame has the viewer's shape (9 : 19.5).
+    const frame = await composer.locator(".story-composer-preview").boundingBox();
+    expect(frame.width / frame.height).toBeCloseTo(9 / 19.5, 1);
     await composer.getByLabel("Caption").fill("After practice");
     await composer.getByLabel("Text overlay").fill("finally ✨");
     const overlayHandle = composer.locator("[data-media-overlay-position]");

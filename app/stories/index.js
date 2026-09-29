@@ -51,7 +51,10 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, ge
             <form>
                 <header><button type="button" data-close-story-composer>Cancel</button><strong>New Story</strong><span></span></header>
                 <div class="story-composer-preview"><span aria-hidden="true">${uiIcon("plus")}</span><p>Choose a photo or an MP4 video.</p></div>
-                <input class="story-file-input" type="file" accept="image/*,video/mp4" capture="environment">
+                <div class="story-source-buttons">
+                    <label class="story-source-button">${uiIcon("camera")}<span>Camera</span><input class="story-camera-input" type="file" accept="image/*,video/mp4" capture="environment"></label>
+                    <label class="story-source-button">${uiIcon("photo")}<span>Library</span><input class="story-file-input" type="file" accept="image/*,video/mp4"></label>
+                </div>
                 <label>Caption <input class="story-caption" type="text" maxlength="120" placeholder="Optional caption"></label>
                 <label>Text overlay <input class="story-overlay" type="text" maxlength="160" placeholder="Optional text — drag it in the preview"></label>
                 <div class="story-upload-progress hidden"><span></span></div>
@@ -67,6 +70,7 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, ge
     });
     root.addEventListener("click", handleClick);
     $(".story-file-input").addEventListener("change", selectStoryMedia);
+    $(".story-camera-input").addEventListener("change", selectStoryMedia);
     $(".story-composer form").addEventListener("submit", publishSelectedStory);
     $(".story-composer").addEventListener("close", resetStoryComposer);
     window.addEventListener("online", () => void retryPendingStories());
@@ -341,6 +345,7 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, ge
         storyUploadRequestId = null;
         storyPublishRequestId = null;
         $(".story-file-input").value = "";
+        $(".story-camera-input").value = "";
         $(".story-caption").value = "";
         $(".story-overlay").value = "";
         $(".story-composer-preview").innerHTML = `<span aria-hidden="true">${uiIcon("plus")}</span><p>Choose a photo or an MP4 video.</p>`;
