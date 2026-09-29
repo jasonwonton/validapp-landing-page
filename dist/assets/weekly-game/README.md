@@ -11,6 +11,11 @@ the network. Inference runs in a bounded, single-in-flight browser worker.
   https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task
   SHA-256 `59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a`.
   Model documentation: https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker
+- Face Landmarker float16 model, version **1** (camera lenses, `assets/lenses/`):
+  https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
+  SHA-256 `64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff` (3,758,596 bytes).
+  Model documentation: https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker
+  The lens worker shares this directory's 0.10.32 runtime and wasm.
 - The tracker bundle is built by `node scripts/weekly-game/build-tracker.mjs`.
   Its filename contains a content hash. Retain previous tracker bundles for open
   clients. The generated `app/weekly-game/tracker-asset.js` pins that exact file.
