@@ -1219,7 +1219,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
 
     function mediaBoxMarkup(message, mediaURL, mementoSwappedURL, mediaOverlay) {
         const kind = ['memento', 'story', 'sticker', 'video'].includes(message.kind) ? message.kind : 'photo';
-        const alt = kind === "memento" ? "Memento" : kind === "video" ? "Video thumbnail" : kind === "sticker" ? "Sticker" : kind === "story" ? "Story" : "Photo";
+        const alt = kind === "memento" ? "Memento" : kind === "video" ? "Video thumbnail" : kind === "sticker" ? "Sticker" : "Photo";
         // The preview loads first; the full photo is its fallback when the preview never landed.
         const preview = kind === 'photo' ? safeMediaURL(message.photo_thumbnail_url, api) : '';
         const hash = kind === 'sticker' ? '' : thumbHashDataURL(message.preview_hash);
