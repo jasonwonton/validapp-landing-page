@@ -126,6 +126,7 @@ img.media-placeholder { background: var(--mint); object-fit: cover; }
 }
 .network-banner { position: sticky; top: 66px; z-index: 19; padding: 9px 18px; border-bottom: 2px solid var(--outline); background: #ffe0bb; text-align: center; }
 .app-update-prompt { position: fixed; z-index: 55; left: 50%; bottom: calc(82px + var(--safe-bottom)); width: min(430px, calc(100% - 28px)); display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 11px 12px 11px 15px; border: 2px solid var(--outline); border-radius: 18px; background: var(--white); box-shadow: 0 8px 22px rgba(5,9,20,.2); transform: translateX(-50%); }
+body:not(.authenticated) .app-update-prompt { bottom: calc(18px + var(--safe-bottom)); }
 .app-update-prompt > span { display: grid; gap: 2px; }
 .app-update-prompt small { color: var(--muted); font-size: .76rem; }
 .app-update-prompt button { min-height: 40px; padding: 7px 13px; border: 0; border-radius: 12px; background: var(--peach); color: var(--on-peach); }
@@ -938,6 +939,12 @@ body.play-active .play-actions { margin: 0; }
 .ui-sheet-details[hidden] { display: none; }
 .ui-sheet-details textarea { width: 100%; min-height: 88px; resize: vertical; padding: 11px; border: 2px solid var(--outline); border-radius: 14px; background: var(--white); color: var(--ink); font-size: 1rem; }
 :root[data-theme="dark"] .ui-sheet-grabber { background: rgba(255,255,255,.28); }
+.ios-install-steps { display: grid; gap: 10px; margin: 4px 0 0; padding: 0; list-style: none; text-align: left; }
+.ios-install-steps li { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 12px; border: 2px solid rgba(128,128,128,.22); border-radius: 16px; background: var(--white); font-size: 1rem; line-height: 1.3; }
+.ios-install-icon { flex: 0 0 36px; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; background: var(--mint); color: #0a84ff; }
+.ios-install-icon svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ios-install-icon img { width: 28px; height: 28px; border-radius: 7px; }
+.ios-install-note { margin: 0; color: var(--muted); font-size: .9rem; line-height: 1.35; }
 :root[data-theme="dark"] .ui-sheet-reasons label { border-color: rgba(255,255,255,.18); }
 @media (min-width: 700px) {
     .ui-sheet { width: min(440px, calc(100% - 28px)); margin: auto; box-shadow: 0 12px 30px rgba(0,0,0,.15); }

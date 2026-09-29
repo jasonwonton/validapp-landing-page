@@ -267,3 +267,51 @@ test.describe("pull to refresh", () => {
         await expect(indicator).not.toHaveClass(/refreshing/);
     });
 });
+
+test.describe("install and update", () => {
+    const IPHONE_SAFARI = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1";
+
+    test.describe("on iPhone Safari", () => {
+        test.use({ userAgent: IPHONE_SAFARI });
+
+        test("offers Add to Home Screen where Android offers install and notifications", async ({ page }) => {
+            await signInToDemo(page);
+            const prompt = page.locator("#feedNotificationPrompt");
+            await expect(prompt).toBeVisible();
+            await expect(prompt.getByRole("button", { name: "Add to Home Screen" })).toBeVisible();
+            await prompt.getByRole("button", { name: "Add to Home Screen" }).click();
+            const sheet = page.getByRole("dialog", { name: "Add Valid to your Home Screen" });
+            await expect(sheet).toBeVisible();
+            await expect(sheet).toContainText("Share");
+            await expect(sheet).toContainText("notifications work only in the Home Screen app");
+            await sheet.getByRole("button", { name: "Got it" }).click();
+            await expect(sheet).toBeHidden();
+            await expect(prompt).toBeHidden();
+
+            await page.locator("#bottomNav").getByRole("button", { name: "Profile", exact: true }).click();
+            const row = page.locator("#installAppButton");
+            await expect(row).toBeVisible();
+            await expect(row).toContainText("Add to Home Screen");
+            await row.click();
+            await expect(page.getByRole("dialog", { name: "Add Valid to your Home Screen" })).toBeVisible();
+        });
+    });
+
+    test("the update prompt is reachable while signed out", async ({ page }) => {
+        await page.goto("/app/?demo=1&signin=1");
+        await expect(page.getByText("Welcome Back")).toBeVisible();
+        await page.evaluate(() => document.querySelector("#appUpdatePrompt").classList.remove("hidden"));
+        await expect(page.getByRole("button", { name: "Update" })).toBeVisible();
+    });
+
+    test("the manifest offers narrow screenshots for the richer Android install sheet", async ({ request }) => {
+        const manifest = await (await request.get("/app/manifest.webmanifest")).json();
+        expect(manifest.screenshots.length).toBeGreaterThanOrEqual(3);
+        for (const screenshot of manifest.screenshots) {
+            expect(screenshot.form_factor).toBe("narrow");
+            const response = await request.get(new URL(screenshot.src, "http://host/app/").pathname);
+            expect(response.ok()).toBeTruthy();
+            expect(screenshot.label).toBeTruthy();
+        }
+    });
+});

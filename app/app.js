@@ -3981,14 +3981,51 @@ function renderFeedNotificationPrompt() {
         : syncing
         ? "Finishing setup…"
         : "Enable notifications";
+    // iPhone Safari has no Web Push outside the installed app: offer the
+    // Home Screen steps instead (hidden for a week after they were shown).
+    const iosInstall = !supported && iosInstallAvailable() && !iosInstallRecentlyShown();
     const prompts = [$("#feedNotificationPrompt"), ...$$(".feed-gate-notification")].filter(Boolean);
     prompts.forEach((prompt) => {
-        prompt.classList.toggle("hidden", !supported || Boolean(enabled) || blocked);
+        prompt.classList.toggle("hidden", !iosInstall && (!supported || Boolean(enabled) || blocked));
+        const detail = prompt.querySelector("small");
+        if (detail) detail.textContent = iosInstall ? "Add Valid to your Home Screen to know when someone picks you." : "Enable notifications to know when someone picks you.";
         const button = prompt.querySelector("button");
         if (!button) return;
-        button.textContent = label;
-        button.disabled = state.webPushBusy || syncing;
+        button.textContent = iosInstall ? "Add to Home Screen" : label;
+        button.disabled = !iosInstall && (state.webPushBusy || syncing);
     });
+}
+
+const IOS_INSTALL_SHOWN_KEY = "valid:ios-install-shown-at";
+
+function iosInstallAvailable() {
+    return isAppleTouchDevice() && !isStandaloneApp();
+}
+
+function iosInstallRecentlyShown() {
+    try { return Date.now() - Number(localStorage.getItem(IOS_INSTALL_SHOWN_KEY) || 0) < 7 * 86_400_000; }
+    catch (_) { return false; }
+}
+
+async function openIOSInstall() {
+    try {
+        const { openIOSInstallSheet } = await import("./ios-install.js");
+        openIOSInstallSheet({ onClose: () => {
+            try { localStorage.setItem(IOS_INSTALL_SHOWN_KEY, String(Date.now())); } catch (_) { /* Shown again next time. */ }
+            renderFeedNotificationPrompt();
+        } });
+    } catch (error) {
+        showToast(userMessage(error, "In Safari, tap Share, then Add to Home Screen."));
+    }
+}
+
+function renderIOSInstallRow() {
+    if (!iosInstallAvailable()) return;
+    const row = $("#installAppButton");
+    row.querySelector("strong").textContent = "Add to Home Screen";
+    row.querySelector("small").textContent = "Get notifications and open Valid like an app";
+    row.classList.remove("hidden");
+    renderProfileActionsVisibility();
 }
 
 async function refreshFeedGateStatus() {
@@ -6588,6 +6625,7 @@ function finishAndroidInstall() {
 }
 
 async function installWebApp() {
+    if (iosInstallAvailable()) return openIOSInstall();
     if (!state.installPrompt) {
         if ($("#androidInstallDialog").open) {
             $("#androidInstallStatus").textContent = "Open Chrome’s ⋮ menu and choose Install app or Add to Home screen.";
@@ -6767,6 +6805,7 @@ async function detachWebPushSubscription() {
 }
 
 async function toggleWebPush() {
+    if (!webPushSupported() && iosInstallAvailable()) return openIOSInstall();
     const button = $("#notificationButton");
     if (state.webPushBusy || !webPushSupported()) return;
     if (Notification.permission === "denied") {
@@ -7500,10 +7539,14 @@ function startApp() {
         $("#authStatus").textContent = "This browser does not support passkeys. Try current Chrome, Safari, or Edge.";
         showAuthBrowserHelp({ code: 'passkeys_unavailable' }, false);
     }
+    renderIOSInstallRow();
     if (androidInstallRequested()) {
         showAuthView();
         showAndroidInstallGate();
-    } else restoreOrStartAuthFlow();
+    } else {
+        restoreOrStartAuthFlow();
+        if (iosInstallAvailable() && new URLSearchParams(location.search).get("install") === "1") void openIOSInstall();
+    }
 }
 
 async function restoreOrStartAuthFlow() {
