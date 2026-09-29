@@ -18,9 +18,9 @@ test('shared history setting saves only after confirmation, reconciles, and supp
  const choices=page.locator('[data-history-options]');
  await expect(choices.getByRole('button',{name:/Keep history/})).toBeEnabled();
  await expect(choices.getByRole('button',{name:/Keep history/})).toHaveAttribute('aria-pressed','true');
- page.once('dialog',d=>d.dismiss());await choices.getByRole('button',{name:/Clear after 24 hours/}).click();
+ await choices.getByRole('button',{name:/Clear after 24 hours/}).click();await page.getByRole('dialog',{name:'Change history for everyone?'}).getByRole('button',{name:'Cancel'}).click();
  expect(await page.evaluate(()=>historyPuts.length)).toBe(0);
- page.once('dialog',d=>d.accept());await choices.getByRole('button',{name:/Clear after 24 hours/}).click();
+ await choices.getByRole('button',{name:/Clear after 24 hours/}).click();await page.getByRole('dialog',{name:'Change history for everyone?'}).getByRole('button',{name:'Change history'}).click();
  await expect(choices.getByRole('button',{name:/Clear after 24 hours/})).toHaveAttribute('aria-pressed','true');
  expect(await page.evaluate(()=>historyPuts[0].slice(1))).toEqual(['chat-noah','after24Hours']);
  await page.getByRole('button',{name:'Done',exact:true}).click();
@@ -120,7 +120,7 @@ test('history API sends the existing shared contract and never claims a rejected
  await page.getByRole('button',{name:/^sign in$/i}).click();await page.getByRole('button',{name:'Chats',exact:true}).click();await room(page);
  await page.getByRole('button',{name:'Chat settings',exact:true}).click();
  await expect(page.locator('[data-history-mode="afterLeaving"]')).toBeEnabled();
- page.once('dialog',d=>d.accept());await page.locator('[data-history-mode="afterLeaving"]').click();
+ await page.locator('[data-history-mode="afterLeaving"]').click();await page.getByRole('dialog',{name:'Change history for everyone?'}).getByRole('button',{name:'Change history'}).click();
  await expect(page.locator('[data-history-status]')).toContainText('couldn’t be confirmed');
  await expect(page.locator('[data-history-mode="save"]')).toHaveAttribute('aria-pressed','true');
 });

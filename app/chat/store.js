@@ -18,8 +18,6 @@ export function createChatStore({ attentionPriority = chatAttentionPriority } = 
         replyToMessageId: null,
         loadingList: false,
         loadingRoom: false,
-        eventSource: null,
-        reconnectTimer: null,
         lastEventId: null,
     };
 
