@@ -1338,6 +1338,13 @@ body.detail-screen-open { overflow: hidden; }
 
 .toast { position: fixed; z-index: 80; left: var(--visual-viewport-center, 50%); bottom: calc(98px + var(--visual-viewport-bottom, 0px)); max-width: calc(var(--visual-viewport-width, 100%) - 28px); padding: 11px 18px; border: 2px solid var(--outline); border-radius: 999px; background: var(--ink); color: var(--white); opacity: 0; pointer-events: none; transform: translate(-50%, 12px); transition: .2s ease; }
 .toast.visible { opacity: 1; transform: translate(-50%, 0); }
+/* As a manual popover the toast joins the top layer, above any open modal <dialog>. */
+.toast[popover] { inset: auto; right: auto; top: auto; left: var(--visual-viewport-center, 50%); bottom: calc(98px + var(--visual-viewport-bottom, 0px)); width: max-content; height: auto; margin: 0; overflow: visible; font: inherit; font-family: var(--app-font); }
+.toast[popover]:popover-open.visible { transition: opacity .2s ease, transform .2s ease; }
+@starting-style { .toast[popover]:popover-open.visible { opacity: 0; transform: translate(-50%, 12px); } }
+.toast[popover]::backdrop { display: none; }
+/* A bottom sheet owns the lower screen; keep its buttons uncovered. */
+body:has(dialog.ui-sheet[open]) .toast[popover] { top: calc(env(safe-area-inset-top, 0px) + 12px); bottom: auto; }
 
 .streak-celebration { position: fixed; z-index: 110; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(5,9,20,.3); }
 .streak-celebration.hidden { display: none; }

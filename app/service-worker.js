@@ -20,6 +20,7 @@ const APP_SHELL = [
     "./ui-icons.js",
     "./media-url.js",
     "./ui-dialogs.js",
+    "./toast.js",
     "./tbh-share.js",
     "./feed-sender.js",
     "./live-camera.js",

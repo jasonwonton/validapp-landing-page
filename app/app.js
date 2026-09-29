@@ -10,6 +10,7 @@ import { activateRoute, preloadRoute } from "./routes/route-loader.js";
 import { clearRuntimeStyles, setRuntimeStyles } from "./runtime-style.js";
 import { configureMediaFallback, installMediaImageFallback, mediaImageMarkup } from "./media-url.js";
 import { confirmSheet } from "./ui-dialogs.js";
+import { showToast } from "./toast.js";
 
 const demoMode = localDemoAllowed();
 const api = demoMode ? new DemoAPI() : new ValidAPI();
@@ -476,14 +477,6 @@ function relativeTime(value) {
         duration /= amount;
     }
     return "recently";
-}
-
-function showToast(message) {
-    const toast = $("#toast");
-    toast.textContent = message;
-    toast.classList.add("visible");
-    clearTimeout(showToast.timeout);
-    showToast.timeout = setTimeout(() => toast.classList.remove("visible"), 2800);
 }
 
 function setButtonLoading(button, loading, loadingLabel = "Working...") {

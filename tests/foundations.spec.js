@@ -104,3 +104,39 @@ test("public images fall back across media routes, then to initials", async ({ p
     await expect(page.locator("#art img")).toHaveClass(/media-placeholder/);
     expect(requested).toEqual(expect.arrayContaining(["media.six7.lol", "validappcdn.com", "six7-public-media-fallback.empty-snow-d731.workers.dev", "api"]));
 });
+
+// Hit-testing skips inert content (everything outside a modal, including the
+// top-layer toast), so read the painted pixel at the toast's dark pill instead.
+async function toastIsPaintedOnTop(page) {
+    const box = await page.locator("#toast").boundingBox();
+    const shot = await page.screenshot({ clip: { x: box.x + 8, y: box.y + box.height / 2 - 1, width: 2, height: 2 } });
+    const [r, g, b] = await page.evaluate(async (data) => {
+        const image = new Image();
+        image.src = `data:image/png;base64,${data}`;
+        await image.decode();
+        const canvas = document.createElement("canvas");
+        canvas.width = image.width; canvas.height = image.height;
+        const context = canvas.getContext("2d");
+        context.drawImage(image, 0, 0);
+        return [...context.getImageData(0, 0, 1, 1).data];
+    }, shot.toString("base64"));
+    // The light-mode pill is pure black on top; under a modal backdrop (rgba(5,9,20,.55)) it would tint blue.
+    return r + g + b < 8;
+}
+
+test("toasts paint above an open modal dialog", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+    await signIn(page);
+    await openSheet(page, "confirmSheet", { title: "Covering the page" });
+    await page.evaluate(async () => (await import("/app/toast.js")).showToast("Saved above the sheet"));
+    const toast = page.locator("#toast");
+    await expect(toast).toHaveText("Saved above the sheet");
+    await expect(toast).toBeVisible();
+    await expect.poll(() => toastIsPaintedOnTop(page)).toBe(true);
+    await page.getByRole("button", { name: "Cancel" }).click();
+    // A modal opened after the first toast is still covered by the next one.
+    await page.evaluate(() => document.querySelector("#feedbackDialog").showModal());
+    await page.evaluate(async () => (await import("/app/toast.js")).showToast("Second toast"));
+    await expect(toast).toHaveText("Second toast");
+    await expect.poll(() => toastIsPaintedOnTop(page)).toBe(true);
+});
