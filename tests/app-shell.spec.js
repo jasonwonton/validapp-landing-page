@@ -223,3 +223,47 @@ test.describe("history and Back", () => {
         await expect(page).not.toHaveURL(/#screen=/);
     });
 });
+
+test.describe("pull to refresh", () => {
+    const touch = (page, selector, type, y) => page.evaluate(({ selector, type, y }) => {
+        const target = document.querySelector(selector);
+        const event = new Event(type, { bubbles: true });
+        Object.defineProperty(event, "touches", { value: y === null ? [] : [{ clientY: y }] });
+        target.dispatchEvent(event);
+    }, { selector, type, y });
+
+    test("holds a spinner until the refresh finishes and never starts inside the fixed chat room", async ({ page }) => {
+        await signInToDemo(page);
+        let release;
+        await page.evaluate(async () => {
+            const { DemoAPI } = await import("/app/demo-api.js");
+            const original = DemoAPI.prototype.getPersonalFeed;
+            DemoAPI.prototype.getPersonalFeed = async function slowFeed(...args) {
+                await new Promise((resolve) => { window.__finishRefresh = resolve; });
+                return original.apply(this, args);
+            };
+        });
+        const indicator = page.locator("#pullRefreshIndicator");
+        await touch(page, "#feedList", "touchstart", 10);
+        await touch(page, "#feedList", "touchmove", 160);
+        await expect(indicator).toHaveClass(/ready/);
+        await expect(indicator).toHaveClass(/dragging/);
+        expect(await indicator.evaluate((element) => getComputedStyle(element).transitionDuration)).toBe("0s");
+        await touch(page, "#feedList", "touchend", null);
+        await expect(indicator).toHaveClass(/refreshing/);
+        await page.waitForTimeout(300);
+        await expect(indicator).toHaveClass(/refreshing/);
+        await page.evaluate(() => window.__finishRefresh());
+        await expect(indicator).not.toHaveClass(/refreshing/);
+
+        // Dragging down through the chat room's history must not refresh the room.
+        await page.locator("#bottomNav").getByRole("button", { name: "Chats", exact: true }).click();
+        await page.locator("[data-open-chat='chat-friends']").first().click();
+        await expect(page.locator(".chat-room-screen")).toBeVisible();
+        await touch(page, ".chat-timeline", "touchstart", 200);
+        await touch(page, ".chat-timeline", "touchmove", 400);
+        await expect(indicator).not.toHaveClass(/ready/);
+        await touch(page, ".chat-timeline", "touchend", null);
+        await expect(indicator).not.toHaveClass(/refreshing/);
+    });
+});

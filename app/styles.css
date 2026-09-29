@@ -130,8 +130,14 @@ img.media-placeholder { background: var(--mint); object-fit: cover; }
 .app-update-prompt small { color: var(--muted); font-size: .76rem; }
 .app-update-prompt button { min-height: 40px; padding: 7px 13px; border: 0; border-radius: 12px; background: var(--peach); color: var(--on-peach); }
 .pull-refresh-indicator { position: fixed; z-index: 54; top: calc(env(safe-area-inset-top) - 42px); left: 50%; width: 36px; height: 36px; display: grid; place-items: center; border: 2px solid var(--outline); border-radius: 50%; background: var(--white); opacity: var(--pull-opacity, 0); pointer-events: none; transform: translate(-50%, var(--pull-distance, 0px)) rotate(0deg); transition: transform .15s ease, opacity .15s ease; }
+.pull-refresh-indicator.dragging { transition: none; }
 .pull-refresh-indicator.ready span { transform: rotate(180deg); }
 .pull-refresh-indicator span { transition: transform .15s ease; }
+.pull-refresh-indicator.refreshing span { display: none; }
+.pull-refresh-indicator.refreshing::before { content: ""; width: 16px; height: 16px; border: 2.5px solid var(--ink); border-right-color: transparent; border-radius: 50%; animation: pull-refresh-spin .75s linear infinite; }
+@keyframes pull-refresh-spin { to { transform: rotate(360deg); } }
+/* The app owns pull-to-refresh; stop Chrome's native one (and iOS bounce) from doubling it. */
+@media (display-mode: standalone) { html, body { overscroll-behavior-y: none; } }
 
 .wordmark img { display: block; width: 106px; height: auto; }
 .text-button, .icon-button { border: 0; background: transparent; cursor: pointer; }

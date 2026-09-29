@@ -6357,8 +6357,22 @@ async function refreshActivePanel() {
     successHaptic();
 }
 
+// A pull only refreshes when the drag starts on the page itself at the top:
+// not inside a scrolled container, and never inside a fixed-position layer
+// (the chat room is fixed, so window.scrollY stays 0 while its history scrolls).
+function pullRefreshAllowedFrom(target) {
+    for (let element = target instanceof Element ? target : null; element && element !== document.body; element = element.parentElement) {
+        if (element.scrollTop > 0) return false;
+        const style = getComputedStyle(element);
+        if (style.position === "fixed" || style.position === "sticky" && element.scrollHeight > element.clientHeight) return false;
+    }
+    return true;
+}
+
 function beginPullRefresh(event) {
-    if (!document.body.classList.contains("authenticated") || window.scrollY > 0 || $("dialog[open], .detail-screen:not(.hidden)")) return;
+    state.pullRefreshStartY = null;
+    if (!document.body.classList.contains("authenticated") || state.pullRefreshing || window.scrollY > 0
+        || $("dialog[open], .detail-screen:not(.hidden)") || event.touches?.length > 1 || !pullRefreshAllowedFrom(event.target)) return;
     state.pullRefreshStartY = event.touches?.[0]?.clientY ?? null;
     state.pullRefreshDistance = 0;
 }
@@ -6372,6 +6386,8 @@ function renderPullRefreshDistance() {
         "--pull-distance": `${state.pullRefreshDistance}px`,
         "--pull-opacity": String(Math.min(1, state.pullRefreshDistance / 50)),
     });
+    // Follow the finger exactly; the transition only animates the release.
+    indicator.classList.add("dragging");
     indicator.classList.toggle("ready", state.pullRefreshDistance >= 64);
 }
 
@@ -6383,7 +6399,7 @@ function movePullRefresh(event) {
     if (pullRefreshFrame === null) pullRefreshFrame = requestAnimationFrame(renderPullRefreshDistance);
 }
 
-function endPullRefresh() {
+async function endPullRefresh() {
     if (state.pullRefreshStartY === null) return;
     const shouldRefresh = state.pullRefreshDistance >= 64;
     state.pullRefreshStartY = null;
@@ -6391,9 +6407,24 @@ function endPullRefresh() {
     if (pullRefreshFrame !== null) cancelAnimationFrame(pullRefreshFrame);
     pullRefreshFrame = null;
     const indicator = $("#pullRefreshIndicator");
-    clearRuntimeStyles(indicator, "--pull-distance", "--pull-opacity");
-    indicator.classList.remove("ready");
-    if (shouldRefresh) refreshActivePanel();
+    indicator.classList.remove("ready", "dragging");
+    if (!shouldRefresh) {
+        clearRuntimeStyles(indicator, "--pull-distance", "--pull-opacity");
+        return;
+    }
+    // Hold a spinner at the threshold until the refresh finishes.
+    state.pullRefreshing = true;
+    indicator.classList.add("refreshing");
+    setRuntimeStyles(indicator, { "--pull-distance": "64px", "--pull-opacity": "1" });
+    try {
+        await refreshActivePanel();
+    } catch (_) {
+        // Each panel reports its own load errors inline.
+    } finally {
+        state.pullRefreshing = false;
+        indicator.classList.remove("refreshing");
+        clearRuntimeStyles(indicator, "--pull-distance", "--pull-opacity");
+    }
 }
 
 function installNativeSheetGestures() {
@@ -7405,6 +7436,10 @@ function bindEvents() {
     $("#appView").addEventListener("touchstart", beginPullRefresh, { passive: true });
     $("#appView").addEventListener("touchmove", movePullRefresh, { passive: true });
     $("#appView").addEventListener("touchend", endPullRefresh, { passive: true });
+    $("#appView").addEventListener("touchcancel", () => {
+        state.pullRefreshDistance = 0;
+        void endPullRefresh();
+    }, { passive: true });
     addEventListener("beforeinstallprompt", (event) => {
         event.preventDefault();
         state.installPrompt = event;
