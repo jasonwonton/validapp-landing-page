@@ -224,6 +224,11 @@ const state = {
     detailReturnFocus: null,
     detailUnderlyingScroll: null,
     feedLoadedAt: 0,
+    personalFeedItems: [],
+    personalFeedHasMore: false,
+    personalFeedLoaded: false,
+    personalInboxVisible: false,
+    personalInboxCutoff: null,
     tabScrollPositions: { feed: 0, play: 0, chats: 0, profile: 0 },
     navigationInitialized: false,
     handlingPopState: false,
@@ -361,7 +366,10 @@ function restoreCachedAppState() {
     const cachedClassmates = readAppCache("classmates");
     const cachedContactClassmateIds = readAppCache("contact-classmates");
     if (cachedProfile) state.profile = cachedProfile;
-    if (Array.isArray(cachedFeed)) commitFeedItems(cachedFeed, { reset: true });
+    if (Array.isArray(cachedFeed)) {
+        commitFeedItems(cachedFeed, { reset: true });
+        state.personalFeedItems = state.feedItems.slice();
+    }
     if (Array.isArray(cachedClassmates)) {
         state.classmates = cachedClassmates;
         state.classmateDirectory = cachedClassmates;
@@ -487,6 +495,18 @@ function relativeTime(value) {
         duration /= amount;
     }
     return "recently";
+}
+
+// PollCommentsView.swift / ReactionViews.swift timestamp: "now", "5m", "3h", "2d", then "Sep 3".
+function shortRelativeTime(value) {
+    const time = new Date(value).getTime();
+    if (!Number.isFinite(time)) return "";
+    const elapsed = Math.max(0, (Date.now() - time) / 1000);
+    if (elapsed < 60) return "now";
+    if (elapsed < 3_600) return `${Math.floor(elapsed / 60)}m`;
+    if (elapsed < 86_400) return `${Math.floor(elapsed / 3_600)}h`;
+    if (elapsed < 604_800) return `${Math.floor(elapsed / 86_400)}d`;
+    return new Date(time).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function setButtonLoading(button, loading, loadingLabel = "Working...") {
@@ -633,6 +653,11 @@ function showSignedOut(message = "") {
     state.tabScrollPositions = { feed: 0, play: 0, chats: 0, profile: 0 };
     state.feedLoadedAt = 0;
     state.playTransition = null;
+    state.personalFeedItems = [];
+    state.personalFeedHasMore = false;
+    state.personalFeedLoaded = false;
+    state.personalInboxVisible = false;
+    state.personalInboxCutoff = null;
     void commentsViewPromise?.then((view) => view.clear()).catch(() => null);
     $("#authStatus").textContent = friendlyErrorMessage(message, "");
 }
@@ -1019,8 +1044,71 @@ async function shareProfileInvite(button, channel) {
     }
 }
 
+// FeedViewModel+InboxVisit.swift: "seen" is a screen-level event. Opening the
+// Inbox marks everything loaded as read (a per-user last-opened time) and
+// clears the badge; during the visit, polls newer than the moment it began keep
+// counting on the Polls chip, and that cutoff stays put until the user leaves.
+// The /feed API has no per-item unread flag, so this mirrors iOS exactly.
+const PERSONAL_FEED_PAGE_SIZE = 20;
+
+function feedItemTime(item) {
+    return Date.parse(item?.timestamp) || 0;
+}
+
+function personalInboxLastOpenedKey() {
+    return api.user?.id ? `valid:pwa:v1:${api.user.id}:inbox-last-opened` : null;
+}
+
+function readPersonalInboxLastOpened() {
+    const key = personalInboxLastOpenedKey();
+    if (!key) return null;
+    try {
+        const value = Number(localStorage.getItem(key));
+        return value > 0 ? value : null;
+    } catch (_) { return null; }
+}
+
+function personalInboxReadReference() {
+    const stored = readPersonalInboxLastOpened();
+    if (stored) return stored;
+    // First visit on this device: the first page is new, older pages are not.
+    const items = state.personalFeedItems;
+    if (items.length > PERSONAL_FEED_PAGE_SIZE) return feedItemTime(items[PERSONAL_FEED_PAGE_SIZE]);
+    if (state.personalFeedHasMore && items.length) return feedItemTime(items.at(-1)) - 1;
+    return 0;
+}
+
+function markLoadedPersonalItemsRead() {
+    const key = personalInboxLastOpenedKey();
+    if (!key) return;
+    const readThrough = Math.max(Date.now(), feedItemTime(state.personalFeedItems[0]));
+    const previous = readPersonalInboxLastOpened();
+    if (previous && readThrough - previous < 1000) return;
+    try { localStorage.setItem(key, String(readThrough)); } catch (_) { /* The badge simply stays until the next visit. */ }
+}
+
+function syncPersonalInboxVisit() {
+    const showing = document.body.classList.contains("authenticated")
+        && state.activePanel === "feed" && state.feedType === "personal"
+        && document.visibilityState !== "hidden" && !isFeedVoteLocked();
+    if (!showing) {
+        state.personalInboxVisible = false;
+        return;
+    }
+    if (!state.personalInboxVisible) {
+        state.personalInboxVisible = true;
+        state.personalInboxCutoff = null;
+    }
+    if (state.personalInboxCutoff === null && (state.personalFeedLoaded || state.personalFeedItems.length)) {
+        state.personalInboxCutoff = personalInboxReadReference();
+    }
+    if (state.personalInboxCutoff !== null) markLoadedPersonalItemsRead();
+}
+
 function personalInboxUnreadCounts() {
-    const polls = state.feedItems.filter((item) => item.is_new === true || item.unread === true).length;
+    syncPersonalInboxVisit();
+    const cutoff = state.personalInboxVisible ? state.personalInboxCutoff : personalInboxReadReference();
+    const polls = cutoff === null ? 0 : state.personalFeedItems.filter((item) => feedItemTime(item) > cutoff).length;
     const tbhs = state.tbhPendingRequests.filter((item) => !item.opened_at).length
         + state.tbhInboxItems.filter((item) => !item.opened_at).length;
     const askMe = (state.anonymousInbox?.questions || []).filter((item) => !item.opened_at).length;
@@ -1028,7 +1116,9 @@ function personalInboxUnreadCounts() {
 }
 
 function renderTabBadges() {
-    const unread = personalInboxUnreadCounts().all;
+    const counts = personalInboxUnreadCounts();
+    // While the Inbox is on screen its loaded polls count as read for the tab badge.
+    const unread = counts.all - (state.personalInboxVisible ? counts.polls : 0);
     const feedBadge = $("#feedTabBadge");
     feedBadge.textContent = unread > 9 ? "9+" : String(unread || "");
     feedBadge.classList.toggle("hidden", unread < 1);
@@ -2641,10 +2731,10 @@ function prepareFeedView() {
                 $, $$, state, api,
                 personalInboxFilters: PERSONAL_INBOX_FILTERS,
                 reactionByType: REACTION_BY_TYPE,
-                avatarMarkup, displayName, escapeHTML, formatGrade, relativeTime,
+                avatarMarkup, displayName, escapeHTML, formatGrade, relativeTime: shortRelativeTime,
                 normalizeReactionState, dominantReaction, promptForKey, tbhAuthorLine,
                 tbhRequestsEnabled, renderTabBadges, formatVoterHint, showToast,
-                commentControlMarkup,
+                commentControlMarkup, personalInboxUnreadCounts,
             });
             return feedView;
         });
@@ -2682,7 +2772,7 @@ function prepareCommentsView() {
     if (!commentsViewPromise) {
         commentsViewPromise = import("./comments/index.js").then(({ createCommentsView }) => createCommentsView({
             root: $("#commentsRoot"), api, getUser: () => api.user,
-            escapeHTML, avatarMarkup, relativeTime, openDetailScreen, closeDetailScreen, showToast,
+            escapeHTML, avatarMarkup, relativeTime: shortRelativeTime, openDetailScreen, closeDetailScreen, showToast,
         }));
     }
     return commentsViewPromise;
@@ -4083,8 +4173,13 @@ async function loadFeed(reset = false) {
         }
         status.textContent = "";
         state.feedAppliedSearch = search;
+        if (feedType === "personal" && !search) {
+            state.personalFeedItems = state.feedItems.slice();
+            state.personalFeedHasMore = items.length >= PERSONAL_FEED_PAGE_SIZE;
+            state.personalFeedLoaded = true;
+            writeAppCache("feed-personal", state.feedItems.slice(0, 60));
+        }
         renderFeed();
-        if (feedType === "personal" && !search) writeAppCache("feed-personal", state.feedItems.slice(0, 60));
         loadMore.classList.toggle("hidden", schoolSort === "hottest" || schoolContent === "tbhs" || items.length < 20);
     } catch (error) {
         if (generation !== state.feedGeneration) return;
@@ -6153,6 +6248,9 @@ function switchPanel(panel, { historyMode = "push", restoreScroll = true } = {})
     if (historyMode !== "none") writeNavigationState(historyMode);
     const targetScroll = restoreScroll ? state.tabScrollPositions[panel] || 0 : 0;
     restorePanelScroll(panel, targetScroll);
+    renderTabBadges();
+    // A return to the Inbox starts a new visit; redraw its chip counts.
+    if (panel === "feed" && previousPanel !== panel && state.feedItems.length) renderFeed();
     void activatePanelRoute(panel);
 }
 
@@ -6801,20 +6899,6 @@ function bindEvents() {
         const detail = event.target.closest("[data-feed-detail]");
         if (detail) openFeedDetail(detail.dataset.feedDetail);
     });
-    $("#feedList").addEventListener("keydown", (event) => {
-        if (!["Enter", " "].includes(event.key)) return;
-        const detail = event.target.closest("[data-feed-detail]");
-        const tbhDetail = event.target.closest("[data-tbh-detail]");
-        if (tbhDetail) {
-            event.preventDefault();
-            openTbhDetail(tbhDetail.dataset.tbhDetail);
-            return;
-        }
-        if (detail) {
-            event.preventDefault();
-            openFeedDetail(detail.dataset.feedDetail);
-        }
-    });
     $("#feedDetailDialog").addEventListener("click", (event) => {
         const commentsTarget = event.target.closest("[data-comments-target]");
         if (commentsTarget) return void openCommentsFromValue(commentsTarget.dataset.commentsTarget);
@@ -7198,6 +7282,10 @@ function bindEvents() {
             refreshWebPushStatus();
             refreshAskSafetyState();
             refreshFeedIfStale(FEED_FOREGROUND_REFRESH_MS);
+        }
+        if (document.body.classList.contains("authenticated")) {
+            renderTabBadges();
+            if (state.activePanel === "feed") renderFeed();
         }
     });
     $("#appView").addEventListener("touchstart", beginPullRefresh, { passive: true });

@@ -13,7 +13,7 @@ export function createFeedView(context) {
         $, $$, state, api, personalInboxFilters,
         avatarMarkup, displayName, escapeHTML, formatGrade, relativeTime,
         normalizeReactionState, dominantReaction, promptForKey, tbhAuthorLine,
-        tbhRequestsEnabled, renderTabBadges, showToast, commentControlMarkup,
+        tbhRequestsEnabled, renderTabBadges, showToast, commentControlMarkup, personalInboxUnreadCounts,
     } = context;
     const storiesView = state.config?.enable_stories === true && state.config?.enable_web_stories === true
         ? createStoriesView({ root: $("#storiesRoot"), api, getUser: () => api.user, getProfile: () => state.profile, escapeHTML, showToast })
@@ -27,6 +27,9 @@ export function createFeedView(context) {
         const target = `${targetType}:${targetId}`;
         return `<span class="reaction-control ${selected ? "selected" : ""} ${canReact ? "" : "disabled"}" data-reaction-control="${escapeHTML(target)}"><button class="reaction-picker-button" type="button" data-reaction-picker="${escapeHTML(target)}" aria-label="${escapeHTML(selected ? `Your reaction is ${selected.label}. Change reaction` : "React")}" ${canReact ? "" : "disabled"}>${displayed ? `<span aria-hidden="true">${displayed.emoji}</span>` : `<span aria-hidden="true">${uiIcon("smile")}</span>`}</button><span class="reaction-divider" aria-hidden="true"></span><button class="reaction-count-button" type="button" data-reactors="${escapeHTML(target)}" aria-label="View ${Number(item.reaction_count || 0)} reactions">${Number(item.reaction_count || 0)}</button></span>`;
     };
+    // One real button opens the card; the reaction and comment buttons sit beside it
+    // instead of inside an element that is itself a button.
+    const cardOpenButton = (label) => `<button class="feed-card-open" type="button" aria-label="${escapeHTML(label)}"></button>`;
     const tbhAvatarMarkup = (profile, request = false) => `<span class="tbh-avatar-shell ${request ? "request" : "response"}">${avatarMarkup(profile, "row-avatar tbh-avatar")}<span class="tbh-avatar-badge" aria-hidden="true">TBH</span></span>`;
     const inboxAvatar = (avatar, kind) => `<span class="inbox-avatar-shell">${avatar}<span class="inbox-content-badge ${kind}" aria-hidden="true">${kind === "poll" ? "POLL" : "ASK ME"}</span></span>`;
     const feedAvatar = (item) => inboxAvatar(state.feedType === "personal" ? avatarMarkup(state.profile) : avatarMarkup({ first_name: item.voted_for_name || item.contact_name || "Student", profile_picture_url: item.voted_for_profile_picture_url }), "poll");
@@ -45,7 +48,7 @@ export function createFeedView(context) {
             const picture = received ? item.author_profile_picture_url : item.subject_profile_picture_url;
             const title = received ? `<strong>${escapeHTML(`${firstName} ${lastName}`)}</strong> sent you a TBH` : school ? `<strong>${escapeHTML(`${firstName} ${lastName}`)}</strong> got a TBH` : `<strong>${escapeHTML(`${firstName} ${lastName}`)}</strong> got your TBH`;
             const detail = school ? tbhAuthorLine(item) : promptForKey(item.prompt_key).title;
-            return { key: `tbh-${kind}:${item.id}`, timestamp: item.created_at, item, html: `<article class="feed-card tbh-row tbh-feed-row tbh-${kind}" data-tbh-detail="${escapeHTML(`${kind}:${item.id}`)}" role="button" tabindex="0" aria-label="Open TBH details">${tbhAvatarMarkup({ first_name: firstName, last_name: lastName, profile_picture_url: picture })}<div class="tbh-feed-copy"><div class="tbh-feed-title">${title}</div><div class="tbh-feed-body">${escapeHTML(item.body)}</div><div class="tbh-feed-meta"><span>${escapeHTML(detail)}</span><time>${escapeHTML(relativeTime(item.created_at))}</time></div></div>${reactionControlMarkup(item, "activity", item.activity_id)}${commentControlMarkup(item, "activity", item.activity_id)}</article>` };
+            return { key: `tbh-${kind}:${item.id}`, timestamp: item.created_at, item, html: `<article class="feed-card tbh-row tbh-feed-row tbh-${kind}" data-tbh-detail="${escapeHTML(`${kind}:${item.id}`)}">${cardOpenButton("Open TBH details")}${tbhAvatarMarkup({ first_name: firstName, last_name: lastName, profile_picture_url: picture })}<div class="tbh-feed-copy"><div class="tbh-feed-title">${title}</div><div class="tbh-feed-body">${escapeHTML(item.body)}</div><div class="tbh-feed-meta"><span>${escapeHTML(detail)}</span><time>${escapeHTML(relativeTime(item.created_at))}</time></div></div>${reactionControlMarkup(item, "activity", item.activity_id)}${commentControlMarkup(item, "activity", item.activity_id)}</article>` };
         });
     }
 
@@ -66,12 +69,6 @@ export function createFeedView(context) {
         return [...answers, ...questions];
     }
 
-    function personalInboxUnreadCounts() {
-        const polls = state.feedItems.filter((item) => item.is_new === true || item.unread === true).length;
-        const tbhs = state.tbhPendingRequests.filter((item) => !item.opened_at).length + state.tbhInboxItems.filter((item) => !item.opened_at).length;
-        const askMe = (state.anonymousInbox?.questions || []).filter((item) => !item.opened_at).length;
-        return { all: polls + tbhs + askMe, polls, tbhs, ask_me: askMe };
-    }
 
     function renderPersonalInboxControls() {
         const controls = $("#personalInboxControls");
@@ -130,7 +127,7 @@ export function createFeedView(context) {
             normalizeReactionState(item);
             const title = state.feedType === "personal" ? `${item.is_nomination ? `<img class="feed-nomination-icon" src="../assets/app/crown.webp" alt="" width="22" height="22" decoding="async"> ` : ""}<strong>You</strong> got ${item.is_nomination ? "nominated" : "voted"}` : `<strong>${escapeHTML(item.voted_for_name || item.contact_name || "A classmate")}</strong> got voted`;
             const detail = context.formatVoterHint(item);
-            return { key: `poll:${item.question_answer_id}`, timestamp: item.timestamp, item, html: `<article class="feed-card vote-feed-row" data-answer-id="${item.question_answer_id}" data-feed-detail="${item.question_answer_id}" role="button" tabindex="0" aria-label="Open poll details: ${escapeHTML(item.question_text)}">${feedAvatar(item)}<div class="feed-body"><div class="feed-meta"><span>${title}</span></div><div class="feed-question">${escapeHTML(item.question_text)}</div><div class="feed-detail-row">${detail ? `<span class="feed-answer">${escapeHTML(detail)}</span>` : "<span></span>"}<time>${escapeHTML(relativeTime(item.timestamp))}</time></div></div>${reactionControlMarkup(item, "poll", item.question_answer_id)}${commentControlMarkup(item, "poll", item.question_answer_id)}</article>` };
+            return { key: `poll:${item.question_answer_id}`, timestamp: item.timestamp, item, html: `<article class="feed-card vote-feed-row" data-answer-id="${item.question_answer_id}" data-feed-detail="${item.question_answer_id}">${cardOpenButton(`Open poll details: ${item.question_text}`)}${feedAvatar(item)}<div class="feed-body"><div class="feed-meta"><span>${title}</span></div><div class="feed-question">${escapeHTML(item.question_text)}</div><div class="feed-detail-row">${detail ? `<span class="feed-answer">${escapeHTML(detail)}</span>` : "<span></span>"}<time>${escapeHTML(relativeTime(item.timestamp))}</time></div></div>${reactionControlMarkup(item, "poll", item.question_answer_id)}${commentControlMarkup(item, "poll", item.question_answer_id)}</article>` };
         });
         const rows = [...anonymousRows, ...personalTbhRows, ...schoolTbhRows, ...voteRows];
         const sortedRows = rows.sort((left, right) => state.feedType === "school" && state.schoolFeedSort === "hottest" ? schoolHotScore(right) - schoolHotScore(left) : (Date.parse(right.timestamp) || 0) - (Date.parse(left.timestamp) || 0));

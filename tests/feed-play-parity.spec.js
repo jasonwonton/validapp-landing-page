@@ -208,3 +208,72 @@ test('feed refreshes itself in place on return to the foreground after 60 s', as
     await expect(page.locator("[data-feed-detail='live-poll-1']")).toHaveCount(0);
     await expect(existing).toBeVisible();
 });
+
+test('feed rows use short iOS timestamps that stay inside their cards', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 700 });
+    await signIn(page);
+    for (const panel of ['Inbox', 'School']) {
+        if (panel === 'School') await page.getByRole('button', { name: 'School', exact: true }).click();
+        const times = page.locator('#feedList time');
+        await expect(times.first()).toBeVisible();
+        const results = await times.evaluateAll((nodes) => nodes.map((node) => {
+            const card = node.closest('article, button');
+            const box = node.getBoundingClientRect();
+            const cardBox = card.getBoundingClientRect();
+            return { text: node.textContent, inside: box.left >= cardBox.left - 0.5 && box.right <= cardBox.right + 0.5, clipped: node.scrollWidth > node.clientWidth + 1 };
+        }));
+        for (const result of results) {
+            expect(result.text).toMatch(/^(now|\d+[mhd]|[A-Z][a-z]{2} \d{1,2})$/);
+            expect(result.inside, result.text).toBe(true);
+            expect(result.clipped, result.text).toBe(false);
+        }
+    }
+});
+
+test('Polls chip counts new polls per Inbox visit like iOS, without an API unread flag', async ({ page }) => {
+    await signIn(page);
+    const pollsChip = page.locator('[data-inbox-filter="polls"] [data-inbox-count]');
+    await expect(page.locator('#feedList [data-feed-detail]').first()).toBeVisible();
+    const polls = await page.locator('#feedList [data-feed-detail]').count();
+    expect(polls).toBeGreaterThan(0);
+    // First visit on a device: the first page is new and stays counted for the visit.
+    await expect(pollsChip).toHaveText(String(polls));
+    await page.getByRole('button', { name: 'Profile', exact: true }).click();
+    await page.getByRole('button', { name: 'Feed', exact: true }).click();
+    // Opening the Inbox marked them read; the next visit starts clean.
+    await expect(pollsChip).toBeHidden();
+});
+
+test('feed controls answer to 44px hit areas without changing their drawing', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await signIn(page);
+    const hits = await page.evaluate(() => {
+        // Probe just inside a 44px target measured from the control's centre.
+        const probe = (selector, dx, dy) => {
+            const element = document.querySelector(selector);
+            const box = element.getBoundingClientRect();
+            const hit = document.elementFromPoint(box.left + box.width / 2 + dx, box.top + box.height / 2 + dy);
+            return { size: [Math.round(box.width), Math.round(box.height)], hit: hit === element || element.contains(hit) };
+        };
+        return {
+            reactionCountAbove: probe('#feedList .reaction-count-button', 0, -21),
+            reactionPickerBelow: probe('#feedList .reaction-picker-button', 0, 21),
+            commentAbove: probe('#feedList .comment-count-button', 0, -21),
+            inboxChipBelow: probe('[data-inbox-filter="polls"]', 0, 21),
+        };
+    });
+    for (const [name, result] of Object.entries(hits)) expect(result.hit, name).toBe(true);
+    expect(hits.reactionCountAbove.size).toEqual([26, 32]);
+    const tbhMenu = await page.locator('.tbh-row-menu summary').first().boundingBox();
+    expect(tbhMenu.width).toBeGreaterThanOrEqual(44);
+    expect(tbhMenu.height).toBeGreaterThanOrEqual(44);
+    // Cards are not buttons that contain buttons.
+    expect(await page.locator('#feedList [role="button"] button').count()).toBe(0);
+    await expect(page.getByRole('button', { name: /^Open poll details:/ }).first()).toBeVisible();
+    await page.locator('[data-feed-detail="9001"]').click();
+    for (const name of ['Close', 'More poll actions']) {
+        const box = await page.locator('#feedDetailDialog').getByRole('button', { name, exact: true }).boundingBox();
+        expect(box.height, name).toBeGreaterThanOrEqual(44);
+        expect(box.width, name).toBeGreaterThanOrEqual(44);
+    }
+});
