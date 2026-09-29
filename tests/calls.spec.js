@@ -373,3 +373,83 @@ test("leaving the page asks for confirmation only while a call is in progress", 
     await expect(page.locator(".call-overlay")).not.toBeVisible();
     expect(await leaveBlocked()).toBe(false);
 });
+
+test('Answer from a call notification accepts and joins without ringing again', async ({ page }) => {
+    await installCallHarness(page); await installToneProbe(page);
+    await page.evaluate(() => __calls.open('incoming-1', { answer: true }));
+    await expect(page.locator('[data-call-active-actions]')).toBeVisible();
+    await expect(page.locator('.call-overlay')).not.toHaveClass(/is-ringing/);
+    const names = await page.evaluate(() => __callLog.map(([name]) => name));
+    expect(names.indexOf('get')).toBeLessThan(names.indexOf('accept'));
+    expect(names.indexOf('accept')).toBeLessThan(names.indexOf('join'));
+    await page.locator('[data-call-hangup]').click();
+});
+
+test('Answer while the page already rings for that call accepts it', async ({ page }) => {
+    await installCallHarness(page);
+    await page.evaluate(() => __calls.handleRealtimeEvent({ type: 'call_started', call_id: 'incoming-1', actor_user_id: 'user-2' }));
+    await expect(page.locator('.call-overlay')).toHaveClass(/is-ringing/);
+    await page.evaluate(() => __calls.open('incoming-1', { answer: true }));
+    await expect(page.locator('[data-call-active-actions]')).toBeVisible();
+    expect(await page.evaluate(() => __callLog.filter(([name]) => name === 'accept').length)).toBe(1);
+    await page.locator('[data-call-hangup]').click();
+});
+
+for (const [state, outcome] of [['accepted', 'Answered on another device'], ['declined', 'Call declined']]) {
+    test(`ringing stops when the call is ${state} on another device`, async ({ page }) => {
+        await installCallHarness(page);
+        await page.evaluate(() => __calls.handleRealtimeEvent({ type: 'call_started', call_id: 'incoming-1', actor_user_id: 'user-2' }));
+        await expect(page.locator('.call-overlay')).toHaveClass(/is-ringing/);
+        await page.evaluate(async (viewerState) => {
+            __callAPI.getCall = async () => ({ id: 'incoming-1', chat_id: 'chat-1', state: viewerState === 'accepted' ? 'active' : 'ringing', viewer_invitation_state: viewerState, media_type: 'audio', caller_name: 'Maya' });
+            await __calls.handleRealtimeEvent({ type: 'call_ended', call_id: 'incoming-1' });
+        }, state);
+        await expect(page.locator('[data-call-status]')).toHaveText(outcome);
+        await expect(page.locator('.call-overlay')).not.toHaveClass(/is-ringing/);
+        expect(await page.evaluate(() => __callLog.some(([name]) => ['join', 'end', 'leave', 'decline'].includes(name)))).toBe(false);
+    });
+}
+
+async function signInToIncomingCall(page, search) {
+    await installCallHarness(page, { chatUI: true });
+    await page.evaluate(async () => {
+        const { DemoAPI } = await import('/app/demo-api.js');
+        Object.assign(DemoAPI.prototype, __callAPI);
+    });
+    await page.evaluate((query) => history.replaceState(null, '', `/app/?${query}`), search);
+    await page.getByRole('button', { name: /^sign in$/i }).click();
+}
+
+test('the ?call= deep link with answer=1 joins once and drops answer from the URL', async ({ page }) => {
+    await signInToIncomingCall(page, 'demo=1&signin=1&calls=1&tab=chats&chat=chat-noah&call=incoming-1&answer=1');
+    await expect(page.locator('.call-overlay[open] [data-call-active-actions]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => __callLog.filter(([name]) => name === 'accept').length)).toBe(1);
+    expect(await page.evaluate(() => __callLog.some(([name]) => name === 'join'))).toBe(true);
+    const url = new URL(page.url());
+    expect(url.searchParams.get('call')).toBe('incoming-1');
+    expect(url.searchParams.has('answer')).toBe(false);
+    await page.screenshot({ path: test.info().outputPath('answered-from-notification.png') });
+    await page.locator('.call-overlay[open] [data-call-hangup]').click();
+});
+
+test('the ?call= deep link without answer shows the ringer to accept or decline', async ({ page }) => {
+    await signInToIncomingCall(page, 'demo=1&signin=1&calls=1&tab=chats&chat=chat-noah&call=incoming-1');
+    await expect(page.locator('.call-overlay[open] [data-call-accept]')).toBeVisible();
+    await expect(page.locator('.call-overlay[open] [data-call-status]')).toContainText('Incoming voice call');
+    expect(await page.evaluate(() => __callLog.some(([name]) => name === 'accept'))).toBe(false);
+    await page.locator('.call-overlay[open] [data-call-decline]').click();
+    await expect.poll(() => page.evaluate(() => __callLog.some(([name, id]) => name === 'decline' && id === 'incoming-1'))).toBe(true);
+});
+
+test('the service worker hands a call to the visible app and retires it there', async ({ page }) => {
+    await signInToIncomingCall(page, 'demo=1&signin=1&calls=1&tab=feed');
+    await expect(page.locator('body.authenticated')).toBeVisible();
+    const post = (data) => page.evaluate((message) => navigator.serviceWorker.dispatchEvent(new MessageEvent('message', { data: message })), data);
+    await post({ type: 'VALID_INCOMING_CALL', callId: 'incoming-1', chatId: 'chat-1' });
+    await expect(page.locator('.call-overlay[open] [data-call-accept]')).toBeVisible();
+    await page.evaluate(() => { __callAPI.getCall = async () => ({ id: 'incoming-1', chat_id: 'chat-1', state: 'cancelled', viewer_invitation_state: 'missed', media_type: 'audio' }); });
+    await page.evaluate(async () => { const { DemoAPI } = await import('/app/demo-api.js'); DemoAPI.prototype.getCall = __callAPI.getCall; });
+    await post({ type: 'VALID_CALL_ENDED', callId: 'incoming-1', chatId: 'chat-1', reason: 'missed' });
+    await expect(page.locator('.call-overlay[open] [data-call-status]')).toHaveText('Call cancelled');
+    await expect(page.getByRole('button', { name: 'Accept call' })).toHaveCount(0);
+});

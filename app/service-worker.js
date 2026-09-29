@@ -286,6 +286,55 @@ async function clientViewingChat(chatId) {
 // suppressed chat push is still shown silently and closed at once.
 const appleWebKit = () => /AppleWebKit/.test(self.navigator?.userAgent || "") && !/Chrome|Chromium|Edg\//.test(self.navigator.userAgent);
 
+async function showSuppressedOnWebKit(title, data) {
+    if (!appleWebKit()) return;
+    const shown = `valid-suppressed-${Date.now()}`;
+    await self.registration.showNotification(title, { body: "", tag: shown, silent: true, data });
+    (await self.registration.getNotifications({ tag: shown })).forEach((notification) => notification.close());
+}
+
+// A visible Valid window rings in the page itself (calls/index.js), so the
+// worker hands the call to it instead of showing a second, system ringer.
+async function visibleAppWindow() {
+    return (await appWindows()).find((client) => client.visibilityState === "visible") || null;
+}
+
+const callTag = (callId) => `valid-call-${callId}`;
+
+async function closeCallNotifications(callId) {
+    if (!callId) return;
+    (await self.registration.getNotifications({ tag: callTag(callId) })).forEach((notification) => notification.close());
+}
+
+// call_ended: the ring stopped for this person (answered or declined on any
+// device, or missed). With Valid on screen the ringing notification is just
+// closed; otherwise the server's quiet notice replaces it under the same tag
+// (every push must show something, or Safari/Firefox withdraw the
+// subscription and Chrome shows a generic one). Replacing by tag instead of
+// closing first matters: Chrome keys persistent notifications by tag, so a
+// close() still in flight could dismiss the replacement.
+async function presentCallEnded(payload, url) {
+    const callId = String(payload.data?.call_id || "");
+    const chatId = String(payload.data?.chat_id || url.searchParams.get("chat") || "");
+    for (const client of await appWindows()) client.postMessage({ type: "VALID_CALL_ENDED", callId, chatId, reason: payload.data?.reason || "" });
+    const title = payload.title || "Valid";
+    const data = { url: url.href, type: "call_ended", callId, chatId };
+    if (await visibleAppWindow()) {
+        await closeCallNotifications(callId);
+        return showSuppressedOnWebKit(title, data);
+    }
+    await self.registration.showNotification(title, {
+        body: payload.body || "",
+        icon: "/assets/pwa/icon-192.png",
+        badge: "/assets/pwa/badge-96.png",
+        tag: callId ? callTag(callId) : undefined,
+        renotify: false,
+        silent: true,
+        timestamp: Number(payload.timestamp) || Date.now(),
+        data,
+    });
+}
+
 async function presentPush(payload) {
     const type = notificationType(payload);
     const url = new URL(safeNotificationURL(payload.url));
@@ -300,13 +349,10 @@ async function presentPush(payload) {
         const viewer = await clientViewingChat(chatId);
         if (viewer) {
             viewer.postMessage({ type: "VALID_PUSH_IN_ACTIVE_CHAT", chatId, payload: { title, body: payload.body, type, url: data.url } });
-            if (!appleWebKit()) return;
-            const shown = `valid-suppressed-${Date.now()}`;
-            await self.registration.showNotification(title, { body: payload.body || "", tag: shown, silent: true, data });
-            (await self.registration.getNotifications({ tag: shown })).forEach((notification) => notification.close());
-            return;
+            return showSuppressedOnWebKit(title, data);
         }
     }
+    if (type === "call_ended") return presentCallEnded(payload, url);
 
     const options = {
         body: payload.body || "You have a new update.",
@@ -319,12 +365,18 @@ async function presentPush(payload) {
         data,
     };
     if (type === "incoming_call") {
-        const callId = String(payload.data?.call_id || "");
+        const callId = String(payload.data?.call_id || url.searchParams.get("call") || "");
         const chatId = String(payload.data?.chat_id || url.searchParams.get("chat") || "");
         const callURL = new URL("/app/", self.location.origin);
         callURL.search = new URLSearchParams({ signin: "1", tab: "chats", chat: chatId, call: callId }).toString();
+        const page = await visibleAppWindow();
+        if (page) {
+            // The page's own ringer (with sound) takes it from here.
+            page.postMessage({ type: "VALID_INCOMING_CALL", callId, chatId });
+            return showSuppressedOnWebKit(title, data);
+        }
         Object.assign(options, {
-            tag: tag || `valid-call-${callId}`,
+            tag: tag || callTag(callId),
             renotify: true,
             requireInteraction: true,
             vibrate: [400, 200, 400, 200, 400, 200, 400],
@@ -355,6 +407,7 @@ async function appWindows() {
 }
 
 async function declineCall(data) {
+    await closeCallNotifications(data.callId);
     const [client] = await appWindows();
     // An open page declines with its signed-in API client.
     if (client) return client.postMessage({ type: "VALID_CALL_DECLINE", callId: data.callId, chatId: data.chatId });
@@ -386,5 +439,9 @@ self.addEventListener("notificationclick", (event) => {
         event.waitUntil(declineCall(data));
         return;
     }
-    event.waitUntil(openNotificationTarget(safeNotificationURL(data.url)));
+    const target = new URL(safeNotificationURL(data.url));
+    // Answer joins straight away; a tap on the ringing notification itself
+    // opens the in-app ringer so the person can still choose.
+    if (event.action === "answer" && data.callId) target.searchParams.set("answer", "1");
+    event.waitUntil(openNotificationTarget(target.href));
 });
