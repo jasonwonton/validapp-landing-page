@@ -549,8 +549,10 @@ export class ValidAPI {
         return this.request(`/users/${userId}/questions/unanswered`);
     }
 
-    getConfig() {
-        return this.request("/config", { auth: false });
+    async getConfig() {
+        // Media code reads the latest /config (photo quality, ingest flag) from here.
+        this.config = await this.request("/config", { auth: false });
+        return this.config;
     }
 
     getWebPushConfig() {
@@ -850,7 +852,7 @@ export class ValidAPI {
         return this.request(`/users/${userId}/story-uploads/${mediaAssetId}/finalize`, { method: "POST", timeoutMs: 60_000 });
     }
 
-    publishStory(userId, mediaAssetId, { caption = null, overlay = null, clientRequestId = crypto.randomUUID() } = {}) {
+    publishStory(userId, mediaAssetId, { caption = null, overlay = null, clientRequestId = crypto.randomUUID(), captureId = null } = {}) {
         const overlayText = overlay?.text?.trim() || null;
         return this.request(`/users/${userId}/stories`, {
             method: "POST",
@@ -861,6 +863,7 @@ export class ValidAPI {
                 text_overlay: overlayText,
                 text_overlay_x: overlayText ? Number(overlay.x ?? 0.5) : null,
                 text_overlay_y: overlayText ? Number(overlay.y ?? 0.5) : null,
+                ...(captureId ? { capture_id: captureId } : {}),
             }),
         });
     }
@@ -1036,7 +1039,7 @@ export class ValidAPI {
         });
     }
 
-    createChatMediaUpload(userId, { contentType, sizeBytes, thumbnailSizeBytes = null, durationMs = null, viewOnce = false, clientRequestId = crypto.randomUUID() }) {
+    createChatMediaUpload(userId, { contentType, sizeBytes, thumbnailSizeBytes = null, durationMs = null, previewHash = null, viewOnce = false, clientRequestId = crypto.randomUUID() }) {
         const payload = {
             content_type: contentType,
             size_bytes: sizeBytes,
@@ -1045,6 +1048,7 @@ export class ValidAPI {
         };
         if (thumbnailSizeBytes !== null) payload.thumbnail_size_bytes = thumbnailSizeBytes;
         if (durationMs !== null) payload.duration_ms = durationMs;
+        if (previewHash && contentType === "image/jpeg") payload.preview_hash = previewHash;
         return this.request(`/users/${userId}/chat-media-uploads`, {
             method: "POST",
             body: JSON.stringify(payload),
@@ -1206,31 +1210,54 @@ export class ValidAPI {
             client_request_id: clientRequestId,
         };
         if (secondarySizeBytes !== null && secondarySizeBytes !== undefined) body.secondary_size_bytes = secondarySizeBytes;
-        return this.request(`/users/${userId}/daily-highlight-uploads?delivery=proxy`, {
+        // Direct to storage; each part also gets a same-origin relay URL
+        // (proxy_*) that putDirectUpload falls back to when R2 is unreachable.
+        return this.request(`/users/${userId}/daily-highlight-uploads`, {
             method: "POST",
             body: JSON.stringify(body),
         });
     }
 
-    async putDirectUpload(file, session, { onProgress } = {}) {
+    async putDirectUpload(file, session, { onProgress, signal } = {}) {
         if (session.already_finalized) return;
-        await new Promise((resolve, reject) => {
+        try {
+            await this.putUpload(file, session.upload_url, session.upload_method, session.required_headers, { onProgress, signal });
+        } catch (error) {
+            // A filtered network or missing CORS rule fails at the network
+            // level (status 0) or with 403; the same object can go via the relay.
+            const relay = session.proxy_upload_url;
+            if (!relay || signal?.aborted || error.cancelled || (error.status !== 0 && error.status !== 403)) throw error;
+            const headers = { "Content-Type": file.type || "image/jpeg" };
+            if (this.token) headers.Authorization = `Bearer ${this.token}`;
+            await this.putUpload(file, relay, "PUT", headers, { onProgress, signal });
+        }
+    }
+
+    putUpload(file, url, method, headers, { onProgress, signal } = {}) {
+        return new Promise((resolve, reject) => {
+            const cancelled = () => Object.assign(new APIError("The media upload was cancelled.", 0), { cancelled: true });
+            if (signal?.aborted) return reject(cancelled());
             const request = new XMLHttpRequest();
-            const uploadURL = new URL(session.upload_url, location.href);
-            request.open(session.upload_method || "PUT", uploadURL.href, true);
-            request.timeout = 60_000;
+            const uploadURL = new URL(url, location.href);
+            request.open(method || "PUT", uploadURL.href, true);
+            // A minute plus a second per 100 KB, so large videos on slow
+            // networks are not cut off while they are still moving.
+            request.timeout = 60_000 + Math.floor(Number(file.size || 0) / 100_000) * 1000;
             request.withCredentials = uploadURL.origin === location.origin;
-            for (const [name, value] of Object.entries(session.required_headers || {})) request.setRequestHeader(name, value);
+            for (const [name, value] of Object.entries(headers || {})) request.setRequestHeader(name, value);
             request.upload.addEventListener("progress", (event) => {
                 if (event.lengthComputable) onProgress?.(event.loaded / event.total);
             });
-            request.addEventListener("load", () => {
+            const abort = () => request.abort();
+            signal?.addEventListener("abort", abort, { once: true });
+            const settle = (callback) => () => { signal?.removeEventListener("abort", abort); callback(); };
+            request.addEventListener("load", settle(() => {
                 if (request.status >= 200 && request.status < 300) resolve();
                 else reject(new APIError("The media could not be uploaded. Please try again.", request.status));
-            });
-            request.addEventListener("error", () => reject(new APIError("The media could not be uploaded. Check your connection.", 0)));
-            request.addEventListener("abort", () => reject(new APIError("The media upload was cancelled.", 0)));
-            request.addEventListener("timeout", () => reject(new APIError("The upload timed out. Your saved photo can be retried.", 0)));
+            }));
+            request.addEventListener("error", settle(() => reject(new APIError("The media could not be uploaded. Check your connection.", 0))));
+            request.addEventListener("abort", settle(() => reject(signal?.aborted ? cancelled() : new APIError("The media upload was cancelled.", 0))));
+            request.addEventListener("timeout", settle(() => reject(new APIError("The upload timed out. Your saved media can be retried.", 0))));
             request.send(file);
         });
     }

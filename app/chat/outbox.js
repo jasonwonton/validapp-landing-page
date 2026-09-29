@@ -311,7 +311,26 @@ export async function markChatMediaOutboxAttempt(id, now = Date.now()) {
     const attempts = Number(record.attempts || 0) + 1;
     const updated = { ...record, attempts, next_attempt_at: now + Math.min(5 * 60_000, 2_000 * (2 ** Math.min(attempts, 7))) };
     await withNamedStore(MEDIA_STORE_NAME, "readwrite", (store) => requestResult(store.put(updated)));
+    requestMediaOutboxSync();
     return hydrateMediaRecord(updated);
+}
+
+// Records how far a saved upload got (asset ids, parts already PUT, segments
+// sent) so a retry resumes instead of uploading everything again.
+export async function patchChatMediaOutbox(id, patch) {
+    if (!id || !patch) return null;
+    const record = await withNamedStore(MEDIA_STORE_NAME, "readonly", (store) => requestResult(store.get(String(id))));
+    if (!record) return null;
+    const { file, thumbnail, secondary, id: _id, user_id: _user, ...metadata } = patch;
+    const updated = { ...record, ...metadata };
+    await withNamedStore(MEDIA_STORE_NAME, "readwrite", (store) => requestResult(store.put(updated)));
+    return updated;
+}
+
+// Background Sync (Android Chrome): the service worker asks open pages to
+// drain this outbox when connectivity returns.
+export function requestMediaOutboxSync() {
+    navigator.serviceWorker?.ready?.then((registration) => registration.sync?.register("valid-media-outbox")).catch(() => {});
 }
 
 export async function removeChatMediaOutbox(id) {
