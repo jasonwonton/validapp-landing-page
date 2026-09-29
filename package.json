@@ -18,7 +18,8 @@
     "test:seo": "node --test scripts/tests/seo.test.mjs",
     "test:auth-recovery": "node --test scripts/tests/auth-route-policy.test.mjs scripts/tests/auth-route-recovery.test.mjs scripts/tests/session-recovery.test.mjs",
     "test:weekly-game": "node --test scripts/tests/weekly-game.test.mjs && playwright test tests/weekly-game.spec.js",
-    "test:foundations": "node --test scripts/tests/media-url.test.mjs scripts/tests/user-message.test.mjs"
+    "test:foundations": "node --test scripts/tests/media-url.test.mjs scripts/tests/user-message.test.mjs",
+    "test:shell": "node --test scripts/tests/service-worker-shell.test.mjs scripts/tests/service-worker-media-cache.test.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
