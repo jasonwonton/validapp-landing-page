@@ -5446,7 +5446,9 @@ async function openQuestionArtworkCrop(file) {
             $("#questionImage").value = "";
             resetQuestionArtworkPreview();
         }
-        $("#questionStatus").textContent = "That photo format could not be decoded by this browser. Choose a JPEG or PNG, or export the photo as Most Compatible.";
+        $("#questionStatus").textContent = /hei[cf]/i.test(`${file.type} ${file.name}`)
+            ? "This photo is HEIC; choose a JPEG/PNG or change the camera format."
+            : "That photo format could not be decoded by this browser. Choose a JPEG or PNG, or export the photo as Most Compatible.";
         updateQuestionSubmissionUI();
     }
 }
