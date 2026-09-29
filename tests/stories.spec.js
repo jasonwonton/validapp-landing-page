@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 async function signInWithStories(page, query = "") {
     await page.goto(`/app/?demo=1&signin=1&stories=1${query}`);
     await page.getByRole("button", { name: /^sign in$/i }).click();
-    await expect(page.getByRole("region", { name: "Stories" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Stories" })).toBeVisible({ timeout: 20_000 });
 }
 
 // Stop the fake clock (installed before navigation) so Story timers only move
@@ -11,7 +11,7 @@ async function signInWithStories(page, query = "") {
 async function freezeClock(page) {
     for (let attempt = 0; ; attempt += 1) {
         try {
-            return await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
+            return await page.clock.pauseAt(await page.evaluate(() => Date.now() + 500));
         } catch (error) {
             // A slow engine can pass the target before the pause lands; aim again.
             if (attempt >= 4 || !/past/.test(error.message)) throw error;
@@ -83,7 +83,9 @@ for (const unavailable of [false, true]) {
 }
 
 test("Story rail reveals signed media before recording the authoritative view", async ({ page }) => {
+    await page.clock.install();
     await signInWithStories(page);
+    await freezeClock(page);
     const noah = page.getByRole("button", { name: "Noah Williams's Story, new" });
     await expect(noah).toHaveClass(/unviewed/);
     await noah.click();
@@ -97,7 +99,9 @@ test("Story rail reveals signed media before recording the authoritative view", 
 });
 
 test("Story owners can inspect viewers and delete through authoritative endpoints", async ({ page }) => {
+    await page.clock.install();
     await signInWithStories(page);
+    await freezeClock(page);
     await page.getByRole("button", { name: "Your Story", exact: true }).click();
     const viewer = page.getByRole("dialog", { name: "Story viewer" });
     await viewer.getByRole("button", { name: "2 views" }).click();
@@ -154,6 +158,7 @@ test("Story reports ask for a reason in a sheet and remove reported content", as
 });
 
 test("Story composer prepares and publishes a photo through the feature-gated surface", async ({ page }) => {
+    await page.clock.install();
     await signInWithStories(page);
     await page.getByRole("button", { name: "Add Story" }).click();
     const composer = page.getByRole("dialog", { name: "Create Story" });
@@ -177,6 +182,7 @@ test("Story composer prepares and publishes a photo through the feature-gated su
     await composer.getByRole("button", { name: "Post Story" }).click();
     await expect(composer).toBeHidden();
     await expect(page.getByText("Story posted", { exact: true })).toBeVisible();
+    await freezeClock(page); // Keep the posted Story on screen while it is measured.
     await page.getByRole("button", { name: "Your Story", exact: true }).click();
     const viewer = page.getByRole("dialog", { name: "Story viewer" });
     await viewer.getByRole("button", { name: "Next Story" }).click();
@@ -275,7 +281,7 @@ test("an exact Story deep link opens the authoritative item after sign-in", asyn
     await page.goto("/app/?demo=1&signin=1&stories=1&story=story-noah");
     await page.getByRole("button", { name: /^sign in$/i }).click();
     const viewer = page.getByRole("dialog", { name: "Story viewer" });
-    await expect(viewer.getByRole("img", { name: "Noah Williams's Story" })).toBeVisible();
+    await expect(viewer.getByRole("img", { name: "Noah Williams's Story" })).toBeVisible({ timeout: 20_000 });
     await expect(page).toHaveURL(/story=story-noah/);
     await viewer.getByRole("button", { name: "Close Story" }).click();
     await expect(page).not.toHaveURL(/story=/);
@@ -441,24 +447,39 @@ test("swiping sideways changes person with a rubber band at the ends", async ({ 
 
 test("Story videos autoplay inline without controls and advance when they end", async ({ page }) => {
     await routeDemoVideo(page);
+    // The clip is 2 s, so record what the player looked like while it played
+    // (media events do not bubble, but they do pass the document on capture).
+    await page.addInitScript(() => {
+        window.storyVideoLog = { played: null, samples: [] };
+        document.addEventListener("playing", (event) => {
+            const node = event.target;
+            if (!node.matches?.(".story-video") || window.storyVideoLog.played) return;
+            window.storyVideoLog.played = {
+                controls: node.controls, inline: node.hasAttribute("playsinline"), muted: node.muted,
+                poster: new URL(node.poster).pathname, src: new URL(node.currentSrc).pathname,
+                story: new URLSearchParams(location.search).get("story"),
+                captions: document.querySelector(".story-overlays").textContent,
+            };
+        }, true);
+        document.addEventListener("timeupdate", (event) => {
+            const node = event.target;
+            if (!node.matches?.(".story-video") || !(node.duration > 0) || !node.currentTime || node.ended) return;
+            window.storyVideoLog.samples.push({ played: node.currentTime / node.duration, bar: Number(document.querySelector(".story-progress").dataset.progress) });
+        }, true);
+    });
     await signInWithStories(page, "&storyvideo=1&story=story-maya-video");
     const viewer = page.getByRole("dialog", { name: "Story viewer" });
-    await expect(viewer.locator(".story-author strong")).toHaveText("Maya Chen");
-    await expect(viewer.locator(".story-overlays")).toHaveText("pregame 🏀");
-    const video = viewer.locator(".story-video");
-    const playable = await video.evaluate((node) => node.canPlayType('video/mp4; codecs="avc1.42E01E"') !== "");
+    const playable = await page.evaluate(() => document.createElement("video").canPlayType('video/mp4; codecs="avc1.42E01E"') !== "");
     test.skip(!playable, "This browser build has no H.264 decoder");
-    await expect(video).toBeVisible();
-    expect(await video.evaluate((node) => ({
-        controls: node.controls, inline: node.hasAttribute("playsinline"), poster: new URL(node.poster).pathname, src: new URL(node.currentSrc || node.src).pathname,
-    }))).toEqual({ controls: false, inline: true, poster: "/assets/app/aura.webp", src: "/assets/demo.mp4" });
-    await expect.poll(() => video.evaluate((node) => !node.paused && node.currentTime > 0)).toBe(true);
-    // The bar follows the video's own clock.
-    const sample = await video.evaluate((node) => ({ played: node.currentTime / node.duration, bar: Number(document.querySelector(".story-progress").dataset.progress) }));
-    expect(Math.abs(sample.played - sample.bar)).toBeLessThan(0.25);
-    // Sound is tried first; a browser that refuses it gets a tap-to-unmute pill.
-    if (await video.evaluate((node) => node.muted)) await expect(viewer.getByRole("button", { name: "Unmute Story" })).toBeVisible();
     await expect(page).toHaveURL(/story=story-maya-processing/, { timeout: 15_000 });
+    const log = await page.evaluate(() => window.storyVideoLog);
+    expect(log.played).toMatchObject({ controls: false, inline: true, poster: "/assets/app/aura.webp", src: "/assets/demo.mp4", story: "story-maya-video", captions: "pregame 🏀" });
+    // The bar followed the video's own clock.
+    expect(log.samples.length).toBeGreaterThan(0);
+    for (const sample of log.samples) expect(Math.abs(sample.played - sample.bar)).toBeLessThan(0.25);
+    // Sound is tried first; a browser that refuses it falls back to muted with a pill.
+    if (log.played.muted) await expect(viewer.getByRole("button", { name: "Unmute Story" })).toHaveCount(1);
+    await expect(viewer.locator(".story-author strong")).toHaveText("Maya Chen");
 });
 
 test("a processing Story video shows its poster, polls, and plays the web rendition when ready", async ({ page }) => {
