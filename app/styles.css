@@ -816,8 +816,7 @@ h3 { font-size: 1.45rem; }
 .poll-summary-votes { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border-radius: 999px; background: #ffd5df; }
 .share-platform-row { display: flex; align-items: center; justify-content: center; gap: 16px; }
 .share-platform-label { font-size: 1.1rem; }
-/* SocialSharingButtons.swift: 58pt brand squares (radius 16, black 20% shadow r8 y6);
-   SnapchatButtonStyle: 56pt yellow, radius 18, 44pt glyph + 18pt label, 8pt apart. */
+/* SocialSharingButtons.swift icons + SnapchatButtonStyle. */
 .share-platform-button { flex: 0 0 auto; width: 58px; height: 58px; display: grid; place-items: center; overflow: hidden; padding: 0; border: 0; border-radius: 16px; background: transparent; cursor: pointer; box-shadow: 0 6px 16px rgba(0,0,0,.2); }
 .share-platform-button > .share-platform-art { width: 100%; height: 100%; display: block; object-fit: contain; }
 .share-platform-button.snapchat { background: #fffc00; }
@@ -1301,11 +1300,7 @@ body.play-active .play-actions { margin: 0; }
 .contact-invite-extras .invite-reward-card { gap: 7px; padding: 12px 14px; border-width: 2px; border-radius: 16px; text-align: left; }
 .contact-invite-extras .invite-reward-card strong { font-size: .95rem; line-height: 1.2; }
 .contact-invite-extras .invite-reward-card small { font-size: .76rem; }
-/* Poll detail geometry from QuestionDetailView.swift / PollSnapshot.swift
-   (QuestionCardCoreView): VStack spacing 16, question 28pt with 16pt margins,
-   square artwork with 24pt side padding, 2-column options 10pt apart with 10pt
-   margins and 100pt minimum height. The artwork frame is the only flexible part
-   so the whole poll and its engagement row fit in the first screen. */
+/* PollSnapshot.swift QuestionCardCoreView; only the artwork flexes so the poll fits one screen. */
 .feed-detail-content { width: min(480px, 100%); display: grid; gap: 16px; margin: 0 auto; padding: 16px 0 calc(12px + env(safe-area-inset-bottom)); }
 #feedDetailStatus { margin: 0 16px; }
 #feedDetailStatus:empty { display: none; }
@@ -1328,8 +1323,7 @@ body.play-active .play-actions { margin: 0; }
 .feed-detail-actions { display: grid; gap: 16px; }
 .feed-detail-actions .reveal-sender-button { order: -1; }
 .feed-detail-share { display: grid; gap: 0; padding: 0 10px 4px; }
-/* BottomCTAContainer + revealSenderButton: 56pt white card, 3pt outline,
-   radius 12, 10pt margins; 32pt crown leading a left-aligned 18pt label. */
+/* QuestionDetailView.swift BottomCTAContainer + revealSenderButton. */
 .reveal-sender-button { width: auto; min-height: 56px; display: flex; align-items: center; justify-content: center; gap: 10px; margin: 0 10px; padding: 6px 16px; border: 3px solid var(--outline); border-radius: 12px; background: var(--white); color: var(--ink); box-shadow: 0 3px 12px rgba(0,0,0,.15); font-size: clamp(16px, 4.6vw, 18px); line-height: 1.15; text-align: left; }
 .reveal-sender-button::before { content: ""; width: 32px; height: 32px; flex: 0 0 32px; background: url("../assets/app/crown.webp") center / contain no-repeat; }
 .reveal-sender-button > span { min-width: 0; display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; text-wrap: pretty; }
@@ -1745,8 +1739,7 @@ body:has(dialog.ui-sheet[open]) .toast[popover] { top: calc(env(safe-area-inset-
 :root[data-theme="dark"] .play-action-button.nominate:active { background: #63334d; }
 :root[data-theme="dark"] .nav-item { color: var(--muted); }
 :root[data-theme="dark"] .nav-item.active { color: var(--ink); }
-/* Six7Theme.six7BrandArtwork(): dim every bright brand bitmap in dark mode
-   (saturation .86, brightness -.16, contrast .94); brand share logos stay exact. */
+/* Six7Theme.six7BrandArtwork() in dark mode; share logos stay exact. */
 :root[data-theme="dark"] :is(img[src*="assets/app/"]:not([src$=".svg"], [src*="snapchat"], .share-platform-art), img[src*="valid_logo"], .aura-icon),
 :root[data-theme="dark"] .reveal-sender-button::before { filter: saturate(.86) brightness(.84) contrast(.94); }
 @media (prefers-contrast: more) {
@@ -1932,9 +1925,7 @@ body:has(dialog.ui-sheet[open]) .toast[popover] { top: calc(env(safe-area-inset-
 .blocked-user-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .blocked-users-dialog > [role="status"] { text-align: center; color: var(--muted); }
 
-/* Tap targets: every Feed control answers to at least 44 x 44 px. Where iOS keeps a
-   smaller visual (FeedReactionControl 36/26 x 34, inbox chips, ••• menus), a
-   transparent hit area extends the control without changing its drawing. */
+/* 44px hit areas around controls that keep the smaller iOS drawing. */
 .reaction-control { overflow: visible; }
 .reaction-control button, .tbh-row-menu summary, .detail-overflow-button { position: relative; }
 .reaction-control button::after, .comment-count-button::after, .tbh-row-menu summary::after, .detail-overflow-button::after { content: ""; position: absolute; }
@@ -1943,8 +1934,7 @@ body:has(dialog.ui-sheet[open]) .toast[popover] { top: calc(env(safe-area-inset-
 .detail-engagement-row .reaction-control button::after { inset: 0; }
 /* Extend upward: the card clips below (content-visibility paint containment). */
 .comment-count-button::after { inset: -12px -3px -2px; }
-/* Inbox chips stay 36px pills but take taps across 44px: the extra 4px above and
-   below is transparent border, and the outline is an inset shadow. */
+/* 36px chip drawn inside a 44px target (transparent border, inset-shadow outline). */
 .personal-inbox-filter-rail { padding-block: 0; margin-block: -3px -2px; }
 .personal-inbox-filter-rail button { height: 44px; border: 0 solid transparent; border-block-width: 4px; background-clip: padding-box; box-shadow: inset 0 0 0 2px var(--outline); }
 .personal-inbox-filter-rail button.active { box-shadow: inset 0 0 0 2px var(--peach); }
@@ -1952,8 +1942,7 @@ body:has(dialog.ui-sheet[open]) .toast[popover] { top: calc(env(safe-area-inset-
 .tbh-row-menu > span { top: 44px; }
 .detail-overflow-button::after { inset: -5px; }
 .detail-back-button { min-height: 44px; min-width: 44px; }
-/* The open button sits under the card's text (which still opens the card through
-   the list's click handler) so text stays directly clickable and selectable. */
+/* The open button sits under the card text, which opens the card through the list handler. */
 .feed-card { isolation: isolate; }
 .feed-card-open { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; border-radius: inherit; background: transparent; cursor: pointer; }
 .feed-card-open:focus-visible { outline: 3px solid var(--selection, var(--peach)); outline-offset: -3px; }
