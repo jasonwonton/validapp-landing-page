@@ -831,6 +831,7 @@ export class DemoAPI {
             enable_calls: this.demoCallsEnabled,
             enable_web_calls: this.demoCallsEnabled,
             enable_web_comments: new URLSearchParams(location.search).get("comments") !== "0",
+            enable_vault: new URLSearchParams(location.search).get("vault") !== "0",
         };
     }
 
@@ -887,6 +888,8 @@ export class DemoAPI {
     async getStoryViewers(_userId, storyId) { return { story_id: storyId, viewers: [{ user_id: "classmate-2", first_name: "Noah", last_name: "Williams", username: "noah", profile_picture_url: "../assets/app/lock.webp", viewed_at: ago(2), screenshot_count: 1, last_screenshot_at: ago(1), screen_capture_count: 0, last_screen_capture_at: null }], next_cursor: null }; }
     async deleteStory(_userId, storyId) { for (const author of this.storyAuthors()) author.items = author.items.filter((item) => item.id !== storyId); }
     async reportStory(_userId, storyId) { for (const author of this.storyAuthors()) author.items = author.items.filter((item) => item.id !== storyId); return { story_id: storyId, reported: true }; }
+    // Memories and Vault fixtures load on demand (vault/demo.js, vault/api.js).
+    async demoVault(action, ...args) { assertLocalDemo(); const { demoVault } = await import('./vault/demo.js'); return demoVault(this, action, args); }
 
     async updateChatPresence(userId, payload) {
         const enabled = this.demoActivityEnabled ?? (new URLSearchParams(location.search).get('presence') === '1');
