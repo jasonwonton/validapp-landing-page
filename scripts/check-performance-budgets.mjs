@@ -84,7 +84,9 @@ for (const entry of shellEntries) {
 // 785 KB: the camera, review editor and photo pipeline stay precached so a chat
 // photo can still be drafted offline and queued (core-flows offline journey).
 // Precache downloads after first paint; it does not delay the first screen.
-assert.ok(shellTransferEstimate <= 785_000, `Estimated app-shell transfer exceeds 785 KB (${shellTransferEstimate} bytes)`);
+// 790 KB (web-v107): config refresh, call-notification handoff and the chat media
+// fixes in the startup modules.
+assert.ok(shellTransferEstimate <= 790_000, `Estimated app-shell transfer exceeds 790 KB (${shellTransferEstimate} bytes)`);
 
 console.log(JSON.stringify({
     fontBytes,
