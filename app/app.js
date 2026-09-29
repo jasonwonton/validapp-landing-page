@@ -2060,7 +2060,7 @@ async function addBackupPasskey(trigger = null) {
         successHaptic();
         showToast("Backup passkey added");
     } catch (error) {
-        const message = error.message || "Could not add that passkey.";
+        const message = userMessage(error, "Could not add that passkey.");
         $("#passkeyEnrollmentStatus").textContent = message;
         showToast(message);
     } finally {
