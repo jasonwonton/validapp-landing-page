@@ -512,10 +512,18 @@ let layoutViewportProbes = null;
 let staleViewportTimers = [];
 
 function staleViewportCheckApplies() {
-    return isStandaloneApp() && Math.min(screen.width, screen.height) < 600 && matchMedia("(pointer: coarse)").matches;
+    // Installed phone apps only: a desktop or tablet window can legitimately
+    // change height without a keyboard.
+    return isStandaloneApp() && Math.min(screen.width, screen.height) < 600;
+}
+
+function viewportIsMeasurable() {
+    // Backgrounded or snapshotting pages can briefly report tiny sizes.
+    return window.innerWidth >= 200 && window.innerHeight >= 200;
 }
 
 function trackLayoutViewportBaseline() {
+    if (!viewportIsMeasurable()) return;
     const width = window.innerWidth;
     if (Math.abs(width - state.layoutBaselineWidth) > 80) {
         state.layoutBaselineWidth = width;
@@ -564,6 +572,7 @@ function applyLayoutViewportGap(gap, expected = 0) {
 }
 
 function checkStaleLayoutViewport({ nudge = true } = {}) {
+    if (!viewportIsMeasurable()) return;
     if (!staleViewportCheckApplies() || document.activeElement?.matches?.(TEXT_ENTRY)
         || document.documentElement.classList.contains("keyboard-open")) {
         applyLayoutViewportGap(0);
