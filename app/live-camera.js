@@ -18,6 +18,20 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
         $('[data-camera-flip]').disabled = true;
     }
     function stop() { generation++; busy = false; release(); }
+    // ---- Face lenses (app/lenses, loaded on demand) -------------------------
+    // Hooks: open() attaches, close() detaches, capture() composites onto the
+    // photo. The overlay canvas and carousel live inside .live-camera-stage.
+    let lenses = null, lensesLoad = null;
+    function attachLenses() {
+        if (lensesLoad) return;
+        const load = lensesLoad = import('./lenses/index.js').then(({ attachCameraLenses }) => {
+            if (lensesLoad === load && opened) lenses = attachCameraLenses({ stage: $('.live-camera-stage'), video });
+        }).catch(() => {});
+    }
+    function detachLenses() { lensesLoad = null; lenses?.destroy(); lenses = null; }
+    // capture() draws the video unmirrored, so the lens is drawn unmirrored too.
+    const compositeLenses = (context, width, height) => lenses?.composite(context, width, height, { mirrored: false });
+    // ---- end face lenses ----------------------------------------------------
     function clearPhotos() {
         photos = [];
         if (insetURL) URL.revokeObjectURL(insetURL);
@@ -81,6 +95,7 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
             canvas.width = 1080; canvas.height = 1440;
             const scale = Math.max(canvas.width / video.videoWidth, canvas.height / video.videoHeight);
             canvas.getContext('2d').drawImage(video, (canvas.width - video.videoWidth * scale) / 2, (canvas.height - video.videoHeight * scale) / 2, video.videoWidth * scale, video.videoHeight * scale);
+            compositeLenses(canvas.getContext('2d'), canvas.width, canvas.height);
             const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', .9));
             canvas.width = canvas.height = 0;
             if (captureGeneration !== generation || !opened) return;
@@ -98,7 +113,7 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
             if (captureGeneration === generation && opened) failure('That photo could not be captured. Please try again.');
         } finally { busy = false; if (stream && opened) $('[data-camera-shutter]').disabled = false; }
     }
-    function close() { opened = false; stop(); clearPhotos(); container.hidden = true; }
+    function close() { opened = false; stop(); clearPhotos(); detachLenses(); container.hidden = true; }
     function finish() { if (!photos.length) return; const result = photos.slice(0, 2); close(); onCapture(result); }
     function fallback() {
         if ($('[data-camera-library]').hidden) return;
@@ -114,5 +129,5 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
         stop(); failure('Camera paused while you were away. Tap Try camera again to resume.');
     });
     window.addEventListener('pagehide', () => { if (opened) { stop(); failure('Camera paused. Tap Try camera again to resume.'); } });
-    return { open() { close(); facing = 'environment'; opened = true; container.hidden = false; void start(); }, close };
+    return { open() { close(); facing = 'environment'; opened = true; container.hidden = false; void start(); attachLenses(); }, close };
 }
