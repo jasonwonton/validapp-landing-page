@@ -19,6 +19,7 @@ configureMediaFallback({ apiBase: api.baseURL });
 installMediaImageFallback();
 let chatPresence = null;
 let presenceLifecycle = null;
+let callListenerStarted = false;
 let weeklyGame = null;
 let weeklyGameOpening = false;
 let weeklyGameGeneration = 0;
@@ -676,6 +677,13 @@ async function showSignedIn() {
             $('#blockedUsersButton').before(button);
         }
         presenceLifecycle?.setUser(chatsEnabled ? api.user.id : null);
+        // Incoming calls ring from any tab, not only after Chats has been opened.
+        if (chatsEnabled && config.enable_calls === true && config.enable_web_calls === true) {
+            callListenerStarted = true;
+            void import("./calls/service.js")
+                .then(({ startCallListener }) => startCallListener({ api, getUser: () => api.user, getConfig: () => state.config, showToast }))
+                .catch(() => null);
+        }
         $("#activityStatusButton")?.classList.toggle("hidden", !chatsEnabled);
         $('.nav-item[data-panel="chats"]').classList.toggle("hidden", !chatsEnabled);
         $("#bottomNav").classList.toggle("chats-enabled", chatsEnabled);
@@ -5966,6 +5974,7 @@ async function requestAccountDeletion(event) {
     $("#deleteAccountStatus").textContent = "";
     try {
         await preloadRoute("chats").then((route) => route?.beforeSessionEnd?.()).catch(() => null);
+        await stopCallListener();
         const result = await api.requestAccountDeletion(api.user.id);
         await presenceLifecycle?.stop();
         const scheduled = new Intl.DateTimeFormat(undefined, { dateStyle: "long", timeStyle: "short" }).format(new Date(result.scheduled_for));
@@ -6014,6 +6023,7 @@ async function logoutAndReset() {
     clearCachedAppState();
     await presenceLifecycle?.stop();
     await preloadRoute("chats").then((route) => route?.beforeSessionEnd?.()).catch(() => null);
+    await stopCallListener();
     await detachWebPushSubscription().catch(() => null);
     await api.logout().catch(() => null);
     await import("./chat/outbox.js")
@@ -6022,6 +6032,12 @@ async function logoutAndReset() {
     clearQuestionSubmissionState();
     api.clearSession();
     location.href = "./?signin=1";
+}
+
+async function stopCallListener() {
+    if (!callListenerStarted) return;
+    callListenerStarted = false;
+    await import("./calls/service.js").then(({ stopCallListener: stop }) => stop(api)).catch(() => null);
 }
 
 function switchPanel(panel, { historyMode = "push", restoreScroll = true } = {}) {
@@ -6078,7 +6094,7 @@ function activatePanelRoute(panel) {
         root: $("#chatsRoot"), api, presence: chatPresence,
         getUser: () => api.user,
         getConfig: () => state.config,
-        softHaptic, successHaptic, showToast,
+        softHaptic, successHaptic, haptic, showToast,
         onUnreadChange: renderChatUnreadBadge,
         onPlay: async () => {
             if (!state.profile?.school_id) return showToast('Join a school to play the Game of the Week.');
