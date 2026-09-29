@@ -582,9 +582,8 @@
 .chat-recent-camera { display: grid; place-items: center; width: 23px; height: 23px; color: #000; }
 .chat-recent-camera .ui-icon { width: 13px; height: 13px; }
 .chat-recent-unread { width: 14px; height: 14px; margin: 2px; }
-.chat-moment-streak .ui-icon { color: #ff9500; fill: currentColor; }
+.chat-moment-streak .ui-icon { color: var(--streak); fill: currentColor; }
 :root[data-theme="dark"] .chat-moment-streak { color: var(--muted); }
-:root[data-theme="dark"] .chat-moment-streak .ui-icon { color: #ffa852; }
 
 .chat-avatar-mosaic { position: relative; display: grid; place-items: center; width: 100%; height: 100%; overflow: hidden; border-radius: 50%; background: var(--mint); color: var(--dark-teal); }
 .chat-avatar-mosaic .chat-avatar-member { position: absolute; left: 50%; top: 50%; display: grid; place-items: center; width: 50%; height: 50%; transform: translate(-50%, -50%); border: 2px solid var(--white); border-radius: 50%; background: var(--mint); font-size: 11px; font-style: normal; overflow: hidden; }

@@ -45,7 +45,8 @@ const paths = {
     heart: '<path d="M12 21 3.6 12.6C-1.3 7.6 5.4 1 10.3 5.9L12 7.6l1.7-1.7c4.9-4.9 11.6 1.7 6.7 6.7Z"/>',
     'shield-check': '<path d="M12 2 3 6v6c0 5 9 10 9 10s9-5 9-10V6Z"/><path d="m8 12 3 3 5-6"/>',
     'person-question': '<path d="M17 20a9 9 0 1 1 4-8M5 19c0-6 10-6 10-1"/><circle cx="11" cy="9" r="3"/><path d="M18 15a2 2 0 1 1 3 1.7c-1 .5-1 1-1 1.3m0 3v.1"/>',
-    fire: '<path fill="currentColor" stroke="none" fill-rule="evenodd" d="M12.8 1.5c.7 4-1.9 5.6-3.4 7.5-.7.9-1.1 1.8-1.1 3-1.5-.9-2.2-2.3-2.1-4.2C3.8 10.1 3 12.6 3 14a9 9 0 0 0 18 0c0-4.2-2.8-8.9-8.2-13.5ZM12 12c.2 2.2-2.6 3-2.6 5.2a2.8 2.8 0 0 0 5.6 0c0-1.8-1.2-3.5-3-5.2Z"/>',
+    // Original drawing in the spirit of SF Symbols flame.fill (StreakCounterView.swift).
+    fire: '<path fill="currentColor" stroke="none" fill-rule="evenodd" d="M12.6 1.6C13.2 4.6 15.2 6.6 16.9 8.6C18.8 10.8 20 13 20 15.3C20 19.6 16.4 22.6 12 22.6C7.6 22.6 4 19.6 4 15.3C4 12.6 5.3 10.4 7 8.6C7.2 10.1 7.9 11.3 9 12C9 7.8 10.6 4.4 12.6 1.6ZM12 12.4C12.7 14.4 15.4 15.7 15.4 18.4C15.4 20.3 13.9 21.4 12 21.4C10.1 21.4 8.6 20.3 8.6 18.4C8.6 16.2 10.9 15 12 12.4Z"/>',
     group: '<circle cx="12" cy="7" r="3" fill="currentColor" stroke="none"/><circle cx="4.5" cy="9" r="2.5" fill="currentColor" stroke="none"/><circle cx="19.5" cy="9" r="2.5" fill="currentColor" stroke="none"/><path d="M6 21v-3a6 6 0 0 1 12 0v3ZM1 20v-3a4 4 0 0 1 4-4M23 20v-3a4 4 0 0 0-4-4"/>',
     person: '<circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>',
     check: '<path d="m5 12 4 4L19 6"/>',

@@ -398,10 +398,11 @@ h3 { font-size: 1.45rem; }
 .play-progress { color: var(--muted); font-size: .9rem; text-align: center; white-space: nowrap; }
 .play-live-stats { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .play-streak-chip, .play-aura-chip { min-height: 38px; display: inline-flex; align-items: center; gap: 5px; padding: 6px 10px; border: 2px solid var(--outline); border-radius: 999px; background: rgba(var(--surface-rgb),.92); box-shadow: 0 2px 3px rgba(0,0,0,.08); }
-.play-streak-chip { border-radius: 16px; }
-.play-streak-chip strong { font-size: 18px; font-weight: 400; }
-.play-streak-chip small { color: var(--muted); font-size: .72rem; }
-.play-streak-chip .ui-icon, .streak-celebration-fire .ui-icon { color: var(--streak); fill: currentColor; stroke-width: 1; }
+/* StreakCounterView.swift: surface pill r16, 2pt outline, soft shadow, 18pt flame, 18pt count, 12pt multiplier. */
+.play-streak-chip { gap: 4px; padding: 6px 10px; border-radius: 16px; background: rgba(var(--surface-rgb),.95); box-shadow: 0 2px 8px rgba(0,0,0,.1); }
+.play-streak-chip strong { color: var(--ink); font-size: 18px; font-weight: 400; line-height: 1; }
+.play-streak-chip small { color: var(--muted); font-size: 12px; }
+.play-streak-chip .ui-icon, .streak-celebration-fire .ui-icon { color: var(--streak); fill: currentColor; stroke-width: 0; }
 .play-aura-chip img { width: 20px; height: 22px; object-fit: contain; }
 .play-aura-chip.aura-arrived { animation: aura-balance-arrival .42s cubic-bezier(.2,.9,.25,1); }
 .aura-flight { position: fixed; z-index: 100; display: inline-flex; align-items: center; gap: 5px; pointer-events: none; opacity: 0; transform: translate(-50%, -50%) scale(.72); }
@@ -1370,12 +1371,13 @@ body:has(dialog.ui-sheet[open]) .toast[popover] { top: calc(env(safe-area-inset-
 
 .streak-celebration { position: fixed; z-index: 110; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(5,9,20,.3); }
 .streak-celebration.hidden { display: none; }
-.streak-celebration-card { min-width: min(330px, calc(100vw - 48px)); display: grid; justify-items: center; gap: 13px; padding: 30px 34px; border: 3px solid var(--outline); border-radius: 24px; background: var(--white); box-shadow: 0 16px 34px rgba(0,0,0,.2); animation: streak-card-in .4s cubic-bezier(.2,.9,.25,1); text-align: center; }
-.streak-celebration-fire { display: inline-flex; color: var(--ink); }
+.streak-celebration-card { min-width: min(330px, calc(100vw - 48px)); display: grid; justify-items: center; gap: 16px; padding: 32px 48px; border: 3px solid var(--outline); border-radius: 24px; background: var(--white); box-shadow: 0 16px 34px rgba(0,0,0,.2); animation: streak-card-in .4s cubic-bezier(.2,.9,.25,1); text-align: center; }
+/* PlayGameView.swift streakCelebrationOverlay: one 64pt flame, or three 56pt flames on 7/14/30/50/100. */
+.streak-celebration-fire { display: inline-flex; gap: 4px; color: var(--streak); }
 .streak-celebration-fire .ui-icon { width: 64px; height: 64px; }
-.streak-celebration-fire.milestone .ui-icon { width: 88px; height: 88px; }
-.streak-celebration-card > strong { font-size: 1.75rem; }
-.streak-celebration-card > span:last-child { color: var(--peach); font-size: 1.25rem; }
+.streak-celebration-fire.milestone .ui-icon { width: 56px; height: 56px; }
+.streak-celebration-card > strong { font-size: 28px; font-weight: 400; }
+.streak-celebration-card > span:last-child { color: var(--peach); font-size: 20px; }
 
 @keyframes aura-fly-to-balance {
     0% { opacity: 0; transform: translate(-50%, -50%) scale(.72) rotate(-8deg); }

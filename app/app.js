@@ -4160,7 +4160,7 @@ function showStreakCelebration(streak, multiplier) {
     const overlay = $("#streakCelebration");
     if (!overlay || Number(streak) < 1) return;
     const milestone = [7, 14, 30, 50, 100].includes(Number(streak));
-    $("#streakCelebrationFire").innerHTML = uiIcon("fire");
+    $("#streakCelebrationFire").innerHTML = uiIcon("fire").repeat(milestone ? 3 : 1);
     $("#streakCelebrationFire").classList.toggle("milestone", milestone);
     $("#streakCelebrationTitle").textContent = `${Number(streak).toLocaleString()} Day Streak!`;
     const multiplierLabel = $("#streakCelebrationMultiplier");
