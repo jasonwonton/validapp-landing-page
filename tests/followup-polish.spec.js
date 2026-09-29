@@ -16,12 +16,14 @@ async function openNoahRoom(page) {
 }
 
 // Drive a real touch drag (Chromium only) from the left edge.
+// Event timestamps are set explicitly so the gesture's speed doesn't depend on machine load.
 async function edgeDrag(page, { toX, y = 400, steps = 12, stepMs = 16 }) {
     const cdp = await page.context().newCDPSession(page);
     const point = (x) => [{ x, y, id: 1 }];
-    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: point(6) });
+    const start = Date.now() / 1000;
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: point(6), timestamp: start });
     for (let step = 1; step <= steps; step++) {
-        await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: point(6 + ((toX - 6) * step) / steps) });
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: point(6 + ((toX - 6) * step) / steps), timestamp: start + (step * Math.max(stepMs, 10)) / 1000 });
         await page.waitForTimeout(stepMs);
     }
     return { cdp, release: () => cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] }) };
@@ -215,10 +217,11 @@ test.describe("small parity fixes", () => {
             return { width: box.width - px(after.left) - px(after.right), height: box.height - px(after.top) - px(after.bottom), right: box.right - px(after.right), left: box.left + px(after.left) };
         }));
         for (const area of areas) {
-            expect(area.width).toBeGreaterThanOrEqual(44);
-            expect(area.height).toBeGreaterThanOrEqual(44);
+            // Layout lands on fractional pixels (e.g. 43.999996).
+            expect(area.width).toBeGreaterThanOrEqual(43.9);
+            expect(area.height).toBeGreaterThanOrEqual(43.9);
         }
-        expect(areas[1].left).toBeGreaterThanOrEqual(areas[0].right);
+        expect(areas[1].left).toBeGreaterThanOrEqual(areas[0].right - 0.1);
     });
 
     test("the view-once viewer never loops a video", async ({ page }) => {

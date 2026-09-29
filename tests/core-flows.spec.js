@@ -312,7 +312,10 @@ test("PWA ships install icons and Web Push worker handlers", async ({ request })
     expect(worker).toContain('/assets/pwa/badge-96.png');
     expect(worker).not.toContain('title: "Play"');
     expect(worker).toContain('url.pathname.startsWith("/api/")');
-    expect(worker).not.toContain("cache.put(");
+    // The only runtime writes are the bounded photo cache (never view-once, never /api/).
+    expect(worker.match(/cache\.put\(/g)).toHaveLength(2);
+    expect(worker).toContain('const MEDIA_CACHE = "valid-media-v1"');
+    expect(worker).toContain('url.pathname.includes("/chat-ephemeral/")) return null');
     expect(worker).not.toContain("Jua-Regular.ttf");
     expect(worker).toContain("Jua-Latin.woff2");
     expect(worker).toContain("./routes/route-loader.js");
