@@ -368,3 +368,86 @@ test('profile photos over 5 MB are circle-cropped and resized to a 1024px JPEG b
     await expect(page.locator('#toast')).toContainText('Profile photo updated');
     await expect(page.getByRole('button', { name: 'Change profile picture' })).toBeVisible();
 });
+
+test('comments show a loading state, post optimistically with rollback, and report with a reason', async ({ page }) => {
+    await patchDemo(page, async () => {
+        const { DemoAPI } = await import('/app/demo-api.js');
+        const list = DemoAPI.prototype.listPollComments;
+        DemoAPI.prototype.listPollComments = async function (...args) {
+            window.__commentLoads = (window.__commentLoads || 0) + 1;
+            await new Promise((resolve) => { window.__releaseComments = resolve; });
+            return list.apply(this, args);
+        };
+        const create = DemoAPI.prototype.createPollComment;
+        DemoAPI.prototype.createPollComment = async function (...args) {
+            await new Promise((resolve) => { window.__releaseCreate = resolve; });
+            if (window.__failCreate) throw Object.assign(new Error('Comments are busy right now. Try again.'), { status: 409 });
+            return create.apply(this, args);
+        };
+        window.__demoApi = () => DemoAPI;
+    });
+    await page.getByRole('button', { name: 'School', exact: true }).click();
+    const poll = page.locator("[data-feed-detail='9003']");
+    await poll.getByRole('button', { name: 'Open 4 comments' }).click();
+    const comments = page.getByRole('dialog', { name: 'Comments' });
+    await expect(comments.getByText('Loading comments…')).toBeVisible();
+    await expect(comments.getByText('Start the conversation.')).toHaveCount(0);
+    await page.evaluate(() => window.__releaseComments());
+    await expect(comments.getByText('This one is so accurate.')).toBeVisible();
+
+    // Optimistic post: visible at once, then confirmed.
+    const draft = comments.getByLabel('Add a comment');
+    await draft.fill('Showing up right away.');
+    await comments.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(comments.locator('.comment-pending')).toContainText('Showing up right away.');
+    await expect(draft).toHaveValue('');
+    await expect(poll.locator('[data-comment-count]')).toHaveText('5');
+    await page.evaluate(() => window.__releaseCreate());
+    await expect(comments.locator('.comment-pending')).toHaveCount(0);
+    await expect(comments.getByText('Showing up right away.')).toBeVisible();
+
+    // Failure rolls back and gives the draft back.
+    await page.evaluate(() => { window.__failCreate = true; });
+    await draft.fill('This one will fail.');
+    await comments.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(comments.locator('.comment-pending')).toHaveCount(1);
+    await page.evaluate(() => window.__releaseCreate());
+    await expect(comments.locator('.comment-pending')).toHaveCount(0);
+    await expect(comments.locator('#commentsStatus')).toContainText('Comments are busy right now.');
+    await expect(draft).toHaveValue('This one will fail.');
+    await expect(poll.locator('[data-comment-count]')).toHaveText('5');
+
+    // Reports go through the reason sheet with the iOS safety reasons.
+    const root = comments.locator("[data-comment-id='11111111-1111-4111-8111-111111111111']");
+    await root.getByRole('button', { name: 'Report' }).click();
+    const sheet = page.locator('.ui-sheet');
+    for (const reason of ['Harassment or bullying', 'Sexual content', 'Threat or violence', 'Personal information', 'Spam', 'Another safety issue']) {
+        await expect(sheet.getByText(reason, { exact: true })).toBeVisible();
+    }
+    await sheet.getByText('Threat or violence').click();
+    await sheet.getByRole('button', { name: 'Report and hide' }).click();
+    await expect(root).toHaveCount(0);
+
+    // Escape closes the screen; reopening within 30 s shows the cached thread without a spinner.
+    await page.keyboard.press('Escape');
+    await expect(comments).toBeHidden();
+    const loadsBefore = await page.evaluate(() => window.__commentLoads);
+    await poll.getByRole('button', { name: /^Open \d+ comments$/ }).click();
+    await expect(comments.getByText('Showing up right away.')).toBeVisible();
+    await expect(comments.getByText('Loading comments…')).toHaveCount(0);
+    expect(await page.evaluate(() => window.__commentLoads)).toBe(loadsBefore + 1);
+});
+
+test('the comments screen keeps keyboard focus inside it', async ({ page }) => {
+    await signIn(page);
+    await page.getByRole('button', { name: 'School', exact: true }).click();
+    await page.locator("[data-feed-detail='9003']").getByRole('button', { name: 'Open 4 comments' }).click();
+    const comments = page.getByRole('dialog', { name: 'Comments' });
+    await expect(comments.getByText('This one is so accurate.')).toBeVisible();
+    for (let step = 0; step < 25; step += 1) {
+        await page.keyboard.press('Tab');
+        expect(await page.evaluate(() => Boolean(document.activeElement?.closest('#commentsDialog')))).toBe(true);
+    }
+    const actions = await comments.locator('.comment-actions > button').evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().height));
+    for (const height of actions) expect(height).toBeGreaterThanOrEqual(44);
+});

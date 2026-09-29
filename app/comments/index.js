@@ -1,4 +1,18 @@
+import { confirmSheet, reasonSheet } from "../ui-dialogs.js";
+import { userMessage } from "../user-message.js";
+
 const ROOT_PAGE_SIZE = 30;
+// PollCommentsView.swift CommentThreadCache: a reopened thread shows at once for 30 s.
+const THREAD_CACHE_TTL_MS = 30_000;
+const threadCache = new Map();
+// AnonymousAskReportReason titles; the API takes a free-text reason (<= 120 chars).
+const REPORT_REASONS = [
+    { value: "harassment", label: "Harassment or bullying" },
+    { value: "sexual_content", label: "Sexual content" },
+    { value: "threat", label: "Threat or violence" },
+    { value: "personal_information", label: "Personal information" },
+    { value: "spam", label: "Spam" },
+];
 const REPLY_PAGE_SIZE = 50;
 const REACTOR_PAGE_SIZE = 50;
 const MAX_ROOTS = 100;
@@ -32,7 +46,7 @@ function uniqueById(items) {
 
 export function createCommentsView(context) {
     const {
-        root, api, getUser, escapeHTML, avatarMarkup, relativeTime,
+        root, api, getUser, getProfile = getUser, escapeHTML, avatarMarkup, relativeTime,
         openDetailScreen, closeDetailScreen, showToast,
     } = context;
 
@@ -82,6 +96,7 @@ export function createCommentsView(context) {
     let openReactionPickerId = null;
     let pendingCreate = null;
     let creating = false;
+    let loading = false;
     const reactionBusy = new Set();
     let moderation = { notice: null, restriction: { is_restricted: false, expires_at: null } };
     let reactorState = { commentId: null, rows: [], hasMore: false, loading: false };
@@ -166,6 +181,12 @@ export function createCommentsView(context) {
     }
 
     function renderComment(comment, { reply = false } = {}) {
+        if (comment.pending) {
+            return `<article class="comment-row ${reply ? "comment-reply" : ""} comment-pending" data-comment-id="${escapeHTML(comment.id)}" aria-busy="true">
+            ${avatarMarkup(comment, "row-avatar comment-avatar")}
+            <div class="comment-content"><div class="comment-heading"><strong>${escapeHTML(displayName(comment))}</strong><time>Sending…</time></div><p>${escapeHTML(comment.body)}</p></div>
+        </article>`;
+        }
         const busy = reactionBusy.has(String(comment.id));
         const selected = REACTION_BY_TYPE.get(comment.current_user_reaction);
         const ownAction = comment.viewer_can_delete
@@ -213,7 +234,9 @@ export function createCommentsView(context) {
         renderModeration();
         list.innerHTML = roots.length
             ? roots.map(renderThread).join("")
-            : `<div class="comments-empty"><strong>No comments yet</strong><p>Start the conversation.</p></div>`;
+            : loading
+            ? `<div class="comments-empty comments-loading" role="status"><span class="comments-spinner" aria-hidden="true"></span><p>Loading comments…</p></div>`
+            : `<div class="comments-empty"><strong>Start the conversation.</strong><p>Comments use your name. Be civil!</p></div>`;
         $("#loadMoreComments").classList.toggle("hidden", !hasMoreRoots || roots.length >= MAX_ROOTS);
         const replyContext = $("#commentReplyContext");
         replyContext.classList.toggle("hidden", !replyingTo);
@@ -230,7 +253,7 @@ export function createCommentsView(context) {
         $("#commentCharacterCount").textContent = `${length}/280`;
         sendButton.disabled = creating || restrictionActive() || draft.value.trim().length < 1 || length > 280;
         sendButton.textContent = creating ? "Sending…" : "Send";
-        if (pendingCreate && (pendingCreate.body !== draft.value.trim().split(/\s+/).join(" ") || pendingCreate.parentId !== (replyingTo?.id || null))) pendingCreate = null;
+        if (!creating && pendingCreate && (pendingCreate.body !== draft.value.trim().split(/\s+/).join(" ") || pendingCreate.parentId !== (replyingTo?.id || null))) pendingCreate = null;
     }
 
     async function loadModeration() {
@@ -242,19 +265,48 @@ export function createCommentsView(context) {
         }
     }
 
-    async function loadRoots({ append = false } = {}) {
-        $("#commentsStatus").textContent = append ? "Loading older comments…" : "Loading comments…";
+    function cacheKey() {
+        return target && getUser()?.id ? `${getUser().id}:${target.type}:${target.id}` : null;
+    }
+
+    function storeThread() {
+        const key = cacheKey();
+        if (key) threadCache.set(key, { roots: roots.filter((comment) => !comment.pending), hasMoreRoots, expiresAt: Date.now() + THREAD_CACHE_TTL_MS });
+    }
+
+    function cachedThread() {
+        const key = cacheKey();
+        const entry = key && threadCache.get(key);
+        if (!entry || entry.expiresAt <= Date.now()) {
+            if (key) threadCache.delete(key);
+            return null;
+        }
+        return entry;
+    }
+
+    async function loadRoots({ append = false, quiet = false } = {}) {
+        const targetAtStart = target;
+        loading = !append;
+        $("#commentsStatus").textContent = append ? "Loading older comments…" : "";
+        if (!append && !quiet) render();
         try {
-            const cursor = append ? roots.at(-1) : null;
+            const cursor = append ? roots.filter((comment) => !comment.pending).at(-1) : null;
             const page = await call("list", cursor, ROOT_PAGE_SIZE);
-            roots = uniqueById(append ? [...roots, ...page] : page).slice(0, MAX_ROOTS);
+            if (target !== targetAtStart) return;
+            const pending = roots.filter((comment) => comment.pending);
+            roots = uniqueById(append ? [...roots, ...page] : [...pending, ...page]).slice(0, MAX_ROOTS);
             hasMoreRoots = page.length === ROOT_PAGE_SIZE && roots.length < MAX_ROOTS;
             $("#commentsStatus").textContent = "";
-            render();
+            storeThread();
         } catch (error) {
-            $("#commentsStatus").textContent = error.message || "Could not load comments.";
-            if (!append) roots = [];
-            render();
+            if (target !== targetAtStart) return;
+            // A thread already shown from the cache stays put instead of flashing an error.
+            if (!quiet) $("#commentsStatus").textContent = userMessage(error, "Could not load comments.");
+        } finally {
+            if (target === targetAtStart) {
+                loading = false;
+                render();
+            }
         }
     }
 
@@ -267,7 +319,7 @@ export function createCommentsView(context) {
             replyHasMore.set(String(rootId), page.length === REPLY_PAGE_SIZE && next.length < MAX_REPLIES_PER_ROOT);
             render();
         } catch (error) {
-            showToast(error.message || "Could not load replies.");
+            showToast(userMessage(error, "Could not load replies."));
         }
     }
 
@@ -291,40 +343,84 @@ export function createCommentsView(context) {
         }
     }
 
+    function insertComment(comment) {
+        if (comment.root_comment_id) {
+            const rootId = String(comment.root_comment_id);
+            const rootComment = roots.find((item) => String(item.id) === rootId);
+            if (!replies.has(rootId) && Number(rootComment?.visible_reply_count || 0) > 0) replyHasMore.set(rootId, true);
+            replies.set(rootId, uniqueById([...(replies.get(rootId) || []), comment]).slice(0, MAX_REPLIES_PER_ROOT));
+            if (rootComment) rootComment.visible_reply_count = Number(rootComment.visible_reply_count || 0) + 1;
+        } else {
+            roots = uniqueById([comment, ...roots]).slice(0, MAX_ROOTS);
+        }
+    }
+
+    function removeComment(comment) {
+        if (comment.root_comment_id) {
+            const rootId = String(comment.root_comment_id);
+            replies.set(rootId, (replies.get(rootId) || []).filter((item) => String(item.id) !== String(comment.id)));
+            const rootComment = roots.find((item) => String(item.id) === rootId);
+            if (rootComment) rootComment.visible_reply_count = Math.max(0, Number(rootComment.visible_reply_count || 0) - 1);
+            return 1;
+        }
+        roots = roots.filter((item) => String(item.id) !== String(comment.id));
+        replies.delete(String(comment.id));
+        return 1 + Number(comment.visible_reply_count || 0);
+    }
+
+    // PollCommentsViewModel.send: the comment appears at once, is swapped for the
+    // saved row, and is rolled back (draft restored) if the server refuses it.
     async function submit(event) {
         event.preventDefault();
         const body = draft.value.trim().split(/\s+/).join(" ");
-        if (!body || creating || restrictionActive()) return;
-        const parentId = replyingTo?.id || null;
+        if (!body || creating || restrictionActive() || !target) return;
+        const parent = replyingTo;
+        const parentId = parent?.id || null;
         if (!pendingCreate || pendingCreate.body !== body || pendingCreate.parentId !== parentId) {
             pendingCreate = { body, parentId, requestId: newRequestId() };
         }
+        const requestId = pendingCreate.requestId;
+        const threadTarget = target;
+        const author = getProfile() || {};
+        const optimistic = {
+            id: `pending-${requestId}`, pending: true, body, status: "active", created_at: new Date().toISOString(),
+            root_comment_id: parent ? (parent.root_comment_id || parent.id) : null, parent_comment_id: parentId,
+            first_name: author.first_name, last_name: author.last_name, username: author.username,
+            profile_picture_url: author.profile_picture_url_thumb || author.profile_picture_url,
+            visible_reply_count: 0, reaction_count: 0, reaction_summary: {},
+        };
         creating = true;
-        updateComposer();
+        insertComment(optimistic);
+        threadTarget.onCountChange?.(1);
+        draft.value = "";
+        replyingTo = null;
         $("#commentsStatus").textContent = "";
+        render();
         try {
-            const saved = await call("create", body, pendingCreate.requestId, parentId);
+            const saved = await call("create", body, requestId, parentId);
+            if (target !== threadTarget) return;
             if (saved.moderation_notice) moderation.notice = saved.moderation_notice;
+            removeComment(optimistic);
             if (saved.status === "active") {
-                if (saved.root_comment_id) {
-                    const rootId = String(saved.root_comment_id);
-                    replies.set(rootId, uniqueById([...(replies.get(rootId) || []), saved]).slice(0, MAX_REPLIES_PER_ROOT));
-                    const rootComment = roots.find((comment) => String(comment.id) === rootId);
-                    if (rootComment) rootComment.visible_reply_count = Number(rootComment.visible_reply_count || 0) + 1;
-                } else {
-                    roots.unshift(saved);
-                    roots = uniqueById(roots).slice(0, MAX_ROOTS);
-                }
-                target.onCountChange?.(1);
+                insertComment(saved);
                 highlightedCommentId = String(saved.id);
+            } else {
+                threadTarget.onCountChange?.(-1);
+                $("#commentsStatus").textContent = "Your comment is waiting for review.";
             }
-            draft.value = "";
-            replyingTo = null;
             pendingCreate = null;
+            storeThread();
             render();
-            if (saved.status === "active") showToast("Comment posted");
         } catch (error) {
-            $("#commentsStatus").textContent = error.message || "Could not post your comment. Try again.";
+            if (target !== threadTarget) return;
+            removeComment(optimistic);
+            threadTarget.onCountChange?.(-1);
+            if (!draft.value.trim()) {
+                draft.value = body;
+                replyingTo = parent;
+            }
+            $("#commentsStatus").textContent = userMessage(error, "Could not post your comment. Try again.");
+            render();
         } finally {
             creating = false;
             updateComposer();
@@ -343,7 +439,7 @@ export function createCommentsView(context) {
             replaceComment(updated);
             openReactionPickerId = null;
         } catch (error) {
-            showToast(error.message || "Could not update reaction.");
+            showToast(userMessage(error, "Could not update reaction."));
         } finally {
             reactionBusy.delete(String(commentId));
             render();
@@ -353,26 +449,37 @@ export function createCommentsView(context) {
     async function hideComment(commentId, report) {
         const comment = commentById(commentId);
         if (!comment) return;
-        const verb = report ? "Report" : "Delete";
-        if (!confirm(`${verb} this comment?${report ? " It will disappear immediately and be kept for moderation review." : ""}`)) return;
+        let reason = null;
+        if (report) {
+            const choice = await reasonSheet({
+                title: "Report this comment?",
+                message: "The comment disappears immediately and is kept for moderation review.",
+                reasons: REPORT_REASONS,
+                allowOther: true,
+                otherLabel: "Another safety issue",
+                confirmLabel: "Report and hide",
+                destructive: true,
+            });
+            if (!choice) return;
+            reason = (choice.reason === "other" && choice.details ? `other: ${choice.details}` : choice.reason).slice(0, 120);
+        } else if (!await confirmSheet({ title: "Delete this comment?", confirmLabel: "Delete", destructive: true })) return;
+        const threadTarget = target;
+        const snapshot = { roots: [...roots], replies: new Map(replies) };
+        const removed = removeComment(comment);
+        threadTarget.onCountChange?.(-removed);
+        render();
+        if (!dialog.contains(document.activeElement)) draft.focus({ preventScroll: true });
         try {
-            await call(report ? "report" : "delete", commentId, ...(report ? ["inappropriate"] : []));
-            const rootId = String(comment.root_comment_id || comment.id);
-            let removed = 1;
-            if (comment.root_comment_id) {
-                replies.set(rootId, (replies.get(rootId) || []).filter((item) => String(item.id) !== String(comment.id)));
-                const rootComment = roots.find((item) => String(item.id) === rootId);
-                if (rootComment) rootComment.visible_reply_count = Math.max(0, Number(rootComment.visible_reply_count || 0) - 1);
-            } else {
-                removed += Number(comment.visible_reply_count || 0);
-                roots = roots.filter((item) => String(item.id) !== rootId);
-                replies.delete(rootId);
-            }
-            target.onCountChange?.(-removed);
-            render();
+            await call(report ? "report" : "delete", commentId, ...(report ? [reason] : []));
+            storeThread();
             showToast(report ? "Comment reported" : "Comment deleted");
         } catch (error) {
-            showToast(error.message || `Could not ${report ? "report" : "delete"} comment.`);
+            if (target !== threadTarget) return;
+            roots = snapshot.roots;
+            replies = snapshot.replies;
+            threadTarget.onCountChange?.(removed);
+            render();
+            showToast(userMessage(error, `Could not ${report ? "report" : "delete"} comment.`));
         }
     }
 
@@ -393,7 +500,7 @@ export function createCommentsView(context) {
             reactorState.rows = uniqueById([...reactorState.rows, ...page]).slice(0, MAX_REACTORS);
             reactorState.hasMore = page.length === REACTOR_PAGE_SIZE && reactorState.rows.length < MAX_REACTORS;
         } catch (error) {
-            showToast(error.message || "Could not load reactions.");
+            showToast(userMessage(error, "Could not load reactions."));
         } finally {
             reactorState.loading = false;
             renderReactors();
@@ -415,7 +522,7 @@ export function createCommentsView(context) {
             moderation.notice = null;
             render();
         } catch (error) {
-            showToast(error.message || "Could not acknowledge this notice.");
+            showToast(userMessage(error, "Could not acknowledge this notice."));
         }
     }
 
@@ -439,6 +546,23 @@ export function createCommentsView(context) {
         if (reportButton) return void hideComment(reportButton.dataset.reportComment, true);
         if (event.target.closest("[data-close-comment-reactors]")) return reactorsDialog.close();
     });
+    // A modal screen keeps focus inside it; Escape closes the picker, then the screen.
+    document.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape" || dialog.classList.contains("hidden") || document.querySelector("dialog[open]")) return;
+        event.preventDefault();
+        if (openReactionPickerId !== null) { openReactionPickerId = null; render(); return; }
+        closeDetailScreen(dialog);
+    });
+    dialog.addEventListener("keydown", (event) => {
+        if (event.key !== "Tab") return;
+        const focusable = [...dialog.querySelectorAll("button:not(:disabled), textarea:not(:disabled), [href], [tabindex]:not([tabindex='-1'])")]
+            .filter((node) => node.getClientRects().length);
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable.at(-1);
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    });
     $("#loadMoreComments").addEventListener("click", () => void loadRoots({ append: true }));
     $("#loadMoreCommentReactors").addEventListener("click", () => void loadReactors(reactorState.commentId, { append: true }));
     $("#commentComposer").addEventListener("submit", submit);
@@ -456,9 +580,15 @@ export function createCommentsView(context) {
         openReactionPickerId = null;
         pendingCreate = null;
         draft.value = "";
+        const cached = commentId ? null : cachedThread();
+        if (cached) {
+            roots = cached.roots.map((comment) => ({ ...comment }));
+            hasMoreRoots = cached.hasMoreRoots;
+        }
+        loading = !cached;
         render();
         openDetailScreen(dialog);
-        await Promise.all([loadRoots(), loadModeration()]);
+        await Promise.all([loadRoots({ quiet: Boolean(cached) }), loadModeration()]);
         await resolveExactComment(commentId);
     }
 
@@ -473,6 +603,7 @@ export function createCommentsView(context) {
         openReactionPickerId = null;
         pendingCreate = null;
         creating = false;
+        loading = false;
         reactionBusy.clear();
         moderation = { notice: null, restriction: { is_restricted: false, expires_at: null } };
         reactorState = { commentId: null, rows: [], hasMore: false, loading: false };

@@ -2777,7 +2777,7 @@ function updateCommentCount(type, targetId, delta) {
 function prepareCommentsView() {
     if (!commentsViewPromise) {
         commentsViewPromise = import("./comments/index.js").then(({ createCommentsView }) => createCommentsView({
-            root: $("#commentsRoot"), api, getUser: () => api.user,
+            root: $("#commentsRoot"), api, getUser: () => api.user, getProfile: () => state.profile || api.user,
             escapeHTML, avatarMarkup, relativeTime: shortRelativeTime, openDetailScreen, closeDetailScreen, showToast,
         }));
     }
