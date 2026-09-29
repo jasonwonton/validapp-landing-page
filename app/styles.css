@@ -1937,7 +1937,7 @@ body:has(dialog.ui-sheet[open]) .toast[popover] { top: calc(env(safe-area-inset-
 /* 36px chip drawn inside a 44px target (transparent border, inset-shadow outline). */
 .personal-inbox-filter-rail { padding-block: 0; margin-block: -3px -2px; }
 .personal-inbox-filter-rail button { height: 44px; border: 0 solid transparent; border-block-width: 4px; background-clip: padding-box; box-shadow: inset 0 0 0 2px var(--outline); }
-.personal-inbox-filter-rail button.active { box-shadow: inset 0 0 0 2px var(--peach); }
+.personal-inbox-filter-rail button.active { background-clip: padding-box; box-shadow: inset 0 0 0 2px var(--peach); }
 .tbh-row-menu summary { width: 44px; height: 44px; }
 .tbh-row-menu > span { top: 44px; }
 .detail-overflow-button::after { inset: -5px; }
@@ -1956,3 +1956,5 @@ body:has(dialog.ui-sheet[open]) .toast[popover] { top: calc(env(safe-area-inset-
 .profile-photo-button.photo-failed .photo-edit-badge { background: var(--danger-text); color: #fff; font-weight: 700; }
 .photo-upload-spinner { position: absolute; top: 50%; left: 50%; width: 36px; height: 36px; margin: -18px 0 0 -18px; border: 3px solid rgba(255,255,255,.55); border-top-color: var(--peach); border-radius: 50%; animation: play-gear-spin .8s linear infinite; }
 .settings-row small.settings-row-warning { color: var(--danger-text); }
+#profileEditorHub:has(> .profile-delete-account-button:not(.hidden)) { padding-bottom: 4px; }
+#profileEditorHub > .profile-delete-account-button { margin-top: -16px; }
