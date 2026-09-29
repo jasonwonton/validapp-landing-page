@@ -183,4 +183,12 @@ export function installMediaImageFallback(target = document) {
     if (installed) return;
     installed = true;
     target.addEventListener("error", handleMediaImageError, true);
+    // The worker keeps a decoded chat/Story/avatar photo (service-worker.js
+    // media cache); it can't tell a photo from an error page on its own.
+    target.addEventListener("load", (event) => {
+        const src = event.target?.currentSrc || "";
+        if (event.target?.tagName === "IMG" && /\/(chat-attachments|chat-daily|stories|profile-pictures)\//.test(src)) {
+            navigator.serviceWorker?.controller?.postMessage({ type: "VALID_MEDIA_LOADED", url: src });
+        }
+    }, true);
 }

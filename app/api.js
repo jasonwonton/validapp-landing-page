@@ -61,6 +61,8 @@ export class ValidAPI {
         this.sessionRevision++;
         this.token = null;
         this.user = null;
+        // Private chat/Story photos cached by the worker leave with the session.
+        globalThis.navigator?.serviceWorker?.controller?.postMessage({ type: "VALID_CLEAR_MEDIA_CACHE" });
     }
 
     async request(path, options = {}) {

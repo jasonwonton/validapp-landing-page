@@ -24,7 +24,11 @@ assert.ok(fontBytes <= 25_000, `Latin WOFF2 exceeds 25 KB (${fontBytes} bytes)`)
 assert.ok(!serviceWorker.includes("Jua-Regular.ttf"), "The service-worker shell must not pre-cache the full TTF");
 assert.ok(!serviceWorker.includes("assets/app/aura.webp"), "Route artwork must not be in the minimal app shell");
 assert.match(serviceWorker, /url\.pathname\.startsWith\("\/api\/"\)\) return;/, "Authenticated API GETs must remain network-only");
-assert.doesNotMatch(serviceWorker, /cache\.put\(/, "The service worker must not runtime-cache unlisted responses or private media");
+// The only runtime cache is the bounded media cache (chat/Story/avatar photos),
+// written after the page confirms the image decoded; nothing else is stored.
+assert.equal([...serviceWorker.matchAll(/cache\.put\(/g)].length, 2, "Only the media cache may runtime-cache responses");
+assert.match(serviceWorker, /const MEDIA_CACHE_MAX_ENTRIES = \d+;/, "The runtime media cache must stay bounded");
+assert.match(serviceWorker, /pathname\.includes\("\/chat-ephemeral\/"\)\) return null/, "View-once media must never be cached");
 const appVersion = indexHTML.match(/name="valid-app-version" content="web-v(\d+)"/)?.[1];
 const workerVersion = serviceWorker.match(/CACHE_NAME = `\$\{CACHE_PREFIX\}v(\d+)`/)?.[1];
 assert.equal(appVersion, workerVersion, "App telemetry and service-worker cache versions must advance together");

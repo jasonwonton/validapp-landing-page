@@ -106,6 +106,11 @@ self.addEventListener("sync", (event) => {
 
 self.addEventListener("fetch", (event) => {
     const url = new URL(event.request.url);
+    const mediaKey = mediaCacheKey(event.request);
+    if (mediaKey) {
+        event.respondWith(cachedMedia(event, mediaKey));
+        return;
+    }
     if (event.request.method !== "GET" || url.origin !== self.location.origin) return;
 
     // Authenticated JSON is deliberately network-only. The app owns the small,
@@ -124,6 +129,93 @@ self.addEventListener("fetch", (event) => {
     // Storage. Unlisted same-origin media and other runtime responses stay on
     // the network even when an origin accidentally omits a private directive.
     event.respondWith(caches.open(CACHE_NAME).then((cache) => cache.match(event.request)).then((cached) => cached || fetch(event.request)));
+});
+
+// Runtime media cache: chat photos, Mementos, Story photos, thumbnails, video
+// posters and avatars, so reopening a chat or Story doesn't download them again
+// and they still show offline. Entries are keyed by host + path only, because
+// the signed query (X-Amz-Signature, expiry) changes on every API response
+// while the object doesn't. Never cached: API JSON (/api/ is not a media host),
+// view-once media (chat-ephemeral/), videos and voice (destination isn't
+// "image"), range requests, and anything requested or served as no-store.
+// Bounded to MEDIA_CACHE_MAX_ENTRIES (≈100 MB at a typical ≈600 KB chat
+// photo) and trimmed least-recently-used first. Its name has no CACHE_PREFIX,
+// so an app update keeps it; signing out deletes it (VALID_CLEAR_MEDIA_CACHE).
+const MEDIA_CACHE = "valid-media-v1";
+const MEDIA_CACHE_MAX_ENTRIES = 160;
+// Only hosts this worker's CSP connect-src allows it to fetch.
+const MEDIA_HOSTS = new Set(["9472d27fa2e1a3762bd91728bb7d9437.r2.cloudflarestorage.com", "validappcdn.com"]);
+const MEDIA_OBJECT = /\/(chat-attachments|chat-daily|stories|profile-pictures)\/[^?#]+\.(jpe?g|png|webp)$/i;
+// Cross-origin <img> responses are opaque: their status can't be read, so an
+// expired-signature error would look like a photo. A response waits here until
+// the page reports that the image decoded (VALID_MEDIA_LOADED), then is stored.
+const pendingMedia = new Map();
+const MAX_PENDING_MEDIA = 24;
+const touchedMedia = new Set();
+
+function mediaURLKey(value) {
+    let url;
+    try { url = new URL(value); } catch (_) { return null; }
+    if (url.protocol !== "https:" || !MEDIA_HOSTS.has(url.hostname) || url.pathname.includes("/chat-ephemeral/")) return null;
+    return MEDIA_OBJECT.test(url.pathname) ? `${url.origin}${url.pathname}` : null;
+}
+
+function mediaCacheKey(request) {
+    // A cached opaque response can only answer a no-cors request (an <img>);
+    // canvas and share-card loads (cors) always go to the network.
+    if (request.method !== "GET" || request.destination !== "image" || request.mode !== "no-cors"
+        || request.cache === "no-store" || request.headers.has("range")) return null;
+    return mediaURLKey(request.url);
+}
+
+function storable(response) {
+    if (response.type === "opaque") return true;
+    return response.ok && !/no-store/i.test(response.headers.get("cache-control") || "");
+}
+
+async function cachedMedia(event, key) {
+    const cache = await caches.open(MEDIA_CACHE).catch(() => null);
+    const cached = await cache?.match(key).catch(() => null);
+    if (cached) {
+        // Approximate LRU: move a hit to the young end once per worker lifetime.
+        if (!touchedMedia.has(key)) {
+            touchedMedia.add(key);
+            const copy = cached.clone();
+            event.waitUntil(cache.delete(key).then(() => cache.put(key, copy)).catch(() => null));
+        }
+        return cached;
+    }
+    const response = await fetch(event.request);
+    if (cache && storable(response)) {
+        pendingMedia.delete(key);
+        pendingMedia.set(key, response.clone());
+        while (pendingMedia.size > MAX_PENDING_MEDIA) pendingMedia.delete(pendingMedia.keys().next().value);
+    }
+    return response;
+}
+
+async function storeLoadedMedia(value) {
+    const key = mediaURLKey(value);
+    const response = key && pendingMedia.get(key);
+    if (!response) return;
+    pendingMedia.delete(key);
+    try {
+        const cache = await caches.open(MEDIA_CACHE);
+        await cache.put(key, response);
+        const keys = await cache.keys();
+        for (const stale of keys.slice(0, Math.max(0, keys.length - MEDIA_CACHE_MAX_ENTRIES))) await cache.delete(stale);
+    } catch (_) {
+        // Out of quota: showing media never depends on caching it.
+    }
+}
+
+self.addEventListener("message", (event) => {
+    if (event.data?.type === "VALID_MEDIA_LOADED") event.waitUntil(storeLoadedMedia(event.data.url));
+    else if (event.data?.type === "VALID_CLEAR_MEDIA_CACHE") {
+        pendingMedia.clear();
+        touchedMedia.clear();
+        event.waitUntil(caches.delete(MEDIA_CACHE).catch(() => null));
+    }
 });
 
 function safeNotificationURL(value) {
