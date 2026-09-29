@@ -24,12 +24,10 @@ const NETWORK_ONLY_DYNAMIC_IMPORTS = new Map([
     ["share-cards.js", "share images are drawn only when sharing, which needs the network"],
     ["avatar-crop.js", "the crop step precedes an upload"],
     ["media-delivery.js", "delivers queued media; runs only online"],
-    ["live-camera.js", "camera capture ends in an upload; kept out of the startup shell budget"],
-    ["camera/review-editor.js", "photo/video review tools load with the camera"],
-    ["camera/photo-pipeline.js", "photo encoding loads with the camera"],
     ["chat/room-tools.js", "reporting and voice playback in an open chat need the network"],
     ["chat/viewer-gestures.js", "the media viewer shows network media"],
     ["stories/viewer.js", "Stories are network media"],
+    ["lenses/index.js", "face lenses need the MediaPipe model download"],
 ]);
 
 const appRoot = fileURLToPath(new URL("../../app/", import.meta.url));

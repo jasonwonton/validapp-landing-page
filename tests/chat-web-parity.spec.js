@@ -354,7 +354,7 @@ test("an Opus-only recorder sends voice through the media ingest", async ({ page
     const created = log.find(([name]) => name === "createMediaIngest")[1][0];
     expect(created).toMatchObject({ purpose: "chat", content_type: "audio/webm;codecs=opus", view_once: false });
     const sent = log.filter(([name]) => name === "sendChatMessage").at(-1)[1][1];
-    expect(sent.media_asset_id).toMatch(/^chat-media-ingest-/);
+    expect(sent.media_asset_id).toMatch(/-segment-1$/);
 });
 
 async function installCalls(page) {

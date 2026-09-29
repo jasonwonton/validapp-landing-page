@@ -346,9 +346,10 @@ const BACK_CLOSES_SHEET = "dialog.modal, dialog.ui-sheet";
 const SHEET_REQUIRES_ACTION = "#askSafetyNoticeDialog, #pendingDeletionDialog";
 let sheetSerial = 0;
 
-function historyBack() {
+function historyBack(steps = 1) {
     state.historyTraversalPending = true;
-    history.back();
+    if (steps > 1) history.go(-steps);
+    else history.back();
 }
 
 function trackSheetHistory(dialog) {
@@ -363,6 +364,9 @@ function trackSheetHistory(dialog) {
     }
     if (history.state?.sheet !== dialog.id) history.pushState({ ...history.state, validApp: true, sheet: dialog.id }, "", location.href);
     dialog.addEventListener("close", () => {
+        // A detail screen that closed together with this sheet already unwound
+        // both history entries (closeDetailScreen).
+        if (state.unwoundSheets?.delete(dialog.id)) return;
         if (history.state?.sheet !== dialog.id) return;
         state.ignoreSheetPopState = true;
         historyBack();
@@ -483,6 +487,9 @@ function handleAppPopState(event) {
         // Closing a detail screen or sheet returns to the same tab: keep its live
         // scroll position instead of restoring one saved at the last tab switch.
         if (panel !== state.activePanel) switchPanel(panel, { historyMode: "none", restoreScroll: true });
+        // Same tab (a detail screen or chat room closed): let the route sync
+        // with the URL, e.g. Chats returns to its list, without touching scroll.
+        else if (!event.state?.sheet) void activatePanelRoute(panel);
         const detail = event.state?.detail ? document.getElementById(event.state.detail) : null;
         if (detail?.classList.contains("detail-screen") && detail.classList.contains("hidden")) openDetailScreen(detail, { historyMode: "none" });
         state.handlingPopState = false;
@@ -796,7 +803,18 @@ function closeDetailScreen(screen, { fromHistory = false } = {}) {
     }
     state.detailReturnFocus?.focus?.({ preventScroll: true });
     state.detailReturnFocus = null;
-    if (!fromHistory && history.state?.detail === screen.id) historyBack();
+    if (!fromHistory && history.state?.detail === screen.id) {
+        // A sheet opened over this screen (e.g. a report) may still own the top
+        // entry if it closed in the same task: pop both, or the landing entry
+        // would be this screen's and Back handling would reopen it.
+        const sheetId = history.state.sheet;
+        if (sheetId && !state.ignoreSheetPopState) {
+            (state.unwoundSheets ||= new Set()).add(sheetId);
+            historyBack(2);
+        } else {
+            historyBack();
+        }
+    }
 }
 
 function closeDetailActionMenus() {

@@ -819,6 +819,10 @@ export class DemoAPI {
     }
     // Media routes without a named method (the ingest) go to the demo media fixtures.
     async request(path, options = {}) { return (await import("./demo-media.js")).demoMediaRequest(this, path, options); }
+    // Named ingest methods (media-ingest.js prefers them) share the same fixtures.
+    createMediaIngest(userId, payload) { return this.request(`/users/${userId}/media-ingests`, { method: "POST", body: JSON.stringify(payload) }); }
+    finalizeMediaIngest(userId, ingestId) { return this.request(`/users/${userId}/media-ingests/${ingestId}/finalize`, { method: "POST" }); }
+    getMediaIngest(userId, ingestId) { return this.request(`/users/${userId}/media-ingests/${ingestId}`); }
 
     async getConfig() {
         const query = new URLSearchParams(location.search);
@@ -849,7 +853,6 @@ export class DemoAPI {
             enable_web_calls: this.demoCallsEnabled,
             enable_web_comments: new URLSearchParams(location.search).get("comments") !== "0",
             enable_vault: new URLSearchParams(location.search).get("vault") !== "0",
-            enable_web_media_ingest: new URLSearchParams(location.search).get("ingest") === "1",
         };
     }
 

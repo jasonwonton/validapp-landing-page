@@ -208,7 +208,12 @@ test('live camera: real tracking draws Dog on the preview and into the captured 
         const stats = await live.evaluate(`${controller}.engine.stats()`);
         await camera.getByRole('button', { name: 'Take photo', exact: true }).click();
         await expect(live.locator('[data-chat-media-dialog]').getByRole('img', { name: 'Photo preview' })).toBeVisible();
-        expect(await live.evaluate(() => window.lensComposites)).toEqual([{ drew: true, width: 1080, height: 1440, mirrored: false }]);
+        // The photo is the camera's own 3:4 crop (never upscaled) and, for the
+        // front camera, mirrored like the preview (iOS behaviour); the lens follows.
+        const composites = await live.evaluate(() => window.lensComposites);
+        expect(composites).toHaveLength(1);
+        expect(composites[0]).toMatchObject({ drew: true, mirrored: await live.evaluate(() => document.querySelector('[data-chat-camera] video').classList.contains('mirrored')) });
+        expect(composites[0].width / composites[0].height).toBeCloseTo(3 / 4, 2);
         testInfo.annotations.push({ type: 'live-lens-stats', description: JSON.stringify(stats) });
     } finally { await browser.close(); }
 });

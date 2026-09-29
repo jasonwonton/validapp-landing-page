@@ -2218,7 +2218,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                     const type = (recorder.mimeType || mimeType).split(";")[0] || "audio/webm";
                     const extension = type === "audio/ogg" ? "ogg" : type === "audio/mp4" ? "m4a" : "webm";
                     const file = new File(chunks, `voice.${extension}`, { type: recorder.mimeType || mimeType, lastModified: Date.now() });
-                    await prepareSelectedChatMedia(file, { prepared: { kind: "audio", file, thumbnail: null, durationMs, ingest: true, contentType: type } });
+                    await prepareSelectedChatMedia(file, { prepared: { kind: "audio", file, thumbnail: null, durationMs, ingest: true } });
                     return;
                 }
                 const file = new File(chunks, "voice.m4a", { type: "audio/mp4", lastModified: Date.now() });
