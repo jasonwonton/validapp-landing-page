@@ -1,7 +1,5 @@
-// Public CDN package responses currently lack browser CORS headers. Serve the
-// exact hash-verified selected package from the PWA origin without modifying it.
-const MIRRORED_PACKAGES = new Set(['75eeb783b361dfbf063465a6b87aac862db76831d31aeab601488d2b2e8cfa46']);
-const SCRIPT_HASHES = new Set(['b05b1f7576b857ed281e12f89270844846475dc99cc0a0fead717adf5a457560']);
+// Mirrored packages and reviewed script hashes are shared with the Feed entry gate.
+import { MIRRORED_PACKAGES, SCRIPT_HASHES } from './compat.js';
 const bounded = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
 const fail = () => { throw new Error('This weekly game needs a newer web player. Please try again after updating Valid.'); };
 export async function sha256(bytes) {

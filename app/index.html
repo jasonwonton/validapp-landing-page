@@ -32,8 +32,11 @@
     </header>
     <div id="networkBanner" class="network-banner hidden" role="status">You're offline. We'll reconnect automatically.</div>
 
+    <div id="launchSplash" class="launch-splash" role="img" aria-label="Valid">
+        <img src="../assets/valid_logo.png" alt="" width="964" height="372" decoding="async" fetchpriority="high">
+    </div>
     <main>
-        <section id="authView" class="auth-view">
+        <section id="authView" class="auth-view hidden">
             <div class="passkey-card">
                 <span class="passkey-face-icon" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M18 28v-5a5 5 0 0 1 5-5h5M36 18h5a5 5 0 0 1 5 5v5M46 36v5a5 5 0 0 1-5 5h-5M28 46h-5a5 5 0 0 1-5-5v-5M25 28v5M39 28v5M25 39c4 3 10 3 14 0"/></svg></span>
                 <div class="passkey-copy"><h1>Welcome Back</h1><p>Sign in securely with the passkey saved on this device.</p></div>
@@ -45,12 +48,9 @@
             </div>
         </section>
 
-        <section id="appView" class="app-view hidden" aria-live="polite">
+        <section id="appView" class="app-view hidden">
             <div id="pullRefreshIndicator" class="pull-refresh-indicator" aria-hidden="true"><span>↓</span></div>
-            <div id="appUpdatePrompt" class="app-update-prompt hidden" role="status">
-                <span><strong>Valid is ready to update</strong><small>Restart for the latest version.</small></span>
-                <button id="applyAppUpdate" type="button">Update</button>
-            </div>
+            <p id="pullRefreshStatus" class="visually-hidden" role="status"></p>
             <section id="feedPanel" class="panel active-panel">
                 <div id="feedGateLock" class="hidden"></div>
                 <div id="feedUnlockedContent">
@@ -207,6 +207,11 @@
         </section>
     </main>
 
+    <!-- Outside #appView so signed-out screens can update too. -->
+    <div id="appUpdatePrompt" class="app-update-prompt hidden" role="status">
+        <span><strong>Valid is ready to update</strong><small>Restart for the latest version.</small></span>
+        <button id="applyAppUpdate" type="button">Update</button>
+    </div>
     <nav id="bottomNav" class="bottom-nav hidden" aria-label="App navigation">
         <button class="nav-item active" data-panel="feed" type="button" aria-current="page" aria-label="Feed"><span class="nav-icon-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h11a2 2 0 0 1 2 2V19H6a2 2 0 0 1-2-2V5.5Z"/><path d="M17 8h3v9a2 2 0 0 1-2 2h-1M7 9h7M7 12h7M7 15h4"/></svg><span id="feedTabBadge" class="tab-badge hidden" aria-hidden="true"></span></span><span>Feed</span></button>
         <button class="nav-item" data-panel="play" type="button" aria-label="Play"><span class="nav-icon-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path class="nav-icon-fill" d="m10 8 6 4-6 4Z"/></svg></span><span>Play</span></button>

@@ -808,6 +808,16 @@ export class DemoAPI {
         return { questions: this.questions.map((question) => ({ ...question })) };
     }
 
+    async getActiveBanner() {
+        assertLocalDemo();
+        // ?banner=1 shows an info banner with a link; ?banner=locked a
+        // non-dismissible warning. Otherwise there is none (the API's 404).
+        const variant = new URLSearchParams(window.location.search).get("banner");
+        if (variant === "1") return { id: 7, title: "Spirit Week is here", message: "Vote in Play all week to earn double aura on every answer.", banner_type: "info", action_url: "https://validapp.lol/community-guidelines.html", action_text: "Learn more", priority: 10, created_at: ago(30), dismissible: true, min_app_version: null };
+        if (variant === "locked") return { id: 8, title: "Scheduled maintenance", message: "Valid may be slow tonight from 11 PM to midnight.", banner_type: "warning", action_url: null, action_text: null, priority: 20, created_at: ago(10), dismissible: false, min_app_version: null };
+        return null;
+    }
+
     async getConfig() {
         return {
             nomination_aura_cost: 100,

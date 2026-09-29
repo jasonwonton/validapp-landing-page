@@ -128,12 +128,34 @@ img.media-placeholder { background: var(--mint); object-fit: cover; }
 }
 .network-banner { position: sticky; top: 66px; z-index: 19; padding: 9px 18px; border-bottom: 2px solid var(--outline); background: #ffe0bb; text-align: center; }
 .app-update-prompt { position: fixed; z-index: 55; left: 50%; bottom: calc(82px + var(--safe-bottom)); width: min(430px, calc(100% - 28px)); display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 11px 12px 11px 15px; border: 2px solid var(--outline); border-radius: 18px; background: var(--white); box-shadow: 0 8px 22px rgba(5,9,20,.2); transform: translateX(-50%); }
+body:not(.authenticated) .app-update-prompt { bottom: calc(18px + var(--safe-bottom)); }
 .app-update-prompt > span { display: grid; gap: 2px; }
 .app-update-prompt small { color: var(--muted); font-size: .76rem; }
 .app-update-prompt button { min-height: 40px; padding: 7px 13px; border: 0; border-radius: 12px; background: var(--peach); color: var(--on-peach); }
 .pull-refresh-indicator { position: fixed; z-index: 54; top: calc(env(safe-area-inset-top) - 42px); left: 50%; width: 36px; height: 36px; display: grid; place-items: center; border: 2px solid var(--outline); border-radius: 50%; background: var(--white); opacity: var(--pull-opacity, 0); pointer-events: none; transform: translate(-50%, var(--pull-distance, 0px)) rotate(0deg); transition: transform .15s ease, opacity .15s ease; }
+.app-banner { position: fixed; z-index: 56; top: calc(env(safe-area-inset-top, 0px) + 8px); left: 50%; width: min(560px, calc(100% - 32px)); display: flex; align-items: center; border: 3px solid #000; border-radius: 12px; background: var(--peach); color: var(--on-peach); box-shadow: 0 4px 8px rgba(0,0,0,.2); transform: translateX(-50%); animation: app-banner-in .45s cubic-bezier(.34,1.4,.64,1); }
+.app-banner.leaving { opacity: 0; transform: translate(-50%, -100px); transition: opacity .3s ease, transform .3s ease; }
+@keyframes app-banner-in { from { opacity: 0; transform: translate(-50%, -100px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.app-banner-body { min-width: 0; min-height: 60px; flex: 1 1 auto; display: flex; align-items: center; gap: 12px; padding: 12px 8px 12px 14px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; }
+button.app-banner-body { cursor: pointer; }
+.app-banner-icon { flex: 0 0 36px; width: 36px; height: 20px; fill: currentColor; }
+.app-banner-icon .banner-icon-cut { fill: none; stroke: var(--peach); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.app-banner-copy { min-width: 0; flex: 1 1 auto; display: grid; gap: 2px; }
+.app-banner-copy strong { overflow: hidden; font-size: 16px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.app-banner-copy small { display: -webkit-box; overflow: hidden; font-size: 13px; opacity: .85; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.app-banner-chevron { flex: 0 0 auto; font-size: 22px; font-weight: 700; opacity: .7; }
+.app-banner-close { flex: 0 0 44px; width: 44px; height: 44px; display: grid; place-items: center; margin-right: 6px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; }
+.app-banner-close svg { width: 20px; height: 20px; fill: currentColor; opacity: .8; }
+.app-banner-close path { fill: none; stroke: var(--peach); stroke-width: 2.4; stroke-linecap: round; }
+@media (prefers-reduced-motion: reduce) { .app-banner { animation: none; } .app-banner.leaving { transition: none; } }
+.pull-refresh-indicator.dragging { transition: none; }
 .pull-refresh-indicator.ready span { transform: rotate(180deg); }
 .pull-refresh-indicator span { transition: transform .15s ease; }
+.pull-refresh-indicator.refreshing span { display: none; }
+.pull-refresh-indicator.refreshing::before { content: ""; width: 16px; height: 16px; border: 2.5px solid var(--ink); border-right-color: transparent; border-radius: 50%; animation: pull-refresh-spin .75s linear infinite; }
+@keyframes pull-refresh-spin { to { transform: rotate(360deg); } }
+/* The app owns pull-to-refresh; stop Chrome's native one (and iOS bounce) from doubling it. */
+@media (display-mode: standalone) { html, body { overscroll-behavior-y: none; } }
 
 .wordmark img { display: block; width: 106px; height: auto; }
 .text-button, .icon-button { border: 0; background: transparent; cursor: pointer; }
@@ -153,6 +175,10 @@ main {
    layer). It has no height where there is no inset. */
 body.authenticated::before { content: ""; position: fixed; z-index: 50; top: 0; left: 0; right: 0; height: env(safe-area-inset-top, 0px); background: linear-gradient(to bottom, var(--aqua) 55%, transparent); pointer-events: none; }
 
+/* Shown until the stored session is known, like the iOS launch screen, so a
+   returning user never sees the sign-in card flash on every cold start. */
+.launch-splash { position: fixed; z-index: 95; inset: 0; display: grid; place-items: center; background: var(--aqua); }
+.launch-splash img { width: 168px; height: auto; }
 .auth-view {
     min-height: calc(100vh - 120px);
     display: grid;
@@ -878,6 +904,15 @@ h3 { font-size: 1.45rem; }
     box-shadow: none;
     transform: none;
 }
+/* app.js checkStaleLayoutViewport: WebKit left the layout viewport short, so
+   move fixed-bottom chrome down onto the real screen edge. */
+.viewport-probe { position: fixed; left: 0; width: 0; visibility: hidden; pointer-events: none; }
+.viewport-probe-bottom { bottom: 0; height: 0; }
+.viewport-probe-large { top: 0; height: 100lvh; }
+.layout-viewport-stale .bottom-nav { transform: translateY(var(--layout-viewport-gap)); }
+.layout-viewport-stale .app-update-prompt { bottom: calc(82px + var(--safe-bottom) - var(--layout-viewport-gap)); }
+.layout-viewport-stale .toast, .layout-viewport-stale .toast[popover] { bottom: calc(98px - var(--layout-viewport-gap)); }
+.layout-viewport-stale .detail-screen { bottom: calc(0px - var(--layout-viewport-gap)); }
 .bottom-nav.chats-enabled { grid-template-columns: repeat(4, 1fr); }
 body.play-active .topbar { display: none; }
 body.play-active main { height: var(--visual-viewport-height, 100dvh); min-height: 0; padding-top: max(10px, env(safe-area-inset-top)); padding-bottom: calc(72px + var(--safe-bottom)); }
@@ -935,6 +970,12 @@ body.play-active .play-actions { margin: 0; }
 .ui-sheet-details[hidden] { display: none; }
 .ui-sheet-details textarea { width: 100%; min-height: 88px; resize: vertical; padding: 11px; border: 2px solid var(--outline); border-radius: 14px; background: var(--white); color: var(--ink); font-size: 1rem; }
 :root[data-theme="dark"] .ui-sheet-grabber { background: rgba(255,255,255,.28); }
+.ios-install-steps { display: grid; gap: 10px; margin: 4px 0 0; padding: 0; list-style: none; text-align: left; }
+.ios-install-steps li { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 12px; border: 2px solid rgba(128,128,128,.22); border-radius: 16px; background: var(--white); font-size: 1rem; line-height: 1.3; }
+.ios-install-icon { flex: 0 0 36px; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; background: var(--mint); color: #0a84ff; }
+.ios-install-icon svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ios-install-icon img { width: 28px; height: 28px; border-radius: 7px; }
+.ios-install-note { margin: 0; color: var(--muted); font-size: .9rem; line-height: 1.35; }
 :root[data-theme="dark"] .ui-sheet-reasons label { border-color: rgba(255,255,255,.18); }
 @media (min-width: 700px) {
     .ui-sheet { width: min(440px, calc(100% - 28px)); margin: auto; box-shadow: 0 12px 30px rgba(0,0,0,.15); }
@@ -1359,6 +1400,9 @@ body.play-active .play-actions { margin: 0; }
 .anonymous-detail-content > .status-message.share-progress { color: var(--muted); }
 .anonymous-detail-content #anonymousAnswerButton { min-height: var(--button-height-large); }
 body.detail-screen-open { overflow: hidden; }
+/* Interactive edge swipe-back (app.js installEdgeSwipeBack). */
+.detail-screen.swipe-tracking, .detail-screen.swipe-settling { animation: none; transform: translateX(var(--swipe-x, 0px)); box-shadow: -10px 0 28px rgba(0,0,0,.22); }
+.detail-screen.swipe-settling { transition: transform .24s cubic-bezier(.2,.8,.2,1); }
 .keyboard-open .bottom-nav { visibility: hidden; pointer-events: none; }
 .keyboard-open .signup-flow { height: var(--visual-viewport-height, 100dvh); }
 .keyboard-open .signup-step { align-content: start; padding-top: 58px; padding-bottom: 24px; }

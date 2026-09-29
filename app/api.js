@@ -553,6 +553,21 @@ export class ValidAPI {
         return this.request("/config", { auth: false });
     }
 
+    // Public, optionally authenticated. The web client identifies itself so the
+    // server never sends it an iOS force-update (min_app_version) banner.
+    async getActiveBanner() {
+        const version = document.querySelector('meta[name="valid-app-version"]')?.content;
+        try {
+            return await this.request("/banner-notifications/active", {
+                silentAuthFailure: true,
+                headers: /^web-v\d{1,6}$/.test(version || "") ? { "X-Client-Version": version } : {},
+            });
+        } catch (error) {
+            if (error.status === 404) return null;
+            throw error;
+        }
+    }
+
     getWebPushConfig() {
         return this.request("/web-push/config", { auth: false });
     }

@@ -1,7 +1,6 @@
 import { ValidAPI } from "./api.js";
 import { uiIcon } from "./ui-icons.js";
 import { feedVoterLine, senderGradeIsSafe, senderStatement, tbhSenderLine } from "./feed-sender.js";
-import { DemoAPI, localDemoAllowed } from "./demo-api.js";
 import { createAdditionalPasskey, createSignupPasskey, passkeysSupported, signInWithPasskey } from "./passkeys.js";
 import { authBrowserURL, checkPasskeyEnvironment, completeSignupSafely, enablePreviewSignup, reportAuthFailure, needsPhoneReverification } from './auth-reliability.js';
 import { startPerformanceMonitoring } from "./performance.js";
@@ -13,9 +12,13 @@ import { confirmSheet } from "./ui-dialogs.js";
 import { showToast } from "./toast.js";
 import { userMessage } from "./user-message.js";
 
-const demoMode = localDemoAllowed();
-const api = demoMode ? new DemoAPI() : new ValidAPI();
-configureMediaFallback({ apiBase: api.baseURL });
+// The localhost-only demo fixtures load on demand so they never join the
+// production module graph or the service-worker shell.
+const demoMode = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname)
+    && new URLSearchParams(location.search).get("demo") === "1";
+// No top-level await: production evaluates this module synchronously.
+let api = demoMode ? null : new ValidAPI();
+configureMediaFallback({ apiBase: api?.baseURL });
 installMediaImageFallback();
 let chatPresence = null;
 let presenceLifecycle = null;
@@ -29,8 +32,11 @@ async function refreshWeeklyGame() {
     try {
         const result = await api.getWeeklyGame();
         if (generation !== weeklyGameGeneration || !api.user?.id) return;
-        // Follow the selected weekly release. No separate web feature flag.
-        const available = ['camera-v1','web-v1'].includes(result.release?.runtime);
+        // Follow the selected weekly release, but only show games this web
+        // player can run (not hand-package-v2, touch games or update notices).
+        const { webPlayable } = await import('./weekly-game/compat.js');
+        if (generation !== weeklyGameGeneration) return;
+        const available = webPlayable(result.release);
         if (!available) { document.querySelector('#weeklyGameButton')?.remove(); return; }
         let button = document.querySelector('#weeklyGameButton');
         if (!button) {
@@ -213,6 +219,10 @@ const state = {
     profilePanelLoading: null,
     viewportBaselineWidth: window.innerWidth,
     viewportBaselineHeight: window.innerHeight,
+    layoutBaselineWidth: window.innerWidth,
+    layoutBaselineHeight: window.innerHeight,
+    layoutViewportGap: 0,
+    layoutViewportExpected: 0,
     installPrompt: null,
     webPushSubscription: null,
     webPushBusy: false,
@@ -324,8 +334,49 @@ HTMLDialogElement.prototype.show = function showMountedDialog() {
 };
 HTMLDialogElement.prototype.showModal = function showMountedModal() {
     mountUIRoot(this);
-    return nativeShowModal.call(this);
+    const result = nativeShowModal.call(this);
+    trackSheetHistory(this);
+    return result;
 };
+
+// Android Back (and browser Back) closes the top sheet instead of leaving the
+// screen: each app sheet gets a history entry while it is open.
+const BACK_CLOSES_SHEET = "dialog.modal, dialog.ui-sheet";
+const SHEET_REQUIRES_ACTION = "#askSafetyNoticeDialog, #pendingDeletionDialog";
+let sheetSerial = 0;
+
+function historyBack() {
+    state.historyTraversalPending = true;
+    history.back();
+}
+
+function trackSheetHistory(dialog) {
+    if (!document.body.classList.contains("authenticated") || !dialog.matches(BACK_CLOSES_SHEET)
+        || dialog.matches(SHEET_REQUIRES_ACTION)) return;
+    if (!dialog.id) dialog.id = `valid-sheet-${++sheetSerial}`;
+    // A pending Back (e.g. a detail screen returning to this sheet) must land
+    // first, or the new entry would be the one it pops.
+    if (state.historyTraversalPending) {
+        (state.deferredSheets ||= new Set()).add(dialog);
+        return;
+    }
+    if (history.state?.sheet !== dialog.id) history.pushState({ ...history.state, validApp: true, sheet: dialog.id }, "", location.href);
+    dialog.addEventListener("close", () => {
+        if (history.state?.sheet !== dialog.id) return;
+        state.ignoreSheetPopState = true;
+        historyBack();
+    }, { once: true });
+}
+
+function closeTopSheetFromHistory(entry) {
+    const sheet = [...$$(BACK_CLOSES_SHEET)].reverse().find((dialog) => dialog.open && !dialog.matches(SHEET_REQUIRES_ACTION));
+    // Returning to the sheet's own entry keeps it; going below it closes it.
+    if (!sheet || entry?.sheet === sheet.id) return false;
+    // Run the sheet's own cancel handling (drafts, confirmations) like Escape does.
+    if (sheet.dispatchEvent(new Event("cancel", { cancelable: true }))) sheet.close();
+    if (sheet.open) history.pushState({ ...history.state, validApp: true, sheet: sheet.id }, "", location.href);
+    return true;
+}
 
 // Kept for existing call sites; see user-message.js.
 function friendlyErrorMessage(error, fallback = "Something went wrong. Please try again.") {
@@ -393,7 +444,13 @@ function navigationURL(panel = state.activePanel, detail = null) {
 
 function writeNavigationState(mode, detail = null) {
     if (state.handlingPopState) return;
-    const payload = { validApp: true, panel: state.activePanel, detail };
+    // Tabs behave like the native app: Feed is the root, another tab sits one
+    // entry above it (Back returns to Feed, then leaves), and re-taps or
+    // tab-to-tab switches replace that entry instead of growing history.
+    const tabOverFeed = detail ? false
+        : mode === "replace" ? history.state?.tabOverFeed === true && state.activePanel !== "feed"
+        : state.activePanel !== "feed";
+    const payload = { validApp: true, panel: state.activePanel, detail, tabOverFeed };
     history[mode === "replace" ? "replaceState" : "pushState"](payload, "", navigationURL(state.activePanel, detail));
 }
 
@@ -410,17 +467,26 @@ function closeVisibleDetailScreens({ fromHistory = false } = {}) {
 }
 
 function handleAppPopState(event) {
+    state.historyTraversalPending = false;
+    const deferredSheets = [...(state.deferredSheets || [])];
+    state.deferredSheets = null;
     if (!document.body.classList.contains("authenticated")) return;
-    state.handlingPopState = true;
-    closeVisibleDetailScreens({ fromHistory: true });
-    const requestedPanel = event.state?.panel || new URLSearchParams(location.search).get("tab");
-    const panel = ["feed", "play", "chats", "profile"].includes(requestedPanel) ? requestedPanel : "feed";
-    // Closing a detail screen returns to the same tab: keep its live scroll
-    // position instead of restoring one saved at the last tab switch.
-    if (panel !== state.activePanel) switchPanel(panel, { historyMode: "none", restoreScroll: true });
-    const detail = event.state?.detail ? document.getElementById(event.state.detail) : null;
-    if (detail?.classList.contains("detail-screen")) openDetailScreen(detail, { historyMode: "none" });
-    state.handlingPopState = false;
+    if (state.ignoreSheetPopState) {
+        state.ignoreSheetPopState = false;
+    } else if (!closeTopSheetFromHistory(event.state)) {
+        state.handlingPopState = true;
+        const keepDetail = event.state?.detail ? document.getElementById(event.state.detail) : null;
+        for (const screen of $$(".detail-screen:not(.hidden)")) if (screen !== keepDetail) closeDetailScreen(screen, { fromHistory: true });
+        const requestedPanel = event.state?.panel || new URLSearchParams(location.search).get("tab");
+        const panel = ["feed", "play", "chats", "profile"].includes(requestedPanel) ? requestedPanel : "feed";
+        // Closing a detail screen or sheet returns to the same tab: keep its live
+        // scroll position instead of restoring one saved at the last tab switch.
+        if (panel !== state.activePanel) switchPanel(panel, { historyMode: "none", restoreScroll: true });
+        const detail = event.state?.detail ? document.getElementById(event.state.detail) : null;
+        if (detail?.classList.contains("detail-screen") && detail.classList.contains("hidden")) openDetailScreen(detail, { historyMode: "none" });
+        state.handlingPopState = false;
+    }
+    deferredSheets.filter((dialog) => dialog.open).forEach(trackSheetHistory);
 }
 
 function syncVisualViewport() {
@@ -436,18 +502,126 @@ function syncVisualViewport() {
     }
     const bottomInset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
     const keyboardOpen = focusedControl && state.viewportBaselineHeight - viewport.height > 140;
+    // While WebKit leaves the layout viewport short (see checkStaleLayoutViewport),
+    // the visible screen is still full height: size full-screen layouts to it.
+    const height = !keyboardOpen && state.layoutViewportGap > 0
+        ? Math.max(viewport.height, state.layoutViewportExpected - viewport.offsetTop)
+        : viewport.height;
     setRuntimeStyles(document.documentElement, {
         "--visual-viewport-bottom": `${bottomInset}px`,
         "--visual-viewport-top": `${viewport.offsetTop}px`,
         "--visual-viewport-left": `${viewport.offsetLeft}px`,
         "--visual-viewport-center": `${viewport.offsetLeft + viewport.width / 2}px`,
-        "--visual-viewport-middle": `${viewport.offsetTop + viewport.height / 2}px`,
+        "--visual-viewport-middle": `${viewport.offsetTop + height / 2}px`,
         "--visual-viewport-width": `${viewport.width}px`,
-        "--visual-viewport-height": `${viewport.height}px`,
+        "--visual-viewport-height": `${height}px`,
         "--signup-visual-offset": `${viewport.offsetTop}px`,
     });
     document.documentElement.classList.toggle("keyboard-open", keyboardOpen);
     if (keyboardOpen) requestAnimationFrame(keepFocusedControlVisible);
+    else if (!focusedControl) trackLayoutViewportBaseline();
+}
+
+// iOS 26 standalone WebKit sometimes leaves the layout viewport shrunk by the
+// keyboard height after the keyboard closes (or after returning from another
+// app): position:fixed; bottom:0 then anchors to the stale layout bottom and the
+// tab bar floats mid-screen with content visible below it. WebKit bugs 297779
+// and 301857; Apple Developer Forums thread 800125. Detect it by comparing a
+// fixed bottom probe with the true screen bottom, nudge WebKit to re-measure,
+// and otherwise translate fixed-bottom chrome onto the real bottom edge.
+const TEXT_ENTRY = "input:not([type=hidden]):not([type=file]):not([type=checkbox]):not([type=radio]):not([type=range]):not([type=button]):not([type=submit]), textarea, select, [contenteditable=''], [contenteditable='true']";
+let layoutViewportProbes = null;
+let staleViewportTimers = [];
+
+function staleViewportCheckApplies() {
+    // Installed phone apps only: a desktop or tablet window can legitimately
+    // change height without a keyboard.
+    return isStandaloneApp() && Math.min(screen.width, screen.height) < 600;
+}
+
+function viewportIsMeasurable() {
+    // Backgrounded or snapshotting pages can briefly report tiny sizes.
+    return window.innerWidth >= 200 && window.innerHeight >= 200;
+}
+
+function trackLayoutViewportBaseline() {
+    if (!viewportIsMeasurable()) return;
+    const width = window.innerWidth;
+    if (Math.abs(width - state.layoutBaselineWidth) > 80) {
+        state.layoutBaselineWidth = width;
+        state.layoutBaselineHeight = window.innerHeight;
+    } else if (state.layoutViewportGap === 0) {
+        // Follow small drift both ways, but never adopt a keyboard-sized drop:
+        // that is exactly the stale state this baseline exists to detect.
+        const height = window.innerHeight;
+        if (height > state.layoutBaselineHeight || state.layoutBaselineHeight - height < 40) state.layoutBaselineHeight = height;
+    }
+}
+
+function measureLayoutViewportGap() {
+    if (!layoutViewportProbes) {
+        layoutViewportProbes = ["bottom", "large"].map((kind) => {
+            const probe = document.createElement("div");
+            probe.className = `viewport-probe viewport-probe-${kind}`;
+            probe.setAttribute("aria-hidden", "true");
+            document.body.append(probe);
+            return probe;
+        });
+    }
+    const [bottomProbe, largeProbe] = layoutViewportProbes;
+    const viewport = window.visualViewport;
+    const fixedBottom = Math.min(bottomProbe.getBoundingClientRect().bottom, window.innerHeight);
+    // Candidates for the real bottom: the visual viewport, 100lvh and the healthy
+    // layout height seen earlier at this width (WebKit may shrink the first two
+    // as well). Of those that reach clearly past the fixed bottom, trust the
+    // smallest so chrome is never pushed below the screen.
+    const candidates = [
+        viewport ? viewport.offsetTop + viewport.height : 0,
+        largeProbe.getBoundingClientRect().height,
+        Math.abs(window.innerWidth - state.layoutBaselineWidth) <= 80 ? state.layoutBaselineHeight : 0,
+    ].filter((bottom) => bottom - fixedBottom >= 40);
+    const expected = candidates.length ? Math.min(...candidates) : fixedBottom;
+    return { gap: Math.round(expected - fixedBottom), expected };
+}
+
+function applyLayoutViewportGap(gap, expected = 0) {
+    if (gap === state.layoutViewportGap) return;
+    state.layoutViewportGap = gap;
+    state.layoutViewportExpected = expected;
+    document.documentElement.classList.toggle("layout-viewport-stale", gap > 0);
+    setRuntimeStyles(document.documentElement, { "--layout-viewport-gap": gap > 0 ? `${gap}px` : null });
+    syncVisualViewport();
+}
+
+function checkStaleLayoutViewport({ nudge = true } = {}) {
+    if (!viewportIsMeasurable()) return;
+    if (!staleViewportCheckApplies() || document.activeElement?.matches?.(TEXT_ENTRY)
+        || document.documentElement.classList.contains("keyboard-open")) {
+        applyLayoutViewportGap(0);
+        return;
+    }
+    const { gap, expected } = measureLayoutViewportGap();
+    if (gap < 40) {
+        applyLayoutViewportGap(0);
+        return;
+    }
+    if (nudge) {
+        // A same-position scroll plus a resize pass is often enough for WebKit to
+        // restore the layout viewport; measure again once it has had a frame.
+        const { scrollX, scrollY } = window;
+        window.scrollTo(scrollX, scrollY + 1);
+        window.scrollTo(scrollX, scrollY);
+        syncVisualViewport();
+        requestAnimationFrame(() => requestAnimationFrame(() => checkStaleLayoutViewport({ nudge: false })));
+        return;
+    }
+    applyLayoutViewportGap(gap, expected);
+}
+
+function scheduleStaleViewportCheck() {
+    staleViewportTimers.forEach(clearTimeout);
+    // The keyboard and app-switch animations settle over ~½ s; check through them.
+    staleViewportTimers = [60, 350, 900].map((delay) => setTimeout(checkStaleLayoutViewport, delay));
 }
 
 let visualViewportFrame = null;
@@ -621,7 +795,7 @@ function closeDetailScreen(screen, { fromHistory = false } = {}) {
     }
     state.detailReturnFocus?.focus?.({ preventScroll: true });
     state.detailReturnFocus = null;
-    if (!fromHistory && history.state?.detail === screen.id) history.back();
+    if (!fromHistory && history.state?.detail === screen.id) historyBack();
 }
 
 function closeDetailActionMenus() {
@@ -647,7 +821,8 @@ function showSignedOut(message = "") {
     clearInterval(state.playLockTimer);
     state.playLockTimer = null;
     stopStripeCheckoutPolling();
-    $("#authView").classList.remove("hidden");
+    document.querySelector(".app-banner")?.remove();
+    showAuthView();
     $("#appView").classList.add("hidden");
     $("#bottomNav").classList.add("hidden");
     $("#logoutButton").classList.add("hidden");
@@ -665,11 +840,39 @@ function showSignedOut(message = "") {
     $("#authStatus").textContent = friendlyErrorMessage(message, "");
 }
 
+const PRIOR_SESSION_KEY = "valid:signed-in-before";
+
+function hideLaunchSplash() {
+    clearTimeout(state.launchSplashTimer);
+    $("#launchSplash").classList.add("hidden");
+}
+
+function showAuthView() {
+    hideLaunchSplash();
+    $("#authView").classList.remove("hidden");
+}
+
+function isFirstVisit() {
+    try {
+        return localStorage.getItem(PRIOR_SESSION_KEY) !== "1" && !localStorage.getItem("valid.web.installation-id");
+    } catch (_) {
+        return true;
+    }
+}
+
 async function showSignedIn() {
     sessionRestorePending = false;
     $("#retrySessionButton").classList.add("hidden");
     $("#createAccountButton").classList.remove("hidden");
     $("#authView").classList.add("hidden");
+    hideLaunchSplash();
+    try { localStorage.setItem(PRIOR_SESSION_KEY, "1"); } catch (_) { /* First-visit detection falls back to the installation id. */ }
+    // Notification links carry ?signin=1 for signed-out devices; drop it once in.
+    const launchURL = new URL(location.href);
+    if (launchURL.searchParams.has("signin")) {
+        launchURL.searchParams.delete("signin");
+        history.replaceState(history.state, "", `${launchURL.pathname}${launchURL.search}${launchURL.hash}`);
+    }
     $("#appView").classList.remove("hidden");
     $("#bottomNav").classList.remove("hidden");
     $("#logoutButton").classList.remove("hidden");
@@ -734,6 +937,7 @@ async function showSignedIn() {
         renderProfileHeader();
         renderFeedGate();
         initializeAppNavigation();
+        void refreshBanner({ force: true });
         refreshWebPushStatus({ sync: true });
         if (!isFeedVoteLocked()) await loadFeed(true);
         await handleNotificationRoute();
@@ -742,6 +946,7 @@ async function showSignedIn() {
             state.askAccess = askAccess;
             state.askSafetyNotices = askSafetyNotices;
             state.askSafetyNoticeHistory = askSafetyNoticeHistory;
+            state.askSafetyRefreshedAt = Date.now();
             state.passkeyStatus = passkeyStatus;
             renderPasskeyStatus();
             if (!api.user?.deletion_requested_at) showNextAskSafetyNotice();
@@ -859,6 +1064,72 @@ async function handleNotificationRoute() {
     params.delete("boost_type");
     params.delete("target_user_id");
     history.replaceState(history.state, "", `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`);
+}
+
+// Notification taps route inside the running app (no reload). The URL contract
+// is the backend's web push `url`: ?tab=, &chat=&message=, &call=, &story=
+// (&viewers=1 from the worker), or ?notification=<type>&... for detail routes.
+async function routeToAppURL(href) {
+    let target;
+    try { target = new URL(href, location.origin); } catch (_) { return; }
+    if (target.origin !== location.origin || !target.pathname.startsWith("/app/")) return;
+    target.searchParams.delete("signin");
+    const requested = target.searchParams.get("tab");
+    const panel = ["feed", "play", "chats", "profile"].includes(requested) ? requested : "feed";
+    const url = `${target.pathname}${target.search}`;
+    if (!api?.hasSession() || !document.body.classList.contains("authenticated")) {
+        // Signed-out or still starting: sign-in picks the route up from the URL.
+        history.replaceState(history.state, "", url);
+        return;
+    }
+    closeVisibleDetailScreens({ fromHistory: true });
+    for (const dialog of $$("dialog.modal[open]")) {
+        if (!dialog.matches("#pendingDeletionDialog, #askSafetyNoticeDialog")) dialog.close();
+    }
+    history.pushState({ validApp: true, panel }, "", url);
+    if (target.searchParams.has("notification")) {
+        await handleNotificationRoute();
+        return;
+    }
+    // Switching (even to the current tab) re-activates the route, which reads
+    // ?chat=/&message=/&call= itself.
+    switchPanel(panel, { historyMode: "none", restoreScroll: false });
+    if (panel === "feed" && target.searchParams.has("story")) await (await prepareFeedView()).refreshStories?.();
+}
+
+function handleServiceWorkerMessage(event) {
+    const message = event.data || {};
+    if (message.type === "VALID_NOTIFICATION_CLICK") void routeToAppURL(message.url || "./");
+    else if (message.type === "VALID_CALL_DECLINE" && api?.user?.id && message.callId) {
+        api.declineCall(api.user.id, message.callId).catch(() => showToast("Could not decline the call."));
+    } else if (message.type === "VALID_PUSH_IN_ACTIVE_CHAT") {
+        // The open room already shows the message through realtime.
+        dispatchEvent(new CustomEvent("valid:push-in-active-chat", { detail: message }));
+    }
+}
+
+// Lets the worker skip the system notification for the chat on screen.
+function reportActiveChat() {
+    navigator.serviceWorker?.controller?.postMessage({
+        type: "VALID_ACTIVE_CHAT",
+        chatId: document.documentElement.dataset.activeChatId || null,
+        visible: document.visibilityState === "visible",
+    });
+}
+
+// Server announcement banners (iOS BannerNotificationView parity): at launch
+// and when the app returns to the foreground, at most every 10 minutes.
+let bannerCheckedAt = 0;
+
+async function refreshBanner({ force = false } = {}) {
+    if (!api?.user?.id || !api.getActiveBanner || (!force && Date.now() - bannerCheckedAt < 600_000)) return;
+    bannerCheckedAt = Date.now();
+    try {
+        const banner = await api.getActiveBanner();
+        if (!document.body.classList.contains("authenticated")) return;
+        if (!banner) document.querySelector(".app-banner")?.remove();
+        else (await import("./banner.js")).showBanner(banner);
+    } catch (_) { /* Banners are optional; keep whatever is showing. */ }
 }
 
 function renderProfileHeader() {
@@ -1148,6 +1419,11 @@ function renderTabBadges() {
         const totalUnread = unread + Number(state.chatUnreadCount || 0);
         const badgePromise = totalUnread > 0 ? navigator.setAppBadge(totalUnread) : navigator.clearAppBadge?.();
         Promise.resolve(badgePromise).catch(() => null);
+        // The worker counts pushes on top of what the page last showed.
+        if (state.syncedBadgeCount !== totalUnread) {
+            state.syncedBadgeCount = totalUnread;
+            navigator.serviceWorker?.controller?.postMessage({ type: "VALID_BADGE_SYNC", count: totalUnread });
+        }
     }
     const profileIncomplete = !state.profile?.profile_picture_url || !String(state.profile?.bio || "").trim();
     $("#profileTabBadge").classList.toggle("hidden", !profileIncomplete);
@@ -1323,7 +1599,13 @@ async function startGodModeCheckout(button) {
         if (checkoutWindow) checkoutWindow.location.href = checkout.url;
         else window.location.href = checkout.url;
         stopStripeCheckoutPolling();
-        state.stripeCheckoutPollTimer = setInterval(checkStripeCheckout, 4000);
+        // Poll while this tab is visible, for at most 15 minutes; returning to
+        // the tab (focus) still checks once after that.
+        const pollingUntil = Date.now() + 15 * 60_000;
+        state.stripeCheckoutPollTimer = setInterval(() => {
+            if (Date.now() > pollingUntil) return stopStripeCheckoutPolling();
+            if (document.visibilityState === "visible") void checkStripeCheckout();
+        }, 4000);
         status.textContent = "Finish checkout, then return here. God Mode will unlock automatically.";
     } catch (error) {
         checkoutWindow?.close();
@@ -3334,14 +3616,51 @@ function renderFeedNotificationPrompt() {
         : syncing
         ? "Finishing setup…"
         : "Enable notifications";
+    // iPhone Safari has no Web Push outside the installed app: offer the
+    // Home Screen steps instead (hidden for a week after they were shown).
+    const iosInstall = !supported && iosInstallAvailable() && !iosInstallRecentlyShown();
     const prompts = [$("#feedNotificationPrompt"), ...$$(".feed-gate-notification")].filter(Boolean);
     prompts.forEach((prompt) => {
-        prompt.classList.toggle("hidden", !supported || Boolean(enabled) || blocked);
+        prompt.classList.toggle("hidden", !iosInstall && (!supported || Boolean(enabled) || blocked));
+        const detail = prompt.querySelector("small");
+        if (detail) detail.textContent = iosInstall ? "Add Valid to your Home Screen to know when someone picks you." : "Enable notifications to know when someone picks you.";
         const button = prompt.querySelector("button");
         if (!button) return;
-        button.textContent = label;
-        button.disabled = state.webPushBusy || syncing;
+        button.textContent = iosInstall ? "Add to Home Screen" : label;
+        button.disabled = !iosInstall && (state.webPushBusy || syncing);
     });
+}
+
+const IOS_INSTALL_SHOWN_KEY = "valid:ios-install-shown-at";
+
+function iosInstallAvailable() {
+    return isAppleTouchDevice() && !isStandaloneApp();
+}
+
+function iosInstallRecentlyShown() {
+    try { return Date.now() - Number(localStorage.getItem(IOS_INSTALL_SHOWN_KEY) || 0) < 7 * 86_400_000; }
+    catch (_) { return false; }
+}
+
+async function openIOSInstall() {
+    try {
+        const { openIOSInstallSheet } = await import("./ios-install.js");
+        openIOSInstallSheet({ onClose: () => {
+            try { localStorage.setItem(IOS_INSTALL_SHOWN_KEY, String(Date.now())); } catch (_) { /* Shown again next time. */ }
+            renderFeedNotificationPrompt();
+        } });
+    } catch (error) {
+        showToast(userMessage(error, "In Safari, tap Share, then Add to Home Screen."));
+    }
+}
+
+function renderIOSInstallRow() {
+    if (!iosInstallAvailable()) return;
+    const row = $("#installAppButton");
+    row.querySelector("strong").textContent = "Add to Home Screen";
+    row.querySelector("small").textContent = "Get notifications and open Valid like an app";
+    row.classList.remove("hidden");
+    renderProfileActionsVisibility();
 }
 
 async function refreshFeedGateStatus() {
@@ -4302,8 +4621,11 @@ function showNextAskSafetyNotice() {
     if (!dialog.open) dialog.showModal();
 }
 
-async function refreshAskSafetyState() {
-    if (!api.user?.id) return;
+async function refreshAskSafetyState({ force = false } = {}) {
+    // Three requests: refresh on foreground at most every 5 minutes.
+    if (!api.user?.id || state.askSafetyRefresh || (!force && Date.now() - (state.askSafetyRefreshedAt || 0) < 300_000)) return;
+    state.askSafetyRefresh = true;
+    state.askSafetyRefreshedAt = Date.now();
     try {
         const [access, notices, history] = await Promise.all([
             api.getAnonymousAskAccess(api.user.id),
@@ -4315,7 +4637,12 @@ async function refreshAskSafetyState() {
         state.askSafetyNoticeHistory = history;
         if (state.askLink) renderAskLink();
         showNextAskSafetyNotice();
-    } catch (_) { /* Keep the last authoritative safety state until the next refresh. */ }
+    } catch (_) {
+        // Keep the last authoritative safety state until the next refresh.
+        state.askSafetyRefreshedAt = 0;
+    } finally {
+        state.askSafetyRefresh = false;
+    }
 }
 
 async function acknowledgeAskSafetyNotice() {
@@ -5796,7 +6123,7 @@ function switchPanel(panel, { historyMode = "push", restoreScroll = true } = {})
     if (panel === "chats" && !(state.config?.enable_chats === true && state.config?.enable_web_chats === true)) return;
     const previousPanel = state.activePanel;
     if (previousPanel !== panel) state.tabScrollPositions[previousPanel] = window.scrollY;
-    else if (historyMode === "push") state.tabScrollPositions[panel] = 0;
+    else if (historyMode !== "none") state.tabScrollPositions[panel] = 0;
     state.activePanel = panel;
     if (panel !== "chats") chatPresence?.setWatched([]);
     document.body.classList.toggle("play-active", panel === "play");
@@ -5882,8 +6209,22 @@ async function refreshActivePanel() {
     successHaptic();
 }
 
+// A pull only refreshes when the drag starts on the page itself at the top:
+// not inside a scrolled container, and never inside a fixed-position layer
+// (the chat room is fixed, so window.scrollY stays 0 while its history scrolls).
+function pullRefreshAllowedFrom(target) {
+    for (let element = target instanceof Element ? target : null; element && element !== document.body; element = element.parentElement) {
+        if (element.scrollTop > 0) return false;
+        const style = getComputedStyle(element);
+        if (style.position === "fixed" || style.position === "sticky" && element.scrollHeight > element.clientHeight) return false;
+    }
+    return true;
+}
+
 function beginPullRefresh(event) {
-    if (!document.body.classList.contains("authenticated") || window.scrollY > 0 || $("dialog[open], .detail-screen:not(.hidden)")) return;
+    state.pullRefreshStartY = null;
+    if (!document.body.classList.contains("authenticated") || state.pullRefreshing || window.scrollY > 0
+        || $("dialog[open], .detail-screen:not(.hidden)") || event.touches?.length > 1 || !pullRefreshAllowedFrom(event.target)) return;
     state.pullRefreshStartY = event.touches?.[0]?.clientY ?? null;
     state.pullRefreshDistance = 0;
 }
@@ -5897,6 +6238,8 @@ function renderPullRefreshDistance() {
         "--pull-distance": `${state.pullRefreshDistance}px`,
         "--pull-opacity": String(Math.min(1, state.pullRefreshDistance / 50)),
     });
+    // Follow the finger exactly; the transition only animates the release.
+    indicator.classList.add("dragging");
     indicator.classList.toggle("ready", state.pullRefreshDistance >= 64);
 }
 
@@ -5908,7 +6251,7 @@ function movePullRefresh(event) {
     if (pullRefreshFrame === null) pullRefreshFrame = requestAnimationFrame(renderPullRefreshDistance);
 }
 
-function endPullRefresh() {
+async function endPullRefresh() {
     if (state.pullRefreshStartY === null) return;
     const shouldRefresh = state.pullRefreshDistance >= 64;
     state.pullRefreshStartY = null;
@@ -5916,12 +6259,32 @@ function endPullRefresh() {
     if (pullRefreshFrame !== null) cancelAnimationFrame(pullRefreshFrame);
     pullRefreshFrame = null;
     const indicator = $("#pullRefreshIndicator");
-    clearRuntimeStyles(indicator, "--pull-distance", "--pull-opacity");
-    indicator.classList.remove("ready");
-    if (shouldRefresh) refreshActivePanel();
+    indicator.classList.remove("ready", "dragging");
+    if (!shouldRefresh) {
+        clearRuntimeStyles(indicator, "--pull-distance", "--pull-opacity");
+        return;
+    }
+    // Hold a spinner at the threshold until the refresh finishes.
+    state.pullRefreshing = true;
+    indicator.classList.add("refreshing");
+    $("#pullRefreshStatus").textContent = "Refreshing…";
+    setRuntimeStyles(indicator, { "--pull-distance": "64px", "--pull-opacity": "1" });
+    try {
+        await refreshActivePanel();
+    } catch (_) {
+        // Each panel reports its own load errors inline.
+    } finally {
+        state.pullRefreshing = false;
+        indicator.classList.remove("refreshing");
+        $("#pullRefreshStatus").textContent = "Updated";
+        clearRuntimeStyles(indicator, "--pull-distance", "--pull-opacity");
+    }
 }
 
 function installNativeSheetGestures() {
+    if (isAndroidDevice() || (isStandaloneApp() && isAppleTouchDevice())) {
+        for (const screen of $$(".detail-screen")) installEdgeSwipeBack(screen, () => closeDetailScreen(screen));
+    }
     if (!isAndroidDevice()) return;
     for (const dialog of $$("dialog.modal")) {
         if (dialog.dataset.sheetGesture === "1" || dialog.classList.contains("reaction-picker-dialog")) continue;
@@ -5964,17 +6327,69 @@ function installNativeSheetGestures() {
         });
     }
 
-    for (const screen of $$(".detail-screen")) {
-        let startX = null;
-        screen.addEventListener("pointerdown", (event) => {
-            if (event.clientX <= 24 && !event.target.closest("input, textarea, select")) startX = event.clientX;
-        });
-        screen.addEventListener("pointerup", (event) => {
-            if (startX !== null && event.clientX - startX > 88) closeDetailScreen(screen);
-            startX = null;
-        });
-        screen.addEventListener("pointercancel", () => { startX = null; });
-    }
+}
+
+function isAppleTouchDevice() {
+    return /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+}
+
+// UIKit-style interactive pop: a drag from the left edge moves the screen with
+// the finger (rubber-banding past the edge) and completes past a third of the
+// width or on a fast flick. Installed iPhone apps have no browser back gesture.
+function installEdgeSwipeBack(screen, onBack) {
+    const EDGE = 24;
+    let gesture = null;
+    const setOffset = (x) => setRuntimeStyles(screen, { "--swipe-x": `${x}px` });
+    const finish = (complete) => {
+        const width = screen.getBoundingClientRect().width;
+        const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+        screen.classList.remove("swipe-tracking");
+        const settle = () => {
+            screen.classList.remove("swipe-settling");
+            clearRuntimeStyles(screen, "--swipe-x");
+            if (complete) onBack();
+        };
+        if (reduceMotion) return settle();
+        screen.classList.add("swipe-settling");
+        setOffset(complete ? width : 0);
+        setTimeout(settle, 240);
+    };
+    screen.addEventListener("touchstart", (event) => {
+        const touch = event.touches[0];
+        if (event.touches.length !== 1 || touch.clientX > EDGE || screen.classList.contains("swipe-settling")
+            || event.target.closest("input, textarea, select, [contenteditable='true']")) return;
+        gesture = { x: touch.clientX, y: touch.clientY, dx: 0, tracking: false, samples: [[touch.clientX, event.timeStamp]] };
+    }, { passive: true });
+    screen.addEventListener("touchmove", (event) => {
+        if (!gesture) return;
+        const touch = event.touches[0];
+        const dx = touch.clientX - gesture.x;
+        const dy = touch.clientY - gesture.y;
+        if (!gesture.tracking) {
+            // Decide once: a mostly vertical drag is a scroll, not a back swipe.
+            if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { gesture = null; return; }
+            if (dx < 8) return;
+            gesture.tracking = true;
+            screen.classList.add("swipe-tracking");
+        }
+        event.preventDefault();
+        // Past the left edge the screen resists like a rubber band.
+        gesture.dx = dx >= 0 ? dx : -Math.sqrt(-dx) * 2;
+        gesture.samples = [...gesture.samples.slice(-4), [touch.clientX, event.timeStamp]];
+        setOffset(gesture.dx);
+    }, { passive: false });
+    const end = (event) => {
+        if (!gesture) return;
+        const { tracking, dx, samples } = gesture;
+        gesture = null;
+        if (!tracking) return;
+        const [[firstX, firstTime], [lastX, lastTime]] = [samples[0], samples.at(-1)];
+        const velocity = (lastX - firstX) / Math.max(1, lastTime - firstTime);
+        const width = screen.getBoundingClientRect().width;
+        finish(event.type === "touchend" && dx > 0 && (dx > width / 3 || velocity > 0.5));
+    };
+    screen.addEventListener("touchend", end, { passive: true });
+    screen.addEventListener("touchcancel", end, { passive: true });
 }
 
 function updateNetworkStatus() {
@@ -6027,6 +6442,7 @@ function finishAndroidInstall() {
 }
 
 async function installWebApp() {
+    if (iosInstallAvailable()) return openIOSInstall();
     if (!state.installPrompt) {
         if ($("#androidInstallDialog").open) {
             $("#androidInstallStatus").textContent = "Open Chrome’s ⋮ menu and choose Install app or Add to Home screen.";
@@ -6164,7 +6580,17 @@ async function syncWebPushSubscription(subscription) {
     return current;
 }
 
-async function refreshWebPushStatus({ sync = false } = {}) {
+// focus and visibilitychange both fire on return; share one status read.
+function refreshWebPushStatus(options = {}) {
+    if (!options.sync && state.webPushStatusRefresh) return state.webPushStatusRefresh;
+    const refresh = readWebPushStatus(options).finally(() => {
+        if (state.webPushStatusRefresh === refresh) state.webPushStatusRefresh = null;
+    });
+    if (!options.sync) state.webPushStatusRefresh = refresh;
+    return refresh;
+}
+
+async function readWebPushStatus({ sync = false } = {}) {
     if (!webPushSupported()) {
         renderWebPushStatus();
         return;
@@ -6210,6 +6636,7 @@ async function detachWebPushSubscription() {
 }
 
 async function toggleWebPush() {
+    if (!webPushSupported() && iosInstallAvailable()) return openIOSInstall();
     const button = $("#notificationButton");
     if (state.webPushBusy || !webPushSupported()) return;
     if (Notification.permission === "denied") {
@@ -6528,15 +6955,25 @@ function bindEvents() {
         button.addEventListener("pointerenter", preload, { passive: true });
         button.addEventListener("focus", preload);
         button.addEventListener("click", (event) => {
-            let historyMode = "push";
-            if (button.dataset.panel === "chats" && state.activePanel === "chats" && new URLSearchParams(location.search).has("chat")) {
-                const url = new URL(location.href);
-                url.searchParams.delete("chat");
-                history.pushState({ validApp: true, panel: "chats" }, "", `${url.pathname}${url.search}`);
-                historyMode = "none";
-            }
-            switchPanel(button.dataset.panel, { historyMode });
+            const panel = button.dataset.panel;
             if (event.detail > 0) button.blur();
+            if (panel === state.activePanel) {
+                // Re-tap: back to the tab's root and top, without a new history entry.
+                if (panel === "chats" && new URLSearchParams(location.search).has("chat")) {
+                    const url = new URL(location.href);
+                    url.searchParams.delete("chat");
+                    url.searchParams.delete("message");
+                    url.searchParams.delete("call");
+                    history.replaceState({ ...history.state, validApp: true, panel: "chats" }, "", `${url.pathname}${url.search}`);
+                }
+                switchPanel(panel, { historyMode: "replace", restoreScroll: false });
+                return;
+            }
+            if (panel === "feed" && history.state?.tabOverFeed === true) {
+                history.back();
+                return;
+            }
+            switchPanel(panel, { historyMode: state.activePanel === "feed" ? "push" : "replace" });
         });
     });
     $("#playCard").addEventListener("click", (event) => {
@@ -6856,6 +7293,9 @@ function bindEvents() {
             refreshWebPushStatus();
             refreshAskSafetyState();
             refreshFeedIfStale(FEED_FOREGROUND_REFRESH_MS);
+            void refreshBanner();
+            // Reset the worker's push counter to what the app shows now.
+            state.syncedBadgeCount = null;
         }
         if (document.body.classList.contains("authenticated")) {
             renderTabBadges();
@@ -6865,6 +7305,10 @@ function bindEvents() {
     $("#appView").addEventListener("touchstart", beginPullRefresh, { passive: true });
     $("#appView").addEventListener("touchmove", movePullRefresh, { passive: true });
     $("#appView").addEventListener("touchend", endPullRefresh, { passive: true });
+    $("#appView").addEventListener("touchcancel", () => {
+        state.pullRefreshDistance = 0;
+        void endPullRefresh();
+    }, { passive: true });
     addEventListener("beforeinstallprompt", (event) => {
         event.preventDefault();
         state.installPrompt = event;
@@ -6880,47 +7324,72 @@ function bindEvents() {
     });
 }
 
-$$('[data-share-anonymous], [data-share-feed-platform]').forEach((button) => {
-    const platform = button.dataset.shareAnonymous || button.dataset.shareFeedPlatform;
-    const label = platform ? `${platform[0].toUpperCase()}${platform.slice(1)}` : "Share";
-    button.innerHTML = `${shareIconMarkup(platform)}${button.classList.contains("expanded") ? `<span>Share on ${escapeHTML(label)}</span>` : ""}`;
-});
-syncVisualViewport();
-window.visualViewport?.addEventListener("resize", scheduleVisualViewportSync);
-window.visualViewport?.addEventListener("scroll", scheduleVisualViewportSync);
-addEventListener("resize", scheduleVisualViewportSync);
-document.addEventListener("focusin", () => {
-    scheduleVisualViewportSync();
-    setTimeout(keepFocusedControlVisible, 250);
-});
-document.addEventListener("focusout", scheduleVisualViewportSync);
-bindEvents();
-installNativeSheetGestures();
-initializeParkedUI();
-if (!navigator.onLine) updateNetworkStatus();
-if ("serviceWorker" in navigator && !demoMode) {
-    registerAppServiceWorker();
-    navigator.serviceWorker.addEventListener("message", (event) => {
-        if (event.data?.type !== "VALID_NOTIFICATION_CLICK") return;
-        const target = new URL(event.data.url || "./", location.origin);
-        if (target.origin === location.origin && target.pathname.startsWith("/app/")) location.href = target.href;
-    });
-}
-if (!passkeysSupported() && !demoMode) {
-    $("#passkeyButton").disabled = true;
-    $("#authStatus").textContent = "This browser does not support passkeys. Try current Chrome, Safari, or Edge.";
-    showAuthBrowserHelp({ code: 'passkeys_unavailable' }, false);
-}
-
 let authFlowStarted = false;
 let sessionRestorePending = false;
 let sessionRestoreInFlight = false;
+
+function startApp() {
+    // Start the session check before wiring the UI so a returning user's
+    // request is on the network as early as possible; its result lands after
+    // this synchronous setup.
+    if (!passkeysSupported() && !demoMode) {
+        $("#passkeyButton").disabled = true;
+        $("#authStatus").textContent = "This browser does not support passkeys. Try current Chrome, Safari, or Edge.";
+        showAuthBrowserHelp({ code: 'passkeys_unavailable' }, false);
+    }
+    const androidInstallGate = androidInstallRequested();
+    if (!androidInstallGate) restoreOrStartAuthFlow();
+    $$('[data-share-anonymous], [data-share-feed-platform]').forEach((button) => {
+        const platform = button.dataset.shareAnonymous || button.dataset.shareFeedPlatform;
+        const label = platform ? `${platform[0].toUpperCase()}${platform.slice(1)}` : "Share";
+        button.innerHTML = `${shareIconMarkup(platform)}${button.classList.contains("expanded") ? `<span>Share on ${escapeHTML(label)}</span>` : ""}`;
+    });
+    syncVisualViewport();
+    window.visualViewport?.addEventListener("resize", scheduleVisualViewportSync);
+    window.visualViewport?.addEventListener("scroll", scheduleVisualViewportSync);
+    addEventListener("resize", scheduleVisualViewportSync);
+    document.addEventListener("focusin", () => {
+        scheduleVisualViewportSync();
+        setTimeout(keepFocusedControlVisible, 250);
+    });
+    document.addEventListener("focusout", () => {
+        scheduleVisualViewportSync();
+        scheduleStaleViewportCheck();
+    });
+    window.visualViewport?.addEventListener("resize", scheduleStaleViewportCheck);
+    window.visualViewport?.addEventListener("scroll", scheduleStaleViewportCheck);
+    addEventListener("pageshow", scheduleStaleViewportCheck);
+    addEventListener("orientationchange", scheduleStaleViewportCheck);
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") scheduleStaleViewportCheck();
+    });
+    bindEvents();
+    installNativeSheetGestures();
+    initializeParkedUI();
+    if (!navigator.onLine) updateNetworkStatus();
+    if ("serviceWorker" in navigator) {
+        if (!demoMode) registerAppServiceWorker();
+        navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage);
+        addEventListener("valid:active-chat", reportActiveChat);
+        document.addEventListener("visibilitychange", reportActiveChat);
+        navigator.serviceWorker.addEventListener("controllerchange", reportActiveChat);
+    }
+    renderIOSInstallRow();
+    if (androidInstallGate) {
+        showAuthView();
+        showAndroidInstallGate();
+    } else if (iosInstallAvailable() && new URLSearchParams(location.search).get("install") === "1") void openIOSInstall();
+}
 
 async function restoreOrStartAuthFlow() {
     if (sessionRestoreInFlight || (authFlowStarted && !sessionRestorePending)) return;
     authFlowStarted = true;
     if (!demoMode) {
         sessionRestoreInFlight = true;
+        // Keep the launch splash while the session is unknown; a very slow check
+        // falls back to the sign-in card with its "Checking your session" status.
+        clearTimeout(state.launchSplashTimer);
+        state.launchSplashTimer = setTimeout(showAuthView, 6_000);
         const revision = api.sessionRevision;
         $("#retrySessionButton").disabled = true;
         $("#createAccountButton").classList.add("hidden");
@@ -6936,6 +7405,7 @@ async function restoreOrStartAuthFlow() {
             return;
         } catch (error) {
             if (api.hasSession()) return;
+            showAuthView();
             if (!error.confirmedSessionInvalid) {
                 sessionRestorePending = true;
                 $("#retrySessionButton").classList.remove("hidden");
@@ -6953,11 +7423,18 @@ async function restoreOrStartAuthFlow() {
             $("#retrySessionButton").disabled = false;
         }
     }
+    showAuthView();
+    // Returning users whose cookie expired land on "Welcome Back"; only an
+    // explicit ?signup=1 or a first-ever visit opens account creation.
     const authParams = new URLSearchParams(window.location.search);
-    if (authParams.get("signup") === "1" || (!demoMode && authParams.get("signin") !== "1")) {
+    if (authParams.get("signup") === "1" || (!demoMode && authParams.get("signin") !== "1" && isFirstVisit())) {
         requestAnimationFrame(openSignupDialog);
     }
 }
 
-if (androidInstallRequested()) showAndroidInstallGate();
-else restoreOrStartAuthFlow();
+if (demoMode) {
+    import("./demo-api.js").then(({ DemoAPI }) => {
+        api = new DemoAPI();
+        startApp();
+    });
+} else startApp();
