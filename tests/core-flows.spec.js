@@ -756,7 +756,7 @@ test("completing a poll set celebrates earned aura before cooldown", async ({ pa
     await expect(page.locator("#auraCount")).toHaveText("1,300");
     await page.getByRole("button", { name: "W aura" }).click();
     await expect(page.getByRole("heading", { name: "Next Poll Set Locked" })).toBeVisible();
-    await expect(page.locator("#playLockMessage")).toContainText(/Unlocks in (0:5\d|1:00)/);
+    await expect(page.locator("#playLockMessage")).toContainText(/Unlocks in (\d+s|1m)$/);
 });
 
 test("profile information matches the iOS correction and school-change flow", async ({ page }) => {

@@ -8,7 +8,7 @@ import { startPerformanceMonitoring } from "./performance.js";
 import { createRealtimeList } from "./realtime-list.js";
 import { activateRoute, preloadRoute } from "./routes/route-loader.js";
 import { clearRuntimeStyles, setRuntimeStyles } from "./runtime-style.js";
-import { configureMediaFallback, installMediaImageFallback, mediaImageMarkup } from "./media-url.js";
+import { configureMediaFallback, imageCandidates, installMediaImageFallback, mediaImageMarkup } from "./media-url.js";
 import { confirmSheet } from "./ui-dialogs.js";
 import { showToast } from "./toast.js";
 import { userMessage } from "./user-message.js";
@@ -146,6 +146,7 @@ const state = {
     playComplete: false,
     playAuraEarned: 0,
     skipsUsedInSet: 0,
+    playTransition: null,
     playLockTimer: null,
     inviteStatus: null,
     config: null,
@@ -4149,11 +4150,20 @@ function animateAuraChange(amount, sourceElement = null) {
         setTimeout(() => chip.classList.remove("aura-arrived"), 1400);
         return;
     }
-    chip.animate([
-        { transform: "scale(1)", background: "rgba(255,255,255,.92)" },
-        { transform: "scale(1.16)", background: Number(amount) > 0 ? "#ccf7f4" : "#ffb8d6", offset: .45 },
-        { transform: "scale(1)", background: "rgba(255,255,255,.92)" },
-    ], { duration: 520, easing: "cubic-bezier(.2,.8,.2,1)" });
+    restartChipAnimation(chip, Number(amount) > 0 ? "aura-gain" : "aura-spend");
+}
+
+function prefersReducedMotion() {
+    return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+}
+
+// Class-driven so the keyframes follow the theme and the reduced-motion rule.
+function restartChipAnimation(chip, className) {
+    if (!chip || prefersReducedMotion()) return;
+    chip.classList.remove(className);
+    void chip.offsetWidth;
+    chip.classList.add(className);
+    chip.addEventListener("animationend", () => chip.classList.remove(className), { once: true });
 }
 
 function showStreakCelebration(streak, multiplier) {
@@ -4222,6 +4232,17 @@ function renderInviteUnlock() {
     </div>`;
 }
 
+// PlayLockedView.swift formatTime: "1h 5m", "1h", "4m 30s", "4m", "12s".
+function formatLockRemaining(totalSeconds) {
+    const seconds = Math.max(0, Math.floor(totalSeconds));
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const rest = seconds % 60;
+    if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+    if (minutes > 0) return rest > 0 ? `${minutes}m ${rest}s` : `${minutes}m`;
+    return `${rest}s`;
+}
+
 function renderLockedPlay() {
     const until = state.playLocked?.locked_until;
     clearInterval(state.playLockTimer);
@@ -4238,7 +4259,7 @@ function renderLockedPlay() {
             const remaining = Math.max(0, Math.ceil((new Date(until).getTime() - Date.now()) / 1000));
             const message = $("#playLockMessage");
             if (message) message.textContent = remaining
-                ? `Unlocks in ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`
+                ? `Unlocks in ${formatLockRemaining(remaining)}`
                 : "Unlocking your next polls...";
             if (remaining > 0) return;
             clearInterval(state.playLockTimer);
@@ -4289,9 +4310,10 @@ function renderPlay() {
     const artworkURL = api.assetURL(question.image_url);
     const attribution = question.is_user_submitted ? `<div class="question-attribution">${question.is_anonymous ? avatarMarkup({ first_name: "Anonymous", profile_picture_url: "../assets/app/anonymous.webp" }, "attribution-avatar") : avatarMarkup({ first_name: question.submitted_by_name || "A classmate", profile_picture_url: question.submitted_by_avatar_url }, "attribution-avatar")}<span><small>Question submitted by</small><strong>${escapeHTML(question.is_anonymous ? "Someone at your school" : question.submitted_by_name || "A classmate")}</strong></span><div class="detail-overflow play-overflow"><button class="detail-overflow-button play-overflow-button" type="button" data-toggle-play-menu aria-label="More question actions" aria-expanded="false">•••</button><div class="detail-overflow-menu hidden" role="menu" aria-label="Question actions"><button type="button" role="menuitem" data-play-question-action="report">Report question</button>${question.is_anonymous ? "" : `<button type="button" role="menuitem" data-play-question-action="block">Block submitter</button>`}</div></div></div>` : "";
     const remainingSkips = Math.max(0, Number(state.config?.max_skips_per_set ?? 3) - state.skipsUsedInSet);
+    const previousCard = card.dataset.questionId && card.dataset.questionId !== String(question.id) ? card.querySelector(":scope > .play-card") : null;
     card.innerHTML = `<article class="play-card">
         <div class="play-question-copy"><h3>${escapeHTML(question.question_text)}</h3>${attribution}</div>
-        <div class="question-artwork">${artworkURL ? mediaImageMarkup(artworkURL) : `<div class="artwork-placeholder"><img loading="lazy" decoding="async" src="../assets/app/pencil-clipboard.webp" alt=""><span>Question artwork</span></div>`}</div>
+        <div class="question-artwork">${artworkURL ? mediaImageMarkup(artworkURL, { loading: "eager", attributes: 'fetchpriority="high"' }) : `<div class="artwork-placeholder"><img decoding="async" src="../assets/app/pencil-clipboard.webp" alt=""><span>Question artwork</span></div>`}</div>
         <div class="choice-grid">${choices.map(choiceMarkup).join("")}</div>
         <div class="play-actions">
             <button class="play-action-button" data-shuffle type="button">${uiIcon("shuffle-circle")} Shuffle</button>
@@ -4303,8 +4325,35 @@ function renderPlay() {
     if (card.dataset.questionId !== String(question.id)) {
         card.scrollTop = 0;
         card.dataset.questionId = String(question.id);
+        crossFadePlayCard(card, previousCard);
+        preloadPlayArtwork(state.questions[state.questionIndex + 1]);
     }
 }
+
+// PlayGameView.swift cross-fades the artwork and answer grid over 0.35 s when
+// the question changes. The outgoing card stays inert underneath while it fades.
+function crossFadePlayCard(card, previousCard) {
+    card.querySelectorAll(":scope > .play-card-leaving").forEach((node) => node.remove());
+    if (!previousCard || prefersReducedMotion()) return;
+    previousCard.classList.add("play-card-leaving");
+    previousCard.setAttribute("aria-hidden", "true");
+    previousCard.inert = true;
+    card.querySelector(":scope > .play-card")?.classList.add("play-card-entering");
+    card.append(previousCard);
+    setTimeout(() => previousCard.remove(), 400);
+}
+
+// PlayViewModel prefetches upcoming artwork so the next question never opens on an empty tile.
+function preloadPlayArtwork(question) {
+    const url = question?.image_url ? api.assetURL(question.image_url) : "";
+    const source = url ? imageCandidates(url)[0] : "";
+    if (!source || preloadPlayArtwork.loaded.has(source)) return;
+    preloadPlayArtwork.loaded.add(source);
+    const image = new Image();
+    image.decoding = "async";
+    image.src = source;
+}
+preloadPlayArtwork.loaded = new Set();
 
 async function loadPlay() {
     if (state.questions.length || state.playLocked) return renderPlay();
@@ -4410,21 +4459,42 @@ async function submitNomination({ candidate, question }) {
     refreshFeedGateStatus();
 }
 
+// iOS PlayViewModel.selectAnswer: medium haptic, instant selection, every choice
+// locked, and a fixed 1.2 s hold before advancing whatever the network does
+// (scheduleAdvance ~1180). The server response only reconciles aura and streak.
+const PLAY_ANSWER_HOLD_MS = 1200;
+const PLAY_SKIP_HOLD_MS = 500;
+
+function beginPlayTransition(question) {
+    if (state.playTransition || !question) return false;
+    state.playTransition = { questionId: question.id };
+    $$("#playCard .choice-button, #playCard .play-action-button, #playCard .play-overflow-button").forEach((button) => { button.disabled = true; });
+    return true;
+}
+
+function schedulePlayAdvance(question, delay) {
+    setTimeout(() => {
+        if (state.playTransition?.questionId !== question.id) return;
+        state.playTransition = null;
+        if (state.questions[state.questionIndex] !== question) return;
+        state.questionIndex += 1;
+        renderPlay();
+    }, delay);
+}
+
 async function answerPlayQuestion(choiceId) {
     const question = state.questions[state.questionIndex];
+    if (!question || state.playTransition) return;
     const choices = choicesForQuestion(question);
     const selected = choices.find((choice) => String(choice.user_id) === choiceId);
-    if (!selected) return;
+    if (!selected || !beginPlayTransition(question)) return;
     const selectedButton = $(`[data-choice="${CSS.escape(choiceId)}"]`);
     const previousAura = Math.max(0, Number(state.profile?.aura_points || 0));
     const previousStreak = Math.max(0, Number(state.profile?.current_streak || 0));
     const previousMultiplier = Math.max(1, Number(state.profile?.streak_multiplier || 1));
     const expectedAura = expectedAuraPerAnswer();
-    $$(".choice-button").forEach((button) => {
-        button.disabled = true;
-        button.classList.toggle("selected", button.dataset.choice === choiceId);
-    });
-    softHaptic();
+    $$(".choice-button").forEach((button) => button.classList.toggle("selected", button.dataset.choice === choiceId));
+    haptic("medium");
     if (state.profile && expectedAura > 0) {
         state.profile.aura_points = previousAura + expectedAura;
         state.playAuraEarned += expectedAura;
@@ -4432,6 +4502,7 @@ async function answerPlayQuestion(choiceId) {
         renderProfileHeader();
         animateAuraChange(expectedAura, selectedButton);
     }
+    schedulePlayAdvance(question, PLAY_ANSWER_HOLD_MS);
     try {
         const result = await api.answerQuestion(api.user.id, {
             question_id: question.id,
@@ -4440,37 +4511,37 @@ async function answerPlayQuestion(choiceId) {
             presented_options: choices.map((choice) => ({ phone: "", name: displayName(choice) })),
             is_nomination: false,
         });
-        const auraEarned = Math.max(0, Number(result.aura_points_earned || 0));
+        const auraEarned = Math.max(0, Number(result.aura_points_earned ?? expectedAura));
         const earnedDifference = auraEarned - expectedAura;
-        state.playAuraEarned += earnedDifference;
+        state.playAuraEarned = Math.max(0, state.playAuraEarned + earnedDifference);
         if (state.profile) {
-            const reconciledAura = previousAura + auraEarned;
             const serverTotal = Number(result.total_aura_points);
+            const reconciledAura = Math.max(0, Number(state.profile.aura_points || 0) + earnedDifference);
             state.profile.aura_points = Number.isFinite(serverTotal) ? Math.max(reconciledAura, serverTotal) : reconciledAura;
-            state.profile.current_streak = Math.max(0, Number(result.current_streak ?? previousStreak));
-            state.profile.streak_multiplier = Math.max(1, Number(result.streak_multiplier ?? previousMultiplier));
+            state.profile.current_streak = Math.max(0, Number(result.current_streak ?? state.profile.current_streak ?? previousStreak));
+            state.profile.streak_multiplier = Math.max(1, Number(result.streak_multiplier ?? state.profile.streak_multiplier ?? previousMultiplier));
             protectOptimisticEarnedProfile(state.profile.aura_points, state.profile.current_streak, state.profile.streak_multiplier);
             renderProfileHeader();
         }
         if (earnedDifference !== 0) animateAuraChange(earnedDifference);
+        if (state.playComplete && !state.playTransition) renderPlayCongrats();
         if (Number(state.profile?.current_streak || 0) > previousStreak) {
             showStreakCelebration(state.profile.current_streak, state.profile.streak_multiplier);
         }
-        state.questionIndex += 1;
-        renderPlay();
         refreshProfile();
         refreshFeedGateStatus();
     } catch (error) {
-        if (state.profile) {
-            state.profile.aura_points = previousAura;
-            state.profile.current_streak = previousStreak;
-            state.profile.streak_multiplier = previousMultiplier;
-            state.playAuraEarned = Math.max(0, state.playAuraEarned - expectedAura);
+        // Keep moving like iOS; only take back the aura this vote promised.
+        state.playAuraEarned = Math.max(0, state.playAuraEarned - expectedAura);
+        if (state.profile && expectedAura > 0) {
+            state.profile.aura_points = Math.max(previousAura, Number(state.profile.aura_points || 0) - expectedAura);
             clearOptimisticEarnedProfile();
             renderProfileHeader();
+            animateAuraChange(-expectedAura);
         }
-        showToast(userMessage(error, "Could not save your answer."));
-        renderPlay();
+        if (state.playComplete && !state.playTransition) renderPlayCongrats();
+        const fallback = "Your vote didn't go through. That poll will come back in a later set.";
+        showToast(error?.status >= 400 && error.status < 500 ? userMessage(error, fallback) : fallback);
     }
 }
 
@@ -4486,14 +4557,48 @@ function finishPlaySet() {
     renderLockedPlay();
 }
 
-async function skipPlayQuestion(questionId) {
+// PlayViewModel.skipQuestion: shake the aura counter, record the skip in the
+// background, and advance after 0.5 s. Failed skips retry until they land.
+function skipPlayQuestion(questionId) {
+    const question = state.questions[state.questionIndex];
+    if (!question || String(question.id) !== String(questionId) || state.playTransition) return;
     const remaining = Math.max(0, Number(state.config?.max_skips_per_set ?? 3) - state.skipsUsedInSet);
     if (remaining < 1) return showToast("You've used all skips for this poll set.");
+    if (!beginPlayTransition(question)) return;
     state.skipsUsedInSet += 1;
-    state.questionIndex += 1;
-    renderPlay();
-    try { await api.skipQuestion(api.user.id, questionId); }
-    catch (_) { showToast("Skipped here. We'll sync it when the connection recovers."); }
+    restartChipAnimation($("#auraCount")?.closest(".play-aura-chip"), "aura-shake");
+    schedulePlayAdvance(question, PLAY_SKIP_HOLD_MS);
+    void recordPlaySkip(question.id);
+}
+
+const pendingPlaySkips = new Map();
+
+async function recordPlaySkip(questionId, attempt = 0) {
+    const userId = api.user?.id;
+    if (!userId) return;
+    try {
+        await api.skipQuestion(userId, questionId);
+        pendingPlaySkips.delete(questionId);
+    } catch (error) {
+        if (error?.status && error.status < 500 && error.status !== 408 && error.status !== 429) {
+            pendingPlaySkips.delete(questionId);
+            return;
+        }
+        if (!pendingPlaySkips.has(questionId) && attempt === 0) showToast("Skipped. We'll save it when your connection is back.");
+        pendingPlaySkips.set(questionId, { userId, attempt: attempt + 1 });
+        if (attempt < 4 && navigator.onLine !== false) {
+            setTimeout(() => {
+                const pending = pendingPlaySkips.get(questionId);
+                if (pending && api.user?.id === pending.userId) void recordPlaySkip(questionId, pending.attempt);
+            }, 2000 * 2 ** attempt);
+        }
+    }
+}
+
+function retryPendingPlaySkips() {
+    for (const [questionId, pending] of pendingPlaySkips) {
+        if (api.user?.id === pending.userId) void recordPlaySkip(questionId, pending.attempt);
+    }
 }
 
 async function moderatePlayQuestion(action) {
@@ -7063,6 +7168,7 @@ function bindEvents() {
     addEventListener("popstate", handleAppPopState);
     addEventListener("offline", updateNetworkStatus);
     addEventListener("online", updateNetworkStatus);
+    addEventListener("online", retryPendingPlaySkips);
     addEventListener("online", () => { if (sessionRestorePending) void restoreOrStartAuthFlow(); });
     $("#retrySessionButton").addEventListener("click", restoreOrStartAuthFlow);
     addEventListener("focus", checkStripeCheckout);

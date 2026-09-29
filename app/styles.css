@@ -388,7 +388,8 @@ h3 { font-size: 1.45rem; }
 .choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
 .choice-button { min-height: 90px; display: grid; place-items: center; padding: 12px; border: var(--line); border-radius: 12px; background: var(--white); cursor: pointer; text-align: center; font-size: 1.25rem; line-height: 1.15; }
 .choice-button.selected { outline: 3px solid var(--selection); outline-offset: -6px; transform: scale(.97); box-shadow: 0 0 10px rgba(255,255,0,.5); }
-.choice-button:disabled:not(.selected) { opacity: .58; }
+/* PollChoiceButton keeps every name at full strength while the vote holds. */
+.choice-button:disabled { opacity: 1; cursor: default; }
 .choice-avatar { width: 54px; height: 54px; display: grid; place-items: center; overflow: hidden; border: 2px solid var(--outline); border-radius: 50%; background: rgba(var(--surface-rgb),.65); }
 .choice-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .choice-button:nth-child(1), .choice-button:nth-child(2), .choice-button:nth-child(3), .choice-button:nth-child(4) { background: var(--peach); color: var(--on-peach); }
@@ -405,6 +406,18 @@ h3 { font-size: 1.45rem; }
 .play-streak-chip .ui-icon, .streak-celebration-fire .ui-icon { color: var(--streak); fill: currentColor; stroke-width: 0; }
 .play-aura-chip img { width: 20px; height: 22px; object-fit: contain; }
 .play-aura-chip.aura-arrived { animation: aura-balance-arrival .42s cubic-bezier(.2,.9,.25,1); }
+.play-aura-chip.aura-gain { animation: aura-balance-arrival .52s cubic-bezier(.2,.8,.2,1); }
+.play-aura-chip.aura-spend { animation: aura-balance-spend .52s cubic-bezier(.2,.8,.2,1); }
+/* PlayGameView skip: the aura counter shakes in five 0.08 s steps. */
+.play-aura-chip.aura-shake { animation: aura-skip-shake .4s linear; }
+/* PlayGameView cross-fades the question over 0.35 s; the outgoing card sits inert beneath. */
+#playCard:has(> .play-card-leaving) { position: relative; }
+#playCard > .play-card-leaving { position: absolute; inset: 0; z-index: 0; pointer-events: none; animation: play-card-out .35s ease forwards; }
+#playCard > .play-card-entering { position: relative; z-index: 1; animation: play-card-in .35s ease; }
+@keyframes play-card-in { from { opacity: 0; } }
+@keyframes play-card-out { to { opacity: 0; } }
+@keyframes aura-balance-spend { 45% { transform: scale(1.16); background: #ffb8d6; } }
+@keyframes aura-skip-shake { 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(4px); } }
 .aura-flight { position: fixed; z-index: 100; display: inline-flex; align-items: center; gap: 5px; pointer-events: none; opacity: 0; transform: translate(-50%, -50%) scale(.72); }
 .aura-flight img { width: 34px; height: 38px; object-fit: contain; filter: drop-shadow(0 3px 4px rgba(0,0,0,.2)); }
 .aura-flight strong { padding: 4px 7px; border: 2px solid var(--outline); border-radius: 999px; background: var(--white); color: var(--ink); font-size: 1rem; box-shadow: 0 3px 8px rgba(0,0,0,.15); }
