@@ -32,8 +32,11 @@ async function refreshWeeklyGame() {
     try {
         const result = await api.getWeeklyGame();
         if (generation !== weeklyGameGeneration || !api.user?.id) return;
-        // Follow the selected weekly release. No separate web feature flag.
-        const available = ['camera-v1','web-v1'].includes(result.release?.runtime);
+        // Follow the selected weekly release, but only show games this web
+        // player can run (not hand-package-v2, touch games or update notices).
+        const { webPlayable } = await import('./weekly-game/compat.js');
+        if (generation !== weeklyGameGeneration) return;
+        const available = webPlayable(result.release);
         if (!available) { document.querySelector('#weeklyGameButton')?.remove(); return; }
         let button = document.querySelector('#weeklyGameButton');
         if (!button) {

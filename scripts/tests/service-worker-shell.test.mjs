@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 const NETWORK_ONLY_DYNAMIC_IMPORTS = new Map([
     ["demo-api.js", "localhost-only demo fixtures; never used in production"],
     ["weekly-game/index.js", "the weekly game needs the live release, CDN package and camera"],
+    ["weekly-game/compat.js", "checked only after the live weekly release was fetched"],
     ["weekly-game/web-game.js", "loaded by the weekly game"],
     ["weekly-game/camera.js", "loaded by the weekly game"],
     ["weekly-game/demo-release.js", "demo fixture"],
