@@ -16,6 +16,18 @@ async function emulateInstalledApp(page) {
     });
 }
 
+// The WebKit bug's signature: the visible area is full height again while the
+// layout viewport (what position:fixed bottom:0 uses) stays short.
+async function restoreVisibleAreaOnly(page, height) {
+    await page.evaluate((full) => {
+        Object.defineProperty(window.visualViewport, "height", { configurable: true, get: () => full });
+        window.visualViewport.dispatchEvent(new Event("resize"));
+    }, height);
+}
+async function clearVisibleAreaOverride(page) {
+    await page.evaluate(() => { delete window.visualViewport.height; window.visualViewport.dispatchEvent(new Event("resize")); });
+}
+
 const navBottom = (page) => page.locator("#bottomNav").evaluate((nav) => Math.round(nav.getBoundingClientRect().bottom));
 // Chromium's mobile emulation zooms the signed-in page out by a few pixels
 // (innerHeight 842 vs 839 on Pixel 7), so allow that much rounding.
@@ -43,6 +55,7 @@ test.describe("installed-app viewport", () => {
         // The keyboard is dismissed but the layout viewport stays short (iOS 26 standalone):
         // a fixed bottom:0 element sits 330px above the real bottom edge.
         await page.locator("#feedSearch").blur();
+        await restoreVisibleAreaOnly(page, height);
         await expect(page.locator("html")).not.toHaveClass(/keyboard-open/);
         await expect(page.locator("html")).toHaveClass(/layout-viewport-stale/);
         await expect.poll(async () => nearBottom(height)(await navBottom(page))).toBe(true);
@@ -56,6 +69,7 @@ test.describe("installed-app viewport", () => {
         expect(toastBottom).toBeGreaterThan(height - 140);
 
         // WebKit recovers: the compensation is removed and nothing moves.
+        await clearVisibleAreaOverride(page);
         await cdp.send("Emulation.setDeviceMetricsOverride", { width, height, screenWidth: width, screenHeight: height, deviceScaleFactor: await page.evaluate(() => devicePixelRatio), mobile: true });
         await expect(page.locator("html")).not.toHaveClass(/layout-viewport-stale/);
         await expect.poll(async () => nearBottom(height)(await navBottom(page))).toBe(true);
@@ -67,23 +81,21 @@ test.describe("installed-app viewport", () => {
         const cdp = await context.newCDPSession(page);
         const { width, height } = page.viewportSize();
         await cdp.send("Emulation.setDeviceMetricsOverride", { width, height: height - 300, screenWidth: width, screenHeight: height, deviceScaleFactor: await page.evaluate(() => devicePixelRatio), mobile: true });
+        await restoreVisibleAreaOnly(page, height);
         await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
         await expect.poll(async () => nearBottom(height)(await navBottom(page))).toBe(true);
     });
 
-    test("an estimate below the physical screen never pushes the tab bar off it", async ({ page }) => {
-        // Seen in production (iOS 26 installed app): with a healthy viewport one
-        // "true bottom" estimate overshot and the tab bar labels went under the
-        // screen edge. The correction is clamped to screen.height.
+    test("a healthy installed app never shifts the tab bar, even when the screen is taller than the page", async ({ page, context }) => {
+        // Seen in production (iOS 26 installed app, default status bar): the
+        // page is shorter than the screen and 100lvh; only a visible area that
+        // reaches past the layout bottom may move the tab bar.
         await emulateInstalledApp(page);
-        await page.addInitScript(() => {
-            const style = document.createElement("style");
-            style.textContent = ".viewport-probe-large { height: 3000px !important; }";
-            document.documentElement.append(style);
-        });
         await signInToDemo(page);
-        const { height } = page.viewportSize();
-        await page.evaluate(() => window.dispatchEvent(new Event("pageshow")));
+        const cdp = await context.newCDPSession(page);
+        const { width, height } = page.viewportSize();
+        await cdp.send("Emulation.setDeviceMetricsOverride", { width, height, screenWidth: width, screenHeight: height + 60, deviceScaleFactor: await page.evaluate(() => devicePixelRatio), mobile: true });
+        await page.evaluate(() => { window.dispatchEvent(new Event("pageshow")); document.dispatchEvent(new Event("visibilitychange")); });
         await page.waitForTimeout(1200);
         await expect(page.locator("html")).not.toHaveClass(/layout-viewport-stale/);
         expect(nearBottom(height)(await navBottom(page))).toBe(true);
@@ -428,6 +440,7 @@ test("the chat room and composer fill the real screen while the layout viewport 
     await cdp.send("Emulation.setDeviceMetricsOverride", { width, height: height - 330, screenWidth: width, screenHeight: height, deviceScaleFactor: await page.evaluate(() => devicePixelRatio), mobile: true });
     await expect(page.locator("html")).toHaveClass(/keyboard-open/);
     await composer.blur();
+    await restoreVisibleAreaOnly(page, height);
     await expect(page.locator("html")).toHaveClass(/layout-viewport-stale/);
     await expect.poll(async () => Math.abs(await room.evaluate((element) => element.getBoundingClientRect().bottom) - healthy) <= 4).toBe(true);
     await expect.poll(async () => nearBottom(height)(await navBottom(page))).toBe(true);

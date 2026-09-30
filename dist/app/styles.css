@@ -908,7 +908,6 @@ h3 { font-size: 1.45rem; }
    move fixed-bottom chrome down onto the real screen edge. */
 .viewport-probe { position: fixed; left: 0; width: 0; visibility: hidden; pointer-events: none; }
 .viewport-probe-bottom { bottom: 0; height: 0; }
-.viewport-probe-large { top: 0; height: 100lvh; }
 .layout-viewport-stale .bottom-nav { transform: translateY(var(--layout-viewport-gap)); }
 .layout-viewport-stale .app-update-prompt { bottom: calc(82px + var(--safe-bottom) - var(--layout-viewport-gap)); }
 .layout-viewport-stale .toast, .layout-viewport-stale .toast[popover] { bottom: calc(98px - var(--layout-viewport-gap)); }
