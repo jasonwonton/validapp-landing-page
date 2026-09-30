@@ -59,7 +59,7 @@ const loadLiveCamera = () => import("../live-camera.js");
 // then adopts this stream. Constraints match live-camera.js cameraConstraints.
 function cameraStreamRequest(facing) {
     if (!navigator.mediaDevices?.getUserMedia) return null;
-    const request = navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1440 } } });
+    const request = navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: facing === "user" ? 1080 : 1440 } } });
     request.catch(() => null);
     return request;
 }

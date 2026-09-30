@@ -34,6 +34,9 @@
 .live-camera-stage { position: relative; min-height: 0; height: min(100%, calc((100vw - 16px) * 4 / 3), 672px); aspect-ratio: 3 / 4; place-self: center; overflow: hidden; background: #111; border-radius: 24px; margin: 0 0 12px; }
 .live-camera-stage video { position: absolute; width: 100%; height: 100%; object-fit: cover; }
 .live-camera-stage video.mirrored { transform: scaleX(-1); }
+/* Front-camera framing: FRONT_CAMERA_FRAMING in live-camera.js. */
+.live-camera-stage video.framed { transform: scale(1.3333); }
+.live-camera-stage video.mirrored.framed { transform: scale(-1.3333, 1.3333); }
 .live-camera-stage .live-camera-inset { position: absolute; width: 27%; aspect-ratio: 3 / 4; object-fit: cover; right: 16px; top: 16px; border: 2px solid #fff; border-radius: 12px; }
 .live-camera-heading { position: absolute; left: 16px; right: 16px; top: 16px; display: grid; justify-items: center; gap: 4px; }
 .live-camera-heading strong, .live-camera-heading span { padding: 5px 12px; border-radius: 12px; background: rgba(0,0,0,.65); }

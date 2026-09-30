@@ -199,7 +199,7 @@ export function createLensEngine({ video, lenses = LENSES, sampleRate = 20, anal
         }
     }
 
-    function render(ctx, width, height, { mirrored = false, timestamp = performance.now(), analyze = true } = {}) {
+    function render(ctx, width, height, { mirrored = false, framing = 1, timestamp = performance.now(), analyze = true } = {}) {
         if (destroyed || selected === ORIGINAL_LENS || imagesFor !== selected.id) return false;
         if (analyze) {
             if (lastFrameAt != null && timestamp > lastFrameAt) pushBounded(timings.frame, timestamp - lastFrameAt);
@@ -210,7 +210,7 @@ export function createLensEngine({ video, lenses = LENSES, sampleRate = 20, anal
         const faces = tracker.faces(timestamp / 1000);
         if (!faces.length) return false;
         const started = performance.now();
-        const mapping = coverMapping(video.videoWidth, video.videoHeight, width, height, mirrored);
+        const mapping = coverMapping(video.videoWidth, video.videoHeight, width, height, mirrored, framing);
         drawLens(ctx, selected, faces.map(face => screenFace(face, mapping)), images, timestamp / 1000);
         const cost = performance.now() - started;
         pushBounded(timings.draw, cost);
