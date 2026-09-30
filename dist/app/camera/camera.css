@@ -83,3 +83,27 @@
 .chat-media-editor .chat-media-send-count[hidden] { display: none; }
 .chat-media-editor [data-cancel-chat-upload] { position: absolute; z-index: 6; left: 50%; bottom: 96px; transform: translateX(-50%); min-height: 44px; padding: 0 18px; border: 2px solid #fff; border-radius: 999px; background: rgba(0,0,0,.6); color: #fff; font-size: 15px; }
 .chat-media-editor [data-cancel-chat-upload][hidden] { display: none; }
+
+/* Full-screen camera (iOS ChatMediaCaptureView / DailyMomentCameraView): the
+   preview fills the sheet edge to edge, under the status bar and home
+   indicator, and every control floats over it. */
+.chat-sheet.is-capturing .live-camera { position: absolute; inset: 0; z-index: 1; display: block; padding: 0; }
+.chat-sheet.is-capturing .live-camera[hidden] { display: none; }
+.chat-sheet.is-capturing .live-camera-stage { position: absolute; inset: 0; width: 100%; height: 100%; aspect-ratio: auto; place-self: stretch; margin: 0; border-radius: 0; background: #000; }
+.chat-sheet.is-capturing .live-camera-stage::after { content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none; background: linear-gradient(to bottom, rgba(0,0,0,.58), transparent 18%, transparent 64%, rgba(0,0,0,.72)); }
+.chat-sheet.is-capturing .live-camera-flash { top: max(10px, env(safe-area-inset-top)); right: 74px; width: 46px; height: 46px; border-radius: 23px; background: rgba(0,0,0,.52); }
+.chat-sheet.is-capturing .live-camera-timer { top: calc(max(10px, env(safe-area-inset-top)) + 8px); }
+.chat-sheet.is-capturing .live-camera-inset { top: calc(env(safe-area-inset-top) + 112px); right: 16px; width: min(34%, 150px); z-index: 3; border: 3px solid #fff; border-radius: 20px; }
+.chat-sheet.is-capturing .live-camera-controls { position: absolute; left: 0; right: 0; bottom: calc(max(12px, env(safe-area-inset-bottom)) + 20px); z-index: 5; grid-template-columns: 82px 1fr 82px; gap: 0; padding: 0 18px; }
+.chat-sheet.is-capturing .live-camera-controls [data-camera-library] { width: 54px; height: 54px; border-radius: 16px; background: rgba(0,0,0,.52); }
+.live-camera-flip { position: absolute; z-index: 4; top: max(10px, env(safe-area-inset-top)); right: 18px; width: 46px; height: 46px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: rgba(0,0,0,.52); color: #fff; }
+.live-camera-flip:disabled { opacity: .4; }
+.live-camera-flip .ui-icon { width: 22px; height: 22px; }
+.chat-sheet.is-capturing .live-camera-hint { position: absolute; left: 0; right: 0; bottom: max(8px, env(safe-area-inset-bottom)); z-index: 5; margin: 0; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+.chat-sheet.is-capturing .live-camera-alternatives { position: absolute; left: 12px; right: 12px; bottom: calc(max(12px, env(safe-area-inset-bottom)) + 116px); z-index: 5; }
+.chat-sheet.is-capturing .live-camera-message:not(:empty) { z-index: 5; }
+/* Lens carousel and zoom pill sit above the capture bar, as on iOS. */
+.chat-sheet.is-capturing .live-camera .lens-carousel-slot { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 116px); z-index: 4; padding: 0; background: none; }
+.chat-sheet.is-capturing .live-camera-zoom { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 222px); z-index: 4; min-width: 44px; height: 36px; background: rgba(0,0,0,.55); }
+.chat-sheet.is-capturing .live-camera-stage:not(:has(.lens-carousel-slot:not([hidden]))) .live-camera-zoom { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 124px); }
+.live-camera-flip.recording-hidden { visibility: hidden; }

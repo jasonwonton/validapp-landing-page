@@ -19,7 +19,7 @@ function ensureStyles() {
 // The last lens stays selected when the camera reopens in this session.
 let lastLensId = ORIGINAL_LENS.id;
 
-export function attachCameraLenses({ stage, video, isMirrored = () => video.classList.contains('mirrored'), framing = () => 1, engineOptions = {} }) {
+export function attachCameraLenses({ stage, video, isMirrored = () => video.classList.contains('mirrored'), engineOptions = {} }) {
     ensureStyles();
     const canvas = document.createElement('canvas');
     canvas.className = 'lens-overlay';
@@ -46,7 +46,7 @@ export function attachCameraLenses({ stage, video, isMirrored = () => video.clas
         frame = requestAnimationFrame(tick);
         size();
         if (drawn) ctx.clearRect(0, 0, canvas.width, canvas.height);
-        drawn = engine.render(ctx, canvas.width, canvas.height, { mirrored: isMirrored(), framing: framing(), timestamp });
+        drawn = engine.render(ctx, canvas.width, canvas.height, { mirrored: isMirrored(), timestamp });
     }
     function loop(run) {
         if (run && frame === null && !destroyed) frame = requestAnimationFrame(tick);
@@ -74,9 +74,9 @@ export function attachCameraLenses({ stage, video, isMirrored = () => video.clas
         engine, carousel,
         /** Draw the lens onto a captured frame. `ctx` must hold the video
          * drawn with object-fit: cover into width x height; pass `mirrored`
-         * and `framing` exactly as that frame was drawn. */
-        composite(context, width, height, { mirrored = false, framing = 1 } = {}) {
-            return engine.render(context, width, height, { mirrored, framing, timestamp: performance.now(), analyze: false });
+         * exactly as that frame was drawn. */
+        composite(context, width, height, { mirrored = false } = {}) {
+            return engine.render(context, width, height, { mirrored, timestamp: performance.now(), analyze: false });
         },
         destroy() {
             destroyed = true; loop(false);

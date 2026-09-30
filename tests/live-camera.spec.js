@@ -31,13 +31,15 @@ test.describe('live Memento capture', () => {
         await expect(shutter).toBeEnabled();
         await expect(page.locator('[data-memento-camera]')).not.toContainText(/sequence|First view|Second view|primary/i);
         await expect(page.locator('[data-memento-dialog] .live-camera-hint')).toHaveText('Tap to capture');
+        // Full-screen preview (iOS DailyMomentCameraView); the Memento itself stays 3:4.
         const preview = await page.locator('.live-camera-stage').boundingBox();
-        expect(preview.width / preview.height).toBeCloseTo(3 / 4, 2);
+        expect(preview).toEqual(await page.locator('[data-memento-dialog]').boundingBox());
         await expect(page.locator('.memento-file-input')).toBeHidden();
         await expect(page.getByRole('button', { name: 'Choose a photo instead' })).toBeHidden();
         await shutter.click();
         await expect(page.locator('.memento-publish')).toBeEnabled();
         await expect(page.locator('.memento-preview img')).toBeVisible();
+        expect(await page.locator('.memento-preview img').evaluate(img => img.naturalWidth / img.naturalHeight)).toBeCloseTo(3 / 4, 2);
         await expect(page.locator('[data-swap-memento-capture]')).toBeVisible();
         await expect(page.locator('.memento-options, .memento-caption, [data-memento-effects]')).toHaveCount(0);
         await expect(page.locator('.memento-photo-fallback')).toBeHidden();
