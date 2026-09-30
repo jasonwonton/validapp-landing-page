@@ -40,7 +40,7 @@ function isVideoFile(file) {
 }
 
 export async function prepareChatMedia(file, { durationMsHint = null, poster = null, config = null } = {}) {
-    if (!file) throw new Error("Choose a photo, MP4 video, or M4A voice recording.");
+    if (!file) throw new Error("Choose a photo or video.");
     const pipeline = String(file.type || "").startsWith("image/") || /\.(heic|heif)$/i.test(file.name || "") ? await photoPipeline() : null;
     if (pipeline) {
         const prepared = await pipeline.preparePhotoFile(file, pipeline.chatPhotoProfile(config), { preview: false });
@@ -55,11 +55,11 @@ export async function prepareChatMedia(file, { durationMsHint = null, poster = n
         const normalized = file.type === "audio/mp4" ? file : new File([file], file.name || "voice.m4a", { type: "audio/mp4", lastModified: file.lastModified || Date.now() });
         return { kind: "audio", file: normalized, thumbnail: null, durationMs };
     }
-    if (!isVideoFile(file)) throw new Error("Choose a photo, MP4 video, or M4A voice recording.");
+    if (!isVideoFile(file)) throw new Error("Choose a photo or video.");
     const type = baseMediaType(file.type) || (/\.webm$/i.test(file.name || "") ? "video/webm" : /\.mov$/i.test(file.name || "") ? "video/quicktime" : "video/mp4");
     const ingest = ingestEnabled(config);
     const hint = Number.isFinite(Number(durationMsHint)) && Number(durationMsHint) > 0 ? Math.round(Number(durationMsHint)) : null;
-    if (!ingest && type !== "video/mp4") throw new Error("Choose a photo, MP4 video, or M4A voice recording.");
+    if (!ingest && type !== "video/mp4") throw new Error("Choose a photo or video.");
     if (!ingest && file.size > MAX_UPLOAD_BYTES) throw new Error("Videos can be up to 8 MB.");
     let metadata = null;
     let metadataError = null;

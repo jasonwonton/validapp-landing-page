@@ -1,4 +1,5 @@
-import { downloadPackage } from './package.js';
+import { downloadPackage, isPackageV2 } from './package.js';
+import { CameraPackageSandbox, advanceSprite, MIN_SPRITE_ALPHA } from './package-engine.js';
 import { createCameraGame, CameraEvidence } from './scoring.js';
 import { WristTracker } from './tracker.js';
 import { cameraGameSupport } from './support.js';
@@ -12,7 +13,13 @@ const clamp=(v,lo,hi,fallback)=>Number.isFinite(v)?Math.min(hi,Math.max(lo,v)):f
 
 export function createCameraWeeklyGame({api,onClose=()=>{}}) {
     let dialog,release,pkg,abort,generation=0,stream,tracker,recording,raf,wakeLock,videoURL,phase='closed',engine,evidence,scene;
-    let countStart=0,playStart=0,lastPair=null,lastPairTime=-Infinity,pointTime=-Infinity,finishing=false,hadHistory=false,overlays=[];
+    let countStart=0,playStart=0,lastPair=null,lastPairTime=-Infinity,lastHandsTime=-Infinity,pointTime=-Infinity,finishing=false,hadHistory=false,overlays=[];
+    // hand-package-v2: the reviewed package script, running in its sandbox host.
+    let sandbox=null;
+    const game=()=>sandbox?sandbox.state:scene;
+    // rules.game.hands: 0 = the game ignores hands, 1 = one hand is enough (as iOS).
+    const handsNeeded=()=>sandbox?(release.rules.game?.hands===0?0:release.rules.game?.hands===1?1:2):2;
+    const trackingVisible=now=>{const need=handsNeeded();return need===0 || (need===1?now-lastHandsTime<300:Boolean(lastPair) && now-lastPairTime<300);};
     const supported=()=>Boolean(navigator.mediaDevices?.getUserMedia && recordingType());
     const status=message=>dialog && text(dialog,'[data-status]',message);
     const stopCapture=()=>{
@@ -29,7 +36,7 @@ export function createCameraWeeklyGame({api,onClose=()=>{}}) {
     };
     function close(fromHistory=false) {
         if (!dialog) return;
-        generation++; abort?.abort(); phase='closed'; stopCapture(); revoke();
+        generation++; abort?.abort(); phase='closed'; stopCapture(); revoke(); sandbox?.close(); sandbox=null;
         const old=dialog;dialog=null;old.close();old.remove();
         document.removeEventListener('visibilitychange',visibility); window.removeEventListener('pagehide',pagehide); window.removeEventListener('popstate',popstate);
         if (!fromHistory && hadHistory && history.state?.weeklyGame) history.back();
@@ -87,6 +94,14 @@ export function createCameraWeeklyGame({api,onClose=()=>{}}) {
             const support=cameraGameSupport();
             if(!support.supported){phase='unsupported';show(dialog,'[data-enable]',false);show(dialog,'[data-audio-label]',false);status(support.message);if(support.ios){const link=document.createElement('a');link.href='https://apps.apple.com/us/app/valid-compliment-classmates/id6755367062';link.textContent='Open Valid in the App Store';link.className='weekly-game-ios-link';dialog.querySelector('.weekly-game-controls').prepend(link);}return;}
             if (!supported()) throw new Error('This browser cannot record camera games. Open Valid in the latest Chrome.');
+            if (isPackageV2(release)) {
+                // Load the game before asking for the camera, so a broken package never opens it.
+                const next=new CameraPackageSandbox({host:pkg.host,rules:release.rules,duration:release.rules.duration_seconds,container:dialog,
+                    onChange:(_,scored)=>{if(next!==sandbox)return;if(scored)pointTime=performance.now();if(next.error)interrupt(next.error);},
+                    onHaptic:kind=>window.ValidPreferences?.haptic?.(kind)});
+                sandbox=next;await next.load(abort.signal);
+                if(current!==generation)return;
+            }
             phase='intro';dialog.querySelector('[data-enable]').disabled=false;status('Prop up your phone and leave room for both hands.');
         } catch(error) {
             if(current!==generation)return;
@@ -97,7 +112,7 @@ export function createCameraWeeklyGame({api,onClose=()=>{}}) {
     async function enableCamera() {
         if (!dialog || ['preparing','countdown','playing','reaction','finishing'].includes(phase))return;
         if (document.querySelector('.call-overlay[open]')) { status('Finish your call before opening the camera game.'); return; }
-        const current=++generation;phase='preparing';finishing=false;stopCapture();revoke();lastPair=null;lastPairTime=-Infinity;
+        const current=++generation;phase='preparing';finishing=false;stopCapture();revoke();lastPair=null;lastPairTime=-Infinity;lastHandsTime=-Infinity;
         show(dialog,'[data-rankings]',false);show(dialog,'.weekly-game-controls',true);show(dialog,'[data-enable]',true);show(dialog,'[data-start]',false);
         const button=dialog.querySelector('[data-enable]');button.disabled=true;button.textContent='Preparing camera…';status('Allow camera access. Hand tracking may take a moment to download the first time.');
         const wantsAudio=dialog.querySelector('[data-audio]').checked;
@@ -130,15 +145,20 @@ export function createCameraWeeklyGame({api,onClose=()=>{}}) {
     }
     function receive(sample,current) {
         if(current!==generation || !dialog)return;
-        lastPair=sample.pair;lastPairTime=sample.timestamp;
+        lastPair=sample.pair;lastPairTime=sample.timestamp;if(sample.hands?.length)lastHandsTime=sample.timestamp;
         if (['playing','reaction','finishing'].includes(phase)) {
-            const row=evidence.append(sample.timestamp-playStart,sample.pair,sample.hardBreak);
-            if(row){const prior=scene.score;scene=engine.frame({samples:[row]});if(scene.score>prior)pointTime=performance.now();}
+            const elapsed=sample.timestamp-playStart;
+            const row=evidence.append(elapsed,sample.pair,sample.hardBreak);
+            // Only frames captured inside the round reach the package, as on iOS.
+            if(sandbox){if(elapsed>=0 && elapsed<release.rules.duration_seconds*1000)sandbox.observe(row,sample.hands||[],elapsed);}
+            else if(row){const prior=scene.score;scene=engine.frame({samples:[row]});if(scene.score>prior)pointTime=performance.now();}
         }
     }
     function startRound() {
-        if(phase!=='ready' || !lastPair || performance.now()-lastPairTime>300)return;
-        engine=createCameraGame();scene=engine.start({protocol:1,seed:crypto.getRandomValues(new Uint32Array(1))[0],rules:release.rules});
+        if(phase!=='ready' || !trackingVisible(performance.now()) || (sandbox && !sandbox.loaded))return;
+        const seed=crypto.getRandomValues(new Uint32Array(1))[0];
+        if(sandbox){engine=null;scene=null;void sandbox.start(seed);}
+        else {engine=createCameraGame();scene=engine.start({protocol:1,seed,rules:release.rules});}
         evidence=new CameraEvidence(release.rules.duration_seconds);countStart=performance.now();phase='countdown';pointTime=-Infinity;
         show(dialog,'[data-start]',false);status(pkg.presentation.copy?.countdown || 'Step back. Get ready!');
         recording.audio?.resume().catch(()=>{});
@@ -152,8 +172,9 @@ export function createCameraWeeklyGame({api,onClose=()=>{}}) {
             catch(error){interrupt(error.message);return;}
         }
         if(phase==='playing' && now-playStart>=rules.duration_seconds*1000){phase='reaction';recording.stopMusic();status(pkg.presentation.copy?.reaction || 'Time’s up!');}
+        if(['reaction','finishing'].includes(phase))sandbox?.flush();
         if(phase==='reaction' && now-playStart>=(rules.duration_seconds+rules.reaction_seconds)*1000){void finishRound(current);return;}
-        const visible=lastPair && now-lastPairTime<300;
+        const visible=trackingVisible(now);
         const start=dialog.querySelector('[data-start]');start.disabled=!visible;
         text(dialog,'[data-tracking]',visible?'Hands in view':pkg.presentation.copy?.tracking || 'Keep both hands in view');
         dialog.querySelector('[data-tracking]').classList.toggle('ready',Boolean(visible));
@@ -168,6 +189,17 @@ export function createCameraWeeklyGame({api,onClose=()=>{}}) {
         const p=pkg.presentation,c=p.counter||{};
         const label=(value,x,y,size=40)=>{ctx.font=`${size}px Jua, sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineWidth=5;ctx.strokeStyle='rgba(0,0,0,.65)';ctx.strokeText(value,x,y);ctx.fillText(value,x,y);};
         ctx.fillStyle=color(c.color,'#FFFFFF');
+        if(['playing','reaction'].includes(phase) && sandbox && video.videoWidth){
+            const scale=Math.min(w/video.videoWidth,h/video.videoHeight),fw=video.videoWidth*scale,fh=video.videoHeight*scale,ox=(w-fw)/2,oy=(h-fh)/2;
+            const lead=(now-playStart)/1000-sandbox.spriteTime;let drawn=0;
+            for(const placed of sandbox.state.sprites){
+                const image=sandbox.spriteImages.get(placed.key);if(!image || placed.alpha<MIN_SPRITE_ALPHA)continue;
+                const s=advanceSprite(placed,lead),sw=fw*s.width,sh=sw*image.naturalHeight/image.naturalWidth;
+                ctx.save();ctx.globalAlpha=s.alpha;ctx.translate(ox+s.x*fw,oy+(1-s.y)*fh);ctx.rotate(s.rotation);ctx.drawImage(image,-sw/2,-sh/2,sw,sh);ctx.restore();drawn++;
+            }
+            if(canvas.dataset.sprites!==String(drawn))canvas.dataset.sprites=String(drawn);
+        }
+        const scene=game();
         if(['playing','reaction'].includes(phase)){
             const cx=clamp(c.x,.1,.9,.5)*w,cy=(1-clamp(c.y,.1,.95,.93))*h;
             ctx.save();ctx.globalAlpha=clamp(c.background_opacity,0,1,.6);ctx.fillStyle=color(c.background,'#000000');ctx.beginPath();ctx.roundRect(cx-w*.22,cy-40,w*.44,80,24);ctx.fill();ctx.restore();label(`${scene.score} ${release.rules.score_unit || 'points'}`,cx,cy,42);
@@ -192,10 +224,12 @@ export function createCameraWeeklyGame({api,onClose=()=>{}}) {
         try {
             // Reaction time normally drains the one in-flight observation. A
             // slow tracker must never produce a partially finalized score.
-            const deadline=performance.now()+5000;
-            while(tracker?.busy && performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,25));
+            const deadline=performance.now()+5000,pending=()=>tracker?.busy || sandbox?.hasPendingSamples;
+            while(pending() && !sandbox?.error && performance.now()<deadline){sandbox?.flush();await new Promise(resolve=>setTimeout(resolve,25));}
             if(current!==generation)return;
-            if(tracker?.busy)throw new Error('Tracking could not finish. Please retry.');
+            if(sandbox?.error)throw new Error(sandbox.error);
+            if(pending())throw new Error('Tracking could not finish. Please retry.');
+            const scene=game();
             const blob=await recording.finish();if(current!==generation)return;
             stopCapture();phase='result';revoke();videoURL=URL.createObjectURL(blob);
             const extension=blob.type.includes('mp4')?'mp4':'webm';dialog.videoFile=new File([blob],`valid-${release.game_id}-${scene.score}.${extension}`,{type:blob.type});
@@ -209,7 +243,7 @@ export function createCameraWeeklyGame({api,onClose=()=>{}}) {
         const file=dialog?.videoFile;if(!file)return;
         const button=dialog.querySelector('[data-share]');button.disabled=true;
         try {
-            if(navigator.canShare?.({files:[file]}))await navigator.share({files:[file],title:release.title,text:`I got ${scene.score} on ${release.title}! Play on validapp.lol`});
+            if(navigator.canShare?.({files:[file]}))await navigator.share({files:[file],title:release.title,text:`I got ${game().score} on ${release.title}! Play on validapp.lol`});
             else status('Download your video, then upload it to Snapchat, Instagram, or TikTok.');
         } catch(error) {if(error.name!=='AbortError')status('Sharing could not open. Use Download video, then share it from your photos or files.');}
         finally {if(dialog)button.disabled=false;}

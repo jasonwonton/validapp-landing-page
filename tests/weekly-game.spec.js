@@ -27,7 +27,7 @@ async function syntheticTracker(page){
 test('weekly game adapter advertises camera capability and uses authenticated release leaderboard',async({page})=>{
     const requests=[];await page.route('**/api/v1/easter-egg/**',r=>{requests.push({url:r.request().url(),headers:r.request().headers(),method:r.request().method()});return r.fulfill({contentType:'application/json',body:'{}'});});
     await page.goto('/app/?signin=1');await page.evaluate(async id=>{const {ValidAPI}=await import('/app/api.js');const api=new ValidAPI();await api.getWeeklyGame();await api.getWeeklyGameLeaderboard(id);await api.unlockWeeklyGame();},release.id);
-    expect(requests[0].headers['x-easter-egg-camera-modes']).toBe('hand-package-v1');expect(requests[1].url).toContain(`/releases/${release.id}/leaderboard`);expect(requests.map(r=>r.method)).toEqual(['GET','GET','POST']);expect(requests[2].url).toContain('/easter-egg/unlock');
+    expect(requests[0].headers['x-easter-egg-camera-modes']).toBe('hand-package-v1,hand-package-v2');expect(requests[1].url).toContain(`/releases/${release.id}/leaderboard`);expect(requests.map(r=>r.method)).toEqual(['GET','GET','POST']);expect(requests[2].url).toContain('/easter-egg/unlock');
 });
 test('instructions, practice label, current artwork, leaderboard and dismissal',async({page})=>{
     await open(page);const d=page.getByRole('dialog',{name:'Weekly game'});await expect(d.getByRole('heading',{name:'67 Challenge'})).toBeVisible();await expect(d.locator('[data-instruction]')).toBeVisible();await expect(d).toContainText('Practice on web');

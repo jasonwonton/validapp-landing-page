@@ -26,8 +26,9 @@ export function localDemoAllowed() {
 export class DemoAPI {
     async getWeeklyGame() {
         assertLocalDemo();
-        const { DEMO_RELEASE } = await import('./weekly-game/demo-release.js');
-        return { release: structuredClone(DEMO_RELEASE), discovery_required: false };
+        const { DEMO_RELEASE, DEMO_SCUBA_RELEASE } = await import('./weekly-game/demo-release.js');
+        const scuba = new URLSearchParams(window.location.search).get('weeklygame') === 'scuba';
+        return { release: structuredClone(scuba ? DEMO_SCUBA_RELEASE : DEMO_RELEASE), discovery_required: false };
     }
 
     async getWeeklyGameLeaderboard() {
@@ -50,6 +51,19 @@ export class DemoAPI {
         this.demoStickerFailOnce = demoParams.get("stickerfail") === "1";
         this.demoCallsEnabled = demoParams.get("calls") === "1";
         this.demoCalls = new Map();
+        // ?calls=1&incoming=1: Noah is ringing you, as a call push would open it
+        // (&tab=chats&chat=chat-noah&call=demo-incoming-call[&answer=1]).
+        if (this.demoCallsEnabled && demoParams.get("incoming") === "1") {
+            const now = Date.now();
+            this.demoCalls.set("demo-incoming-call", {
+                id: "demo-incoming-call", chat_id: "chat-noah", initiated_by_user_id: "classmate-2", media_type: "audio",
+                state: "ringing", provider: "livekit", caller_name: "Noah", participant_user_ids: ["classmate-2", "demo-user"],
+                viewer_invitation_state: "invited", participant_limit: 8, camera_publisher_limit: 8, admitted_participant_count: 1,
+                camera_publisher_count: 0, viewer_has_camera_slot: false, ringing_expires_at: new Date(now + 45_000).toISOString(),
+                answered_at: null, max_ends_at: null, ended_at: null, end_reason: null,
+                created_at: new Date(now).toISOString(), updated_at: new Date(now).toISOString(), display_name: "Noah Williams",
+            });
+        }
         this.stickers = [{
             id: "sticker-demo",
             image_url: "../assets/app/rocket.webp",

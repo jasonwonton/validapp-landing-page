@@ -1,72 +1,72 @@
 const CACHE_PREFIX = "valid-web-";
-const CACHE_NAME = `${CACHE_PREFIX}v106-262d738816c7607f397f`;
+const CACHE_NAME = `${CACHE_PREFIX}v107-4a66b64cecda2363805a`;
 // Every module the startup graph imports statically must be listed here, or the
 // installed app cannot start offline; scripts/tests/service-worker-shell.test.mjs
 // walks the import graph and enforces it. Dynamic imports that need the network
 // anyway (the weekly game, LiveKit, the localhost-only demo) stay network-only.
 const APP_SHELL = [
     "./",
-    "/app/_static/262d738816c7607f397f/styles.css",
-    "/app/_static/262d738816c7607f397f/preferences.js",
-    "/app/_static/262d738816c7607f397f/app.js",
-    "/app/_static/262d738816c7607f397f/api.js",
-    "/app/_static/262d738816c7607f397f/session-recovery.js",
-    "/app/_static/262d738816c7607f397f/passkeys.js",
-    "/app/_static/262d738816c7607f397f/auth-reliability.js",
-    "/app/_static/262d738816c7607f397f/auth-route-recovery.js",
-    "/app/_static/262d738816c7607f397f/auth-diagnostics.js",
-    "/app/_static/262d738816c7607f397f/performance.js",
-    "/app/_static/262d738816c7607f397f/keyed-list.js",
-    "/app/_static/262d738816c7607f397f/realtime-list.js",
-    "/app/_static/262d738816c7607f397f/runtime-style.js",
-    "/app/_static/262d738816c7607f397f/ui-icons.js",
-    "/app/_static/262d738816c7607f397f/media-url.js",
-    "/app/_static/262d738816c7607f397f/ui-dialogs.js",
-    "/app/_static/262d738816c7607f397f/toast.js",
-    "/app/_static/262d738816c7607f397f/user-message.js",
-    "/app/_static/262d738816c7607f397f/tbh-share.js",
-    "/app/_static/262d738816c7607f397f/blocked-users.js",
-    "/app/_static/262d738816c7607f397f/ios-install.js",
-    "/app/_static/262d738816c7607f397f/banner.js",
-    "/app/_static/262d738816c7607f397f/feed-sender.js",
-    "/app/_static/262d738816c7607f397f/media-overlay-positioner.js",
-    "/app/_static/262d738816c7607f397f/routes/route-loader.js",
-    "/app/_static/262d738816c7607f397f/routes/feed.js",
-    "/app/_static/262d738816c7607f397f/routes/play.js",
-    "/app/_static/262d738816c7607f397f/routes/chats.js",
-    "/app/_static/262d738816c7607f397f/routes/profile.js",
-    "/app/_static/262d738816c7607f397f/chat/styles.css",
-    "/app/_static/262d738816c7607f397f/chat/presence.js",
-    "/app/_static/262d738816c7607f397f/chat/activity-settings.js",
-    "/app/_static/262d738816c7607f397f/chat/index.js",
-    "/app/_static/262d738816c7607f397f/chat/actions.js",
-    "/app/_static/262d738816c7607f397f/chat/history.js",
-    "/app/_static/262d738816c7607f397f/chat/view-once.js",
-    "/app/_static/262d738816c7607f397f/chat/appearance.js",
-    "/app/_static/262d738816c7607f397f/chat/sticker-maker.js",
-    "/app/_static/262d738816c7607f397f/chat/photo-stickers.js",
-    "/app/_static/262d738816c7607f397f/chat/voice-interaction.js",
-    "/app/_static/262d738816c7607f397f/chat/message-window.js",
-    "/app/_static/262d738816c7607f397f/chat/timeline-scroll.js",
-    "/app/_static/262d738816c7607f397f/chat/models.js",
-    "/app/_static/262d738816c7607f397f/chat/call-history.js",
-    "/app/_static/262d738816c7607f397f/chat/store.js",
-    "/app/_static/262d738816c7607f397f/chat/media.js",
-    "/app/_static/262d738816c7607f397f/live-camera.js",
-    "/app/_static/262d738816c7607f397f/camera/review-editor.js",
-    "/app/_static/262d738816c7607f397f/camera/photo-pipeline.js",
-    "/app/_static/262d738816c7607f397f/camera/review-filters.js",
-    "/app/_static/262d738816c7607f397f/camera-effects.js",
-    "/app/_static/262d738816c7607f397f/thumbhash.js",
-    "/app/_static/262d738816c7607f397f/chat/outbox.js",
-    "/app/_static/262d738816c7607f397f/chat/thumbhash.js",
-    "/app/_static/262d738816c7607f397f/chat/realtime.js",
-    "/app/_static/262d738816c7607f397f/calls/service.js",
-    "/app/_static/262d738816c7607f397f/stories/index.js",
-    "/app/_static/262d738816c7607f397f/stories/styles.css",
-    "/app/_static/262d738816c7607f397f/calls/styles.css",
-    "/app/_static/262d738816c7607f397f/comments/index.js",
-    "/app/_static/262d738816c7607f397f/comments/styles.css",
+    "/app/_static/4a66b64cecda2363805a/styles.css",
+    "/app/_static/4a66b64cecda2363805a/preferences.js",
+    "/app/_static/4a66b64cecda2363805a/app.js",
+    "/app/_static/4a66b64cecda2363805a/api.js",
+    "/app/_static/4a66b64cecda2363805a/session-recovery.js",
+    "/app/_static/4a66b64cecda2363805a/passkeys.js",
+    "/app/_static/4a66b64cecda2363805a/auth-reliability.js",
+    "/app/_static/4a66b64cecda2363805a/auth-route-recovery.js",
+    "/app/_static/4a66b64cecda2363805a/auth-diagnostics.js",
+    "/app/_static/4a66b64cecda2363805a/performance.js",
+    "/app/_static/4a66b64cecda2363805a/keyed-list.js",
+    "/app/_static/4a66b64cecda2363805a/realtime-list.js",
+    "/app/_static/4a66b64cecda2363805a/runtime-style.js",
+    "/app/_static/4a66b64cecda2363805a/ui-icons.js",
+    "/app/_static/4a66b64cecda2363805a/media-url.js",
+    "/app/_static/4a66b64cecda2363805a/ui-dialogs.js",
+    "/app/_static/4a66b64cecda2363805a/toast.js",
+    "/app/_static/4a66b64cecda2363805a/user-message.js",
+    "/app/_static/4a66b64cecda2363805a/tbh-share.js",
+    "/app/_static/4a66b64cecda2363805a/blocked-users.js",
+    "/app/_static/4a66b64cecda2363805a/ios-install.js",
+    "/app/_static/4a66b64cecda2363805a/banner.js",
+    "/app/_static/4a66b64cecda2363805a/feed-sender.js",
+    "/app/_static/4a66b64cecda2363805a/media-overlay-positioner.js",
+    "/app/_static/4a66b64cecda2363805a/routes/route-loader.js",
+    "/app/_static/4a66b64cecda2363805a/routes/feed.js",
+    "/app/_static/4a66b64cecda2363805a/routes/play.js",
+    "/app/_static/4a66b64cecda2363805a/routes/chats.js",
+    "/app/_static/4a66b64cecda2363805a/routes/profile.js",
+    "/app/_static/4a66b64cecda2363805a/chat/styles.css",
+    "/app/_static/4a66b64cecda2363805a/chat/presence.js",
+    "/app/_static/4a66b64cecda2363805a/chat/activity-settings.js",
+    "/app/_static/4a66b64cecda2363805a/chat/index.js",
+    "/app/_static/4a66b64cecda2363805a/chat/actions.js",
+    "/app/_static/4a66b64cecda2363805a/chat/history.js",
+    "/app/_static/4a66b64cecda2363805a/chat/view-once.js",
+    "/app/_static/4a66b64cecda2363805a/chat/appearance.js",
+    "/app/_static/4a66b64cecda2363805a/chat/sticker-maker.js",
+    "/app/_static/4a66b64cecda2363805a/chat/photo-stickers.js",
+    "/app/_static/4a66b64cecda2363805a/chat/voice-interaction.js",
+    "/app/_static/4a66b64cecda2363805a/chat/message-window.js",
+    "/app/_static/4a66b64cecda2363805a/chat/timeline-scroll.js",
+    "/app/_static/4a66b64cecda2363805a/chat/models.js",
+    "/app/_static/4a66b64cecda2363805a/chat/call-history.js",
+    "/app/_static/4a66b64cecda2363805a/chat/store.js",
+    "/app/_static/4a66b64cecda2363805a/chat/media.js",
+    "/app/_static/4a66b64cecda2363805a/live-camera.js",
+    "/app/_static/4a66b64cecda2363805a/camera/review-editor.js",
+    "/app/_static/4a66b64cecda2363805a/camera/photo-pipeline.js",
+    "/app/_static/4a66b64cecda2363805a/camera/review-filters.js",
+    "/app/_static/4a66b64cecda2363805a/camera-effects.js",
+    "/app/_static/4a66b64cecda2363805a/thumbhash.js",
+    "/app/_static/4a66b64cecda2363805a/chat/outbox.js",
+    "/app/_static/4a66b64cecda2363805a/chat/thumbhash.js",
+    "/app/_static/4a66b64cecda2363805a/chat/realtime.js",
+    "/app/_static/4a66b64cecda2363805a/calls/service.js",
+    "/app/_static/4a66b64cecda2363805a/stories/index.js",
+    "/app/_static/4a66b64cecda2363805a/stories/styles.css",
+    "/app/_static/4a66b64cecda2363805a/calls/styles.css",
+    "/app/_static/4a66b64cecda2363805a/comments/index.js",
+    "/app/_static/4a66b64cecda2363805a/comments/styles.css",
     "./manifest.webmanifest",
     "../assets/AppIconV2.png",
     "../assets/pwa/icon-192.png",
@@ -74,7 +74,7 @@ const APP_SHELL = [
     "../assets/pwa/icon-maskable-512.png",
     "../assets/valid_logo.png",
     "../assets/Jua-Latin.woff2",
-    "/app/_static/262d738816c7607f397f/local-config.js",
+    "/app/_static/4a66b64cecda2363805a/local-config.js",
 ];
 
 self.addEventListener("install", (event) => {
@@ -107,6 +107,11 @@ self.addEventListener("sync", (event) => {
 
 self.addEventListener("fetch", (event) => {
     const url = new URL(event.request.url);
+    const mediaKey = mediaCacheKey(event.request);
+    if (mediaKey) {
+        event.respondWith(cachedMedia(event, mediaKey));
+        return;
+    }
     if (event.request.method !== "GET" || url.origin !== self.location.origin) return;
 
     // Authenticated JSON is deliberately network-only. The app owns the small,
@@ -125,6 +130,93 @@ self.addEventListener("fetch", (event) => {
     // Storage. Unlisted same-origin media and other runtime responses stay on
     // the network even when an origin accidentally omits a private directive.
     event.respondWith(caches.open(CACHE_NAME).then((cache) => cache.match(event.request)).then((cached) => cached || fetch(event.request)));
+});
+
+// Runtime media cache: chat photos, Mementos, Story photos, thumbnails, video
+// posters and avatars, so reopening a chat or Story doesn't download them again
+// and they still show offline. Entries are keyed by host + path only, because
+// the signed query (X-Amz-Signature, expiry) changes on every API response
+// while the object doesn't. Never cached: API JSON (/api/ is not a media host),
+// view-once media (chat-ephemeral/), videos and voice (destination isn't
+// "image"), range requests, and anything requested or served as no-store.
+// Bounded to MEDIA_CACHE_MAX_ENTRIES (≈100 MB at a typical ≈600 KB chat
+// photo) and trimmed least-recently-used first. Its name has no CACHE_PREFIX,
+// so an app update keeps it; signing out deletes it (VALID_CLEAR_MEDIA_CACHE).
+const MEDIA_CACHE = "valid-media-v1";
+const MEDIA_CACHE_MAX_ENTRIES = 160;
+// Only hosts this worker's CSP connect-src allows it to fetch.
+const MEDIA_HOSTS = new Set(["9472d27fa2e1a3762bd91728bb7d9437.r2.cloudflarestorage.com", "validappcdn.com"]);
+const MEDIA_OBJECT = /\/(chat-attachments|chat-daily|stories|profile-pictures)\/[^?#]+\.(jpe?g|png|webp)$/i;
+// Cross-origin <img> responses are opaque: their status can't be read, so an
+// expired-signature error would look like a photo. A response waits here until
+// the page reports that the image decoded (VALID_MEDIA_LOADED), then is stored.
+const pendingMedia = new Map();
+const MAX_PENDING_MEDIA = 24;
+const touchedMedia = new Set();
+
+function mediaURLKey(value) {
+    let url;
+    try { url = new URL(value); } catch (_) { return null; }
+    if (url.protocol !== "https:" || !MEDIA_HOSTS.has(url.hostname) || url.pathname.includes("/chat-ephemeral/")) return null;
+    return MEDIA_OBJECT.test(url.pathname) ? `${url.origin}${url.pathname}` : null;
+}
+
+function mediaCacheKey(request) {
+    // A cached opaque response can only answer a no-cors request (an <img>);
+    // canvas and share-card loads (cors) always go to the network.
+    if (request.method !== "GET" || request.destination !== "image" || request.mode !== "no-cors"
+        || request.cache === "no-store" || request.headers.has("range")) return null;
+    return mediaURLKey(request.url);
+}
+
+function storable(response) {
+    if (response.type === "opaque") return true;
+    return response.ok && !/no-store/i.test(response.headers.get("cache-control") || "");
+}
+
+async function cachedMedia(event, key) {
+    const cache = await caches.open(MEDIA_CACHE).catch(() => null);
+    const cached = await cache?.match(key).catch(() => null);
+    if (cached) {
+        // Approximate LRU: move a hit to the young end once per worker lifetime.
+        if (!touchedMedia.has(key)) {
+            touchedMedia.add(key);
+            const copy = cached.clone();
+            event.waitUntil(cache.delete(key).then(() => cache.put(key, copy)).catch(() => null));
+        }
+        return cached;
+    }
+    const response = await fetch(event.request);
+    if (cache && storable(response)) {
+        pendingMedia.delete(key);
+        pendingMedia.set(key, response.clone());
+        while (pendingMedia.size > MAX_PENDING_MEDIA) pendingMedia.delete(pendingMedia.keys().next().value);
+    }
+    return response;
+}
+
+async function storeLoadedMedia(value) {
+    const key = mediaURLKey(value);
+    const response = key && pendingMedia.get(key);
+    if (!response) return;
+    pendingMedia.delete(key);
+    try {
+        const cache = await caches.open(MEDIA_CACHE);
+        await cache.put(key, response);
+        const keys = await cache.keys();
+        for (const stale of keys.slice(0, Math.max(0, keys.length - MEDIA_CACHE_MAX_ENTRIES))) await cache.delete(stale);
+    } catch (_) {
+        // Out of quota: showing media never depends on caching it.
+    }
+}
+
+self.addEventListener("message", (event) => {
+    if (event.data?.type === "VALID_MEDIA_LOADED") event.waitUntil(storeLoadedMedia(event.data.url));
+    else if (event.data?.type === "VALID_CLEAR_MEDIA_CACHE") {
+        pendingMedia.clear();
+        touchedMedia.clear();
+        event.waitUntil(caches.delete(MEDIA_CACHE).catch(() => null));
+    }
 });
 
 function safeNotificationURL(value) {
@@ -195,6 +287,55 @@ async function clientViewingChat(chatId) {
 // suppressed chat push is still shown silently and closed at once.
 const appleWebKit = () => /AppleWebKit/.test(self.navigator?.userAgent || "") && !/Chrome|Chromium|Edg\//.test(self.navigator.userAgent);
 
+async function showSuppressedOnWebKit(title, data) {
+    if (!appleWebKit()) return;
+    const shown = `valid-suppressed-${Date.now()}`;
+    await self.registration.showNotification(title, { body: "", tag: shown, silent: true, data });
+    (await self.registration.getNotifications({ tag: shown })).forEach((notification) => notification.close());
+}
+
+// A visible Valid window rings in the page itself (calls/index.js), so the
+// worker hands the call to it instead of showing a second, system ringer.
+async function visibleAppWindow() {
+    return (await appWindows()).find((client) => client.visibilityState === "visible") || null;
+}
+
+const callTag = (callId) => `valid-call-${callId}`;
+
+async function closeCallNotifications(callId) {
+    if (!callId) return;
+    (await self.registration.getNotifications({ tag: callTag(callId) })).forEach((notification) => notification.close());
+}
+
+// call_ended: the ring stopped for this person (answered or declined on any
+// device, or missed). With Valid on screen the ringing notification is just
+// closed; otherwise the server's quiet notice replaces it under the same tag
+// (every push must show something, or Safari/Firefox withdraw the
+// subscription and Chrome shows a generic one). Replacing by tag instead of
+// closing first matters: Chrome keys persistent notifications by tag, so a
+// close() still in flight could dismiss the replacement.
+async function presentCallEnded(payload, url) {
+    const callId = String(payload.data?.call_id || "");
+    const chatId = String(payload.data?.chat_id || url.searchParams.get("chat") || "");
+    for (const client of await appWindows()) client.postMessage({ type: "VALID_CALL_ENDED", callId, chatId, reason: payload.data?.reason || "" });
+    const title = payload.title || "Valid";
+    const data = { url: url.href, type: "call_ended", callId, chatId };
+    if (await visibleAppWindow()) {
+        await closeCallNotifications(callId);
+        return showSuppressedOnWebKit(title, data);
+    }
+    await self.registration.showNotification(title, {
+        body: payload.body || "",
+        icon: "/assets/pwa/icon-192.png",
+        badge: "/assets/pwa/badge-96.png",
+        tag: callId ? callTag(callId) : undefined,
+        renotify: false,
+        silent: true,
+        timestamp: Number(payload.timestamp) || Date.now(),
+        data,
+    });
+}
+
 async function presentPush(payload) {
     const type = notificationType(payload);
     const url = new URL(safeNotificationURL(payload.url));
@@ -209,13 +350,10 @@ async function presentPush(payload) {
         const viewer = await clientViewingChat(chatId);
         if (viewer) {
             viewer.postMessage({ type: "VALID_PUSH_IN_ACTIVE_CHAT", chatId, payload: { title, body: payload.body, type, url: data.url } });
-            if (!appleWebKit()) return;
-            const shown = `valid-suppressed-${Date.now()}`;
-            await self.registration.showNotification(title, { body: payload.body || "", tag: shown, silent: true, data });
-            (await self.registration.getNotifications({ tag: shown })).forEach((notification) => notification.close());
-            return;
+            return showSuppressedOnWebKit(title, data);
         }
     }
+    if (type === "call_ended") return presentCallEnded(payload, url);
 
     const options = {
         body: payload.body || "You have a new update.",
@@ -228,12 +366,18 @@ async function presentPush(payload) {
         data,
     };
     if (type === "incoming_call") {
-        const callId = String(payload.data?.call_id || "");
+        const callId = String(payload.data?.call_id || url.searchParams.get("call") || "");
         const chatId = String(payload.data?.chat_id || url.searchParams.get("chat") || "");
         const callURL = new URL("/app/", self.location.origin);
         callURL.search = new URLSearchParams({ signin: "1", tab: "chats", chat: chatId, call: callId }).toString();
+        const page = await visibleAppWindow();
+        if (page) {
+            // The page's own ringer (with sound) takes it from here.
+            page.postMessage({ type: "VALID_INCOMING_CALL", callId, chatId });
+            return showSuppressedOnWebKit(title, data);
+        }
         Object.assign(options, {
-            tag: tag || `valid-call-${callId}`,
+            tag: tag || callTag(callId),
             renotify: true,
             requireInteraction: true,
             vibrate: [400, 200, 400, 200, 400, 200, 400],
@@ -264,6 +408,7 @@ async function appWindows() {
 }
 
 async function declineCall(data) {
+    await closeCallNotifications(data.callId);
     const [client] = await appWindows();
     // An open page declines with its signed-in API client.
     if (client) return client.postMessage({ type: "VALID_CALL_DECLINE", callId: data.callId, chatId: data.chatId });
@@ -295,5 +440,9 @@ self.addEventListener("notificationclick", (event) => {
         event.waitUntil(declineCall(data));
         return;
     }
-    event.waitUntil(openNotificationTarget(safeNotificationURL(data.url)));
+    const target = new URL(safeNotificationURL(data.url));
+    // Answer joins straight away; a tap on the ringing notification itself
+    // opens the in-app ringer so the person can still choose.
+    if (event.action === "answer" && data.callId) target.searchParams.set("answer", "1");
+    event.waitUntil(openNotificationTarget(target.href));
 });

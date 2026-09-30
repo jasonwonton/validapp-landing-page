@@ -35,7 +35,7 @@ test.describe("installed-app viewport", () => {
 
         // The keyboard opens: the layout viewport shrinks and the tab bar hides.
         await page.locator("#feedSearch").focus();
-        await cdp.send("Emulation.setDeviceMetricsOverride", { width, height: height - 330, deviceScaleFactor: await page.evaluate(() => devicePixelRatio), mobile: true });
+        await cdp.send("Emulation.setDeviceMetricsOverride", { width, height: height - 330, screenWidth: width, screenHeight: height, deviceScaleFactor: await page.evaluate(() => devicePixelRatio), mobile: true });
         await expect(page.locator("html")).toHaveClass(/keyboard-open/);
         await expect(page.locator("#bottomNav")).toHaveCSS("visibility", "hidden");
         await expect(page.locator("html")).not.toHaveClass(/layout-viewport-stale/);
@@ -56,7 +56,7 @@ test.describe("installed-app viewport", () => {
         expect(toastBottom).toBeGreaterThan(height - 140);
 
         // WebKit recovers: the compensation is removed and nothing moves.
-        await cdp.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: await page.evaluate(() => devicePixelRatio), mobile: true });
+        await cdp.send("Emulation.setDeviceMetricsOverride", { width, height, screenWidth: width, screenHeight: height, deviceScaleFactor: await page.evaluate(() => devicePixelRatio), mobile: true });
         await expect(page.locator("html")).not.toHaveClass(/layout-viewport-stale/);
         await expect.poll(async () => nearBottom(height)(await navBottom(page))).toBe(true);
     });
@@ -66,9 +66,27 @@ test.describe("installed-app viewport", () => {
         await signInToDemo(page);
         const cdp = await context.newCDPSession(page);
         const { width, height } = page.viewportSize();
-        await cdp.send("Emulation.setDeviceMetricsOverride", { width, height: height - 300, deviceScaleFactor: await page.evaluate(() => devicePixelRatio), mobile: true });
+        await cdp.send("Emulation.setDeviceMetricsOverride", { width, height: height - 300, screenWidth: width, screenHeight: height, deviceScaleFactor: await page.evaluate(() => devicePixelRatio), mobile: true });
         await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
         await expect.poll(async () => nearBottom(height)(await navBottom(page))).toBe(true);
+    });
+
+    test("an estimate below the physical screen never pushes the tab bar off it", async ({ page }) => {
+        // Seen in production (iOS 26 installed app): with a healthy viewport one
+        // "true bottom" estimate overshot and the tab bar labels went under the
+        // screen edge. The correction is clamped to screen.height.
+        await emulateInstalledApp(page);
+        await page.addInitScript(() => {
+            const style = document.createElement("style");
+            style.textContent = ".viewport-probe-large { height: 3000px !important; }";
+            document.documentElement.append(style);
+        });
+        await signInToDemo(page);
+        const { height } = page.viewportSize();
+        await page.evaluate(() => window.dispatchEvent(new Event("pageshow")));
+        await page.waitForTimeout(1200);
+        await expect(page.locator("html")).not.toHaveClass(/layout-viewport-stale/);
+        expect(nearBottom(height)(await navBottom(page))).toBe(true);
     });
 
     test("a browser tab never shifts the tab bar", async ({ page, context }) => {
@@ -76,7 +94,7 @@ test.describe("installed-app viewport", () => {
         const cdp = await context.newCDPSession(page);
         const { width, height } = page.viewportSize();
         await page.locator("#feedSearch").focus();
-        await cdp.send("Emulation.setDeviceMetricsOverride", { width, height: height - 330, deviceScaleFactor: await page.evaluate(() => devicePixelRatio), mobile: true });
+        await cdp.send("Emulation.setDeviceMetricsOverride", { width, height: height - 330, screenWidth: width, screenHeight: height, deviceScaleFactor: await page.evaluate(() => devicePixelRatio), mobile: true });
         await page.locator("#feedSearch").blur();
         await page.waitForTimeout(1200);
         await expect(page.locator("html")).not.toHaveClass(/layout-viewport-stale/);
@@ -407,7 +425,7 @@ test("the chat room and composer fill the real screen while the layout viewport 
     await expect(composer).toBeEditable();
     await composer.click();
     await expect(composer).toBeFocused();
-    await cdp.send("Emulation.setDeviceMetricsOverride", { width, height: height - 330, deviceScaleFactor: await page.evaluate(() => devicePixelRatio), mobile: true });
+    await cdp.send("Emulation.setDeviceMetricsOverride", { width, height: height - 330, screenWidth: width, screenHeight: height, deviceScaleFactor: await page.evaluate(() => devicePixelRatio), mobile: true });
     await expect(page.locator("html")).toHaveClass(/keyboard-open/);
     await composer.blur();
     await expect(page.locator("html")).toHaveClass(/layout-viewport-stale/);

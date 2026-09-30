@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isHumanSentence, userMessage, validationMessage } from "../../app/user-message.js";
+import { GENERIC_ERROR_MESSAGE, apiErrorMessage, isHumanSentence, userMessage, validationMessage } from "../../app/user-message.js";
 
 class APIError extends Error {
     constructor(message, status, detail) { super(message); this.name = "APIError"; this.status = status; this.detail = detail; }
@@ -51,4 +51,31 @@ test("FastAPI validation arrays become one field sentence", () => {
 test("sentence detection rejects codes and developer text", () => {
     for (const text of ["", "NOT_FOUND", "user_not_found", "Request failed (500)", "{\"detail\":1}", "Failed to fetch", "x".repeat(300)]) assert.equal(isHumanSentence(text), false, text);
     for (const text of ["Vote not found", "You need 100 aura.", "3 skips left today"]) assert.equal(isHumanSentence(text), true, text);
+});
+
+test("api.js maps detail-less responses through the same status mapper", () => {
+    assert.equal(apiErrorMessage(404), "That’s no longer available.");
+    assert.equal(apiErrorMessage(403, "forbidden"), "You don’t have permission to do that.");
+    assert.equal(apiErrorMessage(502), "Valid is having trouble right now. Please try again in a moment.");
+    assert.equal(apiErrorMessage(409, "That username is taken."), "That username is taken.");
+    assert.equal(apiErrorMessage(418), GENERIC_ERROR_MESSAGE);
+    for (const status of [400, 404, 418, 500]) assert.doesNotMatch(apiErrorMessage(status), /Request failed|\d{3}/);
+});
+
+test("the generic api sentence yields to the caller's more specific fallback", () => {
+    assert.equal(userMessage(new APIError(apiErrorMessage(418), 418), "Could not save."), "Could not save.");
+    assert.equal(userMessage(new Error(GENERIC_ERROR_MESSAGE), "Could not load chats."), "Could not load chats.");
+    assert.equal(userMessage(new APIError(apiErrorMessage(404), 404), "Could not load."), "That’s no longer available.");
+});
+
+test("app surfaces never show a raw error.message", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const files = ["app/app.js", "app/chat/index.js", "app/chat/room-tools.js", "app/chat/sticker-maker.js", "app/calls/index.js", "app/stories/index.js", "app/api.js"];
+    for (const file of files) {
+        const source = await readFile(new URL(`../../${file}`, import.meta.url), "utf8");
+        const raw = source.split("\n").map((line, index) => [index + 1, line])
+            .filter(([, line]) => /(error|reason|lastError)\??\.message\s*(\|\||\)|;|\})/.test(line) && !/\.test\(|=\s*(navigator|['"])/.test(line));
+        assert.deepEqual(raw, [], `${file} shows raw error text`);
+        assert.doesNotMatch(source, /Request failed \(/, file);
+    }
 });

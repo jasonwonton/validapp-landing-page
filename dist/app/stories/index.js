@@ -41,6 +41,7 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, ge
     let storyPublishRequestId = null;
     let storyRetrying = false;
     let storyRetryTimer = null;
+    let storyPhotoFilter = null;
 
     root.innerHTML = `
         <section class="stories-shell" aria-label="Stories">
@@ -142,7 +143,7 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, ge
             if (authors.length) void loadViewer().catch(() => null);
             void retryPendingStories();
         } catch (error) {
-            $(".stories-status").textContent = error.message || "Stories unavailable";
+            $(".stories-status").textContent = userMessage(error, "Stories unavailable");
         } finally {
             loading = false;
         }
@@ -193,6 +194,8 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, ge
 
     async function prepareSelectedStoryMedia(file, { preserveOverlay = false } = {}) {
         const generation = ++storyPreparationGeneration;
+        storyPhotoFilter?.destroy();
+        storyPhotoFilter = null;
         $(".story-composer-status").textContent = "Preparing media…";
         $(".story-publish").disabled = true;
         $(".story-overlay").disabled = true;
@@ -211,18 +214,38 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, ge
                 : `<img src="${escapeHTML(selectedStoryPreview)}" alt="Story photo preview" decoding="async">`;
             if (!preserveOverlay) storyOverlay.reset();
             storyOverlay.mount();
+            if (selectedStoryMedia.kind === "photo") void attachStoryPhotoFilter(file, generation);
             const parts = selectedStoryMedia.ingest ? ingestSegmentCount(selectedStoryMedia.durationMs) : 1;
             $(".story-composer-status").textContent = parts > 1 ? `Posts as ${parts} Stories` : `${selectedStoryMedia.kind === "video" ? "Video" : "Photo"} ready to post`;
             $(".story-publish").disabled = false;
         } catch (error) {
             if (generation !== storyPreparationGeneration) return;
             selectedStoryMedia = null;
-            $(".story-composer-status").textContent = error.message || "Could not prepare that Story.";
+            $(".story-composer-status").textContent = userMessage(error, "Could not prepare that Story.");
         } finally {
             if (generation === storyPreparationGeneration) {
                 $(".story-overlay").disabled = false;
                 storyOverlay.setDisabled(false);
             }
+        }
+    }
+
+    // iOS Stories get the chat review's swipe colour looks (ChatMediaCaptureView
+    // purpose .story). A look changes the pixels, so it resets the request ids;
+    // once a post has been attempted the look is locked, like iOS didSubmit.
+    async function attachStoryPhotoFilter(source, generation) {
+        try {
+            const { createStoryPhotoFilter } = await import("./photo-filter.js");
+            if (generation !== storyPreparationGeneration) return;
+            const filter = await createStoryPhotoFilter({
+                preview: $(".story-composer-preview"), source, api, config: api.config,
+                canSwipe: () => !storyUploadRequestId && !$(".story-publish").hasAttribute("aria-busy"),
+                onChange: () => { storyUploadRequestId = null; storyPublishRequestId = null; },
+            });
+            if (generation !== storyPreparationGeneration) return filter?.destroy();
+            storyPhotoFilter = filter;
+        } catch (_) {
+            // Offline or undecodable here: the original photo still posts.
         }
     }
 
@@ -236,6 +259,11 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, ge
         event.preventDefault();
         if (!selectedStoryMedia) return;
         const button = $(".story-publish");
+        button.disabled = true;
+        button.setAttribute("aria-busy", "true");
+        let file = selectedStoryMedia.file;
+        try { file = await storyPhotoFilter?.compose(file) || file; } catch (_) { /* post the original */ }
+        if (!selectedStoryMedia) return button.removeAttribute("aria-busy");
         storyUploadRequestId ||= crypto.randomUUID();
         storyPublishRequestId ||= crypto.randomUUID();
         const overlayPosition = storyOverlay.value();
@@ -243,9 +271,9 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, ge
             id: `${getUser().id}:story:${storyUploadRequestId}`,
             user_id: getUser().id,
             kind: "story",
-            file: selectedStoryMedia.file,
+            file,
             thumbnail: selectedStoryMedia.thumbnail || null,
-            content_type: selectedStoryMedia.ingest ? selectedStoryMedia.contentType : selectedStoryMedia.file.type,
+            content_type: selectedStoryMedia.ingest ? selectedStoryMedia.contentType : file.type,
             ingest: Boolean(selectedStoryMedia.ingest),
             duration_ms: selectedStoryMedia.durationMs,
             caption: $(".story-caption").value.trim() || null,
@@ -272,16 +300,17 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, ge
         } catch (error) {
             if (saved && chatTextSendIsRetryable(error)) {
                 await markChatMediaOutboxAttempt(record.id).catch(() => null);
-                $(".story-composer-status").textContent = `${error.message || "Could not post your Story."} It is saved on this device and will retry while Valid is open.`;
+                $(".story-composer-status").textContent = `${userMessage(error, "Could not post your Story.")} It is saved on this device and will retry while Valid is open.`;
                 scheduleStoryRetry(await listChatMediaOutbox(getUser().id).catch(() => []));
             } else {
                 await removeChatMediaOutbox(record.id).catch(() => null);
                 $(".story-composer-status").textContent = saved
-                    ? (error.message || "Could not post your Story.")
+                    ? (userMessage(error, "Could not post your Story."))
                     : "This Story could not be saved for a safe retry. Free some device storage and try again.";
             }
         } finally {
             button.textContent = "Post Story";
+            button.removeAttribute("aria-busy");
             button.disabled = !selectedStoryMedia;
         }
     }
@@ -325,6 +354,8 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, ge
 
     function resetStoryComposer() {
         storyPreparationGeneration += 1;
+        storyPhotoFilter?.destroy();
+        storyPhotoFilter = null;
         selectedStoryMedia = null;
         if (selectedStoryPreview) URL.revokeObjectURL(selectedStoryPreview);
         selectedStoryPreview = null;

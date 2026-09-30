@@ -41,6 +41,10 @@ const icons = {
 };
 
 let stylesPromise = null;
+export function cameraConstraints(facing) {
+    return { audio: false, video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1440 } } };
+}
+
 export function ensureCameraStyles() {
     if (stylesPromise) return stylesPromise;
     const href = new URL('./camera/camera.css', import.meta.url).href;
@@ -89,6 +93,7 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
     let stream = null, generation = 0, pending = false, busy = false, opened = false;
     let facing = initialFacing, photos = [], insetURL = null, permissionTimer = null;
     let mirrored = false, capabilities = {}, zoom = 1, frameHook = null, overlayFrame = 0;
+    let prefetchedStream = null;
     let flashMode = 'auto', lowLight = false, lightTimer = null, screenFlashTimer = null;
     let lastTap = null, pinch = null;
     let press = null, rec = null;
@@ -273,7 +278,12 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
         try {
             // 4:3 at the highest common resolution: phones return their full
             // sensor field of view, and a 3:4 crop of it loses nothing.
-            const acquired = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1440 } } });
+            // A stream requested inside the opening tap (see cameraStreamRequest)
+            // is used first: iOS may refuse a request made after awaiting the
+            // lazily loaded camera module.
+            const prefetched = prefetchedStream;
+            prefetchedStream = null;
+            const acquired = await (prefetched || navigator.mediaDevices.getUserMedia(cameraConstraints(facing)));
             if (requestGeneration !== generation || !opened || document.hidden) { acquired.getTracks().forEach(item => item.stop()); return; }
             stream = acquired;
             const actualFacing = stream.getVideoTracks()[0]?.getSettings?.().facingMode;
@@ -659,7 +669,7 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
     });
     window.addEventListener('pagehide', () => { if (opened) { stop(); failure('Camera paused. Tap Try camera again to resume.'); } });
     return {
-        open() { close(); facing = initialFacing; opened = true; container.hidden = false; refreshHint(); void start(); attachLenses(); },
+        open({ stream = null } = {}) { close(); facing = initialFacing; opened = true; container.hidden = false; prefetchedStream = stream; refreshHint(); void start(); attachLenses(); },
         close,
         setFrameHook(hook) { frameHook = typeof hook === 'function' ? hook : null; if (frameHook) startOverlay(); else stopOverlay(); },
         get mirrored() { return mirrored; },

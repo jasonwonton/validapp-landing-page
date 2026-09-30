@@ -1,4 +1,4 @@
-.comments-screen { --comments-surface: #fff; --comments-raised: #f3fbfa; --comments-text: #001f21; --comments-muted: #476264; --comments-quiet: #6d8182; --comments-border: rgba(0, 63, 66, .16); --comments-primary: #006d70; --comments-danger: #b42318; background: var(--comments-surface); z-index: 45; }
+.comments-screen { --comments-surface: #fff; --comments-raised: #f3fbfa; --comments-text: #001f21; --comments-muted: #476264; --comments-quiet: #6d8182; --comments-border: rgba(0, 63, 66, .16); --comments-primary: #006d70; --comments-danger: #b42318; background: var(--comments-surface); z-index: 62; } /* above detail screens (60): comments open over a poll or TBH, like the iOS sheet */
 .comments-header { position: sticky; top: 0; z-index: 2; }
 .comments-layout { display: flex; flex-direction: column; min-height: calc(100dvh - 58px); max-width: 720px; margin: 0 auto; padding: 0 16px 132px; }
 .comments-context { border-bottom: 1px solid var(--comments-border); color: var(--comments-muted); font-size: .9rem; line-height: 1.35; padding: 12px 4px; }

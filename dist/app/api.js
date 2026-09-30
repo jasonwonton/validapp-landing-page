@@ -2,7 +2,7 @@ import { confirmsInvalidSession, fetchSessionRequest } from './session-recovery.
 import { permitsAuthRouteRecovery, fetchAuthWithRecovery } from './auth-route-recovery.js';
 import { reportAuthFailure } from './auth-reliability.js';
 import { authStage, authRejectionCode } from './auth-diagnostics.js';
-import { validationMessage } from './user-message.js';
+import { apiErrorMessage, validationMessage } from './user-message.js';
 
 function apiBaseURL() {
     // Browser auth is first-party: production hosting must reverse-proxy this
@@ -61,6 +61,8 @@ export class ValidAPI {
         this.sessionRevision++;
         this.token = null;
         this.user = null;
+        // Private chat/Story photos cached by the worker leave with the session.
+        globalThis.navigator?.serviceWorker?.controller?.postMessage({ type: "VALID_CLEAR_MEDIA_CACHE" });
     }
 
     async request(path, options = {}) {
@@ -104,6 +106,7 @@ export class ValidAPI {
                 ? new APIError('That request took too long. Check your connection and try again.', 408)
                 : new APIError(navigator.onLine === false ? 'You’re offline. Reconnect, then try again.' : 'Could not reach Valid. Check your connection and try again.', 0);
             failure.routeRecoveryAttempted = error.routeRecoveryAttempted === true;
+            failure.path = path;
             if (authStage(path)) {
                 failure.stage = authStage(path);
                 failure.code = navigator.onLine === false ? 'offline' : failure.status === 408 ? 'request_timeout' : 'network_failure';
@@ -153,9 +156,11 @@ export class ValidAPI {
                 ? detail
                 : Array.isArray(detail)
                 ? validationMessage(detail) || "Some details aren’t valid. Check them and try again."
-                : detail?.message || `Request failed (${response.status})`;
+                : apiErrorMessage(response.status, detail?.message);
             const failure = new APIError(message, response.status, detail, waitSeconds);
             failure.confirmedSessionInvalid = sessionInvalid;
+            failure.path = path;
+            failure.requestId = response.headers.get('x-request-id');
             if (authStage(path) && !sessionInvalid) {
                 failure.stage = authStage(path);
                 failure.code = authRejectionCode(response.status, detail);
@@ -179,7 +184,8 @@ export class ValidAPI {
 
     getWeeklyGame(options = {}) {
         return this.request('/easter-egg/featured', {
-            ...options, headers: { 'X-Easter-Egg-Camera-Modes': 'hand-package-v1' },
+            // Keep in sync with CAMERA_MODES in weekly-game/compat.js.
+            ...options, headers: { 'X-Easter-Egg-Camera-Modes': 'hand-package-v1,hand-package-v2' },
         });
     }
 

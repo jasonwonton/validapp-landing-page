@@ -105,6 +105,76 @@ test("incoming calls ring until answered or declined", async () => {
     assert.equal(url.searchParams.get("chat"), "c1");
 });
 
+test("a visible Valid window rings in the page instead of a second system ringer", async () => {
+    const page = client("a", "/app/?tab=feed", { focused: false, visible: true });
+    const worker = harness({ clients: [page] });
+    await worker.push({ title: "Maya is calling", body: "Incoming voice call", type: "incoming_call", url: "/app/?signin=1&tab=chats&chat=c1&call=call-7", tag: "valid-call-call-7", data: { type: "incoming_call", call_id: "call-7", chat_id: "c1" } });
+    assert.equal(worker.shown.length, 0);
+    assert.deepEqual(plain(page.messages), [{ type: "VALID_INCOMING_CALL", callId: "call-7", chatId: "c1" }]);
+
+    // A hidden window (locked phone, background tab) still gets the system ringer.
+    const hidden = harness({ clients: [client("b", "/app/?tab=feed", { focused: false, visible: false })] });
+    await hidden.push({ title: "Maya is calling", type: "incoming_call", url: "/app/?signin=1&tab=chats&chat=c1&call=call-7", data: { call_id: "call-7", chat_id: "c1" } });
+    assert.equal(hidden.shown.length, 1);
+    assert.equal(hidden.shown[0].requireInteraction, true);
+
+    // Safari must still show something for every push.
+    const safari = harness({ clients: [client("c", "/app/")], userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148" });
+    await safari.push({ title: "Maya is calling", type: "incoming_call", data: { call_id: "call-7", chat_id: "c1" } });
+    assert.equal(safari.shown.length, 1);
+    assert.equal(safari.shown[0].silent, true);
+    assert.equal(safari.shown[0].closed, true);
+});
+
+test("call_ended swaps the ringing notification for a quiet notice under the same tag", async () => {
+    const worker = harness();
+    await worker.push({ title: "Maya is calling", body: "Incoming voice call", type: "incoming_call", url: "/app/?signin=1&tab=chats&chat=c1&call=call-7", tag: "valid-call-call-7", data: { type: "incoming_call", call_id: "call-7", chat_id: "c1" } });
+    await worker.push({ title: "Maya", body: "Missed voice call", type: "call_ended", url: "/app/?signin=1&tab=chats&chat=c1", tag: "valid-call-call-7", data: { type: "call_ended", call_id: "call-7", chat_id: "c1", reason: "missed" } });
+    const [ringing, ended] = worker.shown;
+    // Replaced through the shared tag, never closed first (see presentCallEnded).
+    assert.equal(ringing.closed, undefined);
+    assert.equal(ended.title, "Maya");
+    assert.equal(ended.body, "Missed voice call");
+    assert.equal(ended.tag, "valid-call-call-7");
+    assert.equal(ended.silent, true);
+    assert.equal(ended.renotify, false);
+    assert.equal(ended.requireInteraction, undefined);
+    assert.equal(ended.actions, undefined);
+    assert.equal(ended.vibrate, undefined);
+    assert.equal(new URL(ended.data.url).searchParams.get("chat"), "c1");
+    assert.equal(new URL(ended.data.url).searchParams.has("call"), false);
+    // A missed or retired call never bumps the home-screen badge.
+    assert.equal(worker.badges.length, 1);
+});
+
+test("call_ended with the app on screen just stops the ringing and tells the page", async () => {
+    const page = client("a", "/app/?tab=chats&chat=c1");
+    const worker = harness({ clients: [page] });
+    worker.shown.push({ title: "Maya is calling", tag: "valid-call-call-7" });
+    await worker.push({ title: "Maya", body: "Voice call answered on another device", type: "call_ended", tag: "valid-call-call-7", data: { call_id: "call-7", chat_id: "c1", reason: "answered" } });
+    assert.equal(worker.shown.length, 1);
+    assert.equal(worker.shown[0].closed, true);
+    assert.deepEqual(plain(page.messages), [{ type: "VALID_CALL_ENDED", callId: "call-7", chatId: "c1", reason: "answered" }]);
+});
+
+test("Answer opens the call with answer=1; tapping the notification only opens the ringer", async () => {
+    const data = { url: `${ORIGIN}/app/?signin=1&tab=chats&chat=c1&call=call-7`, callId: "call-7", chatId: "c1" };
+    const cold = harness();
+    await cold.click({ data }, "answer");
+    await cold.click({ data });
+    const [answered, tapped] = cold.opened.map((href) => new URL(href));
+    assert.equal(answered.searchParams.get("call"), "call-7");
+    assert.equal(answered.searchParams.get("answer"), "1");
+    assert.equal(tapped.searchParams.get("call"), "call-7");
+    assert.equal(tapped.searchParams.has("answer"), false);
+
+    const page = client("a", "/app/?tab=feed", { visible: false, focused: false });
+    const warm = harness({ clients: [page] });
+    await warm.click({ data }, "answer");
+    assert.equal(page.messages[0].type, "VALID_NOTIFICATION_CLICK");
+    assert.equal(new URL(page.messages[0].url).searchParams.get("answer"), "1");
+});
+
 test("Decline asks an open page to decline; with no page it uses the session cookie", async () => {
     const page = client("a", "/app/?tab=feed", { focused: false, visible: false });
     const worker = harness({ clients: [page] });

@@ -217,7 +217,8 @@ test("a failed Story publish resumes once after reload with its saved request id
     await overlayHandle.press("Shift+ArrowLeft");
     await overlayHandle.press("Shift+ArrowDown");
     await composer.getByRole("button", { name: "Post Story" }).click();
-    await expect(composer.getByText(/Temporary Story outage.*saved on this device/)).toBeVisible();
+    // A 503 is described in plain English (userMessage), never as the server's text.
+    await expect(composer.getByText(/Valid is having trouble right now.*saved on this device/)).toBeVisible();
     await expect.poll(() => page.evaluate(async () => {
         const { listChatMediaOutbox } = await import("/app/chat/outbox.js");
         const record = (await listChatMediaOutbox("demo-user")).find((item) => item.kind === "story");

@@ -3,7 +3,7 @@ export const MAX_CHAT_APPEARANCES_PER_USER = 100;
 export const MAX_CHAT_APPEARANCES_GLOBAL = 200;
 
 export const CHAT_FONT_STYLES = Object.freeze([
-    Object.freeze({ value: "six7", label: "Six7" }),
+    Object.freeze({ value: "six7", label: "Valid" }),
     Object.freeze({ value: "system", label: "System" }),
     Object.freeze({ value: "rounded", label: "Rounded" }),
     Object.freeze({ value: "serif", label: "Serif" }),

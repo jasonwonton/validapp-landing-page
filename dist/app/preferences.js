@@ -15,10 +15,10 @@
     const supported = () => vibrates() || switchHaptics();
     // Android patterns stay short (perceptible, never buzzy); iOS toggles are 1–2 system ticks.
     const KINDS = {
-        selection: { pattern: 12, toggles: [0] },
+        selection: { pattern: 15, toggles: [0] },
         light: { pattern: 15, toggles: [0] },
         medium: { pattern: 22, toggles: [0] },
-        heavy: { pattern: 30, toggles: [0, 45] },
+        heavy: { pattern: 25, toggles: [0, 45] },
         success: { pattern: [16, 60, 24], toggles: [0, 90] },
         warning: { pattern: [24, 80, 24], toggles: [0, 120] },
         error: { pattern: [30, 50, 30], toggles: [0, 60] },
@@ -67,7 +67,10 @@
         if (hint) hint.textContent = theme === 'system' ? 'Matches your device and changes automatically.' : 'This choice stays on until you change it.';
     }
     function renderHaptics() {
-        for (const id of ['hapticsToggle', 'testHaptics', 'hapticsStatus']) document.getElementById(id).hidden = !supported();
+        // The setting is shown only where vibration really works (Android). On
+        // iPhone the hidden-switch tick still runs where iOS allows it, but a
+        // web app cannot promise haptics there, so no toggle is offered.
+        for (const id of ['hapticsToggle', 'testHaptics', 'hapticsStatus']) document.getElementById(id).hidden = !vibrates();
         const toggle = document.getElementById('hapticsToggle');
         toggle.disabled = !supported();
         toggle.setAttribute('aria-checked', String(supported() && haptics));
