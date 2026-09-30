@@ -602,7 +602,7 @@ function trackLayoutViewportBaseline() {
 
 function measureLayoutViewportGap() {
     if (!layoutViewportProbes) {
-        layoutViewportProbes = ["bottom", "large"].map((kind) => {
+        layoutViewportProbes = ["bottom"].map((kind) => {
             const probe = document.createElement("div");
             probe.className = `viewport-probe viewport-probe-${kind}`;
             probe.setAttribute("aria-hidden", "true");
@@ -610,23 +610,16 @@ function measureLayoutViewportGap() {
             return probe;
         });
     }
-    const [bottomProbe, largeProbe] = layoutViewportProbes;
+    const [bottomProbe] = layoutViewportProbes;
     const viewport = window.visualViewport;
     const fixedBottom = Math.min(bottomProbe.getBoundingClientRect().bottom, window.innerHeight);
-    // Candidates for the real bottom: the visual viewport, 100lvh and the healthy
-    // layout height seen earlier at this width (WebKit may shrink the first two
-    // as well). Of those that reach clearly past the fixed bottom, trust the
-    // smallest so chrome is never pushed below the screen.
-    const candidates = [
-        viewport ? viewport.offsetTop + viewport.height : 0,
-        largeProbe.getBoundingClientRect().height,
-        Math.abs(window.innerWidth - state.layoutBaselineWidth) <= 80 ? state.layoutBaselineHeight : 0,
-    ].filter((bottom) => bottom - fixedBottom >= 40);
-    // An installed phone app can never extend below the physical screen, so no
-    // estimate may place chrome past it (iOS keeps screen.* in portrait terms).
-    const portrait = window.innerHeight >= window.innerWidth;
-    const screenBottom = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
-    const expected = Math.min(candidates.length ? Math.min(...candidates) : fixedBottom, screenBottom || Infinity);
+    // Only direct evidence counts: the visible area reaching clearly past the
+    // fixed bottom (WebKit left the layout viewport short). 100lvh and a
+    // remembered healthy height disagree with the page on a healthy installed
+    // iPhone app (the status bar sits outside the page) and pushed the tab bar
+    // off the screen, so they are not used.
+    const visibleBottom = viewport ? viewport.offsetTop + viewport.height : fixedBottom;
+    const expected = visibleBottom - fixedBottom >= 40 ? visibleBottom : fixedBottom;
     return { gap: Math.max(0, Math.round(expected - fixedBottom)), expected };
 }
 
