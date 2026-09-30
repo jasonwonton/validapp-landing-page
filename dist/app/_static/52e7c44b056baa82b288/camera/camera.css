@@ -1,0 +1,85 @@
+/* Live camera controls and the photo review editor. Loaded on first camera use. */
+
+/* Live camera. Elements positioned at runtime (setRuntimeStyles) must not get
+   left/top/size/opacity here: this sheet loads last and would win. */
+.live-camera-stage { touch-action: none; -webkit-user-select: none; user-select: none; }
+.live-camera-stage .live-camera-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.live-camera-stage .live-camera-overlay[hidden], .live-camera-stage [hidden] { display: none; }
+.live-camera-focus { position: absolute; z-index: 3; width: 64px; height: 64px; margin: -32px 0 0 -32px; border: 1.5px solid #fff; border-radius: 12px; box-shadow: 0 0 3px rgba(0,0,0,.35); pointer-events: none; opacity: 0; }
+.live-camera-focus.active { animation: live-camera-focus .9s ease-out both; }
+@keyframes live-camera-focus { 0% { transform: scale(1.18); opacity: 1; } 22% { transform: scale(1); opacity: 1; } 61% { opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
+.live-camera-flash, .live-camera-zoom { position: absolute; z-index: 4; display: grid; place-items: center; min-width: 44px; height: 44px; padding: 0; border: 0; border-radius: 22px; background: rgba(0,0,0,.42); color: #fff; }
+.live-camera-flash { top: 12px; right: 12px; width: 44px; }
+.live-camera-flash .ui-icon { width: 22px; height: 22px; }
+.live-camera-flash small { position: absolute; right: 7px; bottom: 6px; font: 800 10px/1 system-ui, sans-serif; }
+.live-camera-flash.lit { color: #ffd60a; }
+.live-camera-zoom { left: 50%; bottom: 14px; transform: translateX(-50%); padding: 0 12px; font: 700 14px/1 system-ui, sans-serif; }
+.live-camera-timer { position: absolute; z-index: 4; top: 14px; left: 50%; transform: translateX(-50%); padding: 6px 12px; border-radius: 999px; background: rgba(0,0,0,.55); color: #fff; font: 600 14px/1.2 system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+.live-camera-shutter-wrap { position: relative; display: grid; place-items: center; }
+.live-camera-controls .camera-shutter { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.live-camera-controls .camera-shutter span { transition: transform .2s ease, border-radius .2s ease, background-color .2s ease; }
+.live-camera.is-pressing .camera-shutter span { transform: scale(.92); }
+.live-camera.is-recording .camera-shutter span { background: #ff3b30; transform: scale(.88); }
+.live-camera.is-record-locked .camera-shutter span { border-radius: 22%; transform: scale(.52); }
+.live-camera-lock { position: absolute; top: 50%; right: calc(100% + 30px); width: 44px; height: 44px; margin-top: -22px; display: grid; place-items: center; border-radius: 50%; background: rgba(0,0,0,.7); color: #fff; pointer-events: none; }
+.live-camera-lock[hidden] { display: none; }
+.live-camera-lock::before { content: ""; position: absolute; right: -14px; top: 50%; width: 7px; height: 7px; margin-top: -4px; border-left: 2px solid rgba(255,255,255,.8); border-bottom: 2px solid rgba(255,255,255,.8); transform: rotate(45deg); }
+.live-camera-controls .recording-hidden { visibility: hidden; }
+.live-camera-screen-flash { position: fixed; inset: 0; z-index: 2147483000; background: #fff; }
+.live-camera-screen-flash[hidden] { display: none; }
+
+/* Review stage: the photo's own frame, letterboxed inside the preview. */
+.chat-camera-sheet:has(.review-stage) .chat-media-form > header { display: none; }
+.chat-camera-sheet:has(.review-stage) .chat-media-form { grid-template-rows: minmax(0, 1fr); }
+/* The review is black around the photo in both themes, as on iOS. */
+:root .chat-camera-sheet .chat-media-preview:has(> .review-stage) { background: #000; border-radius: 0; }
+.chat-media-preview > .review-stage { position: absolute; overflow: hidden; background: #000; touch-action: none; -webkit-user-select: none; user-select: none; }
+.review-stage > canvas, .chat-camera-sheet .chat-media-preview .review-stage > video { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+.review-stage > canvas[hidden] { display: none; }
+.review-stage > .review-photo:focus-visible { outline: 3px solid #fff; outline-offset: -3px; }
+.review-drawing { pointer-events: none; }
+.review-guides i { position: absolute; z-index: 2; background: var(--peach); box-shadow: 0 0 1px rgba(0,0,0,.35); pointer-events: none; }
+.review-guides i[hidden] { display: none; }
+.review-guide-v { top: 0; bottom: 0; left: 50%; width: 1.5px; margin-left: -.75px; }
+.review-guide-h { left: 0; right: 0; top: 50%; height: 1.5px; margin-top: -.75px; }
+/* No box of its own, so taps between captions reach the photo in every engine. */
+.review-captions { display: contents; }
+.review-caption { position: absolute; z-index: 3; left: 0; right: 0; box-sizing: border-box; width: 100%; margin: 0; padding: 4px 14px; border: 0; border-radius: 0; background: rgba(0,0,0,.42); box-shadow: 0 2px 4px rgba(0,0,0,.35); color: #fff; font-family: inherit; font-size: 21px; font-weight: 500; line-height: 1.3; text-align: center; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; pointer-events: auto; touch-action: none; cursor: grab; }
+.review-caption:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+.review-caption-editor { display: block; resize: none; min-height: 36px; caret-color: var(--peach); cursor: text; outline: none; }
+.review-filter-name { position: absolute; z-index: 4; left: 0; right: 0; top: 50%; margin: 0; transform: translateY(-50%); color: #fff; font-size: 22px; font-weight: 900; text-align: center; text-shadow: 0 1px 6px rgba(0,0,0,.45); opacity: 0; pointer-events: none; }
+.review-filter-name.show { animation: review-filter-flash 1.37s both; }
+@keyframes review-filter-flash { 0% { opacity: 0; animation-timing-function: ease-out; } 8.76% { opacity: 1; animation-timing-function: linear; } 74.45% { opacity: 1; animation-timing-function: ease-in; } 100% { opacity: 0; } }
+.review-duration { position: absolute; z-index: 4; top: 12px; left: 50%; transform: translateX(-50%); padding: 5px 10px; border-radius: 999px; background: rgba(0,0,0,.55); color: #fff; font: 600 13px/1.2 system-ui, sans-serif; pointer-events: none; }
+.review-duration[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) {
+    .review-filter-name.show { animation-name: review-filter-flash-reduced; }
+    .live-camera-focus.active { animation-name: live-camera-focus-reduced; }
+}
+@keyframes review-filter-flash-reduced { 0%, 74% { opacity: 1; } 75%, 100% { opacity: 0; } }
+@keyframes live-camera-focus-reduced { 0%, 60% { opacity: 1; } 61%, 100% { opacity: 0; } }
+
+/* Tool column down the right edge, lined up with the close button (iOS CameraReviewEditingTools). */
+.chat-review-tools { position: absolute; z-index: 5; top: 64px; right: 10px; bottom: 88px; display: flex; flex-direction: column; align-items: center; gap: 8px; overflow-y: auto; scrollbar-width: none; pointer-events: none; }
+.chat-review-tools > *, .review-draw-tools > * { pointer-events: auto; }
+.chat-review-tools button { flex: 0 0 auto; width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: rgba(0,0,0,.42); color: #fff; font-size: 16px; font-weight: 700; }
+.chat-review-tools button[hidden], .review-draw-tools[hidden] { display: none; }
+.chat-review-tools .ui-icon { width: 23px; height: 23px; }
+.chat-review-tools [data-photo-stickers] { color: #ffb15e; }
+.chat-review-tools .native-sticker-icon { width: 23px; height: 23px; }
+.chat-review-tools [data-photo-draw][aria-pressed="true"] { background: var(--peach); color: var(--on-peach); }
+.chat-review-tools.is-drawing > button:not([data-photo-draw]) { display: none; }
+.review-draw-tools { display: flex; flex-direction: column; align-items: center; gap: 0; }
+.chat-review-tools .review-swatch, .chat-review-tools .review-brush { background: transparent; border-radius: 12px; }
+.review-swatch span { width: 22px; height: 22px; border: 1px solid #fff; border-radius: 50%; box-shadow: 0 0 2px rgba(0,0,0,.45); }
+.review-swatch.selected span { border-width: 3px; }
+.review-brush { position: relative; }
+.review-brush::before { content: ""; position: absolute; width: 28px; height: 28px; border-radius: 50%; background: rgba(0,0,0,.42); }
+.review-brush.selected::before { background: rgba(255,255,255,.3); }
+.review-brush span { position: relative; border-radius: 50%; background: #fff; }
+.chat-review-tools .review-draw-action:disabled { opacity: .4; }
+.chat-review-tools .review-draw-action .ui-icon { width: 17px; height: 17px; }
+.chat-media-editor .chat-media-send-count { position: absolute; z-index: 4; right: 84px; bottom: 30px; margin: 0; padding: 6px 10px; border-radius: 999px; background: rgba(0,0,0,.55); color: #fff; font-size: 13px; }
+.chat-media-editor .chat-media-send-count[hidden] { display: none; }
+.chat-media-editor [data-cancel-chat-upload] { position: absolute; z-index: 6; left: 50%; bottom: 96px; transform: translateX(-50%); min-height: 44px; padding: 0 18px; border: 2px solid #fff; border-radius: 999px; background: rgba(0,0,0,.6); color: #fff; font-size: 15px; }
+.chat-media-editor [data-cancel-chat-upload][hidden] { display: none; }
