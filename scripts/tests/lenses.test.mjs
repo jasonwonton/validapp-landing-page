@@ -217,14 +217,6 @@ test('cover mapping matches object-fit: cover and mirrors the preview', () => {
     close(box.x + box.width / 2, 300 - plain.point({ x: 0.2, y: 0 }).x, 1e-9, 'mirrored box centre');
 });
 
-test('cover mapping follows the front camera framing about the centre', () => {
-    // 3:4 video in a 3:4 stage enlarged 4/3: the centre stays, the frame's centre 3/4 fills the stage.
-    const framed = coverMapping(300, 400, 300, 400, false, 4 / 3);
-    assert.deepEqual(framed.point({ x: 0.5, y: 0.5 }), { x: 150, y: 200 });
-    close(framed.point({ x: 0.125, y: 0.125 }).x, 0, 1e-9, 'left edge of the centre 3/4');
-    close(framed.point({ x: 0.875, y: 0.875 }).y, 400, 1e-9, 'bottom edge of the centre 3/4');
-});
-
 test('catalog follows the iOS carousel order and names', () => {
     assert.deepEqual(LENSES.map(lens => lens.name), ['Original', 'Dog', 'Cat', 'Bear', 'Crown', 'Heart Shades', 'Halo', 'Crying']);
     for (const lens of FACE_LENSES) {

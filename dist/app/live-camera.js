@@ -6,7 +6,8 @@ import { centerCrop, drawScaled } from './camera/photo-pipeline.js';
 // ChatCameraController). Loaded on demand; its styles live in camera/camera.css.
 //
 // Captures are handed over as ImageBitmaps that already look like the preview:
-// cropped to the 3:4 stage and mirrored for the front camera (iOS mirrors the
+// cropped to what the full-screen preview shows (or to a fixed `aspect`, e.g.
+// 3:4 Mementos, as iOS does) and mirrored for the front camera (iOS mirrors the
 // preview, photos and videos alike). Nothing is JPEG-encoded here; the photo
 // pipeline encodes exactly once when the photo is sent.
 //
@@ -18,7 +19,7 @@ import { centerCrop, drawScaled } from './camera/photo-pipeline.js';
 //   * once on each captured photo, before it is handed over ("photo"),
 //   * for every recorded video frame ("recording").
 // `ctx` is already in output space: it shows the frame exactly as the user
-// sees it (3:4 crop, mirrored when info.mirrored). info = { target, mirrored,
+// sees it (the capture crop, mirrored when info.mirrored). info = { target, mirrored,
 // video, crop, toOutput(x, y) } where `video` is the raw <video> to track
 // faces on, `crop` is the visible region in raw video pixels and
 // `toOutput(x, y)` maps a raw video pixel to (x, y) in ctx, handling crop,
@@ -32,13 +33,6 @@ const TAP_TOLERANCE = 12;
 const PINCH_DEAD_ZONE = 0.12;
 const MAX_ZOOM_RATIO = 5;
 const SCREEN_FLASH_MS = 1000;
-// The front camera's full 4:3 frame is much wider than a selfie framing
-// (iOS fills the whole screen with it, showing ~60% of its width). The front
-// camera asks for 16:9, whose portrait width is the centre 3/4 of that frame;
-// when a browser still returns 4:3 (or square), the same centre 3/4 is
-// cropped here. The preview (chat styles, video.framed), captures, lenses and
-// tap-to-focus all use this one crop.
-export const FRONT_CAMERA_FRAMING = 4 / 3;
 // The contract's order; plain MP4 last for Safari builds that reject the codec string.
 const VIDEO_TYPES = ['video/mp4;codecs=avc1,mp4a', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
 
@@ -50,12 +44,7 @@ const icons = {
 let stylesPromise = null;
 // Keep in step with cameraStreamRequest in chat/index.js.
 export function cameraConstraints(facing) {
-    return { audio: false, video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: facing === 'user' ? 1080 : 1440 } } };
-}
-
-export function frontCameraFraming(width, height) {
-    const ratio = Math.max(width, height) / Math.max(1, Math.min(width, height));
-    return width && height && ratio < 1.6 ? FRONT_CAMERA_FRAMING : 1;
+    return { audio: false, video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1440 } } };
 }
 
 export function ensureCameraStyles() {
@@ -88,30 +77,24 @@ function withTimeout(promise, ms) {
 
 // The still from ImageCapture covers more of the sensor than the video
 // stream; keep only what the preview showed (the stream is a centred crop).
-function framedCrop(crop, framing) {
-    if (!(framing > 1)) return crop;
-    const width = crop.width / framing, height = crop.height / framing;
-    return { x: crop.x + (crop.width - width) / 2, y: crop.y + (crop.height - height) / 2, width, height };
-}
-
-function stillRegion(width, height, videoWidth, videoHeight, aspect, framing = 1) {
+function stillRegion(width, height, videoWidth, videoHeight, aspect) {
     const videoAspect = videoWidth / videoHeight;
     let regionWidth = width, regionHeight = height;
     if (width / height > videoAspect) regionWidth = height * videoAspect;
     else regionHeight = width / videoAspect;
-    const inner = framedCrop(centerCrop(regionWidth, regionHeight, aspect), framing);
+    const inner = centerCrop(regionWidth, regionHeight, aspect);
     return { x: (width - regionWidth) / 2 + inner.x, y: (height - regionHeight) / 2 + inner.y, width: inner.width, height: inner.height };
 }
 
 export function createLiveCamera({ container, onCapture, onFallback, singlePhoto = false, initialFacing = 'environment', maxDimension = 2560, aspect = 3 / 4, haptic = null, recording = null }) {
-    container.innerHTML = `<div class="live-camera-stage"><video autoplay muted playsinline aria-label="Live camera preview"></video><canvas class="live-camera-overlay" aria-hidden="true" hidden></canvas><img class="live-camera-inset" alt="Memento preview" hidden><span class="live-camera-focus" aria-hidden="true" hidden></span><button type="button" class="live-camera-flash" data-camera-flash hidden></button><button type="button" class="live-camera-zoom" data-camera-zoom hidden>1×</button><span class="live-camera-timer" role="timer" aria-live="off" hidden></span><div class="live-camera-message" role="status"></div></div><div class="live-camera-controls"><button type="button" data-camera-library aria-label="Choose a photo instead">${uiIcon('photo')}</button><div class="live-camera-shutter-wrap"><span class="live-camera-lock" aria-hidden="true" hidden>${uiIcon('lock')}</span><button type="button" class="camera-shutter" data-camera-shutter aria-label="Take photo" disabled><span></span></button></div><button type="button" data-camera-flip aria-label="Switch front and rear camera" disabled>${uiIcon('flip')}</button></div><p class="live-camera-hint">Tap to capture</p><div class="live-camera-alternatives"><button type="button" data-camera-retry hidden>Try camera again</button><button type="button" data-camera-single hidden>Use one photo</button></div><div class="live-camera-screen-flash" hidden></div>`;
+    container.innerHTML = `<div class="live-camera-stage"><video autoplay muted playsinline aria-label="Live camera preview"></video><canvas class="live-camera-overlay" aria-hidden="true" hidden></canvas><img class="live-camera-inset" alt="Memento preview" hidden><span class="live-camera-focus" aria-hidden="true" hidden></span><button type="button" class="live-camera-flash" data-camera-flash hidden></button><button type="button" class="live-camera-flip" data-camera-flip aria-label="Switch front and rear camera" disabled>${uiIcon('flip')}</button><button type="button" class="live-camera-zoom" data-camera-zoom hidden>1×</button><span class="live-camera-timer" role="timer" aria-live="off" hidden></span><div class="live-camera-message" role="status"></div></div><div class="live-camera-controls"><button type="button" data-camera-library aria-label="Choose a photo instead">${uiIcon('photo')}</button><div class="live-camera-shutter-wrap"><span class="live-camera-lock" aria-hidden="true" hidden>${uiIcon('lock')}</span><button type="button" class="camera-shutter" data-camera-shutter aria-label="Take photo" disabled><span></span></button></div><span aria-hidden="true"></span></div><p class="live-camera-hint">Tap to capture</p><div class="live-camera-alternatives"><button type="button" data-camera-retry hidden>Try camera again</button><button type="button" data-camera-single hidden>Use one photo</button></div><div class="live-camera-screen-flash" hidden></div>`;
     const $ = selector => container.querySelector(selector);
     const video = $('video'), message = $('.live-camera-message'), stage = $('.live-camera-stage');
     const shutter = $('[data-camera-shutter]'), flashButton = $('[data-camera-flash]'), zoomButton = $('[data-camera-zoom]');
     if (singlePhoto) $('[data-camera-library]').setAttribute('aria-label', 'Photo library');
     let stream = null, generation = 0, pending = false, busy = false, opened = false;
     let facing = initialFacing, photos = [], insetURL = null, permissionTimer = null;
-    let mirrored = false, framing = 1, capabilities = {}, zoom = 1, frameHook = null, overlayFrame = 0;
+    let mirrored = false, capabilities = {}, zoom = 1, frameHook = null, overlayFrame = 0;
     let prefetchedStream = null;
     let flashMode = 'auto', lowLight = false, lightTimer = null, screenFlashTimer = null;
     let lastTap = null, pinch = null;
@@ -120,7 +103,13 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
     const feedback = (kind) => { try { haptic?.(kind); } catch (_) { /* optional */ } };
 
     function track() { return stream?.getVideoTracks()[0] || null; }
-    function videoCrop() { return framedCrop(centerCrop(video.videoWidth, video.videoHeight, aspect), framing); }
+    // The preview fills the stage (object-fit: cover). aspect 'fill' captures
+    // exactly that; a number captures a centred crop of that shape (iOS
+    // Mementos preview full screen and keep a 3:4 photo).
+    function stageAspect() { return stage.clientWidth && stage.clientHeight ? stage.clientWidth / stage.clientHeight : 3 / 4; }
+    function captureAspect() { return aspect === 'fill' ? stageAspect() : aspect; }
+    function previewCrop() { return centerCrop(video.videoWidth, video.videoHeight, stageAspect()); }
+    function captureCrop() { return centerCrop(video.videoWidth, video.videoHeight, captureAspect()); }
     function mapper(crop, width, height) {
         return (x, y) => {
             const outX = (x - crop.x) / crop.width * width;
@@ -129,7 +118,7 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
     }
     function runHook(context, width, height, target) {
         if (!frameHook || !video.videoWidth) return;
-        const crop = videoCrop();
+        const crop = target === 'preview' ? previewCrop() : captureCrop();
         try {
             context.save();
             frameHook(context, width, height, { target, mirrored, video, crop, toOutput: mapper(crop, width, height) });
@@ -174,13 +163,13 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
     function attachLenses() {
         if (lensesLoad) return;
         const load = lensesLoad = import('./lenses/index.js').then(({ attachCameraLenses }) => {
-            if (lensesLoad === load && opened) lenses = attachCameraLenses({ stage: $('.live-camera-stage'), video, framing: () => framing });
+            if (lensesLoad === load && opened) lenses = attachCameraLenses({ stage: $('.live-camera-stage'), video });
         }).catch(() => {});
     }
     function detachLenses() { lensesLoad = null; lenses?.destroy(); lenses = null; }
     // Photos and recordings are drawn mirrored like the preview for the front
     // camera (see grabPhoto/startRecording), so the lens follows the same flag.
-    const compositeLenses = (context, width, height) => lenses?.composite(context, width, height, { mirrored, framing });
+    const compositeLenses = (context, width, height) => lenses?.composite(context, width, height, { mirrored });
     // ---- end face lenses ----------------------------------------------------
     function clearPhotos() {
         photos.forEach(photo => photo.close?.());
@@ -295,9 +284,9 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
             if (generation === requestGeneration && opened) failure('Allow camera access in your browser to take a photo.');
         }, 10_000);
         try {
-            // Rear: 4:3 at the highest common resolution, the full sensor field
-            // of view, which a 3:4 crop keeps whole. Front: 16:9 (see
-            // FRONT_CAMERA_FRAMING).
+            // 4:3 at the highest common resolution: phones return their full
+            // sensor field of view, which the full-screen preview then fills
+            // the screen with (as iOS does).
             // A stream requested inside the opening tap (see cameraStreamRequest)
             // is used first: iOS may refuse a request made after awaiting the
             // lazily loaded camera module.
@@ -312,20 +301,10 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
             }
             // A webcam that does not report its facing is treated as the one asked for.
             mirrored = actualFacing ? actualFacing === 'user' : facing === 'user';
-            // The track reports its size before the first frame (so a flip
-            // never shows one frame at the other camera's framing); the
-            // decoded size, once known, is authoritative.
-            const applyFraming = (width, height) => {
-                framing = mirrored ? frontCameraFraming(width, height) : 1;
-                video.classList.toggle('framed', framing > 1);
-            };
-            const settings = track()?.getSettings?.() || {};
-            applyFraming(settings.width, settings.height);
             video.classList.toggle('mirrored', mirrored);
             video.srcObject = stream;
             await video.play();
             if (requestGeneration !== generation || !opened) return;
-            if (video.videoWidth) applyFraming(video.videoWidth, video.videoHeight);
             message.textContent = '';
             shutter.disabled = false;
             $('[data-camera-flip]').disabled = false;
@@ -371,7 +350,7 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
         const still = await stillSource();
         try {
             const source = still || video;
-            const region = still ? stillRegion(still.width, still.height, video.videoWidth, video.videoHeight, aspect, framing) : videoCrop();
+            const region = still ? stillRegion(still.width, still.height, video.videoWidth, video.videoHeight, captureAspect()) : captureCrop();
             const scale = Math.min(1, maxDimension / Math.max(region.width, region.height));
             const canvas = drawScaled(source, region, region.width * scale, region.height * scale, { mirrored });
             runHook(canvas.getContext('2d'), canvas.width, canvas.height, 'photo');
@@ -460,7 +439,7 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
         try {
             audio = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => null);
             if (recordingGeneration !== generation || !opened || !press) { audio?.getTracks().forEach(item => item.stop()); return; }
-            const crop = videoCrop();
+            const crop = captureCrop();
             const scale = Math.min(1, 1280 / Math.max(crop.width, crop.height));
             const canvas = document.createElement('canvas');
             canvas.width = Math.round(crop.width * scale / 2) * 2; canvas.height = Math.round(crop.height * scale / 2) * 2;
@@ -469,7 +448,7 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
                 if (!rec || rec.canvas !== canvas) return;
                 context.save();
                 if (mirrored) { context.translate(canvas.width, 0); context.scale(-1, 1); }
-                const current = videoCrop();
+                const current = captureCrop();
                 context.drawImage(video, current.x, current.y, current.width, current.height, 0, 0, canvas.width, canvas.height);
                 context.restore();
                 runHook(context, canvas.width, canvas.height, 'recording');
@@ -601,7 +580,7 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
         feedback('light');
         const current = track();
         if (!current || !video.videoWidth) return;
-        const crop = videoCrop();
+        const crop = previewCrop();
         let nx = (x - bounds.left) / bounds.width;
         const ny = (y - bounds.top) / bounds.height;
         if (mirrored) nx = 1 - nx;

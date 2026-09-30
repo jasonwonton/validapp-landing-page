@@ -305,10 +305,9 @@ export class FaceTracker {
 
 /** How the video frame lands on a `width` x `height` output with
  * object-fit: cover (the live preview and the captured photo both crop this
- * way), then enlarged about the centre by `framing` (the front camera's
- * tighter crop). Returns a mapper from normalized frame coords to output pixels. */
-export function coverMapping(videoWidth, videoHeight, width, height, mirrored = false, framing = 1) {
-    const scale = Math.max(width / videoWidth, height / videoHeight) * Math.max(1, framing || 1);
+ * way). Returns a mapper from normalized frame coords to output pixels. */
+export function coverMapping(videoWidth, videoHeight, width, height, mirrored = false) {
+    const scale = Math.max(width / videoWidth, height / videoHeight);
     const drawnWidth = videoWidth * scale, drawnHeight = videoHeight * scale;
     const offsetX = (width - drawnWidth) / 2, offsetY = (height - drawnHeight) / 2;
     const x = value => {

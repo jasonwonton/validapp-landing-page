@@ -139,9 +139,8 @@ test.describe("chat camera capture", () => {
         await expect(dialog.getByRole("button", { name: "Take photo", exact: true })).toBeEnabled();
         await expect(video).toHaveClass(/mirrored/);
         expect(await page.evaluate(() => cameraLog.requests[0].video.facingMode.ideal)).toBe("user");
-        // What the person sees: sample the rendered preview itself (the stage
-        // clips the front camera's enlarged video).
-        const shot = await dialog.locator(".live-camera-stage").screenshot();
+        // What the person sees: sample the rendered preview itself.
+        const shot = await video.screenshot();
         const previewLeft = await page.evaluate(async (base64) => {
             const image = new Image(); image.src = `data:image/png;base64,${base64}`; await image.decode();
             const canvas = document.createElement("canvas"); canvas.width = image.width; canvas.height = image.height;
@@ -170,7 +169,7 @@ test.describe("chat camera capture", () => {
         expect(isRed(rearPixels.colors[0]) && isBlue(rearPixels.colors[1])).toBe(true);
     });
 
-    test("captures crop 3:4 at the stream's resolution, never upscale, and encode once with a 640 preview and ThumbHash", async ({ page }) => {
+    test("captures crop to the full-screen preview at the stream's resolution, never upscale, and encode once with a 640 preview and ThumbHash", async ({ page }) => {
         await page.addInitScript(() => {
             window.encodeLog = []; window.decodeLog = [];
             const toBlob = HTMLCanvasElement.prototype.toBlob;
@@ -184,22 +183,25 @@ test.describe("chat camera capture", () => {
                 return decode.call(this, source, ...rest);
             };
         });
-        // The front camera's 16:9 stream, portrait as a phone delivers it.
-        await syntheticCamera(page, { width: 1080, height: 1920 });
+        await syntheticCamera(page, { width: 1920, height: 1440 });
         const dialog = await openChatCamera(page);
         await expect(dialog.getByRole("button", { name: "Take photo", exact: true })).toBeEnabled();
+        // The preview fills the sheet edge to edge (iOS), and the photo is exactly that shape.
+        const sheet = await dialog.boundingBox(), stage = await dialog.locator(".live-camera-stage").boundingBox();
+        expect(stage).toEqual(sheet);
+        const width = Math.round(1440 * stage.width / stage.height), previewWidth = Math.round(640 * stage.width / stage.height);
         await dialog.getByRole("button", { name: "Take photo", exact: true }).click();
         await expect(dialog.locator(".chat-media-publish")).toBeEnabled();
         await dialog.locator(".chat-media-publish").click();
         await expect(dialog).toBeHidden();
         const log = await page.evaluate(() => ({ encodes: encodeLog, decodes: decodeLog, options: uploadOptions, payloads: sentPayloads }));
         // The photo and its preview: one JPEG encode each, no JPEG decoded in between.
-        expect(log.encodes).toEqual([{ width: 1080, height: 1440, quality: 0.92 }, { width: 480, height: 640, quality: 0.7 }]);
+        expect(log.encodes).toEqual([{ width, height: 1440, quality: 0.92 }, { width: previewWidth, height: 640, quality: 0.7 }]);
         expect(log.decodes.filter((type) => type === "image/jpeg")).toEqual([]);
         const photo = await uploadedPixel(page, 0, [[0.5, 0.5]]);
         const preview = await uploadedPixel(page, 1, [[0.5, 0.5]]);
-        expect([photo.width, photo.height, photo.type]).toEqual([1080, 1440, "image/jpeg"]);
-        expect([preview.width, preview.height, preview.type]).toEqual([480, 640, "image/jpeg"]);
+        expect([photo.width, photo.height, photo.type]).toEqual([width, 1440, "image/jpeg"]);
+        expect([preview.width, preview.height, preview.type]).toEqual([previewWidth, 640, "image/jpeg"]);
         expect(log.options[0]).toMatchObject({ contentType: "image/jpeg", sizeBytes: photo.size, thumbnailSizeBytes: preview.size });
         expect(log.options[0].previewHash).toMatch(/^[A-Za-z0-9+/]{4,64}={0,2}$/);
         expect(log.options[0].previewHash.length).toBeLessThanOrEqual(64);
@@ -460,41 +462,8 @@ test.describe("chat camera capture", () => {
         });
         expect(result.targets).toEqual(expect.arrayContaining(["preview", "photo"]));
         expect(result.corner).toEqual([0, 255, 0]);
-        // 640x480 front stream: 3:4 crop 360x480, then the front framing's centre 3/4.
-        expect(result.size).toEqual([270, 360]);
+        expect(result.size).toEqual([360, 480]);
     });
-
-    for (const [label, width, height] of [["16:9", 1080, 1920], ["4:3", 1440, 1920]]) {
-        test(`the front camera frames a ${label} stream like a selfie: 1080x1440, same field of view`, async ({ page }) => {
-            await page.addInitScript(() => {
-                window.encodeLog = [];
-                const toBlob = HTMLCanvasElement.prototype.toBlob;
-                HTMLCanvasElement.prototype.toBlob = function (callback, type, quality) {
-                    if (type === "image/jpeg") encodeLog.push([this.width, this.height]);
-                    return toBlob.call(this, callback, type, quality);
-                };
-            });
-            await syntheticCamera(page, { width, height });
-            const dialog = await openChatCamera(page);
-            const video = dialog.locator(".live-camera-stage video");
-            await expect(dialog.getByRole("button", { name: "Take photo", exact: true })).toBeEnabled();
-            expect(await page.evaluate(() => cameraLog.requests[0].video)).toMatchObject({ facingMode: { ideal: "user" }, width: { ideal: 1920 }, height: { ideal: 1080 } });
-            if (label === "4:3") await expect(video).toHaveClass(/framed/);
-            else await expect(video).not.toHaveClass(/framed/);
-            await dialog.getByRole("button", { name: "Take photo", exact: true }).click();
-            await dialog.locator(".chat-media-publish").click();
-            await expect(dialog).toBeHidden();
-            expect((await page.evaluate(() => encodeLog))[0]).toEqual([1080, 1440]);
-
-            // The rear camera keeps its full 4:3 field of view.
-            await page.getByRole("button", { name: "Send photo or video" }).click();
-            await expect(dialog.getByRole("button", { name: "Take photo", exact: true })).toBeEnabled();
-            await dialog.getByRole("button", { name: "Switch front and rear camera" }).click();
-            await expect(video).not.toHaveClass(/mirrored/);
-            await expect(video).not.toHaveClass(/framed/);
-            expect(await page.evaluate(() => cameraLog.requests.at(-1).video.height)).toEqual({ ideal: 1440 });
-        });
-    }
 
     test("HEIC library photos that the browser cannot decode get a clear message", async ({ page }) => {
         await syntheticCamera(page);

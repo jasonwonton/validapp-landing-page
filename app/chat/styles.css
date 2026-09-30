@@ -34,9 +34,6 @@
 .live-camera-stage { position: relative; min-height: 0; height: min(100%, calc((100vw - 16px) * 4 / 3), 672px); aspect-ratio: 3 / 4; place-self: center; overflow: hidden; background: #111; border-radius: 24px; margin: 0 0 12px; }
 .live-camera-stage video { position: absolute; width: 100%; height: 100%; object-fit: cover; }
 .live-camera-stage video.mirrored { transform: scaleX(-1); }
-/* Front-camera framing: FRONT_CAMERA_FRAMING in live-camera.js. */
-.live-camera-stage video.framed { transform: scale(1.3333); }
-.live-camera-stage video.mirrored.framed { transform: scale(-1.3333, 1.3333); }
 .live-camera-stage .live-camera-inset { position: absolute; width: 27%; aspect-ratio: 3 / 4; object-fit: cover; right: 16px; top: 16px; border: 2px solid #fff; border-radius: 12px; }
 .live-camera-heading { position: absolute; left: 16px; right: 16px; top: 16px; display: grid; justify-items: center; gap: 4px; }
 .live-camera-heading strong, .live-camera-heading span { padding: 5px 12px; border-radius: 12px; background: rgba(0,0,0,.65); }
@@ -786,3 +783,22 @@
 /* Honest note on view-once media: iOS reports screenshots, the web can't detect them. */
 .chat-capture-note { position: absolute; z-index: 3; top: calc(74px + env(safe-area-inset-top)); left: 14px; right: 14px; color: rgba(255,255,255,.72); font: 500 .72rem/1.3 system-ui, sans-serif; text-align: center; text-shadow: 0 1px 2px rgba(0,0,0,.6); pointer-events: none; }
 .chat-capture-note[hidden] { display: none; }
+
+/* Full-screen camera and review (iOS): the header floats over the preview and
+   only Cancel stays, as a pill like the camera's own buttons (camera.css holds
+   the preview and capture bar). */
+.chat-sheet.is-capturing .chat-media-form, .chat-sheet.is-capturing .memento-form { position: relative; padding: 0; }
+.chat-sheet.is-capturing .chat-media-form > header, .chat-sheet.is-capturing .memento-form > header { position: absolute; z-index: 6; top: 0; left: 0; right: 0; display: flex; padding: max(10px, env(safe-area-inset-top)) 18px 0; background: none; pointer-events: none; }
+.chat-sheet.is-capturing .chat-media-form > header > :not(:first-child), .chat-sheet.is-capturing .memento-form > header > :not(:first-child) { display: none; }
+.chat-sheet.is-capturing .chat-media-form > header > button:first-child, .chat-sheet.is-capturing .memento-form > header > button:first-child { pointer-events: auto; min-height: 46px; padding: 0 16px; border: 0; border-radius: 23px; background: rgba(0,0,0,.52); color: #fff; font-weight: 700; }
+/* The review keeps the photo edge to edge; its controls clear the status bar and home indicator. */
+.chat-camera-sheet:has(.review-stage) .chat-media-form { padding: 0; }
+.chat-camera-sheet:has(.review-stage) .chat-photo-tools { top: max(12px, env(safe-area-inset-top)); left: 14px; right: 14px; }
+.chat-camera-sheet:has(.review-stage) .chat-review-tools { top: calc(max(12px, env(safe-area-inset-top)) + 56px); right: 14px; bottom: calc(max(12px, env(safe-area-inset-bottom)) + 84px); }
+.chat-camera-sheet:has(.review-stage) .review-duration { top: calc(max(12px, env(safe-area-inset-top)) + 8px); }
+.chat-camera-sheet:has(.review-stage) .chat-media-option { left: 18px; bottom: calc(max(12px, env(safe-area-inset-bottom)) + 12px); }
+.chat-camera-sheet:has(.review-stage) .chat-media-review-actions { right: 18px; bottom: calc(max(12px, env(safe-area-inset-bottom)) + 8px); }
+.chat-camera-sheet:has(.review-stage) .chat-media-send-count { right: 90px; bottom: calc(max(12px, env(safe-area-inset-bottom)) + 22px); }
+.chat-camera-sheet:has(.review-stage) .chat-media-status { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 76px); }
+.chat-camera-sheet:has(.review-stage) .chat-media-progress { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 74px); }
+.chat-camera-sheet:has(.review-stage) [data-cancel-chat-upload] { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 92px); }
