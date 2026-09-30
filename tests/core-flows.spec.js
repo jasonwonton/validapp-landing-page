@@ -465,7 +465,9 @@ test("own school votes show the iOS-style you marker", async ({ page }) => {
     const ownVote = page.locator("[data-feed-detail='9004']");
     await expect(ownVote).toContainText("from Jules Rivera (you 🫵)");
     await ownVote.click();
-    await expect(page.locator("#feedDetailDialog .detail-screen-header > strong")).toHaveText("Jules Rivera said");
+    // Like iOS, the poll title stays the anonymous descriptor even for your own vote.
+    await expect(page.locator("#feedDetailDialog .detail-screen-header > strong")).toHaveText(/said$/);
+    await expect(page.locator("#feedDetailDialog .detail-screen-header > strong")).not.toContainText("Jules");
     await expect(page.locator("#feedDetailDialog")).not.toContainText("(you");
 });
 

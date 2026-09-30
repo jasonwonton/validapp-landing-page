@@ -261,7 +261,6 @@ test('feed controls answer to 44px hit areas without changing their drawing', as
         return {
             reactionCountAbove: probe('#feedList .reaction-count-button', 0, -21),
             reactionPickerBelow: probe('#feedList .reaction-picker-button', 0, 21),
-            commentAbove: probe('#feedList .comment-count-button', 0, -21),
             inboxChipBelow: probe('[data-inbox-filter="polls"]', 0, 21),
         };
     });
@@ -270,6 +269,8 @@ test('feed controls answer to 44px hit areas without changing their drawing', as
     const tbhMenu = await page.locator('.tbh-row-menu summary').first().boundingBox();
     expect(tbhMenu.width).toBeGreaterThanOrEqual(44);
     expect(tbhMenu.height).toBeGreaterThanOrEqual(44);
+    // Like iOS FeedItemRow, rows carry no comment button: comments open from the detail.
+    expect(await page.locator('#feedList [data-comments-target]').count()).toBe(0);
     // Cards are not buttons that contain buttons.
     expect(await page.locator('#feedList [role="button"] button').count()).toBe(0);
     await expect(page.getByRole('button', { name: /^Open poll details:/ }).first()).toBeVisible();
@@ -392,7 +393,8 @@ test('comments show a loading state, post optimistically with rollback, and repo
     });
     await page.getByRole('button', { name: 'School', exact: true }).click();
     const poll = page.locator("[data-feed-detail='9003']");
-    await poll.getByRole('button', { name: 'Open 4 comments' }).click();
+    await poll.click();
+    await page.locator('#feedDetailDialog').getByRole('button', { name: 'Open 4 comments' }).click();
     const comments = page.getByRole('dialog', { name: 'Comments' });
     await expect(comments.getByText('Loading comments…')).toBeVisible();
     await expect(comments.getByText('Start the conversation.')).toHaveCount(0);
@@ -405,7 +407,7 @@ test('comments show a loading state, post optimistically with rollback, and repo
     await comments.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(comments.locator('.comment-pending')).toContainText('Showing up right away.');
     await expect(draft).toHaveValue('');
-    await expect(poll.locator('[data-comment-count]')).toHaveText('5');
+    await expect(page.locator('#feedDetailDialog [data-comment-count]')).toHaveText('5');
     await page.evaluate(() => window.__releaseCreate());
     await expect(comments.locator('.comment-pending')).toHaveCount(0);
     await expect(comments.getByText('Showing up right away.')).toBeVisible();
@@ -419,7 +421,7 @@ test('comments show a loading state, post optimistically with rollback, and repo
     await expect(comments.locator('.comment-pending')).toHaveCount(0);
     await expect(comments.locator('#commentsStatus')).toContainText('Comments are busy right now.');
     await expect(draft).toHaveValue('This one will fail.');
-    await expect(poll.locator('[data-comment-count]')).toHaveText('5');
+    await expect(page.locator('#feedDetailDialog [data-comment-count]')).toHaveText('5');
 
     // Reports go through the reason sheet with the iOS safety reasons.
     const root = comments.locator("[data-comment-id='11111111-1111-4111-8111-111111111111']");
@@ -436,7 +438,7 @@ test('comments show a loading state, post optimistically with rollback, and repo
     await page.keyboard.press('Escape');
     await expect(comments).toBeHidden();
     const loadsBefore = await page.evaluate(() => window.__commentLoads);
-    await poll.getByRole('button', { name: /^Open \d+ comments$/ }).click();
+    await page.locator('#feedDetailDialog').getByRole('button', { name: /^Open \d+ comments$/ }).click();
     await expect(comments.getByText('Showing up right away.')).toBeVisible();
     await expect(comments.getByText('Loading comments…')).toHaveCount(0);
     expect(await page.evaluate(() => window.__commentLoads)).toBe(loadsBefore + 1);
@@ -445,7 +447,8 @@ test('comments show a loading state, post optimistically with rollback, and repo
 test('the comments screen keeps keyboard focus inside it', async ({ page }) => {
     await signIn(page);
     await page.getByRole('button', { name: 'School', exact: true }).click();
-    await page.locator("[data-feed-detail='9003']").getByRole('button', { name: 'Open 4 comments' }).click();
+    await page.locator("[data-feed-detail='9003']").click();
+    await page.locator('#feedDetailDialog').getByRole('button', { name: 'Open 4 comments' }).click();
     const comments = page.getByRole('dialog', { name: 'Comments' });
     await expect(comments.getByText('This one is so accurate.')).toBeVisible();
     for (let step = 0; step < 25; step += 1) {
