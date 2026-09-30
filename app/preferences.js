@@ -67,7 +67,10 @@
         if (hint) hint.textContent = theme === 'system' ? 'Matches your device and changes automatically.' : 'This choice stays on until you change it.';
     }
     function renderHaptics() {
-        for (const id of ['hapticsToggle', 'testHaptics', 'hapticsStatus']) document.getElementById(id).hidden = !supported();
+        // The setting is shown only where vibration really works (Android). On
+        // iPhone the hidden-switch tick still runs where iOS allows it, but a
+        // web app cannot promise haptics there, so no toggle is offered.
+        for (const id of ['hapticsToggle', 'testHaptics', 'hapticsStatus']) document.getElementById(id).hidden = !vibrates();
         const toggle = document.getElementById('hapticsToggle');
         toggle.disabled = !supported();
         toggle.setAttribute('aria-checked', String(supported() && haptics));
