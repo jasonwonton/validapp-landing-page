@@ -1229,7 +1229,7 @@ function formatVoterDemographicsStatement(item) {
 }
 
 // iOS QuestionDetailView.voterInfoText: the title is always the anonymous
-// descriptor ("A Junior 👦💙 Boy said"), never a name, even for your own vote
+// descriptor ("A Junior Boy said", with its emoji), never a name, even for your own vote
 // or a revealed voter (reveals show in their own "Sent by" row).
 function formatVoterStatement(item) {
     return formatVoterDemographicsStatement(item);
