@@ -11,11 +11,16 @@ async function signIn(page, suffix = "") {
     await expect(page.getByRole("button", { name: "Feed", exact: true })).toHaveAttribute("aria-current", "page");
 }
 
+// Comments open from inside the poll, like iOS (rows carry no comment button).
+async function openPollComments(page, answerId = "9003") {
+    await page.locator(`[data-feed-detail='${answerId}']`).click();
+    await page.locator("#feedDetailDialog").getByRole("button", { name: "Open 4 comments" }).click();
+}
+
 test("poll comments support bounded threads, replies, reactions, deletion, and reporting", async ({ page }) => {
     await signIn(page);
     await page.getByRole("button", { name: "School", exact: true }).click();
-    const poll = page.locator("[data-feed-detail='9003']");
-    await poll.getByRole("button", { name: "Open 4 comments" }).click();
+    await openPollComments(page);
 
     const comments = page.getByRole("dialog", { name: "Comments" });
     await expect(comments).toBeVisible();
@@ -28,7 +33,7 @@ test("poll comments support bounded threads, replies, reactions, deletion, and r
     await comments.getByLabel("Add a comment").fill("Adding a safe, named reply.");
     await comments.getByRole("button", { name: "Send", exact: true }).click();
     await expect(comments.getByText("Adding a safe, named reply.")).toBeVisible();
-    await expect(poll.locator("[data-comment-count]")).toHaveText("5");
+    await expect(page.locator("#feedDetailDialog [data-comment-count]")).toHaveText("5");
 
     await root.getByRole("button", { name: "React", exact: true }).click();
     await root.getByRole("button", { name: "Love" }).click();
@@ -41,7 +46,7 @@ test("poll comments support bounded threads, replies, reactions, deletion, and r
     await comments.locator(`[data-comment-id='${OWN_POLL_ROOT}']`).getByRole("button", { name: "Delete" }).click();
     await page.locator(".ui-sheet").getByRole("button", { name: "Delete" }).click();
     await expect(comments.locator(`[data-comment-id='${OWN_POLL_ROOT}']`)).toHaveCount(0);
-    await expect(poll.locator("[data-comment-count]")).toHaveText("4");
+    await expect(page.locator("#feedDetailDialog [data-comment-count]")).toHaveText("4");
 
     await root.getByRole("button", { name: "Report" }).click();
     const report = page.locator(".ui-sheet");
@@ -49,13 +54,13 @@ test("poll comments support bounded threads, replies, reactions, deletion, and r
     await report.getByText("Harassment or bullying").click();
     await report.getByRole("button", { name: "Report and hide" }).click();
     await expect(root).toHaveCount(0);
-    await expect(poll.locator("[data-comment-count]")).toHaveText("0");
+    await expect(page.locator("#feedDetailDialog [data-comment-count]")).toHaveText("0");
 });
 
 test("comment moderation notice can be acknowledged while restrictions remain authoritative", async ({ page }) => {
     await signIn(page, "&commentnotice=1&commentrestricted=1");
     await page.getByRole("button", { name: "School", exact: true }).click();
-    await page.locator("[data-feed-detail='9003']").getByRole("button", { name: "Open 4 comments" }).click();
+    await openPollComments(page);
 
     const comments = page.getByRole("dialog", { name: "Comments" });
     await expect(comments.getByRole("alert")).toContainText("One of your comments was reported and hidden.");
@@ -68,8 +73,7 @@ test("comment moderation notice can be acknowledged while restrictions remain au
 test("a lost create response retries with one stable comment request ID", async ({ page }) => {
     await signIn(page, "&commentfail=1");
     await page.getByRole("button", { name: "School", exact: true }).click();
-    const poll = page.locator("[data-feed-detail='9003']");
-    await poll.getByRole("button", { name: "Open 4 comments" }).click();
+    await openPollComments(page);
     const comments = page.getByRole("dialog", { name: "Comments" });
     const draft = comments.getByLabel("Add a comment");
     await draft.fill("Retry this comment exactly once.");
@@ -78,7 +82,7 @@ test("a lost create response retries with one stable comment request ID", async 
     await expect(draft).toHaveValue("Retry this comment exactly once.");
     await comments.getByRole("button", { name: "Send", exact: true }).click();
     await expect(comments.getByText("Retry this comment exactly once.")).toHaveCount(1);
-    await expect(poll.locator("[data-comment-count]")).toHaveText("5");
+    await expect(page.locator("#feedDetailDialog [data-comment-count]")).toHaveText("5");
 });
 
 test("comment notification routes resolve and highlight the exact poll reply", async ({ page }) => {
@@ -115,7 +119,7 @@ test("the independent web comment flag removes the UI without changing parent fe
 test("session expiry removes private comment state from the DOM", async ({ page }) => {
     await signIn(page);
     await page.getByRole("button", { name: "School", exact: true }).click();
-    await page.locator("[data-feed-detail='9003']").getByRole("button", { name: "Open 4 comments" }).click();
+    await openPollComments(page);
     await expect(page.getByText("This one is so accurate.")).toBeVisible();
 
     await page.evaluate(() => window.dispatchEvent(new CustomEvent("valid:session-expired")));

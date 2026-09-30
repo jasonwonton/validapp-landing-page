@@ -1235,9 +1235,10 @@ function formatVoterDemographicsStatement(item) {
     return senderStatement(item, { safeGrade: senderGradeIsSafe(item.voter_grade, state.classmates) }) || "Poll";
 }
 
+// iOS QuestionDetailView.voterInfoText: the title is always the anonymous
+// descriptor ("A Junior 👦💙 Boy said"), never a name, even for your own vote
+// or a revealed voter (reveals show in their own "Sent by" row).
 function formatVoterStatement(item) {
-    if (item.current_user_voted) return `${displayName(state.profile)} said`;
-    if (item.voter_name) return `${item.voter_name} said`;
     return formatVoterDemographicsStatement(item);
 }
 
