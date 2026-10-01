@@ -255,6 +255,7 @@ h3 { font-size: 1.45rem; }
 .primary-button:disabled, .secondary-button:disabled { opacity: var(--button-disabled-opacity); cursor: not-allowed; }
 .fine-print { max-width: 420px; margin-bottom: 0; color: var(--muted); font-size: .85rem; text-align: center; line-height: 1.4; }
 .status-message { min-height: 20px; margin: 0; color: var(--danger-text); text-align: center; }
+.status-message.is-neutral { color: var(--muted); }
 
 .aura-pill, .counter-pill {
     display: inline-flex;
@@ -1062,9 +1063,6 @@ body.play-active .play-actions { margin: 0; }
 .profile-editor-row small em.attention { color: var(--danger-text); }
 .profile-editor-row strong { overflow: hidden; font-size: 1.02rem; text-overflow: ellipsis; white-space: nowrap; }
 .profile-editor-row > span:last-child { color: var(--muted); font-size: 1.6rem; }
-.god-mode-unsubscribe-row { border-color: var(--danger-text); color: var(--danger-text); }
-.god-mode-unsubscribe-row small, .god-mode-unsubscribe-row > span:last-child { color: #8a5962; }
-.god-mode-unsubscribe-row small em.scheduled { background: rgba(163,41,60,.12); color: var(--danger-text); }
 .profile-editor-validation { min-height: 20px; margin: 0; color: var(--danger-text); font-size: .82rem; line-height: 1.35; text-align: center; }
 .profile-username-field { min-height: 52px; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 4px; padding: 0 14px; border: 2px solid var(--outline); border-radius: 12px; background: var(--white); color: var(--ink) !important; font-size: 1.15rem; }
 .profile-information-flow .profile-username-field input { min-height: 48px !important; padding: 0 !important; border: 0 !important; background: transparent !important; font-size: 1.15rem; outline: 0; }

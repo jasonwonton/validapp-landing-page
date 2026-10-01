@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "valid-web-";
-const CACHE_NAME = `${CACHE_PREFIX}v111`;
+const CACHE_NAME = `${CACHE_PREFIX}v112`;
 // Every module the startup graph imports statically must be listed here, or the
 // installed app cannot start offline; scripts/tests/service-worker-shell.test.mjs
 // walks the import graph and enforces it. Dynamic imports that need the network
