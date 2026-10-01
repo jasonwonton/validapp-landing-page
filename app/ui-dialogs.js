@@ -22,7 +22,7 @@ function element(tag, properties = {}, children = []) {
     return node;
 }
 
-function presentSheet({ title, message, className = "", body = [], confirmLabel, cancelLabel, destructive, prepare, result, cancelled }) {
+function presentSheet({ title, message, className = "", body = [], confirmLabel, cancelLabel, destructive, prepare, result, cancelled, secondary }) {
     const id = `ui-sheet-${++sheetSequence}`;
     const previousFocus = document.activeElement;
     const heading = element("h2", { id: `${id}-title`, text: title || "Are you sure?" });
@@ -50,9 +50,10 @@ function presentSheet({ title, message, className = "", body = [], confirmLabel,
         const finish = (confirmed) => {
             if (settled) return;
             settled = true;
-            resolve(confirmed ? result(form) : cancelled);
+            if (confirmed) resolve(result(form));
+            else resolve(dialog.returnValue === "secondary" ? secondary : cancelled);
         };
-        cancel.addEventListener("click", () => dialog.close("cancel"));
+        cancel.addEventListener("click", () => dialog.close(secondary === undefined ? "cancel" : "secondary"));
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             if (confirm.disabled) return;
@@ -86,6 +87,17 @@ function presentSheet({ title, message, className = "", body = [], confirmLabel,
  */
 export function confirmSheet({ title, message = "", confirmLabel = "OK", cancelLabel = "Cancel", destructive = false } = {}) {
     return presentSheet({ title, message, confirmLabel, cancelLabel, destructive, result: () => true, cancelled: false });
+}
+
+/**
+ * Two real choices plus dismissal, e.g. an offer with a way past it.
+ * @returns {Promise<"confirm" | "secondary" | null>} null on Escape or a backdrop tap.
+ */
+export function choiceSheet({ title, message = "", confirmLabel = "OK", secondaryLabel = "Cancel" } = {}) {
+    return presentSheet({
+        title, message, confirmLabel, cancelLabel: secondaryLabel, destructive: false,
+        result: () => "confirm", secondary: "secondary", cancelled: null,
+    });
 }
 
 /**
