@@ -22,7 +22,7 @@ function element(tag, properties = {}, children = []) {
     return node;
 }
 
-function presentSheet({ title, message, className = "", body = [], confirmLabel, cancelLabel, destructive, prepare, result, cancelled, secondary }) {
+function presentSheet({ title, message, className = "", body = [], footer = [], confirmLabel, cancelLabel, destructive, prepare, result, cancelled, secondary }) {
     const id = `ui-sheet-${++sheetSequence}`;
     const previousFocus = document.activeElement;
     const heading = element("h2", { id: `${id}-title`, text: title || "Are you sure?" });
@@ -37,6 +37,7 @@ function presentSheet({ title, message, className = "", body = [], confirmLabel,
         element("span", { className: "ui-sheet-grabber", "aria-hidden": "true" }),
         heading, ...(description ? [description] : []), ...body,
         element("div", { className: "ui-sheet-actions" }, [confirm, cancel]),
+        ...footer,
     ]);
     const dialog = element("dialog", {
         className: `ui-sheet ${className}`.trim(),
@@ -93,9 +94,10 @@ export function confirmSheet({ title, message = "", confirmLabel = "OK", cancelL
  * Two real choices plus dismissal, e.g. an offer with a way past it.
  * @returns {Promise<"confirm" | "secondary" | null>} null on Escape or a backdrop tap.
  */
-export function choiceSheet({ title, message = "", confirmLabel = "OK", secondaryLabel = "Cancel" } = {}) {
+export function choiceSheet({ title, message = "", finePrint = "", confirmLabel = "OK", secondaryLabel = "Cancel" } = {}) {
     return presentSheet({
         title, message, confirmLabel, cancelLabel: secondaryLabel, destructive: false,
+        footer: finePrint ? [element("p", { className: "ui-sheet-fineprint", text: finePrint })] : [],
         result: () => "confirm", secondary: "secondary", cancelled: null,
     });
 }

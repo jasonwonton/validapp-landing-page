@@ -912,7 +912,7 @@ test("God Mode subscribers can unsubscribe from edit profile details", async ({ 
     await unsubscribe.click();
     // The free-week offer comes first; "Unsubscribe anyway" goes straight through.
     const offer = page.locator(".ui-sheet");
-    await expect(offer.getByRole("heading", { name: "Get a free week instead?" })).toBeVisible();
+    await expect(offer.getByRole("heading", { name: "Stay for a free week?" })).toBeVisible();
     await offer.getByRole("button", { name: "Unsubscribe anyway" }).click();
     await expect(informationDialog.getByText(/Unsubscribed\. God Mode stays active through/)).toBeVisible();
     await expect(informationDialog.getByRole("button", { name: /God Mode cancellation scheduled/ })).toBeDisabled();
@@ -928,15 +928,16 @@ test("God Mode subscribers can take one free week instead of unsubscribing", asy
 
     // Dismissing the offer changes nothing.
     await unsubscribe.click();
-    await expect(page.locator(".ui-sheet")).toContainText("$9.99/week charge moves from");
-    await expect(page.locator(".ui-sheet")).toContainText(/Cancel before .+ and it ends/);
+    const offerSheet = page.locator(".ui-sheet");
+    await expect(offerSheet.locator(".ui-sheet-message")).toHaveText("Your next week is on us, with 2 reveals.");
+    await expect(offerSheet.locator(".ui-sheet-fineprint")).toContainText(/^Reveals on .+ and .+ while you’re still subscribed\. Then \$9\.99\/week starting .+\. Cancel before .+ and it ends .+\.$/);
     await page.keyboard.press("Escape");
     await expect(page.locator(".ui-sheet")).toHaveCount(0);
     await expect(informationDialog.getByText(/Unsubscribed/)).toHaveCount(0);
 
     await unsubscribe.click();
     await page.locator(".ui-sheet").getByRole("button", { name: "Get my free week" }).click();
-    await expect(informationDialog.getByText(/Free week added\. Your next charge is/)).toBeVisible();
+    await expect(informationDialog.getByText(/Free week starts .+\. Your reveals unlock .+ and .+\./)).toBeVisible();
     await expect(unsubscribe).toBeEnabled();
 
     // Once only, and cancelling during the free week says it ends early.
