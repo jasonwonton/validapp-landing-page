@@ -194,6 +194,7 @@ const state = {
     stripeCheckoutPollTimer: null,
     stripeCheckoutPollInFlight: false,
     godModeCancellation: null,
+    godModeBilling: null,
     signupStep: 0,
     signupNearbySchools: [],
     signupSelectedSchool: null,
@@ -1539,6 +1540,27 @@ function renderGodModeCard() {
 
 function hasActiveGodMode() {
     return api.user?.subscribed_user === true;
+}
+
+// Only Stripe subscriptions can be cancelled here; App Store and granted God
+// Mode get a 409 from the unsubscribe route, so the button stays hidden.
+function hasStripeGodMode() {
+    const billing = state.godModeBilling;
+    return hasActiveGodMode() && billing?.userId === api.user?.id && billing.provider === "stripe";
+}
+
+async function refreshGodModeBilling() {
+    const userId = api.user?.id;
+    if (!userId || !hasActiveGodMode() || typeof api.getGodModeBilling !== "function") return;
+    try {
+        const billing = await api.getGodModeBilling(userId);
+        if (api.user?.id !== userId) return;
+        state.godModeBilling = { userId, provider: billing?.provider || null };
+        if (billing?.cancel_at_period_end === true) state.godModeCancellation = billing;
+    } catch {
+        return;
+    }
+    if (state.profileEditor === "hub") renderProfileEditorHub();
 }
 
 function godModeInviteProgressLabel() {
@@ -5035,20 +5057,18 @@ function renderProfileEditorHub() {
     $("#deleteAccountButton").classList.toggle("hidden", state.config?.enable_delete_account === false);
     const unsubscribeButton = $("#godModeUnsubscribeButton");
     const cancellationScheduled = state.godModeCancellation?.cancel_at_period_end === true;
-    unsubscribeButton.classList.toggle("hidden", !hasActiveGodMode());
+    unsubscribeButton.classList.toggle("hidden", !hasStripeGodMode());
     unsubscribeButton.disabled = cancellationScheduled;
     $("#godModeUnsubscribeLabel").textContent = cancellationScheduled
         ? "God Mode cancellation scheduled"
         : "Unsubscribe from God Mode";
-    $("#godModeUnsubscribeBadge").textContent = cancellationScheduled ? "Scheduled" : "";
-    $("#godModeUnsubscribeBadge").className = cancellationScheduled ? "scheduled" : "";
     $("#profileEditHint").innerHTML = informationLocked
         ? `<strong>Profile changes are temporarily locked</strong><span>Username, name, school, and grade will be available again ${escapeHTML(relativeTime(state.profile.next_information_change_at))}.</span>`
         : "<strong>Profile changes are available every 14 days</strong><span>Change any combination below. Nothing is saved until you review and confirm everything.</span>";
 }
 
 async function unsubscribeFromGodMode() {
-    if (!hasActiveGodMode()) return;
+    if (!hasStripeGodMode()) return;
     const confirmed = await confirmSheet({
         title: "Unsubscribe from God Mode?",
         message: "You’ll keep God Mode through the end of your current billing period, and then it won’t renew.",
@@ -5217,6 +5237,7 @@ function openProfileDialog() {
     $("#profileGodModeStatus").textContent = "";
     setProfileEditor("hub");
     $("#profileDialog").showModal();
+    void refreshGodModeBilling();
 }
 
 async function cancelProfileEditor() {

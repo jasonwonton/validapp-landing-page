@@ -45,6 +45,7 @@ export class DemoAPI {
         this.user = null;
         this.deletionRequestedAt = null;
         this.demoGodMode = demoParams.get("godmode") === "1";
+        this.demoGodModeProvider = demoParams.get("godmodeprovider") || "stripe";
         this.profileAskTargetUnavailable = demoParams.get("asktarget") === "unavailable";
         this.demoStoryFailOnce = demoParams.get("storyfail") === "1";
         this.demoCommentFailOnce = demoParams.get("commentfail") === "1";
@@ -1319,6 +1320,14 @@ export class DemoAPI {
 
     async confirmGodModeCheckout() {
         return { completed: false, subscribed: false };
+    }
+
+    async getGodModeBilling() {
+        return {
+            subscribed: this.demoGodMode,
+            provider: this.demoGodMode ? this.demoGodModeProvider : "none",
+            cancel_at_period_end: false,
+        };
     }
 
     async unsubscribeFromGodMode() {
