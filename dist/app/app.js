@@ -5094,12 +5094,18 @@ function formatBillingShortDate(value) {
 async function offerGodModeFreeWeek(offer) {
     const from = formatBillingShortDate(offer.next_charge_at);
     const to = formatBillingShortDate(offer.offer_next_charge_at);
-    const price = offer.price_label ? `${offer.price_label} ` : "";
+    const first = formatBillingShortDate(offer.first_reveal_at);
+    const second = formatBillingShortDate(offer.second_reveal_at);
+    // The free week gets no weekly refill: two reveals (day 2, day 5), each
+    // only while still subscribed (granted by the server).
+    const terms = [];
+    if (first && second) terms.push(`Reveals on ${first} and ${second} while you’re still subscribed.`);
+    if (to) terms.push(`Then ${offer.price_label || "your regular price"} starting ${to}.`);
+    if (from && to) terms.push(`Cancel before ${to} and it ends ${from}.`);
     const choice = await choiceSheet({
-        title: "Get a free week instead?",
-        message: from && to
-            ? `Keep God Mode and your next week is on us. Your next ${price}charge moves from ${from} to ${to}. Cancel before ${to} and it ends ${from}.`
-            : "Keep God Mode and your next week is on us.",
+        title: "Stay for a free week?",
+        message: first && second ? "Your next week is on us, with 2 reveals." : "Your next week is on us.",
+        finePrint: terms.join(" "),
         confirmLabel: "Get my free week",
         secondaryLabel: "Unsubscribe anyway",
     });
@@ -5119,9 +5125,12 @@ async function offerGodModeFreeWeek(offer) {
     try {
         const result = await api.acceptGodModeRetentionOffer(api.user.id);
         const next = formatBillingShortDate(result.next_charge_at);
-        status.textContent = next
-            ? `Free week added. Your next charge is ${next}.`
-            : "Free week added.";
+        const weekStarts = formatBillingShortDate(result.free_week_starts_at);
+        const firstReveal = formatBillingShortDate(result.first_reveal_at);
+        const secondReveal = formatBillingShortDate(result.second_reveal_at);
+        status.textContent = weekStarts && firstReveal && secondReveal
+            ? `Free week starts ${weekStarts}. Your reveals unlock ${firstReveal} and ${secondReveal}.`
+            : next ? `Free week added. Your next charge is ${next}.` : "Free week added.";
         showToast("Free week of God Mode added");
     } catch (error) {
         status.classList.remove("is-neutral");

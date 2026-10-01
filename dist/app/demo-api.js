@@ -1342,13 +1342,24 @@ export class DemoAPI {
             next_charge_at: ago(-4 * 24 * 60),
             offer_next_charge_at: ago(-11 * 24 * 60),
             price_label: "$9.99/week",
+            free_week_starts_at: ago(-4 * 24 * 60),
+            first_reveal_at: ago(-5 * 24 * 60),
+            second_reveal_at: ago(-8 * 24 * 60),
+            free_week_reveals: 2,
         };
     }
 
     async acceptGodModeRetentionOffer() {
         this.demoFreeWeekAvailable = false;
         this.demoFreeWeekTaken = true;
-        return { granted: true, free_days: 7, next_charge_at: ago(-11 * 24 * 60) };
+        return {
+            granted: true,
+            free_days: 7,
+            next_charge_at: ago(-11 * 24 * 60),
+            free_week_starts_at: ago(-4 * 24 * 60),
+            first_reveal_at: ago(-5 * 24 * 60),
+            second_reveal_at: ago(-8 * 24 * 60),
+        };
     }
 
     async declineGodModeRetentionOffer() {
