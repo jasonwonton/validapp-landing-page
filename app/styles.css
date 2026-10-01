@@ -255,6 +255,7 @@ h3 { font-size: 1.45rem; }
 .primary-button:disabled, .secondary-button:disabled { opacity: var(--button-disabled-opacity); cursor: not-allowed; }
 .fine-print { max-width: 420px; margin-bottom: 0; color: var(--muted); font-size: .85rem; text-align: center; line-height: 1.4; }
 .status-message { min-height: 20px; margin: 0; color: var(--danger-text); text-align: center; }
+.status-message.is-neutral { color: var(--muted); }
 
 .aura-pill, .counter-pill {
     display: inline-flex;

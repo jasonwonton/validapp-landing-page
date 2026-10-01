@@ -8,7 +8,7 @@ import { createRealtimeList } from "./realtime-list.js";
 import { activateRoute, preloadRoute } from "./routes/route-loader.js";
 import { clearRuntimeStyles, setRuntimeStyles } from "./runtime-style.js";
 import { configureMediaFallback, imageCandidates, installMediaImageFallback, mediaImageMarkup, setMediaImageSource } from "./media-url.js";
-import { confirmSheet } from "./ui-dialogs.js";
+import { choiceSheet, confirmSheet } from "./ui-dialogs.js";
 import { showToast } from "./toast.js";
 import { userMessage } from "./user-message.js";
 
@@ -5067,31 +5067,109 @@ function renderProfileEditorHub() {
         : "<strong>Profile changes are available every 14 days</strong><span>Change any combination below. Nothing is saved until you review and confirm everything.</span>";
 }
 
-async function unsubscribeFromGodMode() {
-    if (!hasStripeGodMode()) return;
-    const confirmed = await confirmSheet({
-        title: "Unsubscribe from God Mode?",
-        message: "You’ll keep God Mode through the end of your current billing period, and then it won’t renew.",
-        confirmLabel: "Unsubscribe",
-        cancelLabel: "Keep God Mode",
-        destructive: true,
+async function godModeRetentionOffer() {
+    if (typeof api.getGodModeRetentionOffer !== "function") return null;
+    const button = $("#godModeUnsubscribeButton");
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    try {
+        return await api.getGodModeRetentionOffer(api.user.id);
+    } catch {
+        return null;
+    } finally {
+        button.disabled = false;
+        button.removeAttribute("aria-busy");
+    }
+}
+
+// "Oct 12", like the iOS billing copy.
+function formatBillingShortDate(value) {
+    if (!value) return "";
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+// One free week, offered once, before the cancel goes through.
+// Returns true when the subscriber kept God Mode or backed out.
+async function offerGodModeFreeWeek(offer) {
+    const from = formatBillingShortDate(offer.next_charge_at);
+    const to = formatBillingShortDate(offer.offer_next_charge_at);
+    const price = offer.price_label ? `${offer.price_label} ` : "";
+    const choice = await choiceSheet({
+        title: "Get a free week instead?",
+        message: from && to
+            ? `Keep God Mode and your next week is on us. Your next ${price}charge moves from ${from} to ${to}. Cancel before ${to} and it ends ${from}.`
+            : "Keep God Mode and your next week is on us.",
+        confirmLabel: "Get my free week",
+        secondaryLabel: "Unsubscribe anyway",
     });
-    if (!confirmed) return;
+    if (choice === null) return true;
+    if (choice === "secondary") {
+        // The offer is shown once: turning it down uses it up. Never block
+        // the cancel on this.
+        try { await api.declineGodModeRetentionOffer(api.user.id); } catch { /* best effort */ }
+        return false;
+    }
     const button = $("#godModeUnsubscribeButton");
     const status = $("#profileGodModeStatus");
     button.disabled = true;
     button.setAttribute("aria-busy", "true");
+    status.classList.add("is-neutral");
+    status.textContent = "Adding your free week...";
+    try {
+        const result = await api.acceptGodModeRetentionOffer(api.user.id);
+        const next = formatBillingShortDate(result.next_charge_at);
+        status.textContent = next
+            ? `Free week added. Your next charge is ${next}.`
+            : "Free week added.";
+        showToast("Free week of God Mode added");
+    } catch (error) {
+        status.classList.remove("is-neutral");
+        status.textContent = friendlyErrorMessage(error, "Could not add your free week.");
+    } finally {
+        button.disabled = false;
+        button.removeAttribute("aria-busy");
+    }
+    return true;
+}
+
+async function unsubscribeFromGodMode() {
+    if (!hasStripeGodMode()) return;
+    const offer = await godModeRetentionOffer();
+    if (offer?.available === true) {
+        if (await offerGodModeFreeWeek(offer)) return;
+    } else {
+        // Cancelling during the free week takes it back (server-enforced).
+        const paidThrough = offer?.reason === "in_free_week" ? formatBillingShortDate(offer.paid_through) : "";
+        // Keeping is the primary action; unsubscribing stays a full,
+        // clearly labeled button right below it.
+        const choice = await choiceSheet({
+            title: "Unsubscribe from God Mode?",
+            message: paidThrough
+                ? `Your free week ends and God Mode stays active through ${paidThrough}, then it won’t renew.`
+                : "You’ll keep God Mode through the end of your current billing period, and then it won’t renew.",
+            confirmLabel: "Keep God Mode",
+            secondaryLabel: "Unsubscribe",
+        });
+        if (choice !== "secondary") return;
+    }
+    const button = $("#godModeUnsubscribeButton");
+    const status = $("#profileGodModeStatus");
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    status.classList.add("is-neutral");
     status.textContent = "Updating your God Mode subscription...";
     try {
         const result = await api.unsubscribeFromGodMode(api.user.id);
         state.godModeCancellation = result;
-        const ending = formatSafetyNoticeDate(result.subscription_expires_at);
+        const ending = formatBillingShortDate(result.subscription_expires_at);
         status.textContent = ending
             ? `Unsubscribed. God Mode stays active through ${ending}.`
             : "Unsubscribed. God Mode stays active through the current billing period.";
         showToast("God Mode renewal canceled");
         renderProfileEditorHub();
     } catch (error) {
+        status.classList.remove("is-neutral");
         status.textContent = friendlyErrorMessage(error, "Could not unsubscribe from God Mode.");
         button.disabled = false;
     } finally {
@@ -5235,6 +5313,7 @@ function openProfileDialog() {
     $("#profileSchoolFallback").classList.add("hidden");
     $("#profileEditStatus").textContent = "";
     $("#profileGodModeStatus").textContent = "";
+    $("#profileGodModeStatus").classList.remove("is-neutral");
     setProfileEditor("hub");
     $("#profileDialog").showModal();
     void refreshGodModeBilling();

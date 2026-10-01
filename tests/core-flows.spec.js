@@ -910,9 +910,46 @@ test("God Mode subscribers can unsubscribe from edit profile details", async ({ 
     ]);
     expect(unsubscribeColor).toBe(deleteColor);
     await unsubscribe.click();
-    await page.locator(".ui-sheet").getByRole("button", { name: "Unsubscribe" }).click();
+    // The free-week offer comes first; "Unsubscribe anyway" goes straight through.
+    const offer = page.locator(".ui-sheet");
+    await expect(offer.getByRole("heading", { name: "Get a free week instead?" })).toBeVisible();
+    await offer.getByRole("button", { name: "Unsubscribe anyway" }).click();
     await expect(informationDialog.getByText(/Unsubscribed\. God Mode stays active through/)).toBeVisible();
     await expect(informationDialog.getByRole("button", { name: /God Mode cancellation scheduled/ })).toBeDisabled();
+});
+
+test("God Mode subscribers can take one free week instead of unsubscribing", async ({ page }) => {
+    await page.goto("/app/?demo=1&godmode=1");
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: "Profile information" }).click();
+    const informationDialog = page.getByRole("dialog");
+    const unsubscribe = informationDialog.getByRole("button", { name: /Unsubscribe from God Mode/ });
+
+    // Dismissing the offer changes nothing.
+    await unsubscribe.click();
+    await expect(page.locator(".ui-sheet")).toContainText("$9.99/week charge moves from");
+    await expect(page.locator(".ui-sheet")).toContainText(/Cancel before .+ and it ends/);
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".ui-sheet")).toHaveCount(0);
+    await expect(informationDialog.getByText(/Unsubscribed/)).toHaveCount(0);
+
+    await unsubscribe.click();
+    await page.locator(".ui-sheet").getByRole("button", { name: "Get my free week" }).click();
+    await expect(informationDialog.getByText(/Free week added\. Your next charge is/)).toBeVisible();
+    await expect(unsubscribe).toBeEnabled();
+
+    // Once only, and cancelling during the free week says it ends early.
+    await unsubscribe.click();
+    const sheet = page.locator(".ui-sheet");
+    await expect(sheet.getByRole("heading", { name: "Unsubscribe from God Mode?" })).toBeVisible();
+    await expect(sheet).toContainText("Your free week ends and God Mode stays active through");
+    await sheet.getByRole("button", { name: "Keep God Mode" }).click();
+    await expect(page.getByRole("dialog").getByText(/Unsubscribed/)).toHaveCount(0);
+
+    await unsubscribe.click();
+    await page.locator(".ui-sheet").getByRole("button", { name: "Unsubscribe", exact: true }).click();
+    await expect(page.getByRole("dialog").getByText(/Unsubscribed\. God Mode stays active through/)).toBeVisible();
 });
 
 test("App Store God Mode subscribers get no unsubscribe button", async ({ page }) => {

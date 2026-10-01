@@ -46,6 +46,7 @@ export class DemoAPI {
         this.deletionRequestedAt = null;
         this.demoGodMode = demoParams.get("godmode") === "1";
         this.demoGodModeProvider = demoParams.get("godmodeprovider") || "stripe";
+        this.demoFreeWeekAvailable = demoParams.get("freeweek") !== "0";
         this.profileAskTargetUnavailable = demoParams.get("asktarget") === "unavailable";
         this.demoStoryFailOnce = demoParams.get("storyfail") === "1";
         this.demoCommentFailOnce = demoParams.get("commentfail") === "1";
@@ -1328,6 +1329,32 @@ export class DemoAPI {
             provider: this.demoGodMode ? this.demoGodModeProvider : "none",
             cancel_at_period_end: false,
         };
+    }
+
+    async getGodModeRetentionOffer() {
+        if (this.demoGodMode && this.demoFreeWeekTaken) {
+            return { available: false, reason: "in_free_week", paid_through: ago(-4 * 24 * 60) };
+        }
+        if (!this.demoGodMode || !this.demoFreeWeekAvailable) return { available: false, reason: "used" };
+        return {
+            available: true,
+            free_days: 7,
+            next_charge_at: ago(-4 * 24 * 60),
+            offer_next_charge_at: ago(-11 * 24 * 60),
+            price_label: "$9.99/week",
+        };
+    }
+
+    async acceptGodModeRetentionOffer() {
+        this.demoFreeWeekAvailable = false;
+        this.demoFreeWeekTaken = true;
+        return { granted: true, free_days: 7, next_charge_at: ago(-11 * 24 * 60) };
+    }
+
+    async declineGodModeRetentionOffer() {
+        const declined = this.demoFreeWeekAvailable;
+        this.demoFreeWeekAvailable = false;
+        return { declined, reason: declined ? null : "used" };
     }
 
     async unsubscribeFromGodMode() {

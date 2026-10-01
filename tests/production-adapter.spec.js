@@ -188,6 +188,37 @@ test("real adapter sends Android God Mode unsubscribe to the authenticated endpo
     }]);
 });
 
+test("real adapter sends the God Mode free-week offer calls to the authenticated endpoints", async ({ page }) => {
+    await useProductionApiOrigin(page);
+    const requests = [];
+    await page.route(`${API_ORIGIN}/api/v1/**`, async (route) => {
+        const request = route.request();
+        requests.push({
+            method: request.method(),
+            path: new URL(request.url()).pathname,
+            authorization: request.headers().authorization,
+        });
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ available: false }) });
+    });
+    await page.goto("/app/?signin=1");
+    requests.length = 0;
+    await page.evaluate(async (userId) => {
+        const { ValidAPI } = await import("/app/api.js");
+        const api = new ValidAPI();
+        api.saveSession({ access_token: "offer-token", user: { id: userId } });
+        await api.getGodModeRetentionOffer(userId);
+        await api.acceptGodModeRetentionOffer(userId);
+        await api.declineGodModeRetentionOffer(userId);
+    }, USER_ID);
+
+    const base = `/api/v1/users/${USER_ID}/god-mode/retention-offer`;
+    expect(requests).toEqual([
+        { method: "GET", path: base, authorization: "Bearer offer-token" },
+        { method: "POST", path: base, authorization: "Bearer offer-token" },
+        { method: "POST", path: `${base}/decline`, authorization: "Bearer offer-token" },
+    ]);
+});
+
 test("real adapter sends Ask Me safety requests with explicit report reasons", async ({ page }) => {
     const requests = [];
     await page.addInitScript((apiOrigin) => {

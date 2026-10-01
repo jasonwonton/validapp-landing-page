@@ -756,6 +756,18 @@ export class ValidAPI {
         return this.request(`/users/${userId}/god-mode/billing`);
     }
 
+    getGodModeRetentionOffer(userId) {
+        return this.request(`/users/${userId}/god-mode/retention-offer`);
+    }
+
+    acceptGodModeRetentionOffer(userId) {
+        return this.request(`/users/${userId}/god-mode/retention-offer`, { method: "POST" });
+    }
+
+    declineGodModeRetentionOffer(userId) {
+        return this.request(`/users/${userId}/god-mode/retention-offer/decline`, { method: "POST" });
+    }
+
     unsubscribeFromGodMode(userId) {
         return this.request(`/users/${userId}/god-mode/unsubscribe`, { method: "POST" });
     }
