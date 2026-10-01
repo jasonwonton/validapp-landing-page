@@ -752,6 +752,10 @@ export class ValidAPI {
         return this.request(`/users/${userId}/stripe/checkout-session/${encodeURIComponent(sessionId)}`);
     }
 
+    getGodModeBilling(userId) {
+        return this.request(`/users/${userId}/god-mode/billing`);
+    }
+
     unsubscribeFromGodMode(userId) {
         return this.request(`/users/${userId}/god-mode/unsubscribe`, { method: "POST" });
     }

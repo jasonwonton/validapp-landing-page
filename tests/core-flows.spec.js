@@ -900,10 +900,29 @@ test("God Mode subscribers can unsubscribe from edit profile details", async ({ 
     const informationDialog = page.getByRole("dialog");
     const unsubscribe = informationDialog.getByRole("button", { name: /Unsubscribe from God Mode/ });
     await expect(unsubscribe).toBeVisible();
+    // Quiet footnote styling, matching Delete account directly below it.
+    const deleteAccount = informationDialog.getByRole("button", { name: "Delete account" });
+    await expect(unsubscribe).toHaveClass(/profile-delete-account-button/);
+    expect(await unsubscribe.evaluate((el) => el.nextElementSibling?.id)).toBe("deleteAccountButton");
+    const [unsubscribeColor, deleteColor] = await Promise.all([
+        unsubscribe.evaluate((el) => getComputedStyle(el).color),
+        deleteAccount.evaluate((el) => getComputedStyle(el).color),
+    ]);
+    expect(unsubscribeColor).toBe(deleteColor);
     await unsubscribe.click();
     await page.locator(".ui-sheet").getByRole("button", { name: "Unsubscribe" }).click();
     await expect(informationDialog.getByText(/Unsubscribed\. God Mode stays active through/)).toBeVisible();
     await expect(informationDialog.getByRole("button", { name: /God Mode cancellation scheduled/ })).toBeDisabled();
+});
+
+test("App Store God Mode subscribers get no unsubscribe button", async ({ page }) => {
+    await page.goto("/app/?demo=1&godmode=1&godmodeprovider=apple");
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: "Profile information" }).click();
+    const informationDialog = page.getByRole("dialog");
+    await expect(informationDialog.getByRole("button", { name: "Delete account" })).toBeVisible();
+    await expect(informationDialog.getByRole("button", { name: /Unsubscribe from God Mode/ })).toHaveCount(0);
 });
 
 test("settings removes the Find classmates shortcut", async ({ page }) => {
