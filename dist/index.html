@@ -92,6 +92,37 @@
 <script defer src="/assets/public-analytics.js"></script>
 </head>
 <body>
+<style>
+  /* National Bullying Prevention Month banner: the first thing on the page. */
+  .nbpm { display: block; text-decoration: none; color: #000; background: linear-gradient(180deg, #ff9a3c, #ff7a0a); border-bottom: 4px solid #000; font-family: "Jua-Regular", "Jua", system-ui, sans-serif; }
+  .nbpm-inner { max-width: 960px; margin: 0 auto; padding: 14px 16px; display: flex; align-items: center; gap: 14px; }
+  .nbpm svg { flex: none; width: 56px; height: 56px; background: #fff3e3; border: 3px solid #000; border-radius: 16px; }
+  .nbpm-text { flex: 1; min-width: 0; line-height: 1.25; }
+  .nbpm-text strong { display: block; font-weight: 400; font-size: 1.15rem; }
+  .nbpm-text span { font-size: 0.98rem; }
+  .nbpm-cta { flex: none; padding: 10px 16px; border-radius: 999px; background: #fff; border: 3px solid #000; font-size: 1rem; white-space: nowrap; }
+  .nbpm:hover .nbpm-cta { background: #fff3e3; }
+  @media (max-width: 560px) {
+    .nbpm-inner { flex-wrap: wrap; }
+    .nbpm-cta { width: 100%; text-align: center; }
+  }
+</style>
+<a class="nbpm" href="/validchallenge.html" data-analytics-event="valid_challenge_banner">
+  <div class="nbpm-inner">
+    <svg viewBox="0 0 100 100" aria-hidden="true">
+      <defs><linearGradient id="nbpm-orange" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff8514"/><stop offset="1" stop-color="#ed6105"/></linearGradient></defs>
+      <path d="M27.8 84.8 L50 55.9 C73.7 29.3 66.3 17.4 50 17.4 C33.7 17.4 26.3 29.3 50 55.9" fill="none" stroke="#000" stroke-width="19.2" stroke-linejoin="round"/>
+      <path d="M27.8 84.8 L50 55.9 C73.7 29.3 66.3 17.4 50 17.4 C33.7 17.4 26.3 29.3 50 55.9" fill="none" stroke="url(#nbpm-orange)" stroke-width="12.6" stroke-linejoin="round"/>
+      <path d="M44.1 48.5 L72.2 84.8" fill="none" stroke="#000" stroke-width="19.2"/>
+      <path d="M44.1 48.5 L72.2 84.8" fill="none" stroke="url(#nbpm-orange)" stroke-width="12.6"/>
+    </svg>
+    <div class="nbpm-text">
+      <strong>October is National Bullying Prevention Month</strong>
+      <span>Every #ValidChallenge video = $1 to stop bullying</span>
+    </div>
+    <span class="nbpm-cta">Join the challenge →</span>
+  </div>
+</a>
 <div id="valid-simple" aria-label="Valid – Compliment Classmates">
   <main>
     <section class="vs-hero">
