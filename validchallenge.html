@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>#ValidChallenge | Valid</title>
-    <meta name="description" content="Hype up a classmate, nominate 3 friends. Valid gives $1 per #ValidChallenge video to PACER's National Bullying Prevention Center, up to $10,000.">
+    <meta name="description" content="Gas up a classmate on camera, nominate 3 friends. Valid gives $1 per #ValidChallenge video to PACER's National Bullying Prevention Center, up to $10,000.">
     <link rel="canonical" href="https://validapp.lol/validchallenge.html">
     <link rel="icon" type="image/png" href="assets/AppIconV2.png">
     <link rel="apple-touch-icon" href="assets/AppIconV2.png">
@@ -12,7 +12,7 @@
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Valid">
     <meta property="og:title" content="#ValidChallenge: every video = $1 to stop bullying">
-    <meta property="og:description" content="Hype up a classmate, nominate 3 friends. Valid gives $1 per video to PACER's National Bullying Prevention Center, up to $10,000.">
+    <meta property="og:description" content="Gas up a classmate on camera, nominate 3 friends. Valid gives $1 per video to PACER's National Bullying Prevention Center, up to $10,000.">
     <meta property="og:image" content="https://validapp.lol/assets/AppIconV2.png">
     <meta property="og:image:secure_url" content="https://validapp.lol/assets/AppIconV2.png">
     <meta property="og:image:width" content="1024">
@@ -20,7 +20,7 @@
     <meta property="og:image:alt" content="Valid App Icon">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="#ValidChallenge: every video = $1 to stop bullying">
-    <meta name="twitter:description" content="Hype up a classmate, nominate 3 friends. Valid gives $1 per video to PACER's National Bullying Prevention Center, up to $10,000.">
+    <meta name="twitter:description" content="Gas up a classmate on camera, nominate 3 friends. Valid gives $1 per video to PACER's National Bullying Prevention Center, up to $10,000.">
     <meta name="twitter:image" content="https://validapp.lol/assets/AppIconV2.png">
     <meta name="theme-color" content="#ccf7f4">
     <meta name="apple-mobile-web-app-title" content="Valid">
@@ -62,9 +62,24 @@
 
         main { padding: 20px 0 48px; display: grid; gap: 18px; }
 
-        .hero { text-align: center; padding: 8px 0 4px; }
-        .hero h1 { font-size: clamp(2.3rem, 11vw, 3.2rem); line-height: 1.05; }
-        .hero p { margin-top: 10px; font-size: 1.2rem; color: var(--teal); }
+        /* The campaign poster, like the app's: cream, ink outline, orange ribbon. */
+        .poster {
+            text-align: center; background: #fff3e3; border: 4px solid var(--ink); border-radius: 32px;
+            padding: 18px 20px 22px; box-shadow: 0 6px 0 rgba(0, 0, 0, 0.18);
+        }
+        .ribbon { width: 150px; height: 150px; display: block; margin: -8px auto -14px; }
+        .eyebrow { color: #ed6105; font-size: 0.92rem; letter-spacing: 0.04em; text-transform: uppercase; }
+        .poster h1 { font-size: clamp(2.3rem, 11vw, 3.2rem); line-height: 1.05; margin-top: 4px; }
+        .pitch { margin-top: 10px; font-size: 1.12rem; color: #4a3b2e; }
+        .chips { display: flex; justify-content: center; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+        .chips span { padding: 6px 14px; border-radius: 999px; background: rgba(255, 133, 20, 0.2); border: 2px solid #ff8514; }
+        .poster .to { margin-top: 12px; color: #4a3b2e; font-size: 0.95rem; }
+        .poster .to a { text-underline-offset: 3px; }
+        .caption {
+            display: block; width: 100%; margin-top: 16px; padding: 12px 14px; text-align: left; cursor: pointer;
+            font: inherit; color: var(--ink); background: var(--card); border: 3px solid var(--ink); border-radius: 16px;
+        }
+        .caption small { display: block; margin-top: 4px; color: var(--teal); font-size: 0.85rem; }
 
         .card {
             background: var(--card);
@@ -75,22 +90,6 @@
         }
         .card h2 { font-size: 1.45rem; text-align: center; margin-bottom: 14px; }
 
-        .pledge { text-align: center; position: relative; }
-        .pledge .big { font-size: clamp(4.5rem, 24vw, 6rem); line-height: 1; }
-        .pledge .per { font-size: 1.35rem; color: var(--teal); margin-top: 4px; }
-        .pledge .goal {
-            display: inline-block;
-            margin-top: 16px;
-            padding: 10px 22px;
-            border-radius: 999px;
-            background: var(--peach);
-            font-size: 1.15rem;
-        }
-        .pledge .to { margin-top: 12px; color: var(--teal); font-size: 0.98rem; }
-        .pledge .to a { text-underline-offset: 3px; }
-        .heart { position: absolute; width: 44px; height: 44px; }
-        .heart.one { top: -18px; left: -12px; transform: rotate(-20deg); }
-        .heart.two { bottom: -16px; right: -10px; transform: rotate(16deg); }
 
         .pill-button {
             display: block;
@@ -111,31 +110,12 @@
             display: grid; place-items: center;
             border: 3px solid var(--ink);
             border-radius: 50%;
-            background: #d6f5ff;
+            background: #ff8514;
             font-size: 1.4rem;
         }
-        .steps li:nth-child(2) .num { background: #ffe2c2; }
-        .steps li:nth-child(3) .num { background: #ffd6e8; }
-        .steps li:nth-child(4) .num { background: #fff2b8; }
-        .steps small { display: block; color: var(--teal); font-size: 0.95rem; }
+        .steps b { font-weight: 400; }
 
-        .tags { display: grid; gap: 10px; justify-items: center; }
-        .tag {
-            padding: 10px 22px;
-            border-radius: 999px;
-            font-size: 1.3rem;
-            background: var(--peach);
-        }
-        .tag.outline { background: var(--card); border: 3px solid var(--ink); }
-        .plus { color: var(--teal); }
-        .platforms { display: flex; justify-content: center; gap: 22px; margin-top: 18px; }
-        .platform { display: grid; justify-items: center; gap: 4px; font-size: 0.9rem; color: var(--teal); }
-        .platform img { width: 40px; height: 40px; object-fit: contain; }
-        .platform img.is-app-icon { border-radius: 10px; }
-        .rules { margin-top: 18px; display: grid; gap: 8px; color: var(--teal); text-align: center; font-size: 0.98rem; }
 
-        .kind p { text-align: center; color: var(--teal); }
-        .kind p + p { margin-top: 6px; }
 
         .fine { padding: 4px 8px 0; display: grid; gap: 8px; color: var(--teal); font-size: 0.88rem; }
         .fine h2 { font-size: 1rem; color: var(--ink); }
@@ -154,63 +134,38 @@
     </header>
 
     <main>
-        <section class="hero">
-            <h1>#ValidChallenge</h1>
-            <p>Hype up a classmate. Nominate 3 friends.</p>
-        </section>
-
-        <section class="card pledge" aria-label="Our pledge">
-            <svg class="heart one" viewBox="-17 -18 34 28" aria-hidden="true"><path d="M0 8C-16-4-9-17 0-8C9-17 16-4 0 8Z" fill="#ff4f9a" stroke="#000" stroke-width="2.4"/><ellipse cx="-6" cy="-8" rx="3" ry="2" fill="#fff" opacity=".7"/></svg>
-            <svg class="heart two" viewBox="-17 -18 34 28" aria-hidden="true"><path d="M0 8C-16-4-9-17 0-8C9-17 16-4 0 8Z" fill="#ff4f9a" stroke="#000" stroke-width="2.4"/><ellipse cx="-6" cy="-8" rx="3" ry="2" fill="#fff" opacity=".7"/></svg>
-            <p class="big">$1</p>
-            <p class="per">for every video, to stop bullying</p>
-            <p class="goal">Up to $10,000</p>
-            <p class="to">Valid donates it to <a href="https://www.pacer.org/bullying/" target="_blank" rel="noopener">PACER's National Bullying Prevention Center</a> for National Bullying Prevention Month.</p>
+        <section class="poster" aria-labelledby="title">
+            <svg class="ribbon" viewBox="0 0 100 100" aria-hidden="true">
+                <defs><linearGradient id="orange" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff8514"/><stop offset="1" stop-color="#ed6105"/></linearGradient></defs>
+                <path d="M27.8 84.8 L50 55.9 C73.7 29.3 66.3 17.4 50 17.4 C33.7 17.4 26.3 29.3 50 55.9" fill="none" stroke="#000" stroke-width="19.2" stroke-linejoin="round"/>
+                <path d="M27.8 84.8 L50 55.9 C73.7 29.3 66.3 17.4 50 17.4 C33.7 17.4 26.3 29.3 50 55.9" fill="none" stroke="url(#orange)" stroke-width="12.6" stroke-linejoin="round"/>
+                <path d="M44.1 48.5 L72.2 84.8" fill="none" stroke="#000" stroke-width="19.2"/>
+                <path d="M44.1 48.5 L72.2 84.8" fill="none" stroke="url(#orange)" stroke-width="12.6"/>
+                <path d="M55 22 C58 23 60 26 61 30" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="2.6" stroke-linecap="round"/>
+            </svg>
+            <p class="eyebrow">National Bullying Prevention Month</p>
+            <h1 id="title">#ValidChallenge</h1>
+            <p class="pitch">Gas up a classmate on camera. Every tagged video = $1 to stop bullying.</p>
+            <div class="chips"><span>$1 per video</span><span>Up to $10,000</span></div>
         </section>
 
         <a class="pill-button" href="https://apps.apple.com/us/app/valid-compliment-classmates/id6755367062">Get Valid</a>
 
         <section class="card" aria-labelledby="how-title">
-            <h2 id="how-title">How to do it</h2>
+            <h2 id="how-title">How it works</h2>
             <ol class="steps">
-                <li><span class="num">1</span><p>Pick a classmate<small>Say who they are.</small></p></li>
-                <li><span class="num">2</span><p>Give 3 real compliments<small>Hype them up.</small></p></li>
-                <li><span class="num">3</span><p>Nominate 3 friends<small>They go next.</small></p></li>
-                <li><span class="num">4</span><p>Post it and tag us<small>TikTok, Instagram or YouTube Shorts.</small></p></li>
+                <li><span class="num">1</span><p>Gas up a classmate on camera in Valid</p></li>
+                <li><span class="num">2</span><p>Nominate 3 friends to go next</p></li>
+                <li><span class="num">3</span><p>Post it on TikTok, Instagram or Shorts. Tag <b>@play_valid</b> + <b>#ValidChallenge</b></p></li>
             </ol>
+            <button class="caption" type="button" id="caption">
+                <span id="caption-text">Every video = $1 to stop bullying 💛 @play_valid #ValidChallenge</span>
+                <small id="caption-hint">Tap to copy the caption</small>
+            </button>
         </section>
 
-        <section class="card" aria-labelledby="count-title">
-            <h2 id="count-title">To make it count</h2>
-            <div class="tags">
-                <span class="tag">Tag @play_valid</span>
-                <span class="plus">+</span>
-                <span class="tag outline">#ValidChallenge</span>
-            </div>
-            <div class="platforms">
-                <span class="platform"><img class="is-app-icon" src="assets/tiktok.png" alt="" width="40" height="40">TikTok</span>
-                <span class="platform"><img class="is-app-icon" src="assets/instagram.png" alt="" width="40" height="40">Instagram</span>
-                <span class="platform"><img src="assets/youtube-shorts.svg" alt="" width="40" height="40">Shorts</span>
-            </div>
-            <div class="rules">
-                <p>Post it public. We can't count what we can't see.</p>
-                <p>No tag, no count.</p>
-                <p>Each video counts once, even if you post it on more than one app.</p>
-            </div>
-        </section>
-
-        <section class="card kind" aria-labelledby="kind-title">
-            <h2 id="kind-title">Keep it kind</h2>
-            <p>Only film people who said yes.</p>
-            <p>Compliments only. Videos that mock or embarrass anyone don't count.</p>
-        </section>
-
-        <section class="fine" aria-labelledby="fine-title">
-            <h2 id="fine-title">The fine print</h2>
-            <p>Valid pays the donation. You never pay anything, and nobody gets paid for posting.</p>
-            <p>We count tagged videos by hand. The total donation is capped at $10,000 (10,000 videos).</p>
-            <p>We may end the challenge before the cap. If we do, we'll say so here and still donate for every video counted until then.</p>
-            <p>PACER is the recipient of the donation. It isn't a sponsor of the challenge and doesn't endorse Valid.</p>
+        <section class="fine" aria-label="The fine print">
+            <p>Public, tagged posts count, once each. Compliments only. Valid pays $1 per video, up to $10,000, to PACER's National Bullying Prevention Center. You never pay anything. If we end it early, every video counted until then still counts. PACER isn't a sponsor and doesn't endorse Valid.</p>
         </section>
     </main>
 
@@ -220,5 +175,13 @@
             <span><a href="index.html">Home</a> &nbsp; <a href="privacy-policy.html">Privacy</a> &nbsp; <a href="terms.html">Terms</a></span>
         </div>
     </footer>
+<script>
+    // Copy the caption that makes a video count.
+    document.getElementById('caption').addEventListener('click', async () => {
+        const text = document.getElementById('caption-text').textContent;
+        try { await navigator.clipboard.writeText(text); document.getElementById('caption-hint').textContent = 'Copied · paste it in your post'; }
+        catch (e) { document.getElementById('caption-hint').textContent = 'Select the caption above to copy it'; }
+    });
+</script>
 </body>
 </html>
