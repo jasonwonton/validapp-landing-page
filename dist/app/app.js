@@ -1001,6 +1001,7 @@ async function showSignedIn() {
         refreshWebPushStatus({ sync: true });
         if (!isFeedVoteLocked()) await loadFeed(true);
         await handleNotificationRoute();
+        await handleGodModeManagementRoute();
         if (api.user?.deletion_requested_at) showPendingDeletion();
         void deferredAccountState.then(([askAccess, askSafetyNotices, askSafetyNoticeHistory, passkeyStatus]) => {
             state.askAccess = askAccess;
@@ -1015,6 +1016,18 @@ async function showSignedIn() {
     } catch (error) {
         if (!error.confirmedSessionInvalid) $("#feedStatus").textContent = userMessage(error, "Could not load your profile.");
     }
+}
+
+// Keep the management intent in the URL through sign-in, then open the same
+// account settings used by the normal unsubscribe button. A link never cancels.
+async function handleGodModeManagementRoute() {
+    const url = new URL(location.href);
+    if (url.searchParams.get("manage") !== "god-mode") return;
+    if (!api.user?.id || !document.body.classList.contains("authenticated")) return;
+    url.searchParams.delete("manage");
+    history.replaceState(history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    switchPanel("profile");
+    openProfileDialog();
 }
 
 async function handleNotificationRoute() {
@@ -1147,6 +1160,10 @@ async function routeToAppURL(href) {
         if (!dialog.matches("#pendingDeletionDialog, #askSafetyNoticeDialog")) dialog.close();
     }
     history.pushState({ validApp: true, panel }, "", url);
+    if (target.searchParams.get("manage") === "god-mode") {
+        await handleGodModeManagementRoute();
+        return;
+    }
     if (target.searchParams.has("notification")) {
         await handleNotificationRoute();
         return;
