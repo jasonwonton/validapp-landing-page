@@ -1131,8 +1131,25 @@ export class DemoAPI {
         };
     }
 
+    // GET /contacts returns the hash as phone_number; POST echoes 10 digits + hash.
+    async getContacts(_userId, { limit = 250, offset = 0 } = {}) {
+        return structuredClone((this.contacts || []).slice(offset, offset + limit));
+    }
+
+    async getAllContacts(userId) {
+        return this.getContacts(userId, { limit: 10_000 });
+    }
+
     async addContacts(_userId, contacts) {
-        return contacts.map((contact) => ({ ...contact, is_six7_user: false }));
+        this.contacts ||= [];
+        return contacts.map((contact) => {
+            const digits = String(contact.phone_number).replace(/\D/g, "").slice(-10);
+            const hash = digits.padStart(64, "0");
+            if (!this.contacts.some((row) => row.phone_number === hash)) {
+                this.contacts.push({ phone_number: hash, name: contact.name, is_six7_user: false, user_id: null, recommendation_strength: 0, vote_count: 0, visibility_boosts: [] });
+            }
+            return { phone_number: digits, hashed_phone_number: hash, name: contact.name, is_six7_user: false };
+        });
     }
 
     async answerQuestion() {

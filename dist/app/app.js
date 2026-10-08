@@ -11,6 +11,7 @@ import { configureMediaFallback, imageCandidates, installMediaImageFallback, med
 import { choiceSheet, confirmSheet } from "./ui-dialogs.js";
 import { showToast } from "./toast.js";
 import { userMessage } from "./user-message.js";
+import { answerPayload, buildChoicePool, canStartPlay, contactUploadPayload, selectPlayChoices, summarizeContactSync } from "./play-choices.js";
 
 // The localhost-only demo fixtures load on demand so they never join the
 // production module graph or the service-worker shell.
@@ -153,6 +154,12 @@ const state = {
     classmatesStatus: null,
     questionIndex: 0,
     choicesByQuestion: new Map(),
+    // PlayViewModel's combined pool: uploaded contacts plus classmates.
+    playContacts: [],
+    playPool: [],
+    playChoiceHistory: [],
+    playBlockedUserIds: [],
+    playNeedsFriends: false,
     playLocked: null,
     playComplete: false,
     playAuraEarned: 0,
@@ -4268,22 +4275,65 @@ async function toggleUpvote(button) {
     }
 }
 
-function shuffle(items) {
-    const result = [...items];
-    for (let index = result.length - 1; index > 0; index -= 1) {
-        const swapIndex = Math.floor(Math.random() * (index + 1));
-        [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
-    }
-    return result;
-}
-
+// PlayViewModel.selectWeightedRandomChoices over the contacts + classmates pool.
 function choicesForQuestion(question) {
-    if (!state.choicesByQuestion.has(question.id)) state.choicesByQuestion.set(question.id, shuffle(state.classmates).slice(0, 4));
+    if (!state.choicesByQuestion.has(question.id)) {
+        state.choicesByQuestion.set(question.id, selectPlayChoices(state.playPool, {
+            viewer: state.profile,
+            viewerUserId: api.user?.id,
+            tuning: state.config,
+            history: state.playChoiceHistory,
+        }));
+    }
     return state.choicesByQuestion.get(question.id);
 }
 
 function choiceMarkup(choice) {
-    return `<button class="choice-button" type="button" data-choice="${escapeHTML(choice.user_id)}"><span>${escapeHTML(displayName(choice))}</span></button>`;
+    return `<button class="choice-button" type="button" data-choice="${escapeHTML(choice.id)}"><span>${escapeHTML(choice.name)}</span></button>`;
+}
+
+// Contacts the server matched to accounts sort first in the classmate directory.
+function rememberContactAccounts(contacts) {
+    const ids = (contacts || []).filter((contact) => contact?.is_six7_user && contact.user_id).map((contact) => String(contact.user_id));
+    if (!ids.length) return;
+    for (const id of ids) state.contactClassmateIds.add(id);
+    writeAppCache("contact-classmates", [...state.contactClassmateIds]);
+}
+
+function rebuildPlayPool() {
+    state.playPool = buildChoicePool({
+        contacts: state.playContacts,
+        classmates: state.classmates,
+        selfUserId: api.user?.id,
+        blockedUserIds: state.playBlockedUserIds || [],
+        filterRules: state.config?.contact_filter_rules,
+    });
+    return state.playPool;
+}
+
+// Uploaded contacts (GET /contacts, as iOS loads them), classmates and blocks.
+// A user without a school still plays with contacts, like iOS.
+async function loadPlayRoster() {
+    const userId = api.user.id;
+    const [contacts, classmates, blocked] = await Promise.all([
+        api.getAllContacts(userId).catch(() => state.playContacts || []),
+        api.getClassmates(userId).catch((error) => {
+            if (error?.status === 400) return [];
+            throw error;
+        }),
+        api.getBlockedUsers(userId).catch(() => null),
+    ]);
+    if (api.user?.id !== userId) return state.playPool;
+    state.playContacts = Array.isArray(contacts) ? contacts : [];
+    state.classmates = Array.isArray(classmates) ? classmates : [];
+    if (Array.isArray(blocked)) state.playBlockedUserIds = blocked.map((profile) => String(profile.user_id));
+    rememberContactAccounts(state.playContacts);
+    return rebuildPlayPool();
+}
+
+function renderNotEnoughFriends() {
+    $("#playProgress").textContent = "";
+    $("#playCard").innerHTML = `<div class="empty-card locked-card"><img loading="lazy" decoding="async" class="empty-state-art" src="../assets/app/lock.webp" alt=""><strong>Add more friends to play Valid.</strong><span>You need at least four classmates or contacts.</span><button class="primary-button" type="button" data-find-classmates>Find classmates</button><button class="secondary-button" type="button" data-invite-unlock>Share an invite</button></div>`;
 }
 
 function renderInviteUnlock() {
@@ -4357,6 +4407,7 @@ function renderPlayCongrats() {
 
 function renderPlay() {
     const card = $("#playCard");
+    if (state.playNeedsFriends) return renderNotEnoughFriends();
     if (state.playLocked) return renderLockedPlay();
     if (state.playComplete) return renderPlayCongrats();
     const question = state.questions[state.questionIndex];
@@ -4372,10 +4423,7 @@ function renderPlay() {
         return;
     }
     const choices = choicesForQuestion(question);
-    if (choices.length < 4) {
-        card.innerHTML = `<div class="empty-card locked-card"><img loading="lazy" decoding="async" class="empty-state-art" src="../assets/app/lock.webp" alt=""><strong>Add more classmates to play Valid.</strong><span>You need at least four classmates before a poll can start.</span><button class="primary-button" type="button" data-find-classmates>Find classmates</button><button class="secondary-button" type="button" data-invite-unlock>Share an invite</button></div>`;
-        return;
-    }
+    if (choices.length < 4) return renderNotEnoughFriends();
     const artworkURL = api.assetURL(question.image_url);
     const attribution = question.is_user_submitted ? `<div class="question-attribution">${question.is_anonymous ? avatarMarkup({ first_name: "Anonymous", profile_picture_url: "../assets/app/anonymous.webp" }, "attribution-avatar") : avatarMarkup({ first_name: question.submitted_by_name || "Someone at your school", profile_picture_url: question.submitted_by_avatar_url }, "attribution-avatar")}<span><small>Question submitted by</small><strong>${escapeHTML(question.is_anonymous ? "Someone at your school" : question.submitted_by_name || "Someone at your school")}</strong></span><div class="detail-overflow play-overflow"><button class="detail-overflow-button play-overflow-button" type="button" data-toggle-play-menu aria-label="More question actions" aria-expanded="false">•••</button><div class="detail-overflow-menu hidden" role="menu" aria-label="Question actions"><button type="button" role="menuitem" data-play-question-action="report">Report question</button>${question.is_anonymous ? "" : `<button type="button" role="menuitem" data-play-question-action="block">Block submitter</button>`}</div></div></div>` : "";
     const remainingSkips = Math.max(0, Number(state.config?.max_skips_per_set ?? 3) - state.skipsUsedInSet);
@@ -4424,26 +4472,38 @@ function preloadPlayArtwork(question) {
 }
 preloadPlayArtwork.loaded = new Set();
 
+const PLAY_CONFIG_FALLBACK = {
+    nomination_aura_cost: 100,
+    question_submission_aura_cost: 200,
+    max_custom_question_length: 280,
+    max_skips_per_set: 3,
+    play_lock_time_seconds: 60,
+};
+
+// PlayViewModel+QuestionLoading: count the pool first. GET /questions/unanswered
+// starts the server's play lock, so it is only requested once four people exist.
 async function loadPlay() {
     if (state.questions.length || state.playLocked) return renderPlay();
     $("#playStatus").innerHTML = `<span class="play-loading-state"><img class="play-loading-gear" src="../assets/app/setting-gear.webp" width="58" height="58" decoding="async" alt=""><span>Finding questions and classmates…</span></span>`;
     try {
-        const [questionBatch, classmates, inviteStatus, config] = await Promise.all([
-            api.getPlayQuestions(api.user.id),
-            api.getClassmates(api.user.id),
+        const [config, inviteStatus] = await Promise.all([
+            state.config ? Promise.resolve(state.config) : api.getConfig().catch(() => ({ ...PLAY_CONFIG_FALLBACK })),
             api.getInviteStatus(api.user.id).catch(() => null),
-            state.config ? Promise.resolve(state.config) : api.getConfig().catch(() => ({
-                nomination_aura_cost: 100,
-                question_submission_aura_cost: 200,
-                max_custom_question_length: 280,
-                max_skips_per_set: 3,
-                play_lock_time_seconds: 60,
-            })),
         ]);
-        state.questions = questionBatch.questions || [];
-        state.classmates = classmates || [];
-        state.inviteStatus = inviteStatus;
         state.config = config;
+        state.inviteStatus = inviteStatus;
+        await loadPlayRoster();
+        state.choicesByQuestion.clear();
+        if (!canStartPlay(state.playPool)) {
+            state.playNeedsFriends = true;
+            $("#playStatus").textContent = "";
+            renderPlay();
+            return;
+        }
+        state.playNeedsFriends = false;
+        const questionBatch = await api.getPlayQuestions(api.user.id);
+        state.questions = questionBatch.questions || [];
+        state.playChoiceHistory = [];
         $("#playStatus").textContent = "";
         renderPlay();
     } catch (error) {
@@ -4466,16 +4526,16 @@ function shufflePlayChoices() {
 function nominationCandidates() {
     const question = state.questions[state.questionIndex];
     if (!question) return [];
-    const shown = new Set(choicesForQuestion(question).map((choice) => String(choice.user_id)));
-    return state.classmates.filter((classmate) => String(classmate.user_id) !== String(api.user.id) && !shown.has(String(classmate.user_id)));
+    const shown = new Set(choicesForQuestion(question).map((choice) => choice.id));
+    return state.playPool.filter((choice) => choice.user_id !== String(api.user.id) && !shown.has(choice.id));
 }
 
 function renderNominationList() {
     const query = $("#nominationSearch").value.trim().toLowerCase();
-    const candidates = nominationCandidates().filter((candidate) => displayName(candidate).toLowerCase().includes(query));
+    const candidates = nominationCandidates().filter((candidate) => candidate.name.toLowerCase().includes(query));
     const cost = Number(state.config?.nomination_aura_cost ?? 100);
-    $("#nominationList").innerHTML = candidates.length ? candidates.map((candidate) => `<button class="nomination-row" type="button" data-nomination="${escapeHTML(candidate.user_id)}">
-        ${avatarMarkup(candidate, "choice-avatar")}<strong>${escapeHTML(displayName(candidate))}</strong>
+    $("#nominationList").innerHTML = candidates.length ? candidates.map((candidate) => `<button class="nomination-row" type="button" data-nomination="${escapeHTML(candidate.id)}">
+        ${avatarMarkup(candidate, "choice-avatar")}<strong>${escapeHTML(candidate.name)}</strong>
         <span class="nomination-cost"><img loading="lazy" decoding="async" src="../assets/app/aura.webp" alt="">${cost}</span>
     </button>`).join("") : `<div class="empty-card">${query ? "No matching classmates." : "Everyone else is already in this round. Shuffle for new choices."}</div>`;
 }
@@ -4490,7 +4550,7 @@ function openNominationDialog() {
 
 function nominateClassmate(candidateId) {
     const question = state.questions[state.questionIndex];
-    const candidate = state.classmates.find((item) => String(item.user_id) === candidateId);
+    const candidate = nominationCandidates().find((item) => item.id === candidateId);
     if (!question || !candidate) return;
     const cost = auraCost("nominate");
     if (Number(state.profile?.aura_points || 0) < cost) {
@@ -4503,13 +4563,13 @@ function nominateClassmate(candidateId) {
 }
 
 async function submitNomination({ candidate, question }) {
-    const result = await api.answerQuestion(api.user.id, {
-        question_id: question.id,
-        selected_contact_user_id: candidate.user_id,
-        selected_contact_name: displayName(candidate),
-        presented_options: choicesForQuestion(question).map((choice) => ({ phone: "", name: displayName(choice) })),
-        is_nomination: true,
-    });
+    const result = await api.answerQuestion(api.user.id, answerPayload({
+        questionId: question.id,
+        selected: candidate,
+        choices: choicesForQuestion(question),
+        isNomination: true,
+        clientRequestId: crypto.randomUUID?.(),
+    }));
     clearOptimisticEarnedProfile();
     if (state.profile && Number.isFinite(Number(result.total_aura_points))) {
         state.profile.aura_points = Number(result.total_aura_points);
@@ -4518,7 +4578,7 @@ async function submitNomination({ candidate, question }) {
         renderProfileHeader();
     }
     $("#nominationDialog").close();
-    showToast(`You nominated ${displayName(candidate)}`);
+    showToast(`You nominated ${candidate.name}`);
     animateAuraChange(-auraCost("nominate"));
     if (state.questions[state.questionIndex] === question) {
         state.questionIndex += 1;
@@ -4555,7 +4615,7 @@ async function answerPlayQuestion(choiceId) {
     const question = state.questions[state.questionIndex];
     if (!question || state.playTransition) return;
     const choices = choicesForQuestion(question);
-    const selected = choices.find((choice) => String(choice.user_id) === choiceId);
+    const selected = choices.find((choice) => choice.id === choiceId);
     if (!selected || !beginPlayTransition(question)) return;
     const selectedButton = $(`[data-choice="${CSS.escape(choiceId)}"]`);
     const previousAura = Math.max(0, Number(state.profile?.aura_points || 0));
@@ -4573,13 +4633,12 @@ async function answerPlayQuestion(choiceId) {
     }
     schedulePlayAdvance(question, PLAY_ANSWER_HOLD_MS);
     try {
-        const result = await api.answerQuestion(api.user.id, {
-            question_id: question.id,
-            selected_contact_user_id: selected.user_id,
-            selected_contact_name: displayName(selected),
-            presented_options: choices.map((choice) => ({ phone: "", name: displayName(choice) })),
-            is_nomination: false,
-        });
+        const result = await api.answerQuestion(api.user.id, answerPayload({
+            questionId: question.id,
+            selected,
+            choices,
+            clientRequestId: crypto.randomUUID?.(),
+        }));
         const auraEarned = Math.max(0, Number(result.aura_points_earned ?? expectedAura));
         const earnedDifference = auraEarned - expectedAura;
         state.playAuraEarned = Math.max(0, state.playAuraEarned + earnedDifference);
@@ -6113,6 +6172,7 @@ async function previewSignupPhoto() {
 }
 
 function contactsPickerSupported() {
+    if (demoMode && window.__demoNoContactPicker) return false;
     return demoMode || Boolean(navigator.contacts?.select);
 }
 
@@ -6139,9 +6199,7 @@ function renderInviteRewardCard() {
 async function openClassmatesDialog({ onboarding = false } = {}) {
     if (onboarding && !isAndroidDevice()) return;
     state.contactOnboarding = onboarding;
-    $("#classmatesStatus").textContent = contactsPickerSupported()
-        ? ""
-        : "The Google contact picker is available in Chrome on Android. You can skip this step.";
+    $("#classmatesStatus").textContent = contactsPickerSupported() ? "" : contactsPickerUnavailableMessage(onboarding);
     $("#chooseContactsButton").classList.toggle("hidden", !contactsPickerSupported());
     $("#skipContactsButton").textContent = onboarding ? "Skip for now" : "Not now";
     $("#contactInviteExtras").classList.toggle("hidden", onboarding);
@@ -6154,57 +6212,100 @@ async function openClassmatesDialog({ onboarding = false } = {}) {
     } catch (_) { /* Contact discovery remains usable when rewards are unavailable. */ }
 }
 
-function contactPayload(selectedContacts) {
-    const unique = new Map();
-    for (const contact of selectedContacts) {
-        const name = Array.isArray(contact.name) ? contact.name[0] : contact.name;
-        const phones = Array.isArray(contact.tel) ? contact.tel : [contact.tel];
-        for (const phone of phones) {
-            let digits = String(phone || "").replace(/\D/g, "");
-            if (digits.length === 11 && digits.startsWith("1")) digits = digits.slice(1);
-            if (!name?.trim() || digits.length !== 10) continue;
-            unique.set(digits, { phone_number: digits, name: String(name).trim() });
-        }
+// The Contact Picker API exists only in Chrome on Android. Other browsers get
+// a reason and the invite share, never a file picker.
+function contactsPickerUnavailableMessage(onboarding) {
+    if (isAndroidDevice()) {
+        return onboarding
+            ? "Open Valid in Chrome to add friends from your contacts. You can skip this step."
+            : "Open Valid in Chrome to add friends from your contacts, or share your invite.";
     }
-    return [...unique.values()];
+    return onboarding
+        ? "This browser can't open your contacts. You can skip this step."
+        : "This browser can't open your contacts. Share your invite so friends can join you.";
+}
+
+const CONTACT_UPLOAD_CHUNK = 250;
+
+// POST /users/{id}/contacts in chunks. A failed chunk is retried once; the
+// rest still upload. Returns the rows the server accepted and the numbers that failed.
+async function uploadContactChunks(userId, contacts) {
+    const accepted = [];
+    const failedPhones = [];
+    for (let offset = 0; offset < contacts.length; offset += CONTACT_UPLOAD_CHUNK) {
+        const chunk = contacts.slice(offset, offset + CONTACT_UPLOAD_CHUNK);
+        let rows = null;
+        for (let attempt = 0; attempt < 2 && !rows; attempt += 1) {
+            try {
+                rows = await api.addContacts(userId, chunk);
+            } catch (error) {
+                if (attempt === 1 || (error?.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 429)) break;
+                await new Promise((resolve) => setTimeout(resolve, demoMode ? 0 : 1000));
+            }
+        }
+        if (Array.isArray(rows)) accepted.push(...rows);
+        else failedPhones.push(...chunk.map((row) => row.phone_number));
+    }
+    return { accepted, failedPhones };
+}
+
+function contactSyncMessage({ synced, onValid, failed, skipped }) {
+    if (!synced) {
+        return failed
+            ? "Your contacts didn't sync. Check your connection and try again."
+            : "None of those contacts can be added. Choose friends with a US phone number.";
+    }
+    const parts = [`${synced} ${synced === 1 ? "contact" : "contacts"} synced.`];
+    if (onValid !== null) parts.push(onValid ? `${onValid} ${onValid === 1 ? "is" : "are"} on Valid.` : "None are on Valid yet.");
+    if (skipped) parts.push(`${skipped} skipped.`);
+    if (failed) parts.push(`${failed} didn't sync; try again.`);
+    parts.push("No messages were sent.");
+    return parts.join(" ");
 }
 
 async function chooseContacts() {
     const button = $("#chooseContactsButton");
+    const userId = api.user.id;
     setButtonLoading(button, true, "Opening contacts...");
     $("#classmatesStatus").textContent = "";
     try {
         const selected = demoMode
-            ? [{ name: ["Riley Demo"], tel: ["4155550111"] }, { name: ["Casey Demo"], tel: ["4155550112"] }]
+            ? (window.__demoPickedContacts || [{ name: ["Riley Demo"], tel: ["4155550111"] }, { name: ["Casey Demo"], tel: ["4155550112"] }])
             : await navigator.contacts.select(["name", "tel"], { multiple: true });
-        const contacts = contactPayload(selected);
-        if (!contacts.length) {
-            $("#classmatesStatus").textContent = selected.length ? "Choose contacts with a name and a US phone number." : "No contacts selected.";
+        const payload = contactUploadPayload(selected, state.config?.contact_filter_rules);
+        if (!payload.contacts.length) {
+            $("#classmatesStatus").textContent = selected.length ? "Choose friends with a name and a US phone number." : "No contacts selected.";
             return;
         }
-        setButtonLoading(button, true, "Finding classmates...");
-        let acceptedCount = 0;
-        for (let offset = 0; offset < contacts.length; offset += 250) {
-            const accepted = await api.addContacts(api.user.id, contacts.slice(offset, offset + 250));
-            acceptedCount += accepted.length;
-            for (const contact of accepted) {
-                if (contact.is_six7_user === false) continue;
-                const classmateId = contact.user_id || contact.matched_user_id || contact.contact_user_id;
-                if (classmateId) state.contactClassmateIds.add(String(classmateId));
-            }
+        setButtonLoading(button, true, "Syncing contacts...");
+        const { accepted, failedPhones } = await uploadContactChunks(userId, payload.contacts);
+        let serverContacts = null;
+        if (accepted.some((row) => row?.hashed_phone_number)) {
+            // The upload is processed in the background; matches show up on GET.
+            await new Promise((resolve) => setTimeout(resolve, demoMode ? 0 : 1200));
+            serverContacts = await api.getAllContacts(userId).catch(() => null);
         }
-        writeAppCache("contact-classmates", [...state.contactClassmateIds]);
-        $("#classmatesStatus").textContent = `${acceptedCount} ${acceptedCount === 1 ? "classmate" : "classmates"} added. No messages were sent.`;
-        await new Promise((resolve) => setTimeout(resolve, demoMode ? 0 : 900));
-        state.classmates = await api.getClassmates(api.user.id).catch(() => state.classmates);
+        if (api.user?.id !== userId) return;
+        const summary = summarizeContactSync({ ...payload, accepted, failedPhones, serverContacts });
+        $("#classmatesStatus").textContent = contactSyncMessage(summary);
+        if (Array.isArray(serverContacts)) {
+            state.playContacts = serverContacts;
+            rememberContactAccounts(serverContacts);
+        }
+        rebuildPlayPool();
         state.choicesByQuestion.clear();
-        if (state.contactOnboarding || state.classmates.length >= 4) {
+        const ready = canStartPlay(state.playPool);
+        if (state.contactOnboarding || (ready && summary.synced)) {
+            await new Promise((resolve) => setTimeout(resolve, demoMode ? 0 : 1500));
             $("#classmatesDialog").close();
-            showToast(state.contactOnboarding ? "Friends added" : "Classmates are ready for Play");
-            if (state.activePanel === "play") renderPlay();
+            showToast(state.contactOnboarding ? "Friends added" : "Friends are ready for Play");
+            if (state.activePanel === "play" && state.playNeedsFriends && ready) {
+                state.playNeedsFriends = false;
+                loadPlay();
+            } else if (state.activePanel === "play") renderPlay();
         }
     } catch (error) {
-        if (error.name !== "AbortError") $("#classmatesStatus").textContent = userMessage(error, "Could not add those classmates.");
+        if (error.name !== "AbortError") $("#classmatesStatus").textContent = userMessage(error, "Could not sync those contacts.");
     } finally {
         setButtonLoading(button, false);
     }

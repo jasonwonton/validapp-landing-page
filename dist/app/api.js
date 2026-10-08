@@ -623,6 +623,23 @@ export class ValidAPI {
         return this.request(`/users/${userId}/classmates/status`);
     }
 
+    getContacts(userId, { limit = 250, offset = 0 } = {}) {
+        const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+        return this.request(`/users/${userId}/contacts?${params}`);
+    }
+
+    // APIClient+Contacts.swift getAllUserContacts: pages of 250, stops at 10,000.
+    async getAllContacts(userId) {
+        const contacts = [];
+        for (let offset = 0; offset < 10_000; offset += 250) {
+            const page = await this.getContacts(userId, { limit: 250, offset });
+            if (!Array.isArray(page)) break;
+            contacts.push(...page);
+            if (page.length < 250) break;
+        }
+        return contacts;
+    }
+
     addContacts(userId, contacts) {
         return this.request(`/users/${userId}/contacts`, {
             method: "POST",
