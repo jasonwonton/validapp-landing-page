@@ -751,6 +751,12 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
                 { user_id: "51111111-1111-1111-1111-111111111111", first_name: "Eli", last_name: "Brooks", weekly_vote_count: 50 },
             ]);
         }
+        if (path === `/api/v1/users/${USER_ID}/contacts?limit=250&offset=0`) {
+            return fulfill([
+                { phone_number: "a".repeat(64), hashed_phone_number: null, name: "Riley Stone", is_six7_user: false, user_id: null, recommendation_strength: 2, vote_count: 0, visibility_boosts: [] },
+            ]);
+        }
+        if (path === `/api/v1/users/${USER_ID}/blocks/profiles`) return fulfill([]);
         if (path.startsWith(`/api/v1/users/${USER_ID}/classmates?limit=10&search=`)) {
             return fulfill([{ user_id: "21111111-1111-1111-1111-111111111111", first_name: "Maya", last_name: "Chen", grade: "Senior" }]);
         }
@@ -1104,8 +1110,12 @@ test("real adapter submits a Play vote and multipart school question", async ({ 
         question_id: 201,
         is_nomination: false,
     });
-    expect(vote.body.selected_contact_user_id).toBeTruthy();
+    expect(vote.body.selected_contact_user_id || vote.body.selected_contact_phone).toBeTruthy();
     expect(vote.body.presented_options).toHaveLength(4);
+    // The roster (contacts + classmates) is counted before questions start the play lock.
+    const order = (fragment) => requests.findIndex((request) => request.path.includes(fragment));
+    expect(order("/questions/unanswered")).toBeGreaterThan(order("/contacts?limit=250&offset=0"));
+    expect(order("/questions/unanswered")).toBeGreaterThan(order("/classmates?limit=500"));
 
     await page.getByRole("button", { name: "Profile", exact: true }).click();
     await page.getByRole("button", { name: "Classmates", exact: true }).click();
