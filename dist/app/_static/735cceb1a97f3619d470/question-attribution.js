@@ -7,7 +7,7 @@
 // viewer the name, and named questions are unchanged.
 
 export const ANONYMOUS_SUBMITTER_NAME = "Someone at your school";
-export const AUTHOR_ANONYMITY_HINT = "Only you know you asked this";
+export const AUTHOR_ANONYMITY_HINT = "Your name is hidden from classmates";
 
 /**
  * @returns {{ kind: "none" } | { kind: "named", name: string } | { kind: "anonymous", viewerIsAuthor: boolean }}

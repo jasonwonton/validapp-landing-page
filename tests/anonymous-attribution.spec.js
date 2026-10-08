@@ -41,7 +41,7 @@ test('Play: the author of an anonymous question sees it anonymously, with the pr
     await expect(attribution).toContainText('Someone at your school');
     await expect(attribution).not.toContainText('Jamie Rivera');
     await expect(attribution.locator('img')).toHaveAttribute('src', /anonymous\.webp/);
-    await expect(attribution.locator('[data-submitter-author-hint]')).toHaveText('Only you know you asked this');
+    await expect(attribution.locator('[data-submitter-author-hint]')).toHaveText('Your name is hidden from classmates');
     await expect(attribution.getByRole('menuitem', { name: 'Block submitter', includeHidden: true })).toHaveCount(0);
 });
 
@@ -68,7 +68,7 @@ test('Poll detail: the author of an anonymous question sees it anonymously, with
     await expect(author).toContainText('Someone at your school');
     await expect(author).not.toContainText('Jamie Rivera');
     await expect(author.locator('img')).toHaveAttribute('src', /anonymous\.webp/);
-    await expect(author.locator('[data-submitter-author-hint]')).toHaveText('Only you know you asked this');
+    await expect(author.locator('[data-submitter-author-hint]')).toHaveText('Your name is hidden from classmates');
     await expect(page.locator('#blockFeedSubmitterButton')).toBeHidden();
 });
 
