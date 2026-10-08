@@ -127,11 +127,19 @@ img.media-placeholder { background: var(--mint); object-fit: cover; }
     backdrop-filter: blur(18px);
 }
 .network-banner { position: sticky; top: 66px; z-index: 19; padding: 9px 18px; border-bottom: 2px solid var(--outline); background: #ffe0bb; text-align: center; }
-.app-update-prompt { position: fixed; z-index: 55; left: 50%; bottom: calc(82px + var(--safe-bottom)); width: min(430px, calc(100% - 28px)); display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 11px 12px 11px 15px; border: 2px solid var(--outline); border-radius: 18px; background: var(--white); box-shadow: 0 8px 22px rgba(5,9,20,.2); transform: translateX(-50%); }
+.app-update-prompt { position: fixed; z-index: 2147483000; left: 50%; bottom: calc(82px + var(--safe-bottom)); width: min(430px, calc(100% - 28px)); display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 11px 12px 11px 15px; border: 2px solid var(--outline); border-radius: 18px; background: var(--white); box-shadow: 0 8px 22px rgba(5,9,20,.2); transform: translateX(-50%); }
 body:not(.authenticated) .app-update-prompt { bottom: calc(18px + var(--safe-bottom)); }
 .app-update-prompt > span { display: grid; gap: 2px; }
 .app-update-prompt small { color: var(--muted); font-size: .76rem; }
-.app-update-prompt button { min-height: 40px; padding: 7px 13px; border: 0; border-radius: 12px; background: var(--peach); color: var(--on-peach); }
+.app-update-prompt button { min-width: 88px; min-height: 44px; padding: 7px 14px; border: 0; border-radius: 12px; background: var(--peach); color: var(--on-peach); font: inherit; cursor: pointer; touch-action: manipulation; }
+.app-update-prompt button:disabled { cursor: progress; opacity: .8; }
+.app-update-prompt { max-width: calc(100% - 28px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)); color: var(--ink); font-family: var(--app-font); pointer-events: auto; }
+/* As a manual popover the card joins the top layer (see placeAppUpdatePrompt in app.js). */
+.app-update-prompt[popover] { inset: auto auto calc(82px + var(--safe-bottom)) 50%; height: auto; margin: 0; overflow: visible; }
+body:not(.authenticated) .app-update-prompt[popover] { bottom: calc(18px + var(--safe-bottom)); }
+.app-update-prompt[popover]::backdrop { display: none; }
+/* Over an open sheet or dialog, sit at the top so the sheet's own buttons stay uncovered. */
+.app-update-prompt.in-dialog, .app-update-prompt[popover].in-dialog { top: calc(env(safe-area-inset-top, 0px) + 12px); bottom: auto !important; }
 .pull-refresh-indicator { position: fixed; z-index: 54; top: calc(env(safe-area-inset-top) - 42px); left: 50%; width: 36px; height: 36px; display: grid; place-items: center; border: 2px solid var(--outline); border-radius: 50%; background: var(--white); opacity: var(--pull-opacity, 0); pointer-events: none; transform: translate(-50%, var(--pull-distance, 0px)) rotate(0deg); transition: transform .15s ease, opacity .15s ease; }
 .app-banner { position: fixed; z-index: 56; top: calc(env(safe-area-inset-top, 0px) + 8px); left: 50%; width: min(560px, calc(100% - 32px)); display: flex; align-items: center; border: 3px solid #000; border-radius: 12px; background: var(--peach); color: var(--on-peach); box-shadow: 0 4px 8px rgba(0,0,0,.2); transform: translateX(-50%); animation: app-banner-in .45s cubic-bezier(.34,1.4,.64,1); }
 .app-banner.leaving { opacity: 0; transform: translate(-50%, -100px); transition: opacity .3s ease, transform .3s ease; }
@@ -1897,6 +1905,8 @@ body:has(dialog.ui-sheet[open]) .toast[popover] { top: calc(env(safe-area-inset-
 .poll-submitter-row strong, .poll-submitter-row .submitter-reveal-label { font-size: 14px; }
 .poll-submitter-row .attribution-avatar { width: 32px; height: 32px; }
 .poll-submitter-row .submitter-reveal-label { margin-left: auto; }
+.submitter-author-hint { display: inline-flex; align-items: center; gap: 4px; }
+.submitter-author-hint .ui-icon { width: 12px; height: 12px; }
 .feed-nomination-card { position: relative; display: grid; gap: 16px; margin: 8px 0; padding: 40px 24px; border: 3px solid var(--outline); border-radius: 24px; background: var(--peach); color: var(--on-peach); text-align: center; box-shadow: 0 4px 12px rgba(255,177,94,.3); }
 .feed-nomination-card > strong { font-size: 32px; }
 .feed-nomination-card p { margin: 0; font-size: 18px; }

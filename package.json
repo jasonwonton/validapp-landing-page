@@ -20,7 +20,8 @@
     "test:weekly-game": "node --test scripts/tests/weekly-game.test.mjs scripts/tests/weekly-game-v2.test.mjs && playwright test tests/weekly-game.spec.js tests/weekly-game-v2.spec.js",
     "test:foundations": "node --test scripts/tests/media-url.test.mjs scripts/tests/user-message.test.mjs",
     "test:shell": "node --test scripts/tests/service-worker-shell.test.mjs scripts/tests/service-worker-media-cache.test.mjs",
-    "test:play": "node --test scripts/tests/play-choices.test.mjs && playwright test tests/play-contacts.spec.js"
+    "test:play": "node --test scripts/tests/play-choices.test.mjs && playwright test tests/play-contacts.spec.js",
+    "test:attribution": "node --test scripts/tests/question-attribution.test.mjs && playwright test tests/anonymous-attribution.spec.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
