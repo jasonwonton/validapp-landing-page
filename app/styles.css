@@ -1897,6 +1897,8 @@ body:has(dialog.ui-sheet[open]) .toast[popover] { top: calc(env(safe-area-inset-
 .poll-submitter-row strong, .poll-submitter-row .submitter-reveal-label { font-size: 14px; }
 .poll-submitter-row .attribution-avatar { width: 32px; height: 32px; }
 .poll-submitter-row .submitter-reveal-label { margin-left: auto; }
+.submitter-author-hint { display: inline-flex; align-items: center; gap: 4px; }
+.submitter-author-hint .ui-icon { width: 12px; height: 12px; }
 .feed-nomination-card { position: relative; display: grid; gap: 16px; margin: 8px 0; padding: 40px 24px; border: 3px solid var(--outline); border-radius: 24px; background: var(--peach); color: var(--on-peach); text-align: center; box-shadow: 0 4px 12px rgba(255,177,94,.3); }
 .feed-nomination-card > strong { font-size: 32px; }
 .feed-nomination-card p { margin: 0; font-size: 18px; }
