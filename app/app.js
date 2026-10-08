@@ -6799,16 +6799,300 @@ async function installWebApp() {
     }
 }
 
+// The "Valid is ready to update" card. It must stay tappable over anything the
+// app shows: an open modal <dialog> (every Android bottom sheet, the passkey
+// prompt) makes the rest of the document inert, so a card outside it can be
+// seen through the backdrop but not tapped (web-v114 support case). The card
+// is a manual popover that lives inside the topmost open modal dialog, where it
+// is not inert, and is re-shown there so it paints above the dialog itself.
+const APP_UPDATE_RETRY_MS = 2000;
+const APP_UPDATE_AUTO_KEY = "valid:auto-update-attempt";
+const APP_UPDATE_AUTO_COOLDOWN_MS = 10 * 60_000;
+// Set before every update reload: the browser may still be activating the new
+// worker (it waits for the old one's in-flight requests), so the next page
+// keeps asking for it and reloads once it takes over.
+const APP_UPDATE_PENDING_KEY = "valid:app-update-pending";
+const APP_UPDATE_PENDING_MS = 60_000;
+const APP_UPDATE_GIVE_UP_MS = 15_000;
+const modalDialogOpenOrder = new Map();
+let modalDialogOpenCounter = 0;
+let appUpdatePlacementQueued = false;
+let appUpdateRetryTimers = [];
+let appUserInteracted = false;
+const watchedAppUpdateWorkers = new WeakSet();
+
+function appUpdatePromptVisible() {
+    return !$("#appUpdatePrompt").classList.contains("hidden");
+}
+
+function topmostModalDialog() {
+    let topmost = null;
+    let topmostOrder = -1;
+    for (const dialog of document.querySelectorAll("dialog[open]")) {
+        let modal = false;
+        try { modal = dialog.matches(":modal"); } catch (_) { modal = false; }
+        if (!modal) continue;
+        if (!modalDialogOpenOrder.has(dialog)) modalDialogOpenOrder.set(dialog, ++modalDialogOpenCounter);
+        const order = modalDialogOpenOrder.get(dialog);
+        if (order > topmostOrder) {
+            topmost = dialog;
+            topmostOrder = order;
+        }
+    }
+    return topmost;
+}
+
+function placeAppUpdatePrompt() {
+    appUpdatePlacementQueued = false;
+    const prompt = $("#appUpdatePrompt");
+    if (!prompt || !appUpdatePromptVisible()) return;
+    const host = topmostModalDialog() || document.body;
+    if (prompt.parentElement !== host) host.append(prompt);
+    prompt.classList.toggle("in-dialog", host !== document.body);
+    if (typeof prompt.showPopover !== "function" || !prompt.hasAttribute("popover")) return;
+    try {
+        if (prompt.matches(":popover-open")) prompt.hidePopover();
+        prompt.showPopover();
+    } catch (_) { /* The fixed-position card still shows inside the host. */ }
+}
+
+function scheduleAppUpdatePromptPlacement() {
+    if (appUpdatePlacementQueued) return;
+    appUpdatePlacementQueued = true;
+    queueMicrotask(placeAppUpdatePrompt);
+}
+
+function watchModalDialogsForAppUpdate() {
+    new MutationObserver((records) => {
+        for (const record of records) {
+            const dialog = record.target;
+            if (!(dialog instanceof HTMLDialogElement)) continue;
+            if (dialog.open) modalDialogOpenOrder.set(dialog, ++modalDialogOpenCounter);
+            else modalDialogOpenOrder.delete(dialog);
+        }
+        if (appUpdatePromptVisible()) scheduleAppUpdatePromptPlacement();
+    }).observe(document.body, { attributes: true, attributeFilter: ["open"], subtree: true });
+    // A closing dialog may be removed from the DOM right after (ui-dialogs.js);
+    // move the card back out before it goes with it.
+    document.addEventListener("close", () => {
+        if (appUpdatePromptVisible()) placeAppUpdatePrompt();
+    }, true);
+    const prompt = $("#appUpdatePrompt");
+    // Keep sheet drag and backdrop-dismiss handlers on the host dialog from
+    // treating a tap on the card as a tap on the sheet or its backdrop.
+    for (const type of ["pointerdown", "click"]) {
+        prompt.addEventListener(type, (event) => event.stopPropagation());
+    }
+}
+
+function setAppUpdateButton(mode) {
+    const button = $("#applyAppUpdate");
+    const busy = mode === "busy";
+    button.disabled = busy;
+    button.setAttribute("aria-busy", busy ? "true" : "false");
+    button.textContent = busy ? "Updating…" : mode === "retry" ? "Try again" : "Update";
+}
+
+function hideAppUpdatePrompt() {
+    const prompt = $("#appUpdatePrompt");
+    try { if (prompt.matches(":popover-open")) prompt.hidePopover(); } catch (_) { /* Not a popover. */ }
+    prompt.classList.add("hidden");
+    prompt.classList.remove("in-dialog");
+    if (prompt.parentElement !== document.body) document.body.append(prompt);
+}
+
 function showAppUpdatePrompt(worker) {
     if (!worker) return;
+    watchAppUpdateWorker(worker);
     state.waitingServiceWorker = worker;
+    // A newer worker arrived while an update was already under way: send it on.
+    if (state.appUpdateRequested) {
+        worker.postMessage({ type: "SKIP_WAITING" });
+        return;
+    }
+    setAppUpdateButton("idle");
     $("#appUpdatePrompt").classList.remove("hidden");
+    placeAppUpdatePrompt();
+}
+
+function watchAppUpdateWorker(worker) {
+    if (watchedAppUpdateWorkers.has(worker)) return;
+    watchedAppUpdateWorkers.add(worker);
+    worker.addEventListener("statechange", () => {
+        if (worker.state === "activated" && state.appUpdateRequested) reloadForAppUpdate();
+        if (worker.state !== "redundant" || state.waitingServiceWorker !== worker) return;
+        // The worker the card points at was replaced; follow the newest one.
+        navigator.serviceWorker.getRegistration().then((registration) => {
+            if (registration?.waiting && registration.waiting !== worker) showAppUpdatePrompt(registration.waiting);
+            else if (!registration?.waiting && !registration?.installing && !state.appUpdateRequested) hideAppUpdatePrompt();
+        }).catch(() => null);
+    });
+}
+
+let appUpdateReloading = false;
+function reloadForAppUpdate() {
+    if (appUpdateReloading) return;
+    appUpdateReloading = true;
+    for (const timer of appUpdateRetryTimers) clearTimeout(timer);
+    appUpdateRetryTimers = [];
+    // A reload can race the activation and come back from the old worker;
+    // the next page checks and finishes the job (see resumePendingAppUpdate).
+    try { sessionStorage.setItem(APP_UPDATE_PENDING_KEY, `${Date.now()}:${appUpdateReloadCount + 1}`); } catch (_) { /* Reload anyway. */ }
+    location.reload();
+}
+
+async function currentWaitingWorker() {
+    try {
+        const registration = await navigator.serviceWorker.getRegistration();
+        return registration?.waiting || null;
+    } catch (_) {
+        return null;
+    }
+}
+
+async function applyAppUpdate({ automatic = false } = {}) {
+    if (state.appUpdateRequested) return;
+    state.appUpdateRequested = true;
+    if (!automatic) setAppUpdateButton("busy");
+    const worker = await currentWaitingWorker() || state.waitingServiceWorker;
+    if (!worker || worker.state === "redundant" || worker.state === "activated") {
+        // Nothing left to activate: the new worker already controls this page
+        // (or the update vanished). A reload loads whatever is current.
+        reloadForAppUpdate();
+        return;
+    }
+    watchAppUpdateWorker(worker);
+    state.waitingServiceWorker = worker;
+    worker.postMessage({ type: "SKIP_WAITING" });
+    // controllerchange normally reloads within a few hundred ms. If it never
+    // comes, ask whichever worker is waiting now, then reload regardless: a
+    // fresh launch shows the card again if the worker is still waiting.
+    appUpdateRetryTimers.push(setTimeout(async () => {
+        const retryWorker = await currentWaitingWorker();
+        if (retryWorker) {
+            watchAppUpdateWorker(retryWorker);
+            state.waitingServiceWorker = retryWorker;
+            retryWorker.postMessage({ type: "SKIP_WAITING" });
+        }
+    }, APP_UPDATE_RETRY_MS));
+    appUpdateRetryTimers.push(setTimeout(reloadForAppUpdate, APP_UPDATE_RETRY_MS * 2));
+}
+
+// After a fallback reload: keep the update request alive for a few seconds so
+// a late activation still reloads onto the new version, then hand control back
+// to the card (enabled) if nothing happened.
+// How many update reloads led to this page (0 = none pending). Capped so a
+// page that keeps coming back stale can never reload in a loop.
+const APP_UPDATE_MAX_RELOADS = 3;
+let appUpdateReloadCount = 0;
+
+function takePendingAppUpdate() {
+    try {
+        const [since, count] = String(sessionStorage.getItem(APP_UPDATE_PENDING_KEY) || "").split(":").map(Number);
+        sessionStorage.removeItem(APP_UPDATE_PENDING_KEY);
+        if (!(since > 0) || Date.now() - since > APP_UPDATE_PENDING_MS) return 0;
+        return Math.max(1, Number.isFinite(count) ? count : 1);
+    } catch (_) {
+        return 0;
+    }
+}
+
+// The hashed release this document was built from (dist only), e.g. the
+// "<release>" in /app/_static/<release>/app.js.
+function pageRelease() {
+    const entry = document.querySelector('script[type="module"][src]')?.src || "";
+    return entry.match(/\/_static\/([0-9a-f]{8,})\//)?.[1] || null;
+}
+
+// True when the active worker's app-shell cache is a different release than
+// this document: the reload raced the activation and the old worker served it.
+async function pageIsBehindActiveWorker() {
+    const release = pageRelease();
+    if (!release || typeof caches === "undefined") return false;
+    const registration = await navigator.serviceWorker.getRegistration();
+    const active = registration?.active;
+    if (!active) return false;
+    if (active.state !== "activated") {
+        await new Promise((resolve) => {
+            const timer = setTimeout(resolve, 5000);
+            active.addEventListener("statechange", () => {
+                if (active.state === "activated" || active.state === "redundant") {
+                    clearTimeout(timer);
+                    resolve();
+                }
+            });
+        });
+    }
+    const shells = (await caches.keys()).filter((name) => name.startsWith("valid-web-"));
+    return shells.length > 0 && !shells.some((name) => name.includes(release));
+}
+
+// After a fallback reload: keep the update request alive for a while so a late
+// activation still reloads onto the new version, then hand control back to the
+// card (enabled) if nothing happened. The flag is consumed, so this reloads at
+// most once more.
+function resumePendingAppUpdate(registration) {
+    const worker = registration.waiting || registration.installing;
+    if (worker) {
+        watchAppUpdateWorker(worker);
+        state.waitingServiceWorker = worker;
+        if (worker === registration.waiting) worker.postMessage({ type: "SKIP_WAITING" });
+    } else {
+        // Nothing waiting: either this page is current (done) or it came back
+        // from the old worker while the new one activated (reload once more).
+        pageIsBehindActiveWorker().catch(() => false).then((behind) => {
+            if (behind && appUpdateReloadCount < APP_UPDATE_MAX_RELOADS) {
+                reloadForAppUpdate();
+                return;
+            }
+            for (const timer of appUpdateRetryTimers) clearTimeout(timer);
+            appUpdateRetryTimers = [];
+            state.appUpdateRequested = false;
+        });
+    }
+    appUpdateRetryTimers.push(setTimeout(() => {
+        if (appUpdateReloading) return;
+        state.appUpdateRequested = false;
+        if (registration.waiting) showAppUpdatePrompt(registration.waiting);
+    }, APP_UPDATE_GIVE_UP_MS));
+}
+
+function noteAppUserInteraction() {
+    appUserInteracted = true;
+}
+
+// At a cold start nothing is on screen yet, so a worker that is already waiting
+// is applied straight away instead of asking. Guarded against reload loops.
+function maybeApplyAppUpdateAtLaunch(registration) {
+    if (!registration.waiting || !navigator.serviceWorker.controller || appUserInteracted) return false;
+    if (document.visibilityState !== "visible" || performance.now() > 15_000) return false;
+    try {
+        const last = Number(localStorage.getItem(APP_UPDATE_AUTO_KEY) || 0);
+        if (Date.now() - last < APP_UPDATE_AUTO_COOLDOWN_MS) return false;
+        localStorage.setItem(APP_UPDATE_AUTO_KEY, String(Date.now()));
+    } catch (_) {
+        return false;
+    }
+    state.waitingServiceWorker = registration.waiting;
+    void applyAppUpdate({ automatic: true });
+    return true;
 }
 
 function registerAppServiceWorker() {
+    // Set before register() resolves: the new worker can take control (and
+    // fire controllerchange) while this page is still starting.
+    appUpdateReloadCount = takePendingAppUpdate();
+    const resumingUpdate = appUpdateReloadCount > 0;
+    if (resumingUpdate) state.appUpdateRequested = true;
+    for (const type of ["pointerdown", "keydown"]) addEventListener(type, noteAppUserInteraction, { capture: true, once: true });
+    watchModalDialogsForAppUpdate();
     navigator.serviceWorker.register("./service-worker.js", { updateViaCache: "none" }).then((registration) => {
         refreshWebPushStatus();
-        if (registration.waiting) showAppUpdatePrompt(registration.waiting);
+        if (resumingUpdate) {
+            resumePendingAppUpdate(registration);
+        } else if (registration.waiting && !maybeApplyAppUpdateAtLaunch(registration)) {
+            showAppUpdatePrompt(registration.waiting);
+        }
         registration.addEventListener("updatefound", () => {
             const worker = registration.installing;
             worker?.addEventListener("statechange", () => {
@@ -6816,11 +7100,9 @@ function registerAppServiceWorker() {
             });
         });
     }).catch(() => null);
-    let refreshing = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {
-        if (refreshing || !state.appUpdateRequested) return;
-        refreshing = true;
-        location.reload();
+        if (!state.appUpdateRequested) return;
+        reloadForAppUpdate();
     });
 }
 
@@ -7513,9 +7795,10 @@ function bindEvents() {
     $("#androidInstallButton").addEventListener("click", installWebApp);
     $("#androidInstallDialog").addEventListener("cancel", (event) => event.preventDefault());
     $("#applyAppUpdate").addEventListener("click", () => {
-        $("#applyAppUpdate").disabled = true;
-        state.appUpdateRequested = true;
-        state.waitingServiceWorker?.postMessage({ type: "SKIP_WAITING" });
+        applyAppUpdate().catch(() => {
+            state.appUpdateRequested = false;
+            setAppUpdateButton("retry");
+        });
     });
     $("#notificationButton").addEventListener("click", toggleWebPush);
     $("#questionForm").addEventListener("submit", reviewQuestionSubmission);
