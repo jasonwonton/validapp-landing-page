@@ -1,6 +1,6 @@
 @font-face {
     font-family: "Jua";
-    src: url("../assets/Jua-Latin.woff2") format("woff2");
+    src: url("/assets/Jua-Latin.woff2") format("woff2");
     font-display: swap;
     font-style: normal;
     font-weight: 400;
@@ -1372,7 +1372,7 @@ body.play-active .play-actions { margin: 0; }
 .feed-detail-share { display: grid; gap: 0; padding: 0 10px 4px; }
 /* QuestionDetailView.swift BottomCTAContainer + revealSenderButton. */
 .reveal-sender-button { width: auto; min-height: 56px; display: flex; align-items: center; justify-content: center; gap: 10px; margin: 0 10px; padding: 6px 16px; border: 3px solid var(--outline); border-radius: 12px; background: var(--white); color: var(--ink); box-shadow: 0 3px 12px rgba(0,0,0,.15); font-size: clamp(16px, 4.6vw, 18px); line-height: 1.15; text-align: left; }
-.reveal-sender-button::before { content: ""; width: 32px; height: 32px; flex: 0 0 32px; background: url("../assets/app/crown.webp") center / contain no-repeat; }
+.reveal-sender-button::before { content: ""; width: 32px; height: 32px; flex: 0 0 32px; background: url("/assets/app/crown.webp") center / contain no-repeat; }
 .reveal-sender-button > span { min-width: 0; display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; text-wrap: pretty; }
 .reveal-sender-button:disabled { opacity: .6; }
 
