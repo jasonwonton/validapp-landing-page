@@ -12,6 +12,7 @@ import { choiceSheet, confirmSheet } from "./ui-dialogs.js";
 import { showToast } from "./toast.js";
 import { userMessage } from "./user-message.js";
 import { answerPayload, buildChoicePool, canStartPlay, contactUploadPayload, selectPlayChoices, summarizeContactSync } from "./play-choices.js";
+import { ANONYMOUS_SUBMITTER_NAME, AUTHOR_ANONYMITY_HINT, feedQuestionAttribution, playQuestionAttribution } from "./question-attribution.js";
 
 // The localhost-only demo fixtures load on demand so they never join the
 // production module graph or the service-worker shell.
@@ -3436,12 +3437,20 @@ async function sendContentLink(button) {
     } finally { button.disabled = false; }
 }
 
+// "Question submitted by" avatar and lines. An anonymous question reads the
+// same to its author, who also sees a private hint (question-attribution.js).
+function submitterAttributionContent(attribution, avatarURL) {
+    const anonymous = attribution.kind === "anonymous";
+    const name = anonymous ? ANONYMOUS_SUBMITTER_NAME : attribution.name;
+    const hint = anonymous && attribution.viewerIsAuthor ? `<small class="submitter-author-hint" data-submitter-author-hint>${uiIcon("lock")}${AUTHOR_ANONYMITY_HINT}</small>` : "";
+    return `${avatarMarkup({ first_name: anonymous ? "Anonymous" : name, profile_picture_url: anonymous ? "../assets/app/anonymous.webp" : avatarURL }, "attribution-avatar")}<span><small>Question submitted by</small><strong>${escapeHTML(name)}</strong>${hint}</span>`;
+}
+
 function questionSubmitterMarkup(item) {
-    if (item.question_school_id == null || item.question_is_user_submitted === false) return '';
-    const anonymous = (item.question_is_anonymous ?? !item.question_submitted_by_display_name) && !item.question_submitter_revealed;
-    const name = anonymous ? 'Someone at your school' : item.question_submitted_by_display_name || 'Someone at your school';
-    const content = `${avatarMarkup({ first_name: name, profile_picture_url: anonymous ? '../assets/app/anonymous.webp' : item.question_submitted_by_profile_picture_url }, 'attribution-avatar')}<span><small>Question submitted by</small><strong>${escapeHTML(name)}</strong></span>`;
-    return anonymous && item.can_reveal_question_submitter ? `<button class="poll-submitter-row" data-reveal-question-submitter type="button">${content}<span class="submitter-reveal-label">Reveal</span></button>` : `<div class="poll-submitter-row">${content}</div>`;
+    const attribution = feedQuestionAttribution(item, api.user?.id);
+    if (attribution.kind === "none") return '';
+    const content = submitterAttributionContent(attribution, item.question_submitted_by_profile_picture_url);
+    return attribution.kind === "anonymous" && item.can_reveal_question_submitter ? `<button class="poll-submitter-row" data-reveal-question-submitter type="button">${content}<span class="submitter-reveal-label">Reveal</span></button>` : `<div class="poll-submitter-row">${content}</div>`;
 }
 
 async function revealQuestionSubmitter(button) {
@@ -4425,7 +4434,8 @@ function renderPlay() {
     const choices = choicesForQuestion(question);
     if (choices.length < 4) return renderNotEnoughFriends();
     const artworkURL = api.assetURL(question.image_url);
-    const attribution = question.is_user_submitted ? `<div class="question-attribution">${question.is_anonymous ? avatarMarkup({ first_name: "Anonymous", profile_picture_url: "../assets/app/anonymous.webp" }, "attribution-avatar") : avatarMarkup({ first_name: question.submitted_by_name || "Someone at your school", profile_picture_url: question.submitted_by_avatar_url }, "attribution-avatar")}<span><small>Question submitted by</small><strong>${escapeHTML(question.is_anonymous ? "Someone at your school" : question.submitted_by_name || "Someone at your school")}</strong></span><div class="detail-overflow play-overflow"><button class="detail-overflow-button play-overflow-button" type="button" data-toggle-play-menu aria-label="More question actions" aria-expanded="false">•••</button><div class="detail-overflow-menu hidden" role="menu" aria-label="Question actions"><button type="button" role="menuitem" data-play-question-action="report">Report question</button>${question.is_anonymous ? "" : `<button type="button" role="menuitem" data-play-question-action="block">Block submitter</button>`}</div></div></div>` : "";
+    const submitter = playQuestionAttribution(question, api.user?.id);
+    const attribution = submitter.kind !== "none" ? `<div class="question-attribution">${submitterAttributionContent(submitter, question.submitted_by_avatar_url)}<div class="detail-overflow play-overflow"><button class="detail-overflow-button play-overflow-button" type="button" data-toggle-play-menu aria-label="More question actions" aria-expanded="false">•••</button><div class="detail-overflow-menu hidden" role="menu" aria-label="Question actions"><button type="button" role="menuitem" data-play-question-action="report">Report question</button>${question.is_anonymous ? "" : `<button type="button" role="menuitem" data-play-question-action="block">Block submitter</button>`}</div></div></div>` : "";
     const remainingSkips = Math.max(0, Number(state.config?.max_skips_per_set ?? 3) - state.skipsUsedInSet);
     const previousCard = card.dataset.questionId && card.dataset.questionId !== String(question.id) ? card.querySelector(":scope > .play-card") : null;
     card.innerHTML = `<article class="play-card">
