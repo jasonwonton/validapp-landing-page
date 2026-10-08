@@ -59,5 +59,5 @@ test("editorial questions have no attribution; legacy rows without a flag follow
 });
 
 test("the hint is the agreed copy", () => {
-    assert.equal(AUTHOR_ANONYMITY_HINT, "Only you know you asked this");
+    assert.equal(AUTHOR_ANONYMITY_HINT, "Your name is hidden from classmates");
 });
