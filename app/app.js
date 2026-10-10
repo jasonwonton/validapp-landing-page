@@ -242,6 +242,7 @@ const state = {
     webPushBusy: false,
     webPushRegistrationState: "off",
     webPushRegistrationError: "",
+    webPushSigningOut: false,
     feedbackHistory: [],
     feedbackHistoryGeneration: 0,
     highlightedFeedbackId: null,
@@ -6434,6 +6435,7 @@ async function cancelAccountDeletion() {
 
 async function logoutAndReset() {
     const userId = api.user?.id;
+    state.webPushSigningOut = true;
     clearCachedAppState();
     await presenceLifecycle?.stop();
     await preloadRoute("chats").then((route) => route?.beforeSessionEnd?.()).catch(() => null);
@@ -6515,6 +6517,7 @@ function activatePanelRoute(panel) {
         softHaptic, successHaptic, haptic, showToast,
         installSwipeBack: edgeSwipeBackSupported() ? installEdgeSwipeBack : null,
         onUnreadChange: renderChatUnreadBadge,
+        notifications: chatNotificationBridge,
         onPlay: async () => {
             if (!state.profile?.school_id) return showToast('Join a school to play the Game of the Week.');
             await openWeeklyGame();
@@ -7137,6 +7140,7 @@ function renderWebPushStatus() {
         button.classList.add("hidden");
         renderProfileActionsVisibility();
         renderFeedNotificationPrompt();
+        dispatchEvent(new CustomEvent("valid:web-push-status"));
         return;
     }
     button.classList.remove("hidden");
@@ -7161,6 +7165,8 @@ function renderWebPushStatus() {
     status.classList.toggle("visually-hidden", !attention);
     status.classList.toggle("settings-row-warning", attention && status.textContent !== "Finishing setup…");
     renderFeedNotificationPrompt();
+    // The chat notification cards follow permission and subscription changes.
+    dispatchEvent(new CustomEvent("valid:web-push-status"));
 }
 
 function subscriptionUsesVapidKey(subscription, publicKey) {
@@ -7233,6 +7239,9 @@ async function readWebPushStatus({ sync = false } = {}) {
     if (!state.webPushSubscription) {
         state.webPushRegistrationState = "off";
         state.webPushRegistrationError = "";
+        // Allowed but not subscribed (cleared site data, an expired or revoked
+        // subscription, another account signed out here): subscribe again.
+        void resubscribeWebPushQuietly();
     }
     if (sync && state.webPushSubscription && api.user?.id) {
         state.webPushRegistrationState = "syncing";
@@ -7286,9 +7295,12 @@ async function toggleWebPush() {
         const existing = state.webPushSubscription || await registration.pushManager.getSubscription();
         if (existing) {
             if (state.webPushRegistrationState === "on") {
+                // Turned off here on purpose: the quiet re-subscribe must not undo it.
+                setWebPushTurnedOff(api.user?.id, true);
                 await detachWebPushSubscription();
                 showToast("Notifications turned off");
             } else {
+                setWebPushTurnedOff(api.user?.id, false);
                 state.webPushSubscription = existing;
                 state.webPushRegistrationState = "syncing";
                 renderWebPushStatus();
@@ -7306,19 +7318,8 @@ async function toggleWebPush() {
             showToast("Notifications were not enabled.");
             return;
         }
-        if (!config?.enabled || !config.vapid_public_key) {
-            throw new Error("Notifications are not configured yet.");
-        }
-
-        state.webPushRegistrationState = "syncing";
-        renderWebPushStatus();
-        const subscription = await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(config.vapid_public_key),
-        });
-        state.webPushSubscription = subscription;
-        await syncWebPushSubscription(subscription);
-        renderWebPushStatus();
+        setWebPushTurnedOff(api.user?.id, false);
+        await subscribeWebPush(registration, config);
         showToast("Notifications are on");
     } catch (error) {
         if (state.webPushSubscription) {
@@ -7335,6 +7336,147 @@ async function toggleWebPush() {
         renderWebPushStatus();
     }
 }
+
+async function subscribeWebPush(registration, config) {
+    if (!config?.enabled || !config.vapid_public_key) {
+        throw new Error("Notifications are not configured yet.");
+    }
+    state.webPushRegistrationState = "syncing";
+    renderWebPushStatus();
+    const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(config.vapid_public_key),
+    });
+    state.webPushSubscription = subscription;
+    await syncWebPushSubscription(subscription);
+    renderWebPushStatus();
+    return subscription;
+}
+
+const webPushTurnedOffKey = (userId) => `valid:web-push-turned-off:${userId}`;
+
+function webPushTurnedOff(userId) {
+    try { return Boolean(userId) && localStorage.getItem(webPushTurnedOffKey(userId)) === "1"; }
+    catch (_) { return false; }
+}
+
+function setWebPushTurnedOff(userId, off) {
+    if (!userId) return;
+    try {
+        if (off) localStorage.setItem(webPushTurnedOffKey(userId), "1");
+        else localStorage.removeItem(webPushTurnedOffKey(userId));
+    } catch (_) { /* Without storage, a turned-off switch can come back on a later visit. */ }
+}
+
+const QUIET_RESUBSCRIBE_RETRY_MS = 10 * 60_000;
+let quietResubscribe = null;
+
+// Permission is already "granted" but this browser has no subscription, so
+// pushes for this account go nowhere. Subscribe again without asking (no
+// prompt is shown for a granted permission). One attempt at a time; after a
+// failure, wait before trying again so focus/visibility events cannot loop.
+function resubscribeWebPushQuietly(source = null) {
+    const userId = api.user?.id;
+    if (!userId || state.webPushSigningOut || state.webPushBusy || !webPushSupported()
+        || Notification.permission !== "granted" || state.webPushSubscription || webPushTurnedOff(userId)) {
+        return Promise.resolve(false);
+    }
+    if (quietResubscribe?.running) return quietResubscribe.running;
+    if (quietResubscribe?.userId === userId && Date.now() - quietResubscribe.failedAt < QUIET_RESUBSCRIBE_RETRY_MS) {
+        return Promise.resolve(false);
+    }
+    const attempt = { userId, failedAt: 0, running: null };
+    quietResubscribe = attempt;
+    attempt.running = (async () => {
+        try {
+            const registration = await readyServiceWorker();
+            if (!registration) throw new Error("Notification setup is not ready.");
+            const [existing, config] = await Promise.all([registration.pushManager.getSubscription(), api.getWebPushConfig()]);
+            // The account, permission or another path may have changed meanwhile.
+            if (api.user?.id !== userId || state.webPushSigningOut || state.webPushBusy
+                || Notification.permission !== "granted" || state.webPushSubscription) return false;
+            if (existing) {
+                state.webPushSubscription = existing;
+                state.webPushRegistrationState = "syncing";
+                await syncWebPushSubscription(existing);
+                renderWebPushStatus();
+                return false;
+            }
+            await subscribeWebPush(registration, config);
+            void api.recordNotificationPreferencesAction("web_resubscribed", source).catch(() => null);
+            return true;
+        } catch (_) {
+            attempt.failedAt = Date.now();
+            state.webPushRegistrationState = state.webPushSubscription ? "error" : "off";
+            renderWebPushStatus();
+            return false;
+        } finally {
+            attempt.running = null;
+        }
+    })();
+    return attempt.running;
+}
+
+// The chat card's "Notify me". The browser is asked first, synchronously
+// inside the tap: mobile Chrome needs the user gesture, and awaiting the
+// service worker first can consume it.
+function enableWebPushFromPrompt() {
+    if (!webPushSupported()) return Promise.resolve({ permission: "unsupported", prompted: false, subscribed: false });
+    const prompted = Notification.permission === "default";
+    const permissionPromise = prompted ? Notification.requestPermission() : Promise.resolve(Notification.permission);
+    return finishWebPushFromPrompt(prompted, permissionPromise);
+}
+
+async function finishWebPushFromPrompt(prompted, permissionPromise) {
+    if (state.webPushBusy) {
+        return { permission: await permissionPromise.catch(() => Notification.permission), prompted, subscribed: false };
+    }
+    const button = $("#notificationButton");
+    state.webPushBusy = true;
+    button.disabled = true;
+    let permission = Notification.permission;
+    try {
+        permission = await permissionPromise;
+        if (permission !== "granted") return { permission, prompted, subscribed: false };
+        setWebPushTurnedOff(api.user?.id, false);
+        const registration = await readyServiceWorker();
+        if (!registration) throw new Error("Notification setup is not ready. Try again in a moment.");
+        const existing = state.webPushSubscription || await registration.pushManager.getSubscription();
+        if (existing) {
+            state.webPushSubscription = existing;
+            state.webPushRegistrationState = "syncing";
+            renderWebPushStatus();
+            await syncWebPushSubscription(existing);
+        } else {
+            await subscribeWebPush(registration, await api.getWebPushConfig());
+        }
+        return { permission, prompted, subscribed: true };
+    } catch (error) {
+        if (state.webPushSubscription) {
+            state.webPushRegistrationState = "error";
+            state.webPushRegistrationError = userMessage(error, "Could not finish notification setup.");
+        } else {
+            state.webPushRegistrationState = "off";
+        }
+        return { permission: Notification.permission, prompted, subscribed: false, error };
+    } finally {
+        state.webPushBusy = false;
+        button.disabled = false;
+        renderWebPushStatus();
+    }
+}
+
+// What the chat notification cards need. iPhone Safari outside the Home
+// Screen app has no Web Push; it keeps the Add to Home Screen sheet instead.
+const chatNotificationBridge = {
+    permission() {
+        if (!webPushSupported() || iosInstallAvailable()) return "unsupported";
+        return Notification.permission;
+    },
+    enable: enableWebPushFromPrompt,
+    ensureSubscribed: (source) => resubscribeWebPushQuietly(source),
+    record: (action, source) => api.recordNotificationPreferencesAction(action, source),
+};
 
 function bindEvents() {
     $("#passkeyButton").addEventListener("click", handlePasskeySignIn);

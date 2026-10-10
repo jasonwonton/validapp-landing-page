@@ -50,6 +50,7 @@ const APP_SHELL = [
     "./chat/timeline-scroll.js",
     "./chat/models.js",
     "./chat/call-history.js",
+    "./chat/notification-nudge.js",
     "./chat/store.js",
     "./chat/media.js",
     "./live-camera.js",

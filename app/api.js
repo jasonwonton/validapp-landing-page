@@ -594,6 +594,19 @@ export class ValidAPI {
         });
     }
 
+    // Analytics for notification prompts (the iOS NotificationPreferences
+    // actions). Callers fire and forget: an older API answers 422 for the
+    // web sources, which must never surface.
+    recordNotificationPreferencesAction(action, source = null) {
+        const version = document.querySelector('meta[name="valid-app-version"]')?.content;
+        return this.request("/notification-preferences", {
+            method: "POST",
+            headers: /^web-v\d{1,6}$/.test(version || "") ? { "X-Client-Version": version } : {},
+            body: JSON.stringify(source ? { action, source } : { action }),
+            keepalive: true,
+        });
+    }
+
     recordStreakWarningOpen(streakWarningId) {
         return this.request("/notification-preferences/streak-warning-open", {
             method: "POST",
