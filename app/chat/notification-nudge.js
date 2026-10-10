@@ -8,6 +8,7 @@
 // The web has no Settings deep link, so a blocked browser gets "How to turn
 // on" steps instead of iOS's "Open Settings", and its "Not now" lasts a week.
 import { uiIcon } from "../ui-icons.js";
+import { setRuntimeStyles } from "../runtime-style.js";
 
 export const NUDGE_SNOOZE_MS = 24 * 60 * 60 * 1000;
 export const BLOCKED_NUDGE_SNOOZE_MS = 7 * NUDGE_SNOOZE_MS;
@@ -204,7 +205,8 @@ export function createNotificationNudge({ notifications, getUserId, slots, showT
         if (placement === "conversation" && typeof ResizeObserver === "function") {
             const screen = slot.parentElement;
             new ResizeObserver(() => {
-                screen?.style.setProperty("--chat-nudge-height", `${slot.hidden ? 0 : slot.offsetHeight}px`);
+                // Through the runtime stylesheet: the strict CSP allows no style attributes.
+                if (screen) setRuntimeStyles(screen, { "--chat-nudge-height": `${slot.hidden ? 0 : slot.offsetHeight}px` });
             }).observe(slot);
         }
         // Not delegated through a listener that awaits: enable() must run in the tap.
