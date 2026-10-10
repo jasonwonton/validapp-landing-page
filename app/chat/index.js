@@ -39,6 +39,7 @@ import {
     saveChatAppearance,
 } from "./appearance.js";
 import { createStickerMaker } from "./sticker-maker.js";
+import { createNotificationNudge } from "./notification-nudge.js";
 import { createMessageWindow } from "./message-window.js";
 import { createTimelineScroll } from "./timeline-scroll.js";
 import { callHistoryPresentation } from './call-history.js';
@@ -91,7 +92,7 @@ function localLedgerDate(date = new Date()) {
     return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 }
 
-export function createChatsView({ root, api, getUser, getConfig, presence, softHaptic, successHaptic, haptic, showToast, installSwipeBack, onUnreadChange, onPlay }) {
+export function createChatsView({ root, api, getUser, getConfig, presence, softHaptic, successHaptic, haptic, showToast, installSwipeBack, onUnreadChange, onPlay, notifications }) {
     const feedback = (kind) => (haptic || globalThis.ValidPreferences?.haptic)?.(kind);
     const attentionPriority = chat => chatAttentionPriority(chat, {
         dailyLedgerEnabled: dailyLedgerEnabled(),
@@ -183,6 +184,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             <section class="chat-list-screen" data-chat-screen="list">
                 <header class="chat-page-header"><button class="chat-icon-button" type="button" data-focus-chat-search aria-label="Search chats" aria-expanded="false">${uiIcon('search')}</button><h1>Chats</h1><button class="chat-icon-button" type="button" data-new-chat aria-label="Start a chat">${uiIcon('compose')}</button></header>
                 <form class="chat-search-form hidden" role="search"><label><span aria-hidden="true">${uiIcon('search')}</span><input type="search" minlength="2" maxlength="100" placeholder="Search chats and messages" aria-label="Search chats and messages" autocomplete="off"></label><button type="submit">Search</button><button type="button" data-cancel-chat-search>Cancel</button></form>
+                <div class="chat-notification-nudge-slot" data-nudge-slot="inbox" hidden></div>
                 <div class="chat-list-status" role="status"></div>
                 <div class="chat-search-results hidden" aria-label="Chat search results"></div>
                 <section class="chat-recent hidden" aria-label="Recent conversations"><h2>Recent</h2><div class="chat-recent-rail"></div></section>
@@ -204,6 +206,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 <div class="chat-timeline" role="list" aria-live="polite" aria-label="Messages"></div>
                 <button class="chat-jump-latest hidden" type="button" data-jump-latest aria-label="Jump to latest messages">${uiIcon('down')}<span>Latest</span></button>
                 <div class="chat-typing hidden" aria-live="polite">Someone is typing…</div>
+                <div class="chat-notification-nudge-slot" data-nudge-slot="conversation" hidden></div>
                 <div class="chat-reply-draft hidden"><span></span><button type="button" data-cancel-reply aria-label="Cancel reply">${uiIcon('close')}</button></div>
                 <form class="chat-composer">
                     <div class="chat-memento-draft hidden">
@@ -282,6 +285,17 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
 
     const $ = (selector) => root.querySelector(selector);
     const $$ = (selector) => [...root.querySelectorAll(selector)];
+    const notificationNudge = createNotificationNudge({
+        notifications,
+        getUserId: () => getUser()?.id,
+        slots: {
+            conversation: () => $('[data-nudge-slot="conversation"]'),
+            inbox: () => $('[data-nudge-slot="inbox"]'),
+        },
+        showToast,
+    });
+    notificationNudge.bind();
+    addEventListener("valid:web-push-status", () => notificationNudge.refresh());
     let mementoCamera = null;
     let mementoCameraToken = 0;
     async function ensureMementoCamera() {
@@ -764,6 +778,9 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         if (name !== 'room' && voiceMode) resetChatMediaComposer();
         $$('[data-chat-screen]').forEach((screen) => screen.classList.toggle("hidden", screen.dataset.chatScreen !== name));
         root.closest(".panel")?.classList.toggle("chat-room-open", name === "room");
+        // A room's card is shown again on every open (openChat); leaving hides it.
+        if (name !== "room") notificationNudge.roomHidden();
+        notificationNudge.setInboxVisible(name === "list");
         if (name === "room") syncVoiceComposer();
         observePresence();
         reportActiveChat();
@@ -934,6 +951,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         applyChatAppearance();
         store.state.typingUserIds.clear();
         showScreen("room");
+        notificationNudge.roomShown();
         $(".chat-room-status").textContent = "Loading conversation…";
         renderRoomHeader(chat || { display_name: "Chat", accepted_count: 0 });
         if (updateHistory) pushRoomHistory(chatId);
@@ -1594,6 +1612,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             store.updateMessage(chatId, { ...message, delivery_state: "sent" });
             if (store.state.activeChatId === chatId) renderMessages(!automatic);
             if (!automatic) successHaptic?.();
+            if (!automatic && store.state.activeChatId === chatId) notificationNudge.sendConfirmed();
             scheduleChatRowRefresh(chatId);
         } catch (error) {
             // A background retry for a room that is Memento-locked right now keeps
@@ -2060,6 +2079,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 store.state.replyToMessageId = null;
                 $("[data-sticker-library-dialog]").close();
                 renderMessages(true);
+                notificationNudge.sendConfirmed();
             }
             successHaptic?.();
             scheduleChatRowRefresh(chatId);
@@ -2372,6 +2392,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             $("[data-chat-media-dialog]").close();
             if (voiceMode) resetChatMediaComposer();
             renderMessages(true);
+            if (store.state.activeChatId === chatId) notificationNudge.sendConfirmed();
             successHaptic?.();
             showToast?.(`${sent.length > 1 ? `${sent.length} videos` : mediaKind === "audio" ? "Voice message" : mediaKind === "video" ? "Video" : "Photo"} sent${viewOnce ? " · view once" : ""}`);
             scheduleChatRowRefresh(chatId);
