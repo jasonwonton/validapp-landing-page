@@ -535,8 +535,8 @@ async function installCredentialStub(page, operation) {
     }, operation);
 }
 
-async function installWebPushStub(page, { existing = true } = {}) {
-    await page.addInitScript(({ hasExistingSubscription }) => {
+async function installWebPushStub(page, { existing = true, permission = "granted" } = {}) {
+    await page.addInitScript(({ hasExistingSubscription, initialPermission }) => {
         let currentSubscription = null;
         const subscription = {
             endpoint: "https://web.push.apple.com/test-subscription",
@@ -566,13 +566,16 @@ async function installWebPushStub(page, { existing = true } = {}) {
         Object.defineProperty(window, "PushManager", { configurable: true, value: function PushManager() {} });
         Object.defineProperty(window, "Notification", {
             configurable: true,
-            value: { permission: "granted", requestPermission: async () => "granted" },
+            value: {
+                permission: initialPermission,
+                requestPermission: async () => { window.Notification.permission = "granted"; return "granted"; },
+            },
         });
         Object.defineProperty(Navigator.prototype, "serviceWorker", {
             configurable: true,
             get: () => serviceWorker,
         });
-    }, { hasExistingSubscription: existing });
+    }, { hasExistingSubscription: existing, initialPermission: permission });
 }
 
 async function interceptProductionAPI(page, { signup = false, phoneExists = false, profileAura = 500, questionFailureCount = 0, webPushFailureCount = 0, feedLocked = false, wrappedAskTarget = false } = {}) {
@@ -660,6 +663,12 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
         if (path === "/api/v1/auth/passkey/status") return fulfill({ registered: true, credentialCount: 1 });
         if (path === "/api/v1/web-push/config") {
             return fulfill({ enabled: true, vapid_public_key: "BC31fbRg792qbDNr_PaGHMhLlTjBL2VYpOkkhRS85gA1ofvBUbi0Vmixqdr3V7Exm4820s27ZpvNbcTkuTHMDKM" });
+        }
+        if (path === "/api/v1/notification-preferences" && request.method() === "POST") {
+            return fulfill({ user_id: USER_ID, soft_prompt_shown_count: 0 });
+        }
+        if (path === `/api/v1/users/${USER_ID}/web-push-subscriptions` && request.method() === "DELETE") {
+            return fulfill(null, 204);
         }
         if (path === "/api/v1/notification-preferences/streak-warning-open" && request.method() === "POST") {
             return fulfill({ recorded: true });
@@ -934,7 +943,9 @@ test("locked Feed shows received votes, vote-to-unlock, and notification activat
         window.VALID_API_BASE_URL = `${apiOrigin}/api/v1`;
     }, API_ORIGIN);
     await installCredentialStub(page, "get");
-    await installWebPushStub(page, { existing: false });
+    // Not yet asked: a browser that already allows notifications is
+    // subscribed quietly on load and never sees this button.
+    await installWebPushStub(page, { existing: false, permission: "default" });
     const requests = await interceptProductionAPI(page, { feedLocked: true });
 
     await page.goto("/app/?signin=1");
@@ -950,6 +961,36 @@ test("locked Feed shows received votes, vote-to-unlock, and notification activat
 
     await expect(gate.getByLabel("Enable vote notifications")).toBeHidden();
     expect(requests.filter((request) => request.path.endsWith("/web-push-subscriptions"))).toHaveLength(1);
+});
+
+test("allowed but unsubscribed browsers re-subscribe quietly once, and an explicit off sticks", async ({ page }) => {
+    await page.addInitScript((apiOrigin) => {
+        window.VALID_API_BASE_URL = `${apiOrigin}/api/v1`;
+    }, API_ORIGIN);
+    await installCredentialStub(page, "get");
+    await installWebPushStub(page, { existing: false, permission: "granted" });
+    const requests = await interceptProductionAPI(page);
+    const subscriptionWrites = () => requests.filter((request) => request.path.endsWith("/web-push-subscriptions") && request.method === "POST");
+    const resubscribeEvents = () => requests.filter((request) => request.path === "/api/v1/notification-preferences"
+        && request.body?.action === "web_resubscribed");
+
+    await page.goto("/app/?signin=1");
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    const notificationButton = page.locator("#notificationButton");
+    await expect(notificationButton).toHaveAttribute("aria-checked", "true");
+    // Focus and visibility events while subscribed do not subscribe again.
+    await page.evaluate(() => { dispatchEvent(new Event("focus")); dispatchEvent(new Event("focus")); });
+    await page.waitForTimeout(300);
+    expect(subscriptionWrites()).toHaveLength(1);
+    expect(resubscribeEvents()).toHaveLength(1);
+
+    await notificationButton.click();
+    await expect(notificationButton).toHaveAttribute("aria-checked", "false");
+    await page.evaluate(() => dispatchEvent(new Event("focus")));
+    await page.waitForTimeout(300);
+    expect(subscriptionWrites()).toHaveLength(1);
+    expect(resubscribeEvents()).toHaveLength(1);
 });
 
 test("unified search debounces rapid typing into one bounded request pair", async ({ page }) => {
