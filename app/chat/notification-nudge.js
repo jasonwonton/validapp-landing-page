@@ -199,6 +199,14 @@ export function createNotificationNudge({ notifications, getUserId, slots, showT
         if (!slot || slot.dataset.nudgeBound) return;
         slot.dataset.nudgeBound = "1";
         slot.hidden = true;
+        // The room's "Latest" button floats a fixed distance above the
+        // composer; lift it over the card (whose height depends on the width).
+        if (placement === "conversation" && typeof ResizeObserver === "function") {
+            const screen = slot.parentElement;
+            new ResizeObserver(() => {
+                screen?.style.setProperty("--chat-nudge-height", `${slot.hidden ? 0 : slot.offsetHeight}px`);
+            }).observe(slot);
+        }
         // Not delegated through a listener that awaits: enable() must run in the tap.
         slot.addEventListener("click", (event) => {
             if (event.target.closest("[data-nudge-primary]")) accept(placement);

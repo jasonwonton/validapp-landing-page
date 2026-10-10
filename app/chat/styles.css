@@ -808,6 +808,7 @@
 .chat-notification-nudge-slot[hidden] { display: none; }
 .chat-list-screen > .chat-notification-nudge-slot { margin: 8px 0 6px; }
 .chat-room-screen > .chat-notification-nudge-slot { flex: 0 0 auto; padding: 10px 4px 0; }
+.chat-room-screen .chat-jump-latest { bottom: calc(80px + var(--chat-nudge-height, 0px)); }
 .chat-room-screen:has(.chat-composer.hidden) > .chat-notification-nudge-slot,
 .chat-list-screen:has(.chat-search-results:not(.hidden)) > .chat-notification-nudge-slot { display: none; }
 .chat-notification-nudge { display: grid; gap: 12px; padding: 14px; border: 1px solid rgba(0,0,0,.16); border-radius: 18px; background: var(--white); color: var(--ink); text-align: left; animation: chat-notification-nudge-enter .32s cubic-bezier(.2,.9,.3,1.08); }

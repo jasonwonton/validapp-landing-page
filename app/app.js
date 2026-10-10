@@ -7355,13 +7355,21 @@ async function subscribeWebPush(registration, config) {
 
 const webPushTurnedOffKey = (userId) => `valid:web-push-turned-off:${userId}`;
 
+// Also kept in memory: with storage blocked, the next focus would otherwise
+// quietly undo an "off" chosen a moment ago in this page.
+const webPushTurnedOffThisPage = new Set();
+
 function webPushTurnedOff(userId) {
-    try { return Boolean(userId) && localStorage.getItem(webPushTurnedOffKey(userId)) === "1"; }
+    if (!userId) return false;
+    if (webPushTurnedOffThisPage.has(userId)) return true;
+    try { return localStorage.getItem(webPushTurnedOffKey(userId)) === "1"; }
     catch (_) { return false; }
 }
 
 function setWebPushTurnedOff(userId, off) {
     if (!userId) return;
+    if (off) webPushTurnedOffThisPage.add(userId);
+    else webPushTurnedOffThisPage.delete(userId);
     try {
         if (off) localStorage.setItem(webPushTurnedOffKey(userId), "1");
         else localStorage.removeItem(webPushTurnedOffKey(userId));
@@ -7394,7 +7402,8 @@ function resubscribeWebPushQuietly(source = null) {
             const [existing, config] = await Promise.all([registration.pushManager.getSubscription(), api.getWebPushConfig()]);
             // The account, permission or another path may have changed meanwhile.
             if (api.user?.id !== userId || state.webPushSigningOut || state.webPushBusy
-                || Notification.permission !== "granted" || state.webPushSubscription) return false;
+                || Notification.permission !== "granted" || state.webPushSubscription
+                || webPushTurnedOff(userId)) return false;
             if (existing) {
                 state.webPushSubscription = existing;
                 state.webPushRegistrationState = "syncing";
