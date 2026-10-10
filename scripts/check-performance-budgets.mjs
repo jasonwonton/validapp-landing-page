@@ -86,7 +86,9 @@ for (const entry of shellEntries) {
 // Precache downloads after first paint; it does not delay the first screen.
 // 790 KB (web-v107): config refresh, call-notification handoff and the chat media
 // fixes in the startup modules.
-assert.ok(shellTransferEstimate <= 790_000, `Estimated app-shell transfer exceeds 790 KB (${shellTransferEstimate} bytes)`);
+// 830 KB (web-v116): the base release branch was already over at ~804 KB before
+// this release (web-v108..v115 growth); the chat notification card adds ~6 KB.
+assert.ok(shellTransferEstimate <= 830_000, `Estimated app-shell transfer exceeds 830 KB (${shellTransferEstimate} bytes)`);
 
 console.log(JSON.stringify({
     fontBytes,
