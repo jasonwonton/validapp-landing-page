@@ -59,6 +59,8 @@ const paths = {
     leave: '<path d="M13 4H4v16h9M10 12h12m-4-4 4 4-4 4"/>',
     'memento': '<path d="m5 15-3-1L5 2l13 3-1 3"/><rect x="7" y="8" width="15" height="13" rx="2"/><circle cx="12" cy="12" r="1" fill="currentColor"/><path d="m8 19 4-4 3 3 3-4 3 5"/>',
     photo: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="2"/><path d="m3 17 6-6 4 4 3-3 5 5"/>',
+    // SF Symbols bell.badge.fill: a filled bell with the badge dot top right.
+    'bell-badge': '<path fill="currentColor" stroke="none" d="M10.5 3.2a1.5 1.5 0 0 1 3 .1 6 6 0 0 1 1.3.5 4.5 4.5 0 0 0 4.2 6.2V14l1.6 2.4A1 1 0 0 1 19.8 18H4.2a1 1 0 0 1-.8-1.6L5 14v-3.5a6 6 0 0 1 5.5-6Zm-1 15.8h5a2.5 2.5 0 0 1-5 0Z"/><circle cx="19" cy="5" r="3" fill="currentColor" stroke="none"/>',
 };
 export function uiIcon(name) {
     if (!paths[name]) throw new Error(`Unknown interface icon: ${name}`);
