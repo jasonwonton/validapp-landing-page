@@ -45,7 +45,8 @@ test("authenticated users without a credential are prompted to enroll a passkey"
     await enrollment.getByRole("button", { name: "Create a passkey" }).click();
     await expect(enrollment).toBeHidden();
     await page.getByRole("button", { name: "Profile", exact: true }).click();
-    await expect(page.locator("#passkeyStatusText")).toHaveText("1 passkey registered");
+    // SettingsView: the passkey CTA shows only while the account has no passkey.
+    await expect(page.locator("#addPasskeyButton")).toBeHidden();
 });
 
 test("new users can complete passkey-only school onboarding", async ({ page }) => {
@@ -404,7 +405,7 @@ test("Android modals present as draggable bottom sheets", async ({ page }, testI
     test.skip(testInfo.project.name !== "android", "Android-only presentation behavior");
     await signInToDemo(page);
     await page.getByRole("button", { name: "Profile", exact: true }).click();
-    await page.getByRole("button", { name: /Choose a crush/ }).click();
+    await page.getByRole("button", { name: /Target a classmate/ }).click();
     const dialog = page.locator("#targetedBoostDialog");
     const geometry = await dialog.evaluate((element) => {
         const rect = element.getBoundingClientRect();
@@ -606,7 +607,7 @@ test("non-subscribers can reach God Mode from a received vote", async ({ page })
     await signInToDemo(page);
     await page.locator("[data-feed-detail='9001']").click();
     await page.getByRole("button", { name: "Get God Mode to Reveal who sent this" }).click();
-    const pitch = page.getByRole("dialog", { name: "God Mode" });
+    const pitch = page.getByRole("dialog", { name: "God Mode", exact: true });
     await expect(pitch.getByText("See who likes you with")).toBeVisible();
     await expect(pitch.getByText("2 Reveals / Week")).toBeVisible();
     await expect(pitch.getByRole("button", { name: /Earn God Mode/ })).toBeVisible();
@@ -614,6 +615,12 @@ test("non-subscribers can reach God Mode from a received vote", async ({ page })
     await expect(page.locator("#feedDetailDialog")).toBeVisible();
     await pitch.getByRole("button", { name: /Earn God Mode/ }).click();
     await expect(pitch).toBeHidden();
+    // GodModeEarnView: choose invites or the Creator program first.
+    const earn = page.getByRole("dialog", { name: "Earn God Mode" });
+    await expect(earn.getByText("Choose how you want to unlock reveals.")).toBeVisible();
+    await expect(earn.getByRole("button", { name: /Join our Creator program/ })).toBeVisible();
+    await earn.getByRole("button", { name: /Invite 5 friends/ }).click();
+    await expect(earn).toBeHidden();
     const inviteFriends = page.getByRole("dialog", { name: "Invite Friends" });
     await expect(inviteFriends).toBeVisible();
     await inviteFriends.getByRole("button", { name: "Close" }).click();
@@ -809,7 +816,7 @@ test("profile exposes iOS-style editing, ask link, purchases, invites, and sign 
     await expect(page.getByText("God Mode", { exact: true }).first()).toBeVisible();
     await expect(page.locator("#purchasesSection")).toHaveCSS("border-top-width", "3px");
     await page.getByRole("button", { name: /Start God Mode/ }).click();
-    const pitch = page.getByRole("dialog", { name: "God Mode" });
+    const pitch = page.getByRole("dialog", { name: "God Mode", exact: true });
     await expect(pitch.getByRole("button", { name: /Start God Mode/ })).toBeVisible();
     await pitch.getByRole("button", { name: "Maybe later" }).click();
     await expect(page.locator("#purchasesSection .settings-aura-balance")).toHaveCount(0);
@@ -823,10 +830,9 @@ test("profile exposes iOS-style editing, ask link, purchases, invites, and sign 
     await expect(page.getByRole("button", { name: "Contacts", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Classmates", exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Invite Friends" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Sign Out", exact: true })).toBeVisible();
-    await expect(page.locator("#addPasskeyButton")).toBeVisible();
-    await expect(page.locator("#addPasskeyButton")).toContainText("Add another passkey");
-    await expect(page.locator("#passkeyStatusText")).toHaveText("1 passkey registered");
+    await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
+    // With a passkey, SettingsView shows no passkey CTA.
+    await expect(page.locator("#addPasskeyButton")).toBeHidden();
     await page.getByRole("button", { name: "Profile information" }).click();
     const informationDialog = page.getByRole("dialog");
     await expect(informationDialog.getByRole("heading", { name: "Correct profile information" })).toBeVisible();
@@ -834,9 +840,11 @@ test("profile exposes iOS-style editing, ask link, purchases, invites, and sign 
     await expect(informationDialog.getByRole("button", { name: /School Westview High School/ })).toBeVisible();
     await informationDialog.getByRole("button", { name: "Cancel" }).click();
     await page.locator("[data-edit-bio]").click();
-    const bioDialog = page.getByRole("dialog").filter({ hasText: "EDIT BIO" });
-    await bioDialog.getByLabel("Bio").fill("Senior year, good music, better people.");
-    await bioDialog.getByRole("button", { name: "Save bio" }).click();
+    const bioDialog = page.getByRole("dialog", { name: "Bio" });
+    await expect(bioDialog.getByPlaceholder("Say a little about yourself…")).toBeVisible();
+    await bioDialog.getByRole("textbox", { name: "Bio" }).fill("Senior year, good music, better people.");
+    await expect(bioDialog.getByText("39/160")).toBeVisible();
+    await bioDialog.getByRole("button", { name: "Save Bio" }).click();
     await expect(page.locator("[data-edit-bio]")).toHaveText("Senior year, good music, better people.");
     await page.getByRole("button", { name: /Submit a school question for/i }).click();
     await expect(page.getByRole("dialog", { name: "School Questions" })).toBeVisible();
@@ -889,7 +897,8 @@ test("God Mode subscribers can reveal a vote sender and consume one weekly revea
     await detail.getByRole("button", { name: "Close" }).click();
     await page.getByRole("button", { name: "Profile", exact: true }).click();
     await expect(page.getByText("God Mode Active")).toBeVisible();
-    await expect(page.getByText(/1 weekly reveal left/)).toBeVisible();
+    // GodModeCard has no reveals-left line or store-billing paragraph.
+    await expect(page.locator("#godModeCard")).not.toContainText("Billing stays with the store");
 });
 
 test("God Mode subscribers can unsubscribe from edit profile details", async ({ page }) => {
@@ -897,25 +906,27 @@ test("God Mode subscribers can unsubscribe from edit profile details", async ({ 
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await page.getByRole("button", { name: "Profile", exact: true }).click();
     await page.getByRole("button", { name: "Profile information" }).click();
-    const informationDialog = page.getByRole("dialog");
-    const unsubscribe = informationDialog.getByRole("button", { name: /Unsubscribe from God Mode/ });
-    await expect(unsubscribe).toBeVisible();
+    const informationDialog = page.locator("#profileDialog");
+    const manage = informationDialog.getByRole("button", { name: /Manage God Mode/ });
+    await expect(manage).toBeVisible();
     // Quiet footnote styling, matching Delete account directly below it.
     const deleteAccount = informationDialog.getByRole("button", { name: "Delete account" });
-    await expect(unsubscribe).toHaveClass(/profile-delete-account-button/);
-    expect(await unsubscribe.evaluate((el) => el.nextElementSibling?.id)).toBe("deleteAccountButton");
-    const [unsubscribeColor, deleteColor] = await Promise.all([
-        unsubscribe.evaluate((el) => getComputedStyle(el).color),
+    await expect(manage).toHaveClass(/profile-delete-account-button/);
+    expect(await manage.evaluate((el) => el.nextElementSibling?.id)).toBe("deleteAccountButton");
+    const [manageColor, deleteColor] = await Promise.all([
+        manage.evaluate((el) => getComputedStyle(el).color),
         deleteAccount.evaluate((el) => getComputedStyle(el).color),
     ]);
-    expect(unsubscribeColor).toBe(deleteColor);
-    await unsubscribe.click();
-    // The free-week offer comes first; "Unsubscribe anyway" goes straight through.
+    expect(manageColor).toBe(deleteColor);
+    await manage.click();
+    // GodModePlanSheet first; "Unsubscribe" then checks the free-week offer.
+    const plan = page.getByRole("dialog", { name: "God Mode", exact: true });
+    await plan.getByRole("button", { name: "Unsubscribe", exact: true }).click();
     const offer = page.locator(".ui-sheet");
     await expect(offer.getByRole("heading", { name: "Stay for a free week?" })).toBeVisible();
     await offer.getByRole("button", { name: "Unsubscribe anyway" }).click();
-    await expect(informationDialog.getByText(/Unsubscribed\. God Mode stays active through/)).toBeVisible();
-    await expect(informationDialog.getByRole("button", { name: /God Mode cancellation scheduled/ })).toBeDisabled();
+    await expect(informationDialog.getByText(/Unsubscribed\. God Mode ends/)).toBeVisible();
+    await expect(informationDialog.getByRole("button", { name: /^God Mode ends/ })).toBeDisabled();
 });
 
 test("God Mode subscribers can take one free week instead of unsubscribing", async ({ page }) => {
@@ -923,34 +934,40 @@ test("God Mode subscribers can take one free week instead of unsubscribing", asy
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await page.getByRole("button", { name: "Profile", exact: true }).click();
     await page.getByRole("button", { name: "Profile information" }).click();
-    const informationDialog = page.getByRole("dialog");
-    const unsubscribe = informationDialog.getByRole("button", { name: /Unsubscribe from God Mode/ });
+    const informationDialog = page.locator("#profileDialog");
+    const manage = informationDialog.getByRole("button", { name: /Manage God Mode/ });
+    const plan = page.getByRole("dialog", { name: "God Mode", exact: true });
+    const unsubscribe = async () => {
+        await manage.click();
+        await plan.getByRole("button", { name: "Unsubscribe", exact: true }).click();
+    };
 
     // Dismissing the offer changes nothing.
-    await unsubscribe.click();
+    await unsubscribe();
     const offerSheet = page.locator(".ui-sheet");
     await expect(offerSheet.locator(".ui-sheet-message")).toHaveText("Your next week is on us, with 2 reveals.");
-    await expect(offerSheet.locator(".ui-sheet-fineprint")).toContainText(/^Reveals on .+ and .+ while you’re still subscribed\. Then \$9\.99\/week starting .+\. Cancel before .+ and it ends .+\.$/);
+    // GodModeRetentionOffer.offerTerms.
+    await expect(offerSheet.locator(".ui-sheet-fineprint")).toContainText(/^Then \$9\.99\/week\. Cancel before .+ and you'll lose your free week \(God Mode ends .+\)\.$/);
     await page.keyboard.press("Escape");
     await expect(page.locator(".ui-sheet")).toHaveCount(0);
     await expect(informationDialog.getByText(/Unsubscribed/)).toHaveCount(0);
 
-    await unsubscribe.click();
+    await unsubscribe();
     await page.locator(".ui-sheet").getByRole("button", { name: "Get my free week" }).click();
     await expect(informationDialog.getByText(/Free week starts .+\. Your reveals unlock .+ and .+\./)).toBeVisible();
-    await expect(unsubscribe).toBeEnabled();
+    await expect(manage).toBeEnabled();
 
-    // Once only, and cancelling during the free week says it ends early.
-    await unsubscribe.click();
+    // Once only, and cancelling during the free week loses it.
+    await unsubscribe();
     const sheet = page.locator(".ui-sheet");
     await expect(sheet.getByRole("heading", { name: "Unsubscribe from God Mode?" })).toBeVisible();
-    await expect(sheet).toContainText("Your free week ends and God Mode stays active through");
+    await expect(sheet).toContainText("You'll lose your free week.");
     await sheet.getByRole("button", { name: "Keep God Mode" }).click();
-    await expect(page.getByRole("dialog").getByText(/Unsubscribed/)).toHaveCount(0);
+    await expect(informationDialog.getByText(/Unsubscribed/)).toHaveCount(0);
 
-    await unsubscribe.click();
+    await unsubscribe();
     await page.locator(".ui-sheet").getByRole("button", { name: "Unsubscribe", exact: true }).click();
-    await expect(page.getByRole("dialog").getByText(/Unsubscribed\. God Mode stays active through/)).toBeVisible();
+    await expect(informationDialog.getByText(/Unsubscribed\. God Mode ends/)).toBeVisible();
 });
 
 test("App Store God Mode subscribers get no unsubscribe button", async ({ page }) => {
@@ -960,7 +977,7 @@ test("App Store God Mode subscribers get no unsubscribe button", async ({ page }
     await page.getByRole("button", { name: "Profile information" }).click();
     const informationDialog = page.getByRole("dialog");
     await expect(informationDialog.getByRole("button", { name: "Delete account" })).toBeVisible();
-    await expect(informationDialog.getByRole("button", { name: /Unsubscribe from God Mode/ })).toHaveCount(0);
+    await expect(informationDialog.getByRole("button", { name: /Manage God Mode/ })).toHaveCount(0);
 });
 
 test("settings removes the Find classmates shortcut", async ({ page }) => {

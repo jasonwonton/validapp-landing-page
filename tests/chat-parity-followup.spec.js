@@ -87,7 +87,7 @@ test('inbox has pending photo/video actions and Memento indicator; settings are 
  await page.getByRole('button',{name:/^sign in$/i}).click();
  await expect(page.locator('#feedList > article').first()).toHaveCSS('border-top-width','3px');
  await page.getByRole('button',{name:'Profile',exact:true}).click();
- await expect(page.getByRole('region',{name:'System settings'}).getByRole('button',{name:'Activity status',exact:true})).toBeVisible();
+ await expect(page.locator('#privacySettings').getByRole('button',{name:'Activity Status',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Chats',exact:true}).click();
  await expect(page.locator('[data-list-key="chat-friends"] .chat-needs-memento')).toBeVisible();
  await expect(page.locator('[data-pending-media="chat-noah"] i')).toHaveClass('video');

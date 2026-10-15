@@ -1554,6 +1554,7 @@ function accountNeedsPasskey() {
 
 function renderPasskeyStatus() {
     $("#addPasskeyButton").classList.toggle("hidden", !accountNeedsPasskey());
+    $("#passkeyStatusText").textContent = "";
     renderProfileActionsVisibility();
 }
 
