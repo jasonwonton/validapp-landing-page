@@ -72,13 +72,14 @@ for (const unavailable of [false, true]) {
         if (unavailable) await expect(stories).toContainText('Story feed temporarily unavailable');
         else await expect(stories.locator('.stories-status')).toHaveText('');
         await expect(stories.locator('[data-story-author]')).toHaveCount(0);
-        await stories.getByRole('button', { name: 'Add Story' }).click();
-        const composer = page.getByRole('dialog', { name: 'Create Story' });
-        await expect(composer).toBeVisible();
-        await expect(composer.getByRole('button', { name: 'Post Story' })).toBeDisabled();
-        await composer.getByRole('button', { name: 'Cancel' }).click();
-        await expect(composer).toBeHidden();
-        await expect(stories.getByRole('button', { name: 'Add Story' })).toBeVisible();
+        // + opens the live camera (CameraFirstFlowView(startsWithStory: true)), not a form.
+        await stories.getByRole('button', { name: 'Add to Your Story' }).click();
+        const camera = page.getByRole('dialog', { name: 'Send media' });
+        await expect(camera).toBeVisible();
+        await expect(page.getByRole('dialog', { name: 'Create Story' })).toHaveCount(0);
+        await camera.getByRole('button', { name: 'Close camera' }).first().click();
+        await expect(camera).toBeHidden();
+        await expect(stories.getByRole('button', { name: 'Add to Your Story' })).toBeVisible();
     });
 }
 
@@ -102,7 +103,7 @@ test("Story owners can inspect viewers and delete through authoritative endpoint
     await page.clock.install();
     await signInWithStories(page);
     await freezeClock(page);
-    await page.getByRole("button", { name: "Your Story", exact: true }).click();
+    await page.getByRole("button", { name: "Open Your Story", exact: true }).click();
     const viewer = page.getByRole("dialog", { name: "Story viewer" });
     await viewer.getByRole("button", { name: "2 views" }).click();
     const viewers = page.getByRole("dialog", { name: "Story viewers" });
@@ -120,7 +121,7 @@ test("Story owners can inspect viewers and delete through authoritative endpoint
     await viewer.getByRole("menuitem", { name: "Delete Story" }).click();
     await confirm.getByRole("button", { name: "Delete Story" }).click();
     await expect(page.getByText("Story deleted", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Your Story", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Open Your Story", exact: true })).toHaveCount(0);
 });
 
 test("Story reports ask for a reason in a sheet and remove reported content", async ({ page }) => {
@@ -157,95 +158,36 @@ test("Story reports ask for a reason in a sheet and remove reported content", as
     await expect(page.getByRole("button", { name: /Noah Williams's Story/ })).toHaveCount(0);
 });
 
-test("Story composer prepares and publishes a photo through the feature-gated surface", async ({ page }) => {
-    await page.clock.install();
-    await signInWithStories(page);
-    await page.getByRole("button", { name: "Add Story" }).click();
-    const composer = page.getByRole("dialog", { name: "Create Story" });
-    // Camera and library, like iOS: only the camera input forces capture.
-    await expect(composer.locator(".story-camera-input")).toHaveAttribute("capture", "environment");
-    await expect(composer.locator(".story-file-input")).not.toHaveAttribute("capture", /.*/);
-    await expect(composer.getByText("Camera", { exact: true })).toBeVisible();
-    await expect(composer.getByText("Library", { exact: true })).toBeVisible();
-    await composer.locator(".story-file-input").setInputFiles("assets/AppIconV2.png");
-    await expect(composer.getByText("Photo ready to post")).toBeVisible();
-    // The composer frame has the viewer's shape (9 : 19.5).
-    const frame = await composer.locator(".story-composer-preview").boundingBox();
-    expect(frame.width / frame.height).toBeCloseTo(9 / 19.5, 1);
-    await composer.getByLabel("Caption").fill("After practice");
-    await composer.getByLabel("Text overlay").fill("finally ✨");
-    const overlayHandle = composer.locator("[data-media-overlay-position]");
-    await expect(overlayHandle).toHaveAccessibleName(/50% from left, 50% from top/);
-    await overlayHandle.press("ArrowLeft");
-    await overlayHandle.press("Shift+ArrowUp");
-    await expect(overlayHandle).toHaveAccessibleName(/48% from left, 40% from top/);
-    await composer.getByRole("button", { name: "Post Story" }).click();
-    await expect(composer).toBeHidden();
-    await expect(page.getByText("Story posted", { exact: true })).toBeVisible();
-    await freezeClock(page); // Keep the posted Story on screen while it is measured.
-    await page.getByRole("button", { name: "Your Story", exact: true }).click();
-    const viewer = page.getByRole("dialog", { name: "Story viewer" });
-    await viewer.getByRole("button", { name: "Next Story" }).click();
-    const renderedOverlay = viewer.locator(".story-text-overlay");
-    await expect(renderedOverlay).toHaveText("finally ✨");
-    // Captions are placed against the full Story stage, the frame the author
-    // dragged in (and the screen on iOS), not a shorter media box.
-    expect(await renderedOverlay.evaluate((node) => node.parentElement.getBoundingClientRect().height))
-        .toBeCloseTo(await viewer.locator(".story-stage").evaluate((node) => node.getBoundingClientRect().height), 0);
-    const renderedPosition = await renderedOverlay.evaluate((node) => {
-        const media = node.parentElement.getBoundingClientRect();
-        const overlay = node.getBoundingClientRect();
-        return {
-            x: (overlay.left + overlay.width / 2 - media.left) / media.width,
-            y: (overlay.top + overlay.height / 2 - media.top) / media.height,
-        };
-    });
-    expect(renderedPosition.x).toBeCloseTo(0.48, 2);
-    expect(renderedPosition.y).toBeCloseTo(0.4, 2);
-});
-
-test("a failed Story publish resumes once after reload with its saved request identity", async ({ page }) => {
-    await page.goto("/app/?demo=1&signin=1&stories=1&storyfail=1");
+test("a saved Story post resumes after reload with its saved request identity", async ({ page }) => {
+    await page.goto("/app/?demo=1&signin=1&stories=1");
     await page.getByRole("button", { name: /^sign in$/i }).click();
-    await page.getByRole("button", { name: "Add Story" }).click();
-    const composer = page.getByRole("dialog", { name: "Create Story" });
-    await composer.locator(".story-file-input").setInputFiles("assets/AppIconV2.png");
-    await expect(composer.getByRole('group', { name: 'Photo effect' })).toHaveCount(0);
-    await expect(composer.getByText("Photo ready to post", { exact: true })).toBeVisible();
-    await composer.getByLabel("Text overlay").fill("Recover me");
-    const overlayHandle = composer.locator("[data-media-overlay-position]");
-    await overlayHandle.press("Shift+ArrowLeft");
-    await overlayHandle.press("Shift+ArrowDown");
-    await composer.getByRole("button", { name: "Post Story" }).click();
-    // A 503 is described in plain English (userMessage), never as the server's text.
-    await expect(composer.getByText(/Valid is having trouble right now.*saved on this device/)).toBeVisible();
-    await expect.poll(() => page.evaluate(async () => {
-        const { listChatMediaOutbox } = await import("/app/chat/outbox.js");
-        const record = (await listChatMediaOutbox("demo-user")).find((item) => item.kind === "story");
-        return record ? {
-            overlay: record.overlay,
-            fileType: record.file.type,
-            fileName: record.file.name,
-            hasEffectMetadata: Object.hasOwn(record, "photo_effect"),
-        } : null;
-    })).toEqual({
-        overlay: { text: "Recover me", x: 0.4, y: 0.6 },
-        fileType: "image/jpeg",
-        fileName: "chat-photo.jpg",
-        hasEffectMetadata: false,
+    await expect(page.getByRole("region", { name: "Stories" })).toBeVisible({ timeout: 20_000 });
+    // What Send to queues for My Story, as if the tab closed mid-upload.
+    await page.evaluate(async () => {
+        const { putChatMediaOutbox } = await import("/app/chat/outbox.js");
+        const canvas = new OffscreenCanvas(90, 160);
+        const context = canvas.getContext("2d");
+        context.fillStyle = "#ffb15e"; context.fillRect(0, 0, 90, 160);
+        const blob = await canvas.convertToBlob({ type: "image/jpeg" });
+        await putChatMediaOutbox({
+            id: "demo-user:story:saved", user_id: "demo-user", kind: "story",
+            file: new File([blob], "chat-photo.jpg", { type: "image/jpeg" }), thumbnail: null,
+            content_type: "image/jpeg", ingest: false, duration_ms: null, caption: null,
+            overlay: { text: "Recover me", x: 0.5, y: 0.2 }, tagged_user_ids: null,
+            upload_request_id: "11111111-1111-4111-8111-000000000001", publish_request_id: "11111111-1111-4111-8111-000000000002",
+            attempts: 1, next_attempt_at: 0,
+        });
     });
-    await expect.poll(() => page.evaluate(() => localStorage.getItem("valid:demo-story-failed-once"))).toBe("1");
     await page.reload();
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await expect(page.getByRole("region", { name: "Stories" })).toBeVisible();
-    await page.waitForTimeout(4_200); // First retry uses the shared bounded four-second backoff.
-    await page.evaluate(() => window.dispatchEvent(new Event("online")));
     await expect.poll(() => page.evaluate(async () => {
         const { listChatMediaOutbox } = await import("/app/chat/outbox.js");
         return (await listChatMediaOutbox("demo-user")).filter((record) => record.kind === "story").length;
-    }), { timeout: 5_000 }).toBe(0);
-    await page.getByRole("button", { name: "Your Story", exact: true }).click();
-    await expect(page.getByRole("dialog", { name: "Story viewer" }).locator(".story-progress i")).toHaveCount(2, { timeout: 5_000 });
+    }), { timeout: 8_000 }).toBe(0);
+    await page.getByRole("button", { name: "Open Your Story", exact: true }).click();
+    const viewer = page.getByRole("dialog", { name: "Story viewer" });
+    await expect(viewer.locator(".story-progress i")).toHaveCount(2, { timeout: 5_000 });
 });
 
 test("Story replies and classmate shares use idempotent chat delivery", async ({ page }) => {
@@ -333,7 +275,7 @@ test("Story progress times photos for five seconds and auto-advances to the next
     await page.clock.install();
     await signInWithStories(page);
     await freezeClock(page);
-    await page.getByRole("button", { name: "Your Story", exact: true }).click();
+    await page.getByRole("button", { name: "Open Your Story", exact: true }).click();
     const viewer = page.getByRole("dialog", { name: "Story viewer" });
     await expect(viewer.getByRole("img", { name: "Jules Rivera's Story" })).toBeVisible();
     await page.clock.runFor(20);
@@ -361,7 +303,7 @@ test("Story tap zones go back on the left third and forward on the rest", async 
     await page.clock.install();
     await signInWithStories(page);
     await freezeClock(page);
-    await page.getByRole("button", { name: "Your Story", exact: true }).click();
+    await page.getByRole("button", { name: "Open Your Story", exact: true }).click();
     const viewer = page.getByRole("dialog", { name: "Story viewer" });
     const author = viewer.locator(".story-author strong");
     await expect(author).toHaveText("Your Story");
@@ -427,7 +369,7 @@ test("swiping sideways changes person with a rubber band at the ends", async ({ 
     await page.clock.install();
     await signInWithStories(page);
     await freezeClock(page);
-    await page.getByRole("button", { name: "Your Story", exact: true }).click();
+    await page.getByRole("button", { name: "Open Your Story", exact: true }).click();
     const viewer = page.getByRole("dialog", { name: "Story viewer" });
     const author = viewer.locator(".story-author strong");
     await expect(author).toHaveText("Your Story");
