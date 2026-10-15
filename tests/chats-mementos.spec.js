@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { captureMemento, syntheticCamera } from "./fixtures/synthetic-camera.js";
 const TINY_VP9_MP4 = "AAAAHGZ0eXBpc29tAAACAGlzb21pc28ybXA0MQAAAyZtb292AAAAbG12aGQAAAAAAAAAAAAAAAAAAAPoAAAAyAABAAABAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAACUXRyYWsAAABcdGtoZAAAAAMAAAAAAAAAAAAAAAEAAAAAAAAAyAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAEAAAAAAEAAAABAAAAAAACRlZHRzAAAAHGVsc3QAAAAAAAAAAQAAAMgAAAAAAAEAAAAAAcltZGlhAAAAIG1kaGQAAAAAAAAAAAAAAAAAADIAAAAKAFXEAAAAAAAtaGRscgAAAAAAAAAAdmlkZQAAAAAAAAAAAAAAAFZpZGVvSGFuZGxlcgAAAAF0bWluZgAAABR2bWhkAAAAAQAAAAAAAAAAAAAAJGRpbmYAAAAcZHJlZgAAAAAAAAABAAAADHVybCAAAAABAAABNHN0YmwAAACoc3RzZAAAAAAAAAABAAAAmHZwMDkAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAEAAQAEgAAABIAAAAAAAAAAEYTGF2YzYyLjExLjEwMCBsaWJ2cHgtdnA5AAAAAAAAAAAY//8AAAAUdnBjQwEAAAAACoICAgIAAAAAAApmaWVsAQAAAAAQcGFzcAAAAAEAAAABAAAAFGJ0cnQAAAAAAAAPeAAAAAAAAAAYc3R0cwAAAAAAAAABAAAABQAAAgAAAAAUc3RzcwAAAAAAAAABAAAAAQAAABxzdHNjAAAAAAAAAAEAAAABAAAABQAAAAEAAAAoc3RzegAAAAAAAAAAAAAABQAAACcAAAAPAAAADwAAAA8AAAAPAAAAFHN0Y28AAAAAAAAAAQAAA1IAAABhdWR0YQAAAFltZXRhAAAAAAAAACFoZGxyAAAAAAAAAABtZGlyYXBwbAAAAAAAAAAAAAAAACxpbHN0AAAAJKl0b28AAAAcZGF0YQAAAAEAAAAATGF2ZjYyLjMuMTAwAAAACGZyZWUAAABrbWRhdIJJg0IAAPAA9gA4JBwYSgAAMGAAABC///cdr////1/f////8irAAIYAQJKcAFAAAAMgAABCQIYAQJKcAE7gAAMgAABCQIYAQJKcAFAAAAMgAABCQIYAQJKcAE1AAAMgAABCQIYAQJKcAFAAAAMgAABCQIYAQJKcAE=";
 
 const TINY_MP4 = "AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAN0bW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAAMgAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAp90cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAAMgAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAABAAAAAQAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAADIAAAEAAABAAAAAAIXbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAAAyAAAACgBVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABwm1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAYJzdGJsAAAAvnN0c2QAAAAAAAAAAQAAAK5hdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAABAAEABIAAAASAAAAAAAAAABFUxhdmM2Mi4xMS4xMDAgbGlieDI2NAAAAAAAAAAAAAAAGP//AAAANGF2Y0MBZAAK/+EAF2dkAAqs2V7ARAAAAwAEAAADAMg8SJZYAQAGaOvjyyLA/fj4AAAAABBwYXNwAAAAAQAAAAEAAAAUYnRydAAAAAAAAHcQAAAAAAAAABhzdHRzAAAAAAAAAAEAAAAFAAACAAAAABRzdHNzAAAAAAAAAAEAAAABAAAAOGN0dHMAAAAAAAAABQAAAAEAAAQAAAAAAQAACgAAAAABAAAEAAAAAAEAAAAAAAAAAQAAAgAAAAAcc3RzYwAAAAAAAAABAAAAAQAAAAUAAAABAAAAKHN0c3oAAAAAAAAAAAAAAAUAAALKAAAADAAAAAwAAAAMAAAADAAAABRzdGNvAAAAAAAAAAEAAAOkAAAAYXVkdGEAAABZbWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpcmFwcGwAAAAAAAAAAAAAAAAsaWxzdAAAACSpdG9vAAAAHGRhdGEAAAABAAAAAExhdmY2Mi4zLjEwMAAAAAhmcmVlAAADAm1kYXQAAAKuBgX//6rcRem95tlIt5Ys2CDZI+7veDI2NCAtIGNvcmUgMTY1IHIzMjIyIGIzNTYwNWEgLSBILjI2NC9NUEVHLTQgQVZDIGNvZGVjIC0gQ29weWxlZnQgMjAwMy0yMDI1IC0gaHR0cDovL3d3dy52aWRlb2xhbi5vcmcveDI2NC5odG1sIC0gb3B0aW9uczogY2FiYWM9MSByZWY9MyBkZWJsb2NrPTE6MDowIGFuYWx5c2U9MHgzOjB4MTEzIG1lPWhleCBzdWJtZT03IHBzeT0xIHBzeV9yZD0xLjAwOjAuMDAgbWl4ZWRfcmVmPTEgbWVfcmFuZ2U9MTYgY2hyb21hX21lPTEgdHJlbGxpcz0xIDh4OGRjdD0xIGNxbT0wIGRlYWR6b25lPTIxLDExIGZhc3RfcHNraXA9MSBjaHJvbWFfcXBfb2Zmc2V0PS0yIHRocmVhZHM9MSBsb29rYWhlYWRfdGhyZWFkcz0xIHNsaWNlZF90aHJlYWRzPTAgbnI9MCBkZWNpbWF0ZT0xIGludGVybGFjZWQ9MCBibHVyYXlfY29tcGF0PTAgY29uc3RyYWluZWRfaW50cmE9MCBiZnJhbWVzPTMgYl9weXJhbWlkPTIgYl9hZGFwdD0xIGJfYmlhcz0wIGRpcmVjdD0xIHdlaWdodGI9MSBvcGVuX2dvcD0wIHdlaWdodHA9MiBrZXlpbnQ9MjUwIGtleWludF9taW49MjUgc2NlbmVjdXQ9NDAgaW50cmFfcmVmcmVzaD0wIHJjX2xvb2thaGVhZD00MCByYz1jcmYgbWJ0cmVlPTEgY3JmPTIzLjAgcWNvbXA9MC42MCBxcG1pbj0wIHFwbWF4PTY5IHFwc3RlcD00IGlwX3JhdGlvPTEuNDAgYXE9MToxLjAwAIAAAAAUZYiEADP//t8y+BTNxYnOzIBcnpcAAAAIQZokbEK//sAAAAAIQZ5CeIX/wYEAAAAIAZ5hdEK/xIAAAAAIAZ5jakK/xIE=";
@@ -29,9 +30,8 @@ test.describe("Memento calendar boundaries", () => {
         await signInToDemo(page);
         await page.getByRole("button", { name: "Chats", exact: true }).click();
         await page.getByRole("button", { name: /Weekend Crew/ }).click();
-        await expect(page.locator(".chat-daily-row > button")).toHaveAccessibleName("Take today's Memento");
-        await page.locator(".chat-daily-row > button").click();
-        await expect(page.getByRole("dialog", { name: "Create a Memento" })).toBeVisible();
+        await page.getByRole("button", { name: "Take a Memento" }).click();
+        await expect(page.getByRole("dialog", { name: "Today's Memento" })).toBeVisible();
         const createdLedgerDate = await page.evaluate(async () => {
             const { DemoAPI } = await import("/app/demo-api.js");
             const demo = new DemoAPI();
@@ -51,7 +51,9 @@ test("Chats lazy-loads its feature bundle and shows unread conversations and inv
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await expect(page.locator(".chat-list").getByText("Weekend Crew", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Accept" })).toBeVisible();
+    // Invitations read like iOS rows; their buttons live on the invite screen.
+    await expect(page.locator(".chat-list").getByText("Maya Chen invited you · 6 people")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Accept" })).toHaveCount(0);
     await expect(page.locator("#chatsTabBadge")).toHaveText("2");
     await expect.poll(chatResources).toContain("/app/routes/chats.js");
     await expect.poll(chatResources).toContain("/app/chat/index.js");
@@ -64,60 +66,67 @@ test("declining an invitation removes it from the authoritative chat list", asyn
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await expect(page.getByText("Art Club", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: /Art Club/ }).click();
+    // Decline is immediate on iOS: no confirmation, straight back to Chats.
     await page.getByRole("button", { name: "Decline" }).click();
-    await page.getByRole("dialog", { name: "Decline this invitation?" }).getByRole("button", { name: "Decline" }).click();
+    await expect(page.locator('[data-chat-screen="list"]')).toBeVisible();
     await expect(page.getByText("Art Club", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Accept" })).toHaveCount(0);
 });
 
-test("Memento reciprocity keeps locked messages out of the DOM and unlocks after posting", async ({ page }) => {
+test("a room never locks: friends' Mementos stay blurred until the viewer posts, then reveal", async ({ page }) => {
+    await syntheticCamera(page);
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Weekend Crew/ }).click();
-    await expect(page.locator(".chat-timeline")).toHaveText(/Chat locked/);
-    await expect(page.locator(".chat-message")).toHaveCount(0);
-    await expect(page.locator(".chat-composer")).toBeHidden();
+    // Every message and the composer are there; nothing says "locked" or offers a skip.
+    await expect(page.locator(".chat-message")).toHaveCount(4);
+    await expect(page.locator(".chat-composer")).toBeVisible();
+    await expect(page.locator(".chat-timeline")).not.toContainText(/Chat locked/);
+    await expect(page.getByRole("button", { name: "Skip for today" })).toHaveCount(0);
+    // Ava's Memento from today waits, blurred, with the iOS words.
+    const hidden = page.getByRole("button", { name: "Post yours to see Ava\u2019s Memento" });
+    await expect(hidden).toBeVisible();
+    await expect(page.locator('.chat-timeline img[src*="anonymous.webp"]')).toHaveCount(0);
+    await expect(page.locator(".chat-timeline")).not.toContainText("Bus ride energy");
+    // The card sits above the composer and hides while typing.
+    const card = page.getByRole("button", { name: "Take a Memento" });
+    await expect(card).toBeVisible();
+    await page.getByRole("textbox", { name: "Message" }).focus();
+    await expect(card).toBeHidden();
+    await page.getByRole("textbox", { name: "Message" }).blur();
 
-    await page.locator(".chat-daily-row > button").click();
-    const composer = page.getByRole("dialog", { name: "Create a Memento" });
-    await composer.locator(".memento-file-input").setInputFiles("assets/AppIconV2.png");
-    await expect(composer.getByRole("button", { name: /^Send to / })).toBeEnabled();
+    const composer = await captureMemento(page);
     await composer.getByRole("button", { name: /^Send to / }).click();
-
-    await expect(page.locator('.chat-daily-row')).toBeHidden();
+    await expect(composer).toBeHidden();
+    await expect(card).toBeHidden();
+    await expect(hidden).toHaveCount(0);
+    await expect(page.locator(".chat-timeline")).toContainText("Bus ride energy");
     await expect(page.locator('[data-open-memento-gallery]')).toBeVisible();
     await expect(page.locator('[data-open-memento-gallery] .chat-moment-streak')).toHaveText('6');
-    await expect(page.locator('.chat-memento-week button')).toHaveCount(0);
     await expect(page.locator(".chat-message")).toHaveCount(5);
-    await expect(page.locator(".chat-composer")).toBeVisible();
-    await expect(page.getByText(/Memento shared · \+10 Aura/)).toBeVisible();
+    await expect(page.getByText(/Memento shared/)).toHaveCount(0);
     await page.locator('[data-open-memento-gallery]').click();
     await expect(page.getByRole('dialog', { name: 'Mementos', exact: true })).toBeVisible();
     await expect(page.locator('.chat-memento-week button')).toHaveCount(7);
     await expect(page.locator('.chat-memento-week button.selected')).toHaveCount(1);
 });
 
-test("Memento reciprocity offers the same skip-for-today alternative as iOS", async ({ page }) => {
-    await signInToDemo(page);
-    await page.getByRole("button", { name: "Chats", exact: true }).click();
-    await page.getByRole("button", { name: /Weekend Crew/ }).click();
-    await page.getByRole("button", { name: "Skip for today" }).click();
-    await expect(page.getByText("Chat unlocked for today", { exact: true })).toBeVisible();
-    await expect(page.locator(".chat-message")).toHaveCount(4);
-    await expect(page.locator(".chat-composer")).toBeVisible();
-});
-
 test("a Memento stays scoped to the active chat like the released iOS contract", async ({ page }) => {
+    await syntheticCamera(page);
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Weekend Crew/ }).click();
-    await page.locator(".chat-daily-row > button").click();
-    const composer = page.getByRole("dialog", { name: "Create a Memento" });
+    const composer = await captureMemento(page);
     await expect(composer.locator(".memento-publish")).toHaveText("Send to Weekend Crew");
     await expect(composer.getByRole("checkbox")).toHaveCount(0);
-    await composer.locator(".memento-file-input").setInputFiles("assets/AppIconV2.png");
     await composer.getByRole("button", { name: /^Send to / }).click();
-    await expect(page.getByText("Memento shared · +10 Aura", { exact: true })).toBeVisible();
+    await expect(composer).toBeHidden();
+    await expect(page.locator(".chat-message.mine .memento-label")).toHaveCount(1);
+    await page.getByRole("button", { name: "Back to chats" }).click();
+    await page.getByRole("button", { name: /Mateo Lee/ }).click();
+    await expect(page.locator(".chat-message.mine .memento-label")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Take a Memento" })).toBeVisible();
 });
 
 test("Memento gallery can reply, react, and safely reshare its authoritative entry", async ({ page }) => {
@@ -199,12 +208,21 @@ test("chat sends reconcile optimistic identity and support replies and reactions
 test("users can create a named group and return to the list from the active Chats tab", async ({ page }) => {
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
-    await page.getByRole("button", { name: "Start a chat" }).click();
-    const checkboxes = page.getByRole("checkbox");
-    await checkboxes.nth(0).check();
-    await checkboxes.nth(1).check();
-    await page.getByPlaceholder("Name your group").fill("Project Crew");
-    await page.getByRole("button", { name: "Create", exact: true }).click();
+    await page.getByRole("button", { name: "New chat" }).click();
+    await page.getByRole("button", { name: /New Group/ }).click();
+    await expect(page.locator(".chat-create-header strong")).toHaveText("New Group");
+    await page.getByRole("button", { name: /Maya Chen/ }).click();
+    await expect(page.getByRole("button", { name: "Add 1 more" })).toBeDisabled();
+    await page.getByRole("button", { name: /Eli Brooks/ }).click();
+    await page.getByRole("button", { name: "Next" }).click();
+    await expect(page.getByText("Finish your group")).toBeVisible();
+    await expect(page.getByText("You and 2 friends")).toBeVisible();
+    await page.getByPlaceholder("Group name (optional)").fill("Project Crew");
+    await page.getByRole("button", { name: "Create Group" }).click();
+    // Contacts couldn't verify these classmates: iOS asks before creating.
+    const safety = page.getByRole("dialog", { name: "Do you know everyone here?" });
+    await expect(safety).toContainText("Only continue if you know everyone.");
+    await safety.getByRole("button", { name: "Create anyway" }).click();
     await expect(page.locator(".chat-room-title")).toContainText("Project Crew");
     await expect(page).toHaveURL(/tab=chats&chat=chat-/);
 
@@ -217,35 +235,36 @@ test("group owners can rename a chat and invite another classmate", async ({ pag
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Weekend Crew/ }).click();
-    await page.getByRole("button", { name: "Chat settings" }).click();
+    await page.getByRole("button", { name: "Chat details" }).click();
     const settings = page.getByRole("dialog", { name: "Chat settings" });
     await settings.locator(".chat-name-setting input").fill("Friday Crew");
     await settings.getByRole("button", { name: "Save" }).click();
     await expect(page.locator(".chat-room-title")).toContainText("Friday Crew");
 
     await settings.getByRole("button", { name: "Add people" }).click();
-    await page.getByRole("checkbox").first().check();
-    await page.getByRole("button", { name: "Add", exact: true }).click();
-    await expect(page.locator(".chat-room-title")).toContainText("5 people");
+    await page.locator("[data-pick-person]").first().click();
+    await page.getByRole("button", { name: "Add 1" }).click();
+    // ChatRoomView+Chrome.pendingHeaderText: one invitee reads "Waiting on …".
+    await expect(page.locator(".chat-room-title")).toContainText("Waiting on");
 });
 
 test("group owners can remove a member and refresh the authoritative roster", async ({ page }) => {
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Weekend Crew/ }).click();
-    await page.getByRole("button", { name: "Chat settings" }).click();
+    await page.getByRole("button", { name: "Chat details" }).click();
     const settings = page.getByRole("dialog", { name: "Chat settings" });
     await settings.getByRole("button", { name: "Remove Maya Chen" }).click();
     await page.getByRole("dialog", { name: "Remove Maya Chen?" }).getByRole("button", { name: "Remove" }).click();
     await expect(settings.getByText("Maya Chen", { exact: true })).toHaveCount(0);
-    await expect(page.locator(".chat-room-title")).toContainText("3 people");
+    await expect(page.locator(".chat-room-title")).toContainText("3 members");
 });
 
 test("leaving a chat reloads the list without the ended membership", async ({ page }) => {
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
-    await page.getByRole("button", { name: "Chat settings" }).click();
+    await page.getByRole("button", { name: "Chat details" }).click();
     await page.getByRole("dialog", { name: "Chat settings" }).getByRole("button", { name: "Leave chat" }).click();
     await page.getByRole("dialog", { name: "Leave & delete this chat?" }).getByRole("button", { name: "Leave & Delete" }).click();
     await expect(page.locator('[data-chat-screen="list"]')).toBeVisible();
@@ -256,7 +275,7 @@ test("notification levels remain editable after each authoritative update", asyn
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
-    await page.getByRole("button", { name: "Chat settings" }).click();
+    await page.getByRole("button", { name: "Chat details" }).click();
     const setting = page.getByRole("dialog", { name: "Chat settings" }).getByLabel("Notifications");
     await setting.selectOption("muted");
     await expect(setting).toHaveValue("muted");
@@ -268,7 +287,7 @@ test("group owners can prepare and replace the authoritative group photo", async
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Weekend Crew/ }).click();
-    await page.getByRole("button", { name: "Chat settings" }).click();
+    await page.getByRole("button", { name: "Chat details" }).click();
     await page.getByLabel("Choose group photo").setInputFiles("assets/AppIconV2.png");
     await expect(page.getByText("Group photo updated", { exact: true })).toBeVisible();
 });
@@ -277,7 +296,7 @@ test("chat appearance matches iOS and stays private to the user and conversation
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
-    await page.getByRole("button", { name: "Chat settings" }).click();
+    await page.getByRole("button", { name: "Chat details" }).click();
 
     const settings = page.getByRole("dialog", { name: "Chat settings" });
     const font = settings.getByRole("combobox", { name: "Chat font" });
@@ -377,7 +396,7 @@ test("chat settings expose the authoritative account-wide block action", async (
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Weekend Crew/ }).click();
-    await page.getByRole("button", { name: "Chat settings" }).click();
+    await page.getByRole("button", { name: "Chat details" }).click();
     await page.getByRole("button", { name: /Block Maya Chen/ }).click();
     await page.getByRole("dialog", { name: "Block Maya Chen?" }).getByRole("button", { name: "Block" }).click();
     await expect(page.getByText("Person blocked", { exact: true })).toBeVisible();
@@ -432,7 +451,7 @@ test("Chats and Mementos honor the system dark color scheme", async ({ page }) =
     expect(colors.card).not.toBe("rgb(255, 255, 255)");
     expect(colors.composer).not.toBe("rgb(255, 255, 255)");
 
-    await page.getByRole("button", { name: "Chat settings" }).click();
+    await page.getByRole("button", { name: "Chat details" }).click();
     const settings = page.getByRole("dialog", { name: "Chat settings" });
     await settings.getByRole("button", { name: "Pink chat color" }).click();
     const selected = await page.locator(".chat-message.mine .chat-bubble").first().evaluate((bubble) => ({
@@ -446,8 +465,8 @@ test("explicit chat search opens the exact authoritative message", async ({ page
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: "Search chats", exact: true }).click();
-    await page.getByRole("searchbox", { name: "Search chats and messages" }).fill("hilarious");
-    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await page.getByRole("searchbox", { name: "Search chats & messages" }).fill("hilarious");
+    await page.getByRole("button", { name: /Search all chats & messages/ }).click();
     const result = page.getByRole("button", { name: /Noah Williams.*That was hilarious/ });
     await expect(result).toBeVisible();
     await result.click();
@@ -459,7 +478,7 @@ test("chat media sends a prepared photo through upload, finalize, and message cr
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
-    await page.getByRole("button", { name: "Send photo or video" }).click();
+    await page.getByRole("button", { name: "Open camera" }).click();
     const dialog = page.getByRole("dialog", { name: "Send media" });
     await dialog.locator(".chat-media-file-input").setInputFiles("assets/AppIconV2.png");
     await expect(dialog.locator('.chat-media-publish')).toBeEnabled();
@@ -473,6 +492,12 @@ test("chat media sends a prepared photo through upload, finalize, and message cr
     await expect(caption).toBeVisible();
     await caption.press("ArrowUp");
     for (let step = 0; step < 14; step++) await caption.press("ArrowUp");
+    // Chat camera sends start as View once; keep this one in the chat.
+    const delivery = dialog.getByRole("switch", { name: "View once" });
+    await expect(delivery).toHaveAttribute("aria-checked", "true");
+    await delivery.click();
+    await expect(delivery).toHaveAttribute("aria-checked", "false");
+    await expect(dialog.locator(".send-pill-subtitle")).toHaveText("Keep in chat");
     await dialog.getByRole("button", { name: "Send", exact: true }).click();
     await expect(dialog).toBeHidden();
     const sent = page.locator(".chat-message.mine").last();
@@ -482,14 +507,14 @@ test("chat media sends a prepared photo through upload, finalize, and message cr
     // dragged location to within one percent rather than requiring subpixels.
     expect(Number(await sent.locator('.chat-media-text').getAttribute('data-overlay-x'))).toBeCloseTo(0.5, 2);
     expect(Number(await sent.locator('.chat-media-text').getAttribute('data-overlay-y'))).toBeCloseTo(0.3, 1);
-    await expect(page.getByText("Photo sent", { exact: true })).toBeVisible();
+    await expect(page.getByText("Photo sent", { exact: true })).toHaveCount(0);
 });
 
 test("chat media rejects an undecodable MP4 before upload", async ({ page }) => {
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
-    await page.getByRole("button", { name: "Send photo or video" }).click();
+    await page.getByRole("button", { name: "Open camera" }).click();
     const dialog = page.getByRole("dialog", { name: "Send media" });
     await dialog.locator(".chat-media-file-input").setInputFiles({ name: "broken.mp4", mimeType: "video/mp4", buffer: Buffer.from("not an mp4") });
     await expect(dialog.getByText("That video could not be read.")).toBeVisible();
@@ -521,7 +546,7 @@ test("the photo/video library turns away audio files instead of sending them as 
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
-    await page.getByRole("button", { name: "Send photo or video" }).click();
+    await page.getByRole("button", { name: "Open camera" }).click();
     const dialog = page.getByRole("dialog", { name: "Send media" });
     await dialog.locator(".chat-media-file-input").setInputFiles({ name: "memo.m4a", mimeType: "audio/mp4", buffer: Buffer.from("voice") });
     await expect(dialog.locator(".chat-media-status")).toHaveText("Choose a photo or video.");
@@ -563,7 +588,7 @@ test("compatible browsers can record an MP4 voice message locally before upload"
     await expect(page.locator('.chat-voice-player')).toBeVisible();
     await expect(page.locator('[data-chat-media-dialog]')).toBeHidden();
     await expect(page.getByRole('button', { name: 'Send voice message' })).toBeEnabled();
-    await page.getByRole('button', { name: 'Record voice message', exact: true }).click();
+    await page.getByRole('button', { name: 'Record again', exact: true }).click();
     await expect(page.locator('.chat-inline-audio')).toBeHidden();
     await expect(page.locator('[data-send-voice]')).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Send voice message' })).toBeHidden();

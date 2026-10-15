@@ -13,6 +13,6 @@ test("profile editor uses semantic icons for every Android action", async ({ pag
     await expect(rows.nth(1).locator("img")).toHaveAttribute("src", "../assets/app/profile-person-card.svg");
     await expect(rows.nth(2).locator("img")).toHaveAttribute("src", "../assets/app/profile-school.svg");
     await expect(rows.nth(3).locator("img")).toHaveAttribute("src", "../assets/app/profile-graduation-cap.svg");
-    await expect(rows.nth(4).locator("img")).toHaveAttribute("src", "../assets/app/crown.webp");
+    await expect(rows.nth(4).locator("img")).toHaveAttribute("src", "../assets/app/profile-person-two.svg");
     expect(await rows.locator(".profile-editor-row-icon").allTextContents()).toEqual(["", "", "", "", ""]);
 });

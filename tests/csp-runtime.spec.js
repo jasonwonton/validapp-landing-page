@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { captureMemento, syntheticCamera } from "./fixtures/synthetic-camera.js";
 
 test.use({ serviceWorkers: "block" });
 
@@ -18,6 +19,7 @@ test("strict production CSP keeps dynamic app layout functional without inline s
     });
     page.on("pageerror", (error) => pageErrors.push(error.message));
     await stubTurnstileScript(page);
+    await syntheticCamera(page);
     await page.goto("/app/?demo=1&signin=1");
     await page.evaluate(async () => {
         const { DemoAPI } = await import('/app/demo-api.js');
@@ -30,25 +32,23 @@ test("strict production CSP keeps dynamic app layout functional without inline s
     await expect.poll(() => page.evaluate(() => (
         getComputedStyle(document.documentElement).getPropertyValue("--visual-viewport-width").trim()
     ))).toMatch(/px$/);
-    await page.getByRole("button", { name: "Create an account" }).click();
-    await expect(page.getByRole("dialog", { name: "Create your Valid account" })).toBeVisible();
-    await page.keyboard.press("Escape");
+    // The age screen (sign-up) is the signed-out root, with sign-in over it.
+    await expect(page.locator("#signupDialog")).toBeVisible();
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Weekend Crew/ }).click();
 
-    // The permanent daily-progress banner was deliberately removed. Exercise
-    // the actual transient upload progress instead, under the same strict CSP.
-    await page.locator('.chat-daily-row > button').click();
-    const capture = page.getByRole('dialog', { name: 'Create a Memento' });
-    await capture.locator('.memento-file-input').setInputFiles('assets/AppIconV2.png');
+    // Capture through the Memento camera and send under the same strict CSP:
+    // the review closes once the send is queued, and the pending bubble waits
+    // on the held upload.
+    const capture = await captureMemento(page);
     await capture.getByRole('button', { name: 'Send to Weekend Crew', exact: true }).click();
-    const progress = page.locator('.memento-progress span');
-    await expect.poll(() => page.evaluate(() => typeof window.finishCSPUpload)).toBe('function');
-    await expect(progress).toBeVisible();
-    expect(await progress.evaluate((element) => Number.parseFloat(getComputedStyle(element).width))).toBeGreaterThan(0);
-    await page.evaluate(() => window.finishCSPUpload());
     await expect(capture).toBeHidden();
+    await expect.poll(() => page.evaluate(() => typeof window.finishCSPUpload)).toBe('function');
+    await expect(page.locator('.chat-message.mine.sending .memento-label')).toHaveCount(1);
+    expect(await page.locator("[style]").count()).toBe(0);
+    await page.evaluate(() => window.finishCSPUpload());
+    await expect(page.locator('.chat-message.mine.sending')).toHaveCount(0);
     await page.locator('[data-open-memento-gallery]').click();
     await expect(page.getByRole('dialog', { name: 'Mementos', exact: true })).toBeVisible();
     expect(await page.locator("[style]").count()).toBe(0);

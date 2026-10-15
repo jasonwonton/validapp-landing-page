@@ -1,10 +1,16 @@
-import { chatAttentionPriority, normalizeChat, normalizeMessage } from "./models.js";
+import { normalizeChat, normalizeMessage } from "./models.js";
 
 export const MAX_MESSAGES_PER_CHAT = 500;
 
-export function createChatStore({ attentionPriority = chatAttentionPriority } = {}) {
-    let activityTokens = new Map();
-    const activityAt = chat => Date.parse(chat.last_message_at || chat.updated_at || '') || 0;
+// ChatInboxOrder: most recent activity only (latest message or missed call).
+// Unread, invites and Mementos highlight a row; they never move it.
+export function chatActivityAt(chat) {
+    const times = [chat.last_message_at, chat.unacknowledged_missed_call_at].map(value => Date.parse(value || '')).filter(Number.isFinite);
+    return times.length ? Math.max(...times) : Date.parse(chat.updated_at || '') || 0;
+}
+
+export function createChatStore() {
+    let activityById = new Map();
     const state = {
         chats: [],
         activeChatId: null,
@@ -25,26 +31,10 @@ export function createChatStore({ attentionPriority = chatAttentionPriority } = 
         const chats = [...new Map((items || []).map(normalizeChat)
             .filter(chat => ['accepted', 'invited'].includes(chat.membership_status)).map(chat => [chat.id, chat])).values()];
         const byId = new Map(chats.map(chat => [chat.id, chat]));
-        // The initial order within each tier is the authoritative inbox order.
-        let order = state.chats.length ? state.chats.map(chat => chat.id).filter(id => byId.has(id))
-            : [...chats].sort((a, b) => attentionPriority(b) - attentionPriority(a)).map(chat => chat.id);
-        const nextTokens = new Map();
-        const comesBefore = (a, b) => attentionPriority(a) > attentionPriority(b)
-            || (attentionPriority(a) === attentionPriority(b) && (activityAt(a) > activityAt(b)
-                || (activityAt(a) === activityAt(b) && a.id < b.id)));
-        for (const chat of chats) {
-            const previous = activityTokens.get(chat.id);
-            const token = { sequence: chat.last_room_sequence, activity: activityAt(chat), priority: attentionPriority(chat) };
-            const changed = previous && (token.sequence > previous.sequence || token.activity > previous.activity || token.priority !== previous.priority);
-            if (changed) order = order.filter(id => id !== chat.id);
-            if (!order.includes(chat.id)) {
-                const index = order.findIndex(id => comesBefore(chat, byId.get(id)));
-                order.splice(index < 0 ? order.length : index, 0, chat.id);
-            }
-            // Old snapshots must not lower the activity watermark.
-            nextTokens.set(chat.id, { ...token, sequence: Math.max(token.sequence, previous?.sequence || 0), activity: Math.max(token.activity, previous?.activity || 0) });
-        }
-        activityTokens = nextTokens; // Bounded to visible membership, never historical rooms.
+        // An older snapshot never moves a row back down.
+        const next = new Map(chats.map(chat => [chat.id, Math.max(chatActivityAt(chat), activityById.get(chat.id) || 0)]));
+        activityById = next; // Bounded to visible membership, never historical rooms.
+        const order = [...next.keys()].sort((a, b) => next.get(b) - next.get(a) || (a < b ? -1 : a > b ? 1 : 0));
         state.chats = order.map(id => byId.get(id));
         return state.chats;
     }

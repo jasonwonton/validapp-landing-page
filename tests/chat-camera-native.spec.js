@@ -8,7 +8,7 @@ async function room(page) {
     await page.getByRole('button', { name: /^sign in$/i }).click();
     await page.getByRole('button', { name: 'Chats', exact: true }).click();
     await page.getByRole('button', { name: /Noah Williams/ }).click();
-    await page.getByRole('button', { name: 'Send photo or video' }).click();
+    await page.getByRole('button', { name: 'Open camera' }).click();
     return page.locator('[data-chat-media-dialog]');
 }
 
@@ -37,6 +37,7 @@ test('chat camera opens immediately, single shutter reviews, retakes and sends o
     await expect(shutter).toBeEnabled();
     await shutter.click();
     await expect(dialog.locator('.chat-media-publish')).toBeEnabled();
+    await dialog.getByRole('switch', { name: 'View once' }).click();
     await dialog.locator('.chat-media-publish').click();
     await expect(dialog).toBeHidden();
     await expect(page.locator('.chat-message.mine img[alt="Photo"]')).toHaveCount(1);
@@ -56,7 +57,7 @@ test('camera denial keeps an explicit library fallback and clean review', async 
     await expect(dialog.locator('.live-camera')).toBeHidden();
     await expect(dialog.locator('.chat-media-file-input')).toBeHidden();
     await expect(dialog.locator('.chat-media-edit-options')).toHaveCount(0);
-    await expect(dialog.getByRole('button', { name: 'Add caption' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Add or edit caption' })).toBeVisible();
     await dialog.locator('[data-close-chat-media]:visible').click();
     await expect(dialog).toBeHidden();
 });
@@ -98,8 +99,10 @@ for (const theme of ['light', 'dark']) test(`${theme}: profile and native chat c
     await page.getByRole('button', { name: 'Chats', exact: true }).click();
     await expect(page.locator('.chat-row.attention').first()).toHaveCSS('background-image', 'none');
     await page.getByRole('button', { name: /Weekend Crew/ }).click();
-    await expect(page.locator('[data-open-memento]')).toHaveText('Take Memento');
-    await expect(page.locator('[data-open-memento]')).toHaveCSS('background-color', 'rgb(255, 177, 94)');
+    const capture = page.getByRole('button', { name: 'Take a Memento' });
+    await expect(capture).toHaveText('Take a Memento');
+    await expect(capture).toHaveCSS('background-color', 'rgb(255, 177, 94)');
+    await expect(capture.locator('img[src$="memento-camera.webp"]')).toBeVisible();
     await page.getByRole('button', { name: 'Back to chats' }).click();
     await page.getByRole('button', { name: /Noah Williams/ }).click();
     await expect(page.locator('.chat-composer .native-sticker-icon')).toHaveCSS('color', 'rgb(255, 177, 94)');

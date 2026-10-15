@@ -8,15 +8,18 @@ async function signInToDemo(page, query = "") {
 
 test("initial shell parks inactive dialogs until first use", async ({ page }) => {
     await page.goto("/app/?demo=1&signin=1");
+    // The signed-out root (age screen and sign-in sheet) is open, not parked.
     const shell = await page.evaluate(() => ({
-        elements: document.querySelectorAll("*").length,
+        elements: [...document.querySelectorAll("*")].filter((element) => !element.closest("#signupDialog, #signInDialog")).length,
         parked: document.querySelectorAll("dialog[data-ui-parked='true']").length,
     }));
-    // v93 adds one reconnect button to the 450-node shell.
-    expect(shell.elements).toBeLessThanOrEqual(451);
+    // v93 adds one reconnect button to the 450-node shell; the onboarding
+    // parity release parks two more sheets (add school, friends) and the
+    // session recovery card replaces the sign-in card.
+    expect(shell.elements).toBeLessThanOrEqual(454);
     expect(shell.parked).toBeGreaterThanOrEqual(20);
 
-    await page.getByRole("button", { name: "Create an account" }).click();
+    // The age screen is the signed-out root, so sign-up is already mounted.
     await expect(page.locator("#signupDialog")).toBeVisible();
     await expect(page.locator("#signupForm")).toBeAttached();
     await expect(page.locator("#signupDialog")).not.toHaveAttribute("data-ui-parked", "true");
@@ -61,7 +64,7 @@ test("shared action buttons use the iOS button tokens", async ({ page }) => {
         boxShadow: "none",
         fontSize: "22px",
     });
-    expect(await styleSnapshot(page.locator("#createAccountButton"))).toMatchObject({
+    expect(await styleSnapshot(page.locator("#signupRecoverAccount"))).toMatchObject({
         minHeight: "50px",
         borderRadius: "25px",
         borderWidth: "2px",
@@ -141,11 +144,12 @@ test("God Mode actions avoid duplicate icons and overflow dots are centered", as
     const overflow = page.getByRole("button", { name: "More poll actions" });
     await expect(overflow).toHaveCSS("padding-top", "0px");
     await expect(overflow).toHaveCSS("padding-bottom", "0px");
-    expect(await overflow.evaluate((element) => getComputedStyle(element, "::before").content)).toBe('"•••"');
+    // QuestionDetailToolbar: an ellipsis.circle look-alike, centred in the button.
+    await expect(overflow.locator('[data-ui-icon="ellipsis-circle"]')).toBeVisible();
     const revealButton = page.getByRole("button", { name: "Get God Mode to Reveal who sent this" });
     await expect(revealButton.locator("img")).toHaveCount(0);
     expect(await revealButton.evaluate((element) => getComputedStyle(element, "::before").backgroundImage)).toContain("crown.webp");
-    await page.getByRole("button", { name: "Close" }).click();
+    await page.getByRole("button", { name: "Back" }).click();
 
     await page.getByRole("button", { name: "Profile", exact: true }).click();
     const startCard = page.locator(".god-mode-start-button");
@@ -237,7 +241,7 @@ test("classmate browsing, targeted boost, and TBH use the same iOS-style rows", 
     await classmateProfile.getByRole("button", { name: "Back to classmates" }).click();
     await directory.getByRole("button", { name: "Close" }).click();
 
-    await page.getByRole("button", { name: /Choose a crush/ }).click();
+    await page.getByRole("button", { name: /Target a classmate/ }).click();
     const targeted = page.locator("#targetedBoostDialog .classmate-picker-row").first();
     const targetedStyles = await pickerStyles(targeted);
     const targetedSearchStyles = await searchStyles(page.locator("#targetedBoostDialog .classmate-picker-search"));
@@ -325,9 +329,10 @@ test("profile and account actions use consistent app icons instead of platform e
     await expect(profileMeta.locator("img")).toHaveCount(2);
     await expect(profileMeta).not.toContainText("🏫");
     await expect(profileMeta).not.toContainText("🎓");
-    await expect(page.locator("#addPasskeyButton .passkey-settings-icon svg")).toBeVisible();
-    await expect(page.locator("#feedbackButton .feedback-settings-icon svg")).toBeVisible();
-    await expect(page.locator("#profileInviteCard .messages-symbol")).toBeVisible();
+    await expect(page.locator("#notificationButton .settings-icon svg")).toBeVisible();
+    await expect(page.locator("#profileInviteCard .profile-imessage-icon")).toBeVisible();
+    // The passkey CTA (only without a passkey) draws its key.
+    await expect(page.locator("#addPasskeyButton .profile-passkey-key svg")).toBeAttached();
     await expect(page.locator("#addPasskeyButton")).not.toContainText("🔑");
 });
 
@@ -354,7 +359,7 @@ test("school filter chips scroll selected content into view and sheets animate i
     }
 
     await page.getByRole("button", { name: "Profile", exact: true }).click();
-    await page.getByRole("button", { name: /Choose a crush/ }).click();
+    await page.getByRole("button", { name: /Target a classmate/ }).click();
     await expect(page.locator("#targetedBoostDialog")).toHaveCSS("animation-name", "modal-enter");
 });
 

@@ -39,14 +39,14 @@ test("chat photo review loads the Featured catalog once and leaves the photo unt
     });
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
-    await page.getByRole("button", { name: "Send photo or video" }).click();
+    await page.getByRole("button", { name: "Open camera" }).click();
     const dialog = page.getByRole("dialog", { name: "Send media" });
     await dialog.locator(".chat-media-file-input").setInputFiles("assets/AppIconV2.png");
     await expect(dialog.locator('.chat-media-publish')).toBeEnabled();
     await expect(dialog.getByRole("group", { name: "Photo effect" })).toHaveCount(0);
     const preview = dialog.getByRole("img", { name: "Photo preview" });
     const original = await canvasDigest(preview);
-    await dialog.getByRole('button', { name: 'Add caption', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Add or edit caption', exact: true }).click();
     await dialog.getByRole("textbox", { name: "Caption" }).fill("Keep my caption");
     await dialog.getByRole("textbox", { name: "Caption" }).press("Enter");
     expect(await canvasDigest(preview)).toEqual(original);
@@ -55,7 +55,9 @@ test("chat photo review loads the Featured catalog once and leaves the photo unt
     expect(await page.evaluate(() => window.catalogLoads)).toBe(1);
     expect(catalogRequests).toEqual([]);
     await dialog.getByRole("button", { name: "Send", exact: true }).click();
-    await expect(page.getByText("Photo sent", { exact: true })).toBeVisible();
+    // Queued: the camera closes at once, with no toast.
+    await expect(dialog).toBeHidden();
+    await expect(page.getByText("Photo sent", { exact: true })).toHaveCount(0);
 });
 
 async function canvasDigest(locator) {
@@ -71,21 +73,40 @@ async function canvasDigest(locator) {
 }
 
 test("a single-view Memento remains a safe fallback and preserves the authoritative publish flow", async ({ page }) => {
+    // A canvas camera whose front camera is missing: the back photo alone posts.
+    await page.addInitScript(() => {
+        Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: {
+            async getUserMedia(constraints) {
+                const facing = constraints?.video?.facingMode?.ideal || "environment";
+                if (facing === "user") throw new DOMException("Second camera unavailable", "NotReadableError");
+                const canvas = document.createElement("canvas");
+                canvas.width = 640; canvas.height = 480;
+                const context = canvas.getContext("2d");
+                const paint = () => { context.fillStyle = "#6666ff"; context.fillRect(0, 0, 640, 480); };
+                paint(); setInterval(paint, 40);
+                const stream = canvas.captureStream(25);
+                stream.getVideoTracks()[0].getSettings = () => ({ facingMode: facing, width: 640, height: 480 });
+                return stream;
+            },
+            async enumerateDevices() { return []; }, addEventListener() {}, removeEventListener() {},
+        } });
+    });
     await signInToDemo(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Weekend Crew/ }).click();
-    await page.locator(".chat-daily-row > button").click();
-    const dialog = page.getByRole("dialog", { name: "Create a Memento" });
-    await dialog.locator(".memento-file-input").setInputFiles("assets/AppIconV2.png");
+    await page.getByRole("button", { name: "Take a Memento" }).click();
+    const dialog = page.getByRole("dialog", { name: "Today's Memento" });
+    await dialog.getByRole("button", { name: "Take the back photo", exact: true }).click();
+    await dialog.getByRole("button", { name: "Use one photo" }).click();
     const preview = dialog.getByRole("img", { name: "Memento preview" });
-    const original = await previewDigest(preview);
+    await expect(preview).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Swap front and back photos" })).toHaveCount(0);
     await expect(dialog.getByRole("group", { name: "Photo effect" })).toHaveCount(0);
     await expect(dialog.locator('.memento-caption, .memento-options')).toHaveCount(0);
     await expect(dialog.locator('.memento-publish')).toBeEnabled();
-    expect(original).toMatchObject({ width: 1024, height: 1024 });
     await dialog.getByRole("button", { name: /^Send to / }).click();
-    await expect(page.getByText(/Memento shared · \+10 Aura/)).toBeVisible();
+    await expect(dialog).toBeHidden();
+    await expect(page.locator(".chat-message.mine .memento-label")).toHaveCount(1);
 });
 
 test("sequential rear and front photos produce swappable 1080 by 1440 Memento composites", async ({ page }) => {

@@ -21,7 +21,7 @@ const browser=await chromium.launch({channel:'chromium'});
 try{
     const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(`${origin}/app/?signin=1`);await page.getByRole('heading',{name:'Welcome Back'}).waitFor();
-    await page.evaluate(async({path,release})=>{const {createWeeklyGame}=await import(path);window.releaseGame=createWeeklyGame({api:{getWeeklyGame:async()=>({release}),getWeeklyGameLeaderboard:async()=>({entries:[]})}});await releaseGame.open();},{path:manifest.assets['/app/weekly-game/index.js'],release});
+    await page.evaluate(async({path,release})=>{const {createWeeklyGame}=await import(path);window.releaseGame=createWeeklyGame({api:{getWeeklyGame:async()=>({release}),getWeeklyGameLeaderboard:async()=>({entries:[]})}});await releaseGame.open({launch:true});},{path:manifest.assets['/app/weekly-game/index.js'],release});
     await page.getByRole('heading',{name:release.title}).waitFor();assert.match(await page.locator('[data-status]').textContent(),/Prop up your phone/);await page.locator('[data-instruction]').evaluate(img=>img.decode());
     const pose='data:image/jpeg;base64,'+(await readFile(new URL('tests/fixtures/weekly-game/pose.jpg',root))).toString('base64');
     const sample=await page.evaluate(async({path,pose})=>{
@@ -29,5 +29,5 @@ try{
         try{await tracker.start();const image=new Image();image.src=pose;await image.decode();const bitmap=await createImageBitmap(image);return await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('Inference timed out')),10000);tracker.onSample=s=>{clearTimeout(timer);resolve(s);};tracker.onError=e=>{clearTimeout(timer);reject(e);};tracker.worker.postMessage({type:'frame',image:bitmap,timestamp:100},[bitmap]);});}finally{tracker.close();}
     },{path:manifest.assets['/app/weekly-game/tracker.js'],pose});
     assert.equal(sample.pair.length,4);assert(sample.pair.every(v=>v>=0&&v<=1));assert.deepEqual(errors,[]);
-    await page.getByRole('button',{name:'Close weekly game'}).click();console.log('PASS built player: verified package, native instructions, real worker/model wrist inference, clean close; no camera or score writes');
+    await page.getByRole('button',{name:'Close game'}).click();console.log('PASS built player: verified package, native instructions, real worker/model wrist inference, clean close; no camera or score writes');
 }finally{await browser.close();}

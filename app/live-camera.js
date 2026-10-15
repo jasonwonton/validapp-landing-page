@@ -86,8 +86,12 @@ function stillRegion(width, height, videoWidth, videoHeight, aspect) {
     return { x: (width - regionWidth) / 2 + inner.x, y: (height - regionHeight) / 2 + inner.y, width: inner.width, height: inner.height };
 }
 
-export function createLiveCamera({ container, onCapture, onFallback, singlePhoto = false, initialFacing = 'environment', maxDimension = 2560, aspect = 3 / 4, haptic = null, recording = null }) {
-    container.innerHTML = `<div class="live-camera-stage"><video autoplay muted playsinline aria-label="Live camera preview"></video><canvas class="live-camera-overlay" aria-hidden="true" hidden></canvas><img class="live-camera-inset" alt="Memento preview" hidden><span class="live-camera-focus" aria-hidden="true" hidden></span><button type="button" class="live-camera-flash" data-camera-flash hidden></button><button type="button" class="live-camera-flip" data-camera-flip aria-label="Switch front and rear camera" disabled>${uiIcon('flip')}</button><button type="button" class="live-camera-zoom" data-camera-zoom hidden>1×</button><span class="live-camera-timer" role="timer" aria-live="off" hidden></span><div class="live-camera-message" role="status"></div></div><div class="live-camera-controls"><button type="button" data-camera-library aria-label="Choose a photo instead">${uiIcon('photo')}</button><div class="live-camera-shutter-wrap"><span class="live-camera-lock" aria-hidden="true" hidden>${uiIcon('lock')}</span><button type="button" class="camera-shutter" data-camera-shutter aria-label="Take photo" disabled><span></span></button></div><span aria-hidden="true"></span></div><p class="live-camera-hint">Tap to capture</p><div class="live-camera-alternatives"><button type="button" data-camera-retry hidden>Try camera again</button><button type="button" data-camera-single hidden>Use one photo</button></div><div class="live-camera-screen-flash" hidden></div>`;
+// `memento: true` is the Memento camera (MementoSequentialCameraView): the
+// back camera first, then the front one on a second shutter tap, with no
+// lenses, flip or library.
+export function createLiveCamera({ container, onCapture, onFallback, singlePhoto = false, initialFacing = 'environment', maxDimension = 2560, aspect = 3 / 4, haptic = null, recording = null, memento = false }) {
+    container.innerHTML = `<div class="live-camera-stage"><video autoplay muted playsinline aria-label="Live camera preview"></video><canvas class="live-camera-overlay" aria-hidden="true" hidden></canvas><img class="live-camera-inset" alt="Memento preview" hidden><span class="live-camera-focus" aria-hidden="true" hidden></span><button type="button" class="live-camera-flash" data-camera-flash hidden></button><button type="button" class="live-camera-flip" data-camera-flip aria-label="Switch front and rear camera" disabled>${uiIcon('flip')}</button><button type="button" class="live-camera-zoom" data-camera-zoom hidden>1×</button><span class="live-camera-timer" role="timer" aria-live="off" hidden></span><div class="live-camera-message" role="status"></div></div><div class="live-camera-controls"><button type="button" data-camera-library aria-label="Choose a photo instead">${uiIcon('photo')}</button><div class="live-camera-shutter-wrap"><span class="live-camera-lock" aria-hidden="true" hidden>${uiIcon('lock')}</span><button type="button" class="camera-shutter" data-camera-shutter aria-label="Take photo" disabled><span></span></button></div><span aria-hidden="true"></span></div><p class="live-camera-hint">Tap to capture</p><div class="live-camera-alternatives"><button type="button" data-camera-retry hidden>Try camera again</button><button type="button" data-camera-single hidden>Use one photo</button></div><div class="live-camera-screen-flash" hidden></div>${memento ? `<span class="live-camera-step" aria-live="polite"></span><span class="live-camera-next" aria-label="Your photo goes here next">${uiIcon('person')}<small>You're next</small></span><button type="button" class="live-camera-retake-back" data-camera-retake-back aria-label="Retake the back photo" hidden>${uiIcon('retake')}<span>Retake back</span></button>` : ''}`;
+    if (memento) container.classList.add('is-memento');
     const $ = selector => container.querySelector(selector);
     const video = $('video'), message = $('.live-camera-message'), stage = $('.live-camera-stage');
     const shutter = $('[data-camera-shutter]'), flashButton = $('[data-camera-flash]'), zoomButton = $('[data-camera-zoom]');
@@ -181,10 +185,26 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
     function failure(text) {
         message.textContent = text;
         $('[data-camera-retry]').hidden = false;
-        $('[data-camera-library]').hidden = false;
+        $('[data-camera-library]').hidden = memento;
+        // Without a second camera, the back photo alone can still be posted.
+        if (memento && photos.length === 1) $('[data-camera-single]').hidden = false;
+    }
+    function renderMementoStep() {
+        if (!memento) return;
+        const second = photos.length === 1;
+        $('.live-camera-step').textContent = second ? '2 of 2 · Now you' : '1 of 2 · Back camera';
+        $('.live-camera-next').hidden = second;
+        $('[data-camera-retake-back]').hidden = !second;
+        shutter.setAttribute('aria-label', second ? 'Take the front photo' : 'Take the back photo');
+        refreshHint();
     }
     function recordingAllowed() { return Boolean(recording && supportedVideoRecordingType() && recording.limitFor?.(supportedVideoRecordingType()) > 0); }
     function refreshHint() {
+        if (memento) {
+            $('.live-camera-hint').textContent = photos.length === 1 ? 'Now you, in the top corner' : 'Back camera first, then you';
+            shutter.removeAttribute('aria-description');
+            return;
+        }
         $('.live-camera-hint').textContent = recordingAllowed() ? 'Tap for a photo, hold for video' : 'Tap to capture';
         shutter.setAttribute('aria-description', recordingAllowed() ? 'Tap for a photo or hold to record a video. Slide left while holding to lock recording.' : '');
         if (!recordingAllowed()) shutter.removeAttribute('aria-description');
@@ -276,7 +296,7 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
         const requestGeneration = generation;
         message.textContent = photos.length ? 'Capturing…' : 'Starting camera…';
         $('[data-camera-retry]').hidden = true;
-        $('[data-camera-library]').hidden = !singlePhoto;
+        $('[data-camera-library]').hidden = !singlePhoto || memento;
         refreshHint();
         if (!navigator.mediaDevices?.getUserMedia) return failure('Live capture is unavailable here. Open in a supported browser or choose a photo.');
         pending = true;
@@ -307,7 +327,8 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
             if (requestGeneration !== generation || !opened) return;
             message.textContent = '';
             shutter.disabled = false;
-            $('[data-camera-flip]').disabled = false;
+            $('[data-camera-flip]').disabled = memento;
+            $('[data-camera-flip]').hidden = memento;
             readCapabilities();
             lowLight = false;
             sampleLight();
@@ -397,13 +418,13 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
             if (singlePhoto || photos.length === 2) return finish();
             insetURL = await insetPreview(photos[0]);
             if (insetURL) { $('img').src = insetURL; $('img').hidden = false; }
-            $('[data-camera-single]').hidden = false;
             facing = facing === 'environment' ? 'user' : 'environment';
-            // iOS uses one shutter for both views. Web captures them sequentially,
-            // retaining the explicit one-photo fallback if the second camera fails.
+            // Back first, then "Now you": the second photo is its own shutter
+            // tap, as on iPhones without MultiCam. The back photo alone stays
+            // available if the front camera fails.
             busy = false;
+            renderMementoStep();
             await start();
-            if (stream && opened && photos.length === 1) await capture();
         } catch {
             if (captureGeneration === generation && opened) failure('That photo could not be captured. Please try again.');
         } finally { busy = false; if (stream && opened && !rec) shutter.disabled = false; }
@@ -595,7 +616,7 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
         if (Object.keys(constraint).length) current.applyConstraints({ advanced: [constraint] }).catch(() => {});
     }
     function flip() {
-        if (busy || pending || rec) return;
+        if (busy || pending || rec || memento) return;
         feedback('light');
         facing = facing === 'environment' ? 'user' : 'environment';
         void start();
@@ -671,6 +692,14 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
     $('[data-camera-flip]').addEventListener('click', flip);
     $('[data-camera-retry]').addEventListener('click', () => void start());
     $('[data-camera-single]').addEventListener('click', finish);
+    $('[data-camera-retake-back]')?.addEventListener('click', () => {
+        if (busy || pending) return;
+        feedback('light');
+        clearPhotos();
+        facing = 'environment';
+        renderMementoStep();
+        void start();
+    });
     $('[data-camera-library]').addEventListener('click', fallback);
     document.addEventListener('visibilitychange', () => {
         if (!opened || !document.hidden) return;
@@ -678,7 +707,7 @@ export function createLiveCamera({ container, onCapture, onFallback, singlePhoto
     });
     window.addEventListener('pagehide', () => { if (opened) { stop(); failure('Camera paused. Tap Try camera again to resume.'); } });
     return {
-        open({ stream = null } = {}) { close(); facing = initialFacing; opened = true; container.hidden = false; prefetchedStream = stream; refreshHint(); void start(); attachLenses(); },
+        open({ stream = null } = {}) { close(); facing = initialFacing; opened = true; container.hidden = false; prefetchedStream = stream; refreshHint(); renderMementoStep(); void start(); if (!memento) attachLenses(); },
         close,
         setFrameHook(hook) { frameHook = typeof hook === 'function' ? hook : null; if (frameHook) startOverlay(); else stopOverlay(); },
         get mirrored() { return mirrored; },

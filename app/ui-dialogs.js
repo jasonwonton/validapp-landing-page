@@ -1,4 +1,5 @@
-// In-app replacements for window.confirm() and window.prompt(). Native
+// In-app replacements for window.confirm() and window.prompt(), drawn as
+// iOS's ConfirmationModal: a centred card, Cancel left of the action. Native
 // dialogs look foreign in the installed PWA, block the page, and are
 // suppressed after repeated use on iOS. These sheets use <dialog>.showModal()
 // so they sit in the top layer above any other open dialog.
@@ -36,7 +37,8 @@ function presentSheet({ title, message, className = "", body = [], footer = [], 
     const form = element("form", { method: "dialog", className: "ui-sheet-content" }, [
         element("span", { className: "ui-sheet-grabber", "aria-hidden": "true" }),
         heading, ...(description ? [description] : []), ...body,
-        element("div", { className: "ui-sheet-actions" }, [confirm, cancel]),
+        // ConfirmationModal: side by side, Cancel on the left.
+        element("div", { className: "ui-sheet-actions" }, [cancel, confirm]),
         ...footer,
     ]);
     const dialog = element("dialog", {
@@ -142,5 +144,22 @@ export function reasonSheet({
             });
         },
         result: (form) => ({ reason: selected(form), details: detailsField.hidden ? "" : details.value.trim().slice(0, MAX_DETAILS_LENGTH) }),
+    });
+}
+
+/**
+ * ConfirmationModal with its reason field (e.g. "Report a Safety Issue").
+ * The reason is optional, as on iOS.
+ * @returns {Promise<{ reason: string } | null>} null when cancelled.
+ */
+export function confirmReasonSheet({
+    title, message = "", confirmLabel = "Confirm", cancelLabel = "Cancel", destructive = false,
+    reasonPlaceholder = "Explain why...", reasonLabel = "Reason",
+} = {}) {
+    const field = element("textarea", { className: "ui-sheet-reason-field", rows: "2", maxlength: String(MAX_DETAILS_LENGTH), placeholder: reasonPlaceholder, "aria-label": reasonLabel });
+    return presentSheet({
+        title, message, confirmLabel, cancelLabel, destructive, className: "ui-reason-confirm", cancelled: null,
+        body: [field],
+        result: () => ({ reason: field.value.trim().slice(0, MAX_DETAILS_LENGTH) }),
     });
 }

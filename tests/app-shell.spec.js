@@ -138,7 +138,7 @@ test.describe("cold start", () => {
         await expect(page.locator("#authView")).toBeHidden();
     });
 
-    test("an expired cookie shows Welcome Back without opening signup for a returning user", async ({ page }) => {
+    test("an expired cookie returns a returning user to the age screen, with Log in over it", async ({ page }) => {
         await page.addInitScript(() => localStorage.setItem("valid:signed-in-before", "1"));
         await page.addInitScript(() => {
             Object.defineProperty(window, "PublicKeyCredential", { configurable: true, value: class {} });
@@ -146,10 +146,11 @@ test.describe("cold start", () => {
         await page.route("**/api/v1/**", (route) => route.fulfill({ status: 401,
             headers: { "WWW-Authenticate": "Bearer" }, json: { detail: "Authentication required" } }));
         await page.goto("/app/");
-        await expect(page.getByText("Welcome Back")).toBeVisible();
+        // GettingStartedView is the root for new and signed-out users alike.
+        await expect(page.locator("#signupDialog").getByRole("button", { name: "Get Started!" })).toBeVisible();
         await expect(page.locator("#launchSplash")).toBeHidden();
-        await page.waitForTimeout(300);
-        await expect(page.locator("#signupDialog")).not.toBeVisible();
+        await expect(page.locator("#signupDialog").getByRole("button", { name: /Already have an account\? Log in/ })).toBeVisible();
+        await expect(page.getByText("Welcome Back")).toBeHidden();
     });
 });
 
@@ -212,14 +213,14 @@ test.describe("history and Back", () => {
     test("Back closes an open sheet before leaving the screen", async ({ page }) => {
         await signInToDemo(page);
         await page.locator("#bottomNav").getByRole("button", { name: "Profile", exact: true }).click();
-        await page.getByRole("button", { name: /Choose a crush/ }).click();
+        await page.getByRole("button", { name: /Target a classmate/ }).click();
         const sheet = page.locator("#targetedBoostDialog");
         await expect(sheet).toBeVisible();
         await page.goBack();
         await expect(sheet).toBeHidden();
         await expect(page.locator("#profilePanel")).toBeVisible();
         // Closing the sheet from its own button leaves no stale history entry.
-        await page.getByRole("button", { name: /Choose a crush/ }).click();
+        await page.getByRole("button", { name: /Target a classmate/ }).click();
         await expect(sheet).toBeVisible();
         await page.keyboard.press("Escape");
         await expect(sheet).toBeHidden();
@@ -304,25 +305,29 @@ test.describe("install and update", () => {
     test.describe("on iPhone Safari", () => {
         test.use({ userAgent: IPHONE_SAFARI });
 
-        test("offers Add to Home Screen where Android offers install and notifications", async ({ page }) => {
+        test("offers Add to Home Screen from Profile, not as a card on the unlocked Feed", async ({ page }) => {
             await signInToDemo(page);
-            const prompt = page.locator("#feedNotificationPrompt");
-            await expect(prompt).toBeVisible();
-            await expect(prompt.getByRole("button", { name: "Add to Home Screen" })).toBeVisible();
-            await prompt.getByRole("button", { name: "Add to Home Screen" }).click();
+            // Like iOS, the unlocked Feed carries no notification card.
+            await expect(page.locator("#feedNotificationPrompt")).toHaveCount(0);
+            await page.locator("#bottomNav").getByRole("button", { name: "Profile", exact: true }).click();
+            const row = page.locator("#installAppButton");
+            await expect(row).toBeVisible();
+            await expect(row).toContainText("Add to Home Screen");
+            await row.click();
             const sheet = page.getByRole("dialog", { name: "Add Valid to your Home Screen" });
             await expect(sheet).toBeVisible();
             await expect(sheet).toContainText("Share");
             await expect(sheet).toContainText("notifications work only in the Home Screen app");
             await sheet.getByRole("button", { name: "Got it" }).click();
             await expect(sheet).toBeHidden();
-            await expect(prompt).toBeHidden();
+        });
 
-            await page.locator("#bottomNav").getByRole("button", { name: "Profile", exact: true }).click();
-            const row = page.locator("#installAppButton");
-            await expect(row).toBeVisible();
-            await expect(row).toContainText("Add to Home Screen");
-            await row.click();
+        test("the locked Feed's vote alerts card leads to Add to Home Screen", async ({ page }) => {
+            await signInToDemo(page, "&locked=1");
+            // In the install state the card is labelled with its action.
+            const alerts = page.locator("#feedGateLock .feed-gate-notification");
+            await expect(alerts).toBeVisible();
+            await alerts.click();
             await expect(page.getByRole("dialog", { name: "Add Valid to your Home Screen" })).toBeVisible();
         });
     });
@@ -330,6 +335,7 @@ test.describe("install and update", () => {
     test("the update prompt is reachable while signed out", async ({ page }) => {
         await page.goto("/app/?demo=1&signin=1");
         await expect(page.getByText("Welcome Back")).toBeVisible();
+        await page.getByRole("dialog", { name: "Welcome Back" }).getByRole("button", { name: "Cancel" }).click();
         await page.evaluate(() => document.querySelector("#appUpdatePrompt").classList.remove("hidden"));
         await expect(page.getByRole("button", { name: "Update" })).toBeVisible();
     });

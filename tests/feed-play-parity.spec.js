@@ -30,7 +30,7 @@ test('poll detail title carries the iOS gender emoji and heart', async ({ page }
 });
 
 for (const [width, height] of [[375, 812], [390, 844], [430, 932]]) {
-    test(`poll detail fits the poll and engagement row in a ${width}x${height} screen`, async ({ page }) => {
+    test(`poll detail fits the poll and share row in a ${width}x${height} screen`, async ({ page }) => {
         await page.setViewportSize({ width, height });
         await page.emulateMedia({ reducedMotion: 'reduce' });
         await signIn(page);
@@ -38,8 +38,10 @@ for (const [width, height] of [[375, 812], [390, 844], [430, 932]]) {
         const detail = page.locator('#feedDetailDialog');
         await expect(detail).toBeVisible();
         await page.evaluate(() => document.fonts.ready);
-        const engagement = await detail.locator('.detail-engagement-row').boundingBox();
-        expect(engagement.y + engagement.height).toBeLessThanOrEqual(height);
+        // QuestionDetailView: the share row comes first under the card; Reveal and the
+        // engagement row follow it below the fold, as on iOS.
+        const share = await detail.locator('.feed-detail-share').boundingBox();
+        expect(share.y + share.height).toBeLessThanOrEqual(height);
         const options = await detail.locator('.feed-detail-option').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().toJSON()));
         expect(options).toHaveLength(4);
         // PollSnapshot.swift: 10pt between options and 10pt side margins, 100pt minimum height.
@@ -140,7 +142,7 @@ test('play lock countdown uses hours and minutes like PlayLockedView', async ({ 
     for (let answered = 0; answered < 4; answered += 1) {
         await page.locator('#playCard .play-card:not(.play-card-leaving) [data-choice]').first().click();
     }
-    await page.getByRole('button', { name: 'W aura' }).click();
+    await page.getByRole('button', { name: 'w aura' }).click();
     await expect(page.locator('#playLockMessage')).toHaveText(/^Unlocks in 1h 5m$/);
 });
 
@@ -151,19 +153,19 @@ for (const via of ['Done button', 'history.back()']) {
         await signIn(page);
         await page.getByRole('button', { name: 'School', exact: true }).click();
         await expect(page.locator('#feedList [data-feed-detail]').first()).toBeVisible();
-        await page.evaluate(() => window.scrollTo(0, 600));
-        await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(600);
+        await page.evaluate(() => window.scrollTo(0, 500));
+        await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(500);
         await page.locator('#feedList [data-feed-detail]').last().evaluate((node) => node.click());
         await expect(page.locator('#feedDetailDialog')).toBeVisible();
         if (via === 'Done button') await page.locator('[data-close-feed-detail]').click();
         else await page.evaluate(() => history.back());
         await expect(page.locator('#feedDetailDialog')).toBeHidden();
         await page.waitForTimeout(150);
-        expect(await page.evaluate(() => Math.round(window.scrollY))).toBe(600);
+        expect(await page.evaluate(() => Math.round(window.scrollY))).toBe(500);
         // Tab switching still restores each tab's own position.
         await page.getByRole('button', { name: 'Profile', exact: true }).click();
         await page.getByRole('button', { name: 'Feed', exact: true }).click();
-        await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(600);
+        await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(500);
     });
 }
 
@@ -275,7 +277,7 @@ test('feed controls answer to 44px hit areas without changing their drawing', as
     expect(await page.locator('#feedList [role="button"] button').count()).toBe(0);
     await expect(page.getByRole('button', { name: /^Open poll details:/ }).first()).toBeVisible();
     await page.locator('[data-feed-detail="9001"]').click();
-    for (const name of ['Close', 'More poll actions']) {
+    for (const name of ['Back', 'More poll actions']) {
         const box = await page.locator('#feedDetailDialog').getByRole('button', { name, exact: true }).boundingBox();
         expect(box.height, name).toBeGreaterThanOrEqual(44);
         expect(box.width, name).toBeGreaterThanOrEqual(44);
@@ -291,8 +293,8 @@ test('account deletion is reachable from Profile information like iOS', async ({
     await expect(information).toBeHidden();
     const confirm = page.locator('#deleteAccountDialog');
     await expect(confirm.getByRole('heading', { name: 'Delete Account?' })).toBeVisible();
-    await expect(confirm).toContainText('permanently delete your account in 5 days');
-    await confirm.getByRole('button', { name: 'Keep my account' }).click();
+    await expect(confirm).toContainText("We'll delete your account in 5 days.");
+    await confirm.getByRole('button', { name: 'Cancel', exact: true }).click();
     await expect(confirm).toBeHidden();
 });
 
@@ -347,7 +349,7 @@ test('profile photos over 5 MB are circle-cropped and resized to a 1024px JPEG b
     expect(size).toBeGreaterThan(5 * 1024 * 1024);
     const crop = page.locator('.avatar-crop-dialog');
     await expect(crop).toBeVisible();
-    await expect(crop.getByRole('heading', { name: 'Adjust photo' })).toBeVisible();
+    await expect(crop.getByRole('heading', { name: 'Choose your profile photo' })).toBeVisible();
     const ring = await crop.locator('.avatar-crop-ring').boundingBox();
     expect(Math.round(ring.width)).toBe(Math.round(ring.height));
     // Drag far past the edge: the photo stays clamped over the circle.

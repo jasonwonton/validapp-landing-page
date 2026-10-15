@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "valid-web-";
-const CACHE_NAME = `${CACHE_PREFIX}v116`;
+const CACHE_NAME = `${CACHE_PREFIX}v117`;
 // Every module the startup graph imports statically must be listed here, or the
 // installed app cannot start offline; scripts/tests/service-worker-shell.test.mjs
 // walks the import graph and enforces it. Dynamic imports that need the network
@@ -27,6 +27,7 @@ const APP_SHELL = [
     "./tbh-share.js",
     "./blocked-users.js",
     "./ios-install.js",
+    "./onboarding.css",
     "./banner.js",
     "./feed-sender.js",
     "./media-overlay-positioner.js",
@@ -49,6 +50,7 @@ const APP_SHELL = [
     "./chat/message-window.js",
     "./chat/timeline-scroll.js",
     "./chat/models.js",
+    "./chat/inbox-status.js",
     "./chat/call-history.js",
     "./chat/notification-nudge.js",
     "./chat/store.js",
@@ -61,6 +63,7 @@ const APP_SHELL = [
     "./thumbhash.js",
     "./play-choices.js",
     "./question-attribution.js",
+    "./notification-soft-prompt.js",
     "./chat/outbox.js",
     "./chat/thumbhash.js",
     "./chat/realtime.js",
@@ -353,6 +356,13 @@ async function presentPush(payload) {
         if (viewer) {
             viewer.postMessage({ type: "VALID_PUSH_IN_ACTIVE_CHAT", chatId, payload: { title, body: payload.body, type, url: data.url } });
             return showSuppressedOnWebKit(title, data);
+        }
+        // Valid is open on another screen: an in-app banner, as on iOS,
+        // instead of a second system notification.
+        const foreground = (await appWindows()).find((client) => client.focused && client.visibilityState === "visible");
+        if (foreground) {
+            foreground.postMessage({ type: "VALID_PUSH_FOREGROUND", payload: { title, body: payload.body || "", type, url: data.url } });
+            return Promise.all([showSuppressedOnWebKit(title, data), updateAppBadge(payload)]);
         }
     }
     if (type === "call_ended") return presentCallEnded(payload, url);

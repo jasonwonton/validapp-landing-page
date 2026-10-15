@@ -43,7 +43,7 @@ const contact = (seed, name, extra = {}) => ({ phone_number: hash(seed), name, i
 test('fewer than four classmates and contacts shows the friends lock and never requests questions', async ({ page }) => {
     await signInWithRoster(page, { classmates: 2, contacts: [contact(1, 'Riley Stone'), contact(2, 'Mom')] });
     await page.getByRole('button', { name: 'Play', exact: true }).click();
-    await expect(page.getByText('Add more friends to play Valid.')).toBeVisible();
+    await expect(page.getByText('Add more classmates to play Valid.')).toBeVisible();
     await expect(page.getByText('You need at least four classmates or contacts.')).toBeVisible();
     await expect(page.locator('#playCard').getByRole('button', { name: 'Find classmates' })).toBeVisible();
     await expect(page.locator('#playCard').getByRole('button', { name: 'Share an invite' })).toBeVisible();
@@ -85,7 +85,7 @@ test('a contact who is also a classmate appears once', async ({ page }) => {
         contacts: [contact(1, 'Maya Chen', { user_id: 'classmate-1', is_six7_user: true })],
     });
     await page.getByRole('button', { name: 'Play', exact: true }).click();
-    await expect(page.getByText('Add more friends to play Valid.')).toBeVisible();
+    await expect(page.getByText('Add more classmates to play Valid.')).toBeVisible();
     expect(await page.evaluate(() => window.__calls)).not.toContain('getPlayQuestions');
 });
 
@@ -106,7 +106,7 @@ test('syncing contacts from the lock card reports people synced and on Valid, th
         };
     });
     await page.getByRole('button', { name: 'Play', exact: true }).click();
-    await expect(page.getByText('Add more friends to play Valid.')).toBeVisible();
+    await expect(page.getByText('Add more classmates to play Valid.')).toBeVisible();
     await page.locator('#playCard').getByRole('button', { name: 'Find classmates' }).click();
     const dialog = page.locator('#classmatesDialog');
     // The demo closes the dialog without the real 1.5 s pause; record every status line.

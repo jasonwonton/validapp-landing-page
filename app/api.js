@@ -260,6 +260,29 @@ export class ValidAPI {
         });
     }
 
+    // Text-code sign-in for browsers. Shown only when config sets
+    // enable_web_phone_login: the send needs Turnstile and the confirm must
+    // answer with the HttpOnly session cookie, like passkey sign-in.
+    requestLoginVerification(phoneNumber, turnstileToken) {
+        return this.request("/auth/login/request/web", {
+            method: "POST",
+            auth: false,
+            body: JSON.stringify({
+                phone_number: phoneNumber,
+                channel: "sms",
+                turnstile_token: turnstileToken,
+            }),
+        });
+    }
+
+    confirmLoginVerification(phoneNumber, code) {
+        return this.request("/auth/login/confirm/web", {
+            method: "POST",
+            auth: false,
+            body: JSON.stringify({ phone_number: phoneNumber, code }),
+        });
+    }
+
     completeWebSignup(payload) {
         return this.request("/auth/passkey/signup/complete", {
             method: "POST",
@@ -607,6 +630,21 @@ export class ValidAPI {
         });
     }
 
+    // Settings → Notifications: the four switches iOS shows
+    // (NotificationCategoriesStore). GET returns `categories`; a missing one
+    // (older server) means everything is on.
+    getNotificationPreferences() {
+        return this.request("/notification-preferences");
+    }
+
+    // Sends only the switches that changed; the answer has all four as saved.
+    updateNotificationCategories(changes, source = "web_settings") {
+        return this.request("/notification-preferences/categories", {
+            method: "PUT",
+            body: JSON.stringify({ ...changes, source }),
+        });
+    }
+
     recordStreakWarningOpen(streakWarningId) {
         return this.request("/notification-preferences/streak-warning-open", {
             method: "POST",
@@ -691,10 +729,11 @@ export class ValidAPI {
         return this.request(`/users/${userId}/invites/status`);
     }
 
-    createInvite(userId, shareChannel = "web") {
+    createInvite(userId, shareChannel = "web", { surface = null } = {}) {
         return this.request(`/users/${userId}/invites`, {
             method: "POST",
-            body: JSON.stringify({ share_channel: shareChannel }),
+            // invite_surface names the screen for the invite funnel (play_lock, vote_prompt…).
+            body: JSON.stringify(surface ? { share_channel: shareChannel, invite_surface: surface } : { share_channel: shareChannel }),
         });
     }
 
@@ -796,6 +835,11 @@ export class ValidAPI {
 
     declineGodModeRetentionOffer(userId) {
         return this.request(`/users/${userId}/god-mode/retention-offer/decline`, { method: "POST" });
+    }
+
+    // Stripe's Customer Portal (a failed payment's card update).
+    createGodModeBillingPortal(userId) {
+        return this.request(`/users/${userId}/god-mode/billing-portal`, { method: "POST" });
     }
 
     unsubscribeFromGodMode(userId) {
@@ -969,7 +1013,7 @@ export class ValidAPI {
         return this.request(`/users/${userId}/chats-unread-count`);
     }
 
-    createChat(userId, memberUserIds, name = null, clientRequestId = crypto.randomUUID()) {
+    createChat(userId, memberUserIds, name = null, clientRequestId = crypto.randomUUID(), createdFrom = null) {
         return this.request(`/users/${userId}/chats`, {
             method: "POST",
             body: JSON.stringify({
@@ -977,8 +1021,18 @@ export class ValidAPI {
                 name: name?.trim() || null,
                 client_request_id: clientRequestId,
                 timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+                ...(createdFrom ? { created_from: createdFrom } : {}),
             }),
         });
+    }
+
+    // Friends on Valid the viewer has never messaged (SayHiModel).
+    getSayHiSuggestions(userId, limit = 5) {
+        return this.request(`/users/${userId}/chats/say-hi-suggestions?limit=${Number(limit) || 5}`);
+    }
+
+    acknowledgeMissedCall(userId, callId) {
+        return this.request(`/users/${userId}/calls/${callId}/acknowledge-missed`, { method: "POST" });
     }
 
     getChat(userId, chatId) {
@@ -1372,8 +1426,13 @@ export class ValidAPI {
         return url.href;
     }
 
-    requestAccountDeletion(userId) {
-        return this.request(`/users/${userId}/delete`, { method: "POST" });
+    // `hideFromPolls` also hides the number from polls in the same request
+    // (DeleteAccountModal on iOS); older servers ignore the body.
+    requestAccountDeletion(userId, { hideFromPolls = false } = {}) {
+        return this.request(`/users/${userId}/delete`, {
+            method: "POST",
+            body: JSON.stringify({ hide_from_polls: hideFromPolls === true }),
+        });
     }
 
     cancelAccountDeletion(userId) {

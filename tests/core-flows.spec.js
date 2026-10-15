@@ -6,9 +6,18 @@ async function signInToDemo(page, query = "") {
     await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
 }
 
+async function openSignup(page) {
+    await page.goto("/app/?demo=1&signup=1");
+    const dialog = page.locator("#signupDialog");
+    await expect(dialog.getByRole("button", { name: "Get Started!" })).toBeVisible();
+    return dialog;
+}
+
 async function fillSignupThroughUsername(dialog, username = "taylor_j") {
     await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
     await dialog.locator('[data-signup-age="16"]').click();
+    await dialog.getByRole("button", { name: "Get Started!" }).click();
+    await dialog.getByRole("button", { name: "Choose Friends" }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("ZIP code").fill("90210");
     await expect(dialog.locator("[data-signup-school]")).toHaveCount(50);
@@ -26,79 +35,84 @@ async function fillSignupThroughUsername(dialog, username = "taylor_j") {
     await dialog.getByRole("button", { name: "Continue" }).click();
 }
 
-test("signed-out experience goes straight to the passkey actions", async ({ page }) => {
+test("signed-out experience offers the passkey sign-in sheet over the age screen", async ({ page }) => {
     await page.goto("/app/?demo=1");
     await expect(page.getByText("VALID, EVERYWHERE", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Your feed is ready.", { exact: true })).toHaveCount(0);
     await expect(page.getByText(/Use the same passkey as the Valid iPhone app/i)).toHaveCount(0);
     const signInButton = page.getByRole("button", { name: /^sign in$/i });
     await expect(signInButton).toBeVisible();
-    await expect(signInButton).toHaveText("Sign in with a passkey");
-    await expect(signInButton.locator("span")).toHaveCount(0);
+    await expect(signInButton).toHaveText(/^Sign in with (a passkey|Face ID)$/);
     await expect(page.getByText(/fingerprint or face stays on your device/i)).toHaveCount(0);
+    await expect(page.locator("#signupDialog")).toBeVisible();
 });
 
 test("authenticated users without a credential are prompted to enroll a passkey", async ({ page }) => {
     await signInToDemo(page, "&passkeys=0");
-    const enrollment = page.getByRole("dialog", { name: "Secure your Valid account" });
+    const enrollment = page.getByRole("dialog", { name: "Keep your account" });
     await expect(enrollment).toBeVisible();
-    await enrollment.getByRole("button", { name: "Create a passkey" }).click();
+    await expect(enrollment.getByText(/Create a passkey so you can always sign back in/)).toBeVisible();
+    await enrollment.getByRole("button", { name: "Create passkey" }).click();
     await expect(enrollment).toBeHidden();
     await page.getByRole("button", { name: "Profile", exact: true }).click();
-    await expect(page.locator("#passkeyStatusText")).toHaveText("1 passkey registered");
+    // SettingsView: the passkey CTA shows only while the account has no passkey.
+    await expect(page.locator("#addPasskeyButton")).toBeHidden();
 });
 
 test("new users can complete passkey-only school onboarding", async ({ page }) => {
-    await page.goto("/app/?demo=1");
-    await page.getByRole("button", { name: "Create an account" }).click();
-    const dialog = page.getByRole("dialog");
+    const dialog = await openSignup(page);
     await fillSignupThroughUsername(dialog);
     await dialog.getByRole("radio", { name: "Non-binary" }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(dialog.getByRole("heading", { name: "Add a profile photo" })).toBeVisible();
-    await expect(dialog.getByText(/receive 2-3x more votes/i)).toBeVisible();
+    await expect(dialog.getByText(/Profiles with a photo get 2–3x more votes/i)).toBeVisible();
     await expect(dialog.getByText("No password. No phone number.", { exact: true })).toHaveCount(0);
     await expect(dialog.getByText("Choose from Library", { exact: true })).toBeVisible();
     await dialog.getByLabel(/Profile photo/).setInputFiles("assets/valid_logo.png");
     // Profile photos go through the iOS circle crop before they are used.
-    await page.locator(".avatar-crop-dialog").getByRole("button", { name: "Use photo" }).click();
+    const crop = page.locator(".avatar-crop-dialog");
+    await expect(crop.getByText("Choose your profile photo")).toBeVisible();
+    await crop.getByRole("button", { name: "Use photo" }).click();
     await expect(dialog.locator("#signupPhotoPreview img")).toHaveAttribute("src", /^blob:/);
     await dialog.getByRole("button", { name: "Continue" }).click();
+    await dialog.getByRole("button", { name: "Create passkey" }).click();
+    await dialog.getByRole("button", { name: "Let's Go!" }).click();
     await expect(page.locator("#appView")).toBeVisible();
-    const contacts = page.locator("#classmatesDialog");
-    if (await contacts.isVisible()) await contacts.getByRole("button", { name: "Close" }).click();
+    const friends = page.locator("#friendsClassmatesDialog");
+    await friends.getByRole("button", { name: "Continue" }).click();
+    await friends.getByRole("button", { name: "Done" }).click();
     await expect(page.getByRole("button", { name: "Profile", exact: true })).toBeVisible();
 });
 
 test("signup rejects unavailable profile language before creating a passkey", async ({ page }) => {
-    await page.goto("/app/?demo=1");
-    await page.getByRole("button", { name: "Create an account" }).click();
-    const dialog = page.getByRole("dialog");
+    const dialog = await openSignup(page);
     await fillSignupThroughUsername(dialog, "f4gg0t_sn1gger");
-    await expect(dialog.locator("#signupStatus")).toHaveText("That username is not available. Try another one.");
-    await expect(dialog.getByText("Pick a username")).toBeVisible();
+    await expect(dialog.locator("#signupUsernameStatus")).toHaveText("Username 'f4gg0t_sn1gger' is already taken");
+    await expect(dialog.getByText("Choose a username")).toBeVisible();
 });
 
 test("onboarding keeps every action reachable on compact phones", async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 640 });
-    await page.goto("/app/?demo=1");
-    await page.getByRole("button", { name: "Create an account" }).click();
-    const dialog = page.getByRole("dialog");
+    const dialog = await openSignup(page);
     await expect(dialog.locator(".signup-step .eyebrow")).toHaveCount(0);
-    await expect(dialog.getByText("How old are you?")).toBeInViewport();
+    await expect(dialog.getByText(/By entering your age/)).toBeInViewport();
     await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
     await expect(dialog.getByRole("listbox", { name: "Age" })).toBeVisible();
     await expect(dialog.locator('[data-signup-age="13"]')).toHaveCSS("font-family", /Jua/);
-    await expect(dialog.getByRole("button", { name: "Continue" })).toBeInViewport();
+    await expect(dialog.getByRole("button", { name: "Get Started!" })).toBeInViewport();
+    await dialog.getByRole("button", { name: "Get Started!" }).click();
+    await expect(dialog.getByRole("button", { name: "Choose Friends" })).toBeInViewport();
+    await dialog.getByRole("button", { name: "Choose Friends" }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
-    await expect(dialog.getByText("What school do you go to?")).toBeInViewport();
+    await expect(dialog.getByText("Pick your school")).toBeInViewport();
     await expect(dialog.getByLabel("ZIP code")).toBeInViewport();
     await dialog.getByLabel("ZIP code").fill("90210");
     const schoolResults = dialog.locator("#signupSchoolResults");
+    await expect(dialog.locator("[data-signup-school]")).toHaveCount(50);
     const schoolScroll = await schoolResults.evaluate((element) => ({ clientHeight: element.clientHeight, scrollHeight: element.scrollHeight }));
     expect(schoolScroll.scrollHeight).toBeGreaterThan(schoolScroll.clientHeight);
-    await expect(dialog.locator("#signupSchoolContinue")).toBeInViewport();
     await dialog.getByRole("option", { name: /Westview High School/ }).click();
+    await expect(dialog.locator("#signupSchoolContinue")).toBeInViewport();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(dialog.getByText("What grade are you in?")).toBeInViewport();
     const seniorGrade = dialog.getByRole("radio", { name: /Senior/ });
@@ -124,23 +138,28 @@ test("onboarding keeps every action reachable on compact phones", async ({ page 
     await expect(dialog.getByText("Add a profile photo")).toBeInViewport();
     await expect(dialog.getByRole("button", { name: "Continue" })).toBeInViewport();
     await expect(dialog.getByRole("button", { name: "Skip for now" })).toBeInViewport();
+    await dialog.getByRole("button", { name: "Skip for now" }).click();
+    await expect(dialog.getByRole("button", { name: "Create passkey" })).toBeInViewport();
+    await dialog.getByRole("button", { name: "Create passkey" }).click();
+    await expect(dialog.getByRole("button", { name: "Let's Go!" })).toBeInViewport();
 });
 
-test("signup ZIP picker lists, filters, and falls back from 50 nearby schools", async ({ page }) => {
-    await page.goto("/app/?demo=1");
-    await page.getByRole("button", { name: "Create an account" }).click();
-    const dialog = page.getByRole("dialog");
+test("signup school search lists, filters, and falls back from 50 nearby schools", async ({ page }) => {
+    const dialog = await openSignup(page);
+    await dialog.getByRole("button", { name: "Get Started!" }).click();
+    await dialog.getByRole("button", { name: "Choose Friends" }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
-    await dialog.getByLabel("ZIP code").fill("90210");
+    await dialog.getByPlaceholder("School, city, or ZIP").fill("90210");
     await expect(dialog.locator("[data-signup-school]")).toHaveCount(50);
-    await dialog.getByLabel("Search nearby schools").fill("Central High School 2 Beverly Hills");
+    await dialog.getByPlaceholder("School, city, or ZIP").fill("Central High School 2 Beverly Hills");
     await expect(dialog.locator("[data-signup-school]")).toHaveCount(1);
-    await dialog.getByRole("button", { name: "Can't find your school?" }).click();
-    await expect(dialog.getByLabel("School name")).toBeVisible();
-    await expect(dialog.getByLabel("School name")).toBeEnabled();
-    await dialog.getByRole("button", { name: "Back to nearby schools" }).click();
-    await expect(dialog.getByLabel("School name")).toBeHidden();
-    await expect(dialog.getByLabel("Search nearby schools")).toBeVisible();
+    await dialog.getByRole("button", { name: /Can't find your school\?/ }).click();
+    await expect(dialog.getByText("One more way to find it")).toBeVisible();
+    await dialog.getByLabel("ZIP code").fill("90211");
+    await expect(dialog.locator("[data-signup-school]")).toHaveCount(50);
+    // After a second ZIP the list ends with "Add a school".
+    await dialog.getByRole("button", { name: /Add a school/ }).click();
+    await expect(page.getByRole("dialog", { name: "Add Your School" }).getByLabel("School Name")).toBeVisible();
 });
 
 test("mobile shell stays within interaction performance budgets", async ({ page }) => {
@@ -191,7 +210,7 @@ test("strict production CSP permits dynamic progress UI", async ({ page }) => {
     });
     await page.goto("/app/?demo=1&locked=1");
     await page.getByRole("button", { name: /^sign in$/i }).click();
-    await expect(page.locator(".feed-gate-progress")).toBeVisible();
+    await expect(page.locator(".feed-gate-votes-cast")).toBeVisible();
     expect(violations).toEqual([]);
 });
 
@@ -228,10 +247,10 @@ test("installed Chromium shell opens a previously unvisited Chats overlay journe
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
-    await page.getByRole("button", { name: "Send photo or video" }).click();
+    await page.getByRole("button", { name: "Open camera" }).click();
     const dialog = page.getByRole("dialog", { name: "Send media" });
     await dialog.locator(".chat-media-file-input").setInputFiles("assets/AppIconV2.png");
-    await dialog.getByRole('button', { name: 'Add caption', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Add or edit caption', exact: true }).click();
     await dialog.getByRole("textbox", { name: "Caption" }).fill("Offline draft");
     await dialog.getByRole("textbox", { name: "Caption" }).press("Enter");
     await expect(dialog.getByRole("button", { name: /Media text: Offline draft/ })).toBeVisible();
@@ -404,7 +423,7 @@ test("Android modals present as draggable bottom sheets", async ({ page }, testI
     test.skip(testInfo.project.name !== "android", "Android-only presentation behavior");
     await signInToDemo(page);
     await page.getByRole("button", { name: "Profile", exact: true }).click();
-    await page.getByRole("button", { name: /Choose a crush/ }).click();
+    await page.getByRole("button", { name: /Target a classmate/ }).click();
     const dialog = page.locator("#targetedBoostDialog");
     const geometry = await dialog.evaluate((element) => {
         const rect = element.getBoundingClientRect();
@@ -426,10 +445,10 @@ test("feed navigation, filtering, and reactions work", async ({ page }) => {
     await expect(page.locator("#feedList .feed-section-heading")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Recent", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "My Votes", exact: true })).toBeVisible();
-    await page.getByPlaceholder("Search names, questions...").fill("company");
+    await page.getByPlaceholder("Search your school...").fill("company");
     await expect(page.getByText("Who is most likely to start a company?")).toBeVisible();
     await expect(page.getByText("Who has the best music taste?")).toBeHidden();
-    await page.getByPlaceholder("Search names, questions...").fill("");
+    await page.getByPlaceholder("Search your school...").fill("");
     const poll = page.locator("[data-feed-detail='9003']");
     await poll.locator("[data-reaction-picker]").click();
     await page.getByRole("dialog", { name: "Choose a reaction" }).getByRole("button", { name: "Love" }).click();
@@ -444,12 +463,14 @@ test("God Mode first-letter hints appear in the personal feed and poll detail", 
     const poll = page.locator("[data-feed-detail='9001']");
     await expect(poll.locator(".feed-answer")).toHaveText("from a 👧💗 Sophomore (M)");
     await poll.click();
-    await expect(page.locator("#feedDetailDialog .feed-detail-first-letter-hint")).toHaveText("Hint: starts with M");
+    // QuestionDetailView keeps the hint on the row only; the detail has no hint line.
+    await expect(page.locator("#feedDetailDialog")).toBeVisible();
+    await expect(page.locator("#feedDetailDialog .feed-detail-first-letter-hint")).toHaveCount(0);
 });
 
 test("feed search includes classmates and filters their school activity", async ({ page }) => {
     await signInToDemo(page);
-    await page.getByPlaceholder("Search names, questions...").fill("Maya");
+    await page.getByPlaceholder("Search your inbox...").fill("Maya");
     await expect(page.locator("#feedList [data-anonymous-question]")).toHaveCount(0);
     const classmateResult = page.locator("[data-feed-classmate='classmate-1']");
     await expect(classmateResult).toContainText("Maya Chen");
@@ -489,12 +510,12 @@ test("feed polls open the iOS-style detail and moderation flow", async ({ page }
     await expect(dialog.getByRole("button", { name: "Share poll to TikTok" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Get God Mode to Reveal who sent this" })).toBeVisible();
     await expect(dialog.getByRole("menuitem", { name: "Delete This Question" })).toBeHidden();
-    await expect(dialog.getByRole("menuitem", { name: "Report question" })).toBeHidden();
+    await expect(dialog.getByRole("menuitem", { name: "Report a Safety Issue" })).toBeHidden();
     await dialog.getByRole("button", { name: "More poll actions" }).click();
     await expect(dialog.getByRole("menuitem", { name: "Delete This Question" })).toBeVisible();
-    await expect(dialog.getByRole("menuitem", { name: "Report question" })).toBeVisible();
-    await dialog.getByRole("menuitem", { name: "Report question" }).click();
-    await page.locator(".ui-sheet").getByRole("button", { name: "Report" }).click();
+    await expect(dialog.getByRole("menuitem", { name: "Report a Safety Issue" })).toBeVisible();
+    await dialog.getByRole("menuitem", { name: "Report a Safety Issue" }).click();
+    await page.locator(".ui-sheet").getByRole("button", { name: "Report for Review" }).click();
     await expect(dialog).toBeHidden();
     await expect(page.locator("#toast")).toContainText("Question reported");
     await expect(page.locator("[data-feed-detail='9001']")).toHaveCount(0);
@@ -606,7 +627,7 @@ test("non-subscribers can reach God Mode from a received vote", async ({ page })
     await signInToDemo(page);
     await page.locator("[data-feed-detail='9001']").click();
     await page.getByRole("button", { name: "Get God Mode to Reveal who sent this" }).click();
-    const pitch = page.getByRole("dialog", { name: "God Mode" });
+    const pitch = page.getByRole("dialog", { name: "God Mode", exact: true });
     await expect(pitch.getByText("See who likes you with")).toBeVisible();
     await expect(pitch.getByText("2 Reveals / Week")).toBeVisible();
     await expect(pitch.getByRole("button", { name: /Earn God Mode/ })).toBeVisible();
@@ -614,6 +635,12 @@ test("non-subscribers can reach God Mode from a received vote", async ({ page })
     await expect(page.locator("#feedDetailDialog")).toBeVisible();
     await pitch.getByRole("button", { name: /Earn God Mode/ }).click();
     await expect(pitch).toBeHidden();
+    // GodModeEarnView: choose invites or the Creator program first.
+    const earn = page.getByRole("dialog", { name: "Earn God Mode" });
+    await expect(earn.getByText("Choose how you want to unlock reveals.")).toBeVisible();
+    await expect(earn.getByRole("button", { name: /Join our Creator program/ })).toBeVisible();
+    await earn.getByRole("button", { name: /Invite 5 friends/ }).click();
+    await expect(earn).toBeHidden();
     const inviteFriends = page.getByRole("dialog", { name: "Invite Friends" });
     await expect(inviteFriends).toBeVisible();
     await inviteFriends.getByRole("button", { name: "Close" }).click();
@@ -626,9 +653,11 @@ test("non-subscribers can reach God Mode from a received vote", async ({ page })
 test("new users vote to unlock Feed just like iOS", async ({ page }) => {
     await page.goto("/app/?demo=1&locked=1&signin=1");
     await page.getByRole("button", { name: /^sign in$/i }).click();
-    await expect(page.getByRole("heading", { name: "84 votes" })).toBeVisible();
-    await expect(page.getByText("Cast 2 more votes to unlock your Feed and see what classmates said.")).toBeVisible();
-    await expect(page.locator(".feed-gate-lock")).toHaveAttribute("src", "../assets/app/lock.webp");
+    // FeedVoteLockedView: the unread count, not lifetime votes.
+    await expect(page.getByText("2 NEW VOTES")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "You got voted for" })).toBeVisible();
+    await expect(page.getByText("See what people are saying.")).toBeVisible();
+    await expect(page.locator(".feed-gate-lock-symbol [data-ui-icon='lock-filled']")).toBeVisible();
     await expect(page.getByText("1 / 3 votes cast")).toBeVisible();
     await page.getByRole("button", { name: "Vote now to unlock Feed" }).click();
     await expect(page.getByText("Who would survive longest on a deserted island?")).toBeVisible();
@@ -636,7 +665,7 @@ test("new users vote to unlock Feed just like iOS", async ({ page }) => {
     await page.locator("[data-choice]").first().click();
     await page.getByRole("button", { name: "Feed", exact: true }).click();
     await expect(page.getByRole("button", { name: /What is something you are genuinely proud/ })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "84 votes" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "You got voted for" })).toHaveCount(0);
 });
 
 test("anonymous inbox supports private answers and safety controls", async ({ page }) => {
@@ -720,7 +749,7 @@ test("play supports shuffle and paid classmate nominations", async ({ page }) =>
     await page.getByRole("button", { name: /Shuffle/ }).click();
     await page.getByRole("button", { name: /Nominate/ }).click();
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByRole("heading", { name: "Nominate someone" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "Nominate Someone" })).toBeVisible();
     await expect(dialog.getByText("100").first()).toBeVisible();
     const candidate = dialog.locator("[data-nomination]").first();
     const name = await candidate.locator("strong").textContent();
@@ -745,13 +774,13 @@ test("play exposes safety controls for classmate-submitted polls", async ({ page
     await page.getByRole("button", { name: "Play", exact: true }).click();
     await page.locator("[data-choice]").first().click();
     await expect(page.getByText("Who should plan the senior trip?")).toBeVisible();
-    await expect(page.getByRole("menuitem", { name: "Report question" })).toBeHidden();
-    await expect(page.getByRole("menuitem", { name: "Block submitter" })).toBeHidden();
+    await expect(page.getByRole("menuitem", { name: "Report a Safety Issue" })).toBeHidden();
+    await expect(page.getByRole("menuitem", { name: "Block User" })).toBeHidden();
     await page.getByRole("button", { name: "More question actions" }).click();
-    await expect(page.getByRole("menuitem", { name: "Report question" })).toBeVisible();
-    await expect(page.getByRole("menuitem", { name: "Block submitter" })).toBeVisible();
-    await page.getByRole("menuitem", { name: "Report question" }).click();
-    await page.locator(".ui-sheet").getByRole("button", { name: "Report" }).click();
+    await expect(page.getByRole("menuitem", { name: "Report a Safety Issue" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Block User" })).toBeVisible();
+    await page.getByRole("menuitem", { name: "Report a Safety Issue" }).click();
+    await page.locator(".ui-sheet").getByRole("button", { name: "Report for Review" }).click();
     await expect(page.locator("#toast")).toContainText("Reported to Valid");
     await expect(page.getByText("Who gives the best advice?")).toBeVisible();
 });
@@ -762,10 +791,10 @@ test("completing a poll set celebrates earned aura before cooldown", async ({ pa
     for (let answered = 0; answered < 4; answered += 1) {
         await page.locator("[data-choice]").first().click();
     }
-    await expect(page.getByRole("heading", { name: "Congrats!" })).toBeVisible();
-    await expect(page.getByText("You just earned 20 aura")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Congrats", exact: true })).toBeVisible();
+    await expect(page.getByText("you just earned 20 aura")).toBeVisible();
     await expect(page.locator("#auraCount")).toHaveText("1,300");
-    await page.getByRole("button", { name: "W aura" }).click();
+    await page.getByRole("button", { name: "w aura" }).click();
     await expect(page.getByRole("heading", { name: "Next Poll Set Locked" })).toBeVisible();
     await expect(page.locator("#playLockMessage")).toContainText(/Unlocks in (\d+s|1m)$/);
 });
@@ -809,7 +838,7 @@ test("profile exposes iOS-style editing, ask link, purchases, invites, and sign 
     await expect(page.getByText("God Mode", { exact: true }).first()).toBeVisible();
     await expect(page.locator("#purchasesSection")).toHaveCSS("border-top-width", "3px");
     await page.getByRole("button", { name: /Start God Mode/ }).click();
-    const pitch = page.getByRole("dialog", { name: "God Mode" });
+    const pitch = page.getByRole("dialog", { name: "God Mode", exact: true });
     await expect(pitch.getByRole("button", { name: /Start God Mode/ })).toBeVisible();
     await pitch.getByRole("button", { name: "Maybe later" }).click();
     await expect(page.locator("#purchasesSection .settings-aura-balance")).toHaveCount(0);
@@ -823,10 +852,9 @@ test("profile exposes iOS-style editing, ask link, purchases, invites, and sign 
     await expect(page.getByRole("button", { name: "Contacts", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Classmates", exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Invite Friends" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Sign Out", exact: true })).toBeVisible();
-    await expect(page.locator("#addPasskeyButton")).toBeVisible();
-    await expect(page.locator("#addPasskeyButton")).toContainText("Add another passkey");
-    await expect(page.locator("#passkeyStatusText")).toHaveText("1 passkey registered");
+    await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
+    // With a passkey, SettingsView shows no passkey CTA.
+    await expect(page.locator("#addPasskeyButton")).toBeHidden();
     await page.getByRole("button", { name: "Profile information" }).click();
     const informationDialog = page.getByRole("dialog");
     await expect(informationDialog.getByRole("heading", { name: "Correct profile information" })).toBeVisible();
@@ -834,9 +862,11 @@ test("profile exposes iOS-style editing, ask link, purchases, invites, and sign 
     await expect(informationDialog.getByRole("button", { name: /School Westview High School/ })).toBeVisible();
     await informationDialog.getByRole("button", { name: "Cancel" }).click();
     await page.locator("[data-edit-bio]").click();
-    const bioDialog = page.getByRole("dialog").filter({ hasText: "EDIT BIO" });
-    await bioDialog.getByLabel("Bio").fill("Senior year, good music, better people.");
-    await bioDialog.getByRole("button", { name: "Save bio" }).click();
+    const bioDialog = page.getByRole("dialog", { name: "Bio" });
+    await expect(bioDialog.getByPlaceholder("Say a little about yourself…")).toBeVisible();
+    await bioDialog.getByRole("textbox", { name: "Bio" }).fill("Senior year, good music, better people.");
+    await expect(bioDialog.getByText("39/160")).toBeVisible();
+    await bioDialog.getByRole("button", { name: "Save Bio" }).click();
     await expect(page.locator("[data-edit-bio]")).toHaveText("Senior year, good music, better people.");
     await page.getByRole("button", { name: /Submit a school question for/i }).click();
     await expect(page.getByRole("dialog", { name: "School Questions" })).toBeVisible();
@@ -880,16 +910,19 @@ test("God Mode subscribers can reveal a vote sender and consume one weekly revea
     const detail = page.locator("#feedDetailDialog");
     await expect(detail.getByRole("button", { name: "Reveal who sent this (2 remaining)" })).toBeVisible();
     await detail.getByRole("button", { name: "Reveal who sent this (2 remaining)" }).click();
+    // QuestionDetailRevealConfirmations: a free reveal asks first.
+    await page.getByRole("dialog", { name: "Reveal who sent this?" }).getByRole("button", { name: "Use 1 Reveal" }).click();
     const sender = detail.locator(".revealed-sender-row");
     await expect(sender.getByText("Sent by Maya Chen", { exact: true })).toBeVisible();
     await expect(sender).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     await expect(sender).toHaveCSS("border-top-width", "0px");
     expect((await sender.boundingBox()).height).toBeLessThanOrEqual(48);
     await expect(page.locator("#toast")).toContainText("Revealed: Maya Chen");
-    await detail.getByRole("button", { name: "Close" }).click();
+    await detail.getByRole("button", { name: "Back" }).click();
     await page.getByRole("button", { name: "Profile", exact: true }).click();
     await expect(page.getByText("God Mode Active")).toBeVisible();
-    await expect(page.getByText(/1 weekly reveal left/)).toBeVisible();
+    // GodModeCard has no reveals-left line or store-billing paragraph.
+    await expect(page.locator("#godModeCard")).not.toContainText("Billing stays with the store");
 });
 
 test("God Mode subscribers can unsubscribe from edit profile details", async ({ page }) => {
@@ -897,25 +930,27 @@ test("God Mode subscribers can unsubscribe from edit profile details", async ({ 
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await page.getByRole("button", { name: "Profile", exact: true }).click();
     await page.getByRole("button", { name: "Profile information" }).click();
-    const informationDialog = page.getByRole("dialog");
-    const unsubscribe = informationDialog.getByRole("button", { name: /Unsubscribe from God Mode/ });
-    await expect(unsubscribe).toBeVisible();
+    const informationDialog = page.locator("#profileDialog");
+    const manage = informationDialog.getByRole("button", { name: /Manage God Mode/ });
+    await expect(manage).toBeVisible();
     // Quiet footnote styling, matching Delete account directly below it.
     const deleteAccount = informationDialog.getByRole("button", { name: "Delete account" });
-    await expect(unsubscribe).toHaveClass(/profile-delete-account-button/);
-    expect(await unsubscribe.evaluate((el) => el.nextElementSibling?.id)).toBe("deleteAccountButton");
-    const [unsubscribeColor, deleteColor] = await Promise.all([
-        unsubscribe.evaluate((el) => getComputedStyle(el).color),
+    await expect(manage).toHaveClass(/profile-delete-account-button/);
+    expect(await manage.evaluate((el) => el.nextElementSibling?.id)).toBe("deleteAccountButton");
+    const [manageColor, deleteColor] = await Promise.all([
+        manage.evaluate((el) => getComputedStyle(el).color),
         deleteAccount.evaluate((el) => getComputedStyle(el).color),
     ]);
-    expect(unsubscribeColor).toBe(deleteColor);
-    await unsubscribe.click();
-    // The free-week offer comes first; "Unsubscribe anyway" goes straight through.
+    expect(manageColor).toBe(deleteColor);
+    await manage.click();
+    // GodModePlanSheet first; "Unsubscribe" then checks the free-week offer.
+    const plan = page.getByRole("dialog", { name: "God Mode", exact: true });
+    await plan.getByRole("button", { name: "Unsubscribe", exact: true }).click();
     const offer = page.locator(".ui-sheet");
     await expect(offer.getByRole("heading", { name: "Stay for a free week?" })).toBeVisible();
     await offer.getByRole("button", { name: "Unsubscribe anyway" }).click();
-    await expect(informationDialog.getByText(/Unsubscribed\. God Mode stays active through/)).toBeVisible();
-    await expect(informationDialog.getByRole("button", { name: /God Mode cancellation scheduled/ })).toBeDisabled();
+    await expect(informationDialog.getByText(/Unsubscribed\. God Mode ends/)).toBeVisible();
+    await expect(informationDialog.getByRole("button", { name: /^God Mode ends/ })).toBeDisabled();
 });
 
 test("God Mode subscribers can take one free week instead of unsubscribing", async ({ page }) => {
@@ -923,34 +958,40 @@ test("God Mode subscribers can take one free week instead of unsubscribing", asy
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await page.getByRole("button", { name: "Profile", exact: true }).click();
     await page.getByRole("button", { name: "Profile information" }).click();
-    const informationDialog = page.getByRole("dialog");
-    const unsubscribe = informationDialog.getByRole("button", { name: /Unsubscribe from God Mode/ });
+    const informationDialog = page.locator("#profileDialog");
+    const manage = informationDialog.getByRole("button", { name: /Manage God Mode/ });
+    const plan = page.getByRole("dialog", { name: "God Mode", exact: true });
+    const unsubscribe = async () => {
+        await manage.click();
+        await plan.getByRole("button", { name: "Unsubscribe", exact: true }).click();
+    };
 
     // Dismissing the offer changes nothing.
-    await unsubscribe.click();
+    await unsubscribe();
     const offerSheet = page.locator(".ui-sheet");
     await expect(offerSheet.locator(".ui-sheet-message")).toHaveText("Your next week is on us, with 2 reveals.");
-    await expect(offerSheet.locator(".ui-sheet-fineprint")).toContainText(/^Reveals on .+ and .+ while you’re still subscribed\. Then \$9\.99\/week starting .+\. Cancel before .+ and it ends .+\.$/);
+    // GodModeRetentionOffer.offerTerms.
+    await expect(offerSheet.locator(".ui-sheet-fineprint")).toContainText(/^Then \$9\.99\/week\. Cancel before .+ and you'll lose your free week \(God Mode ends .+\)\.$/);
     await page.keyboard.press("Escape");
     await expect(page.locator(".ui-sheet")).toHaveCount(0);
     await expect(informationDialog.getByText(/Unsubscribed/)).toHaveCount(0);
 
-    await unsubscribe.click();
+    await unsubscribe();
     await page.locator(".ui-sheet").getByRole("button", { name: "Get my free week" }).click();
     await expect(informationDialog.getByText(/Free week starts .+\. Your reveals unlock .+ and .+\./)).toBeVisible();
-    await expect(unsubscribe).toBeEnabled();
+    await expect(manage).toBeEnabled();
 
-    // Once only, and cancelling during the free week says it ends early.
-    await unsubscribe.click();
+    // Once only, and cancelling during the free week loses it.
+    await unsubscribe();
     const sheet = page.locator(".ui-sheet");
     await expect(sheet.getByRole("heading", { name: "Unsubscribe from God Mode?" })).toBeVisible();
-    await expect(sheet).toContainText("Your free week ends and God Mode stays active through");
+    await expect(sheet).toContainText("You'll lose your free week.");
     await sheet.getByRole("button", { name: "Keep God Mode" }).click();
-    await expect(page.getByRole("dialog").getByText(/Unsubscribed/)).toHaveCount(0);
+    await expect(informationDialog.getByText(/Unsubscribed/)).toHaveCount(0);
 
-    await unsubscribe.click();
+    await unsubscribe();
     await page.locator(".ui-sheet").getByRole("button", { name: "Unsubscribe", exact: true }).click();
-    await expect(page.getByRole("dialog").getByText(/Unsubscribed\. God Mode stays active through/)).toBeVisible();
+    await expect(informationDialog.getByText(/Unsubscribed\. God Mode ends/)).toBeVisible();
 });
 
 test("App Store God Mode subscribers get no unsubscribe button", async ({ page }) => {
@@ -960,7 +1001,7 @@ test("App Store God Mode subscribers get no unsubscribe button", async ({ page }
     await page.getByRole("button", { name: "Profile information" }).click();
     const informationDialog = page.getByRole("dialog");
     await expect(informationDialog.getByRole("button", { name: "Delete account" })).toBeVisible();
-    await expect(informationDialog.getByRole("button", { name: /Unsubscribe from God Mode/ })).toHaveCount(0);
+    await expect(informationDialog.getByRole("button", { name: /Manage God Mode/ })).toHaveCount(0);
 });
 
 test("settings removes the Find classmates shortcut", async ({ page }) => {

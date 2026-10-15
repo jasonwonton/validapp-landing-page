@@ -273,7 +273,7 @@ test("Story replies and classmate shares use idempotent chat delivery", async ({
     await page.clock.resume();
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Maya Chen/ }).first().click();
-    await page.getByRole("button", { name: "Skip for today" }).click();
+    // A chat never locks behind a Memento (iOS), so the shared Story is right there.
     await expect(page.getByText(/Shared Story/)).toBeVisible();
     await expect(page.getByRole("img", { name: "Photo" }).last()).toBeVisible();
 });

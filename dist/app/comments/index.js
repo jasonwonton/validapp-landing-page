@@ -1,5 +1,7 @@
 import { confirmSheet, reasonSheet } from "../ui-dialogs.js";
 import { userMessage } from "../user-message.js";
+import { uiIcon } from "../ui-icons.js";
+import { clearRuntimeStyles, setRuntimeStyles } from "../runtime-style.js";
 
 const ROOT_PAGE_SIZE = 30;
 // PollCommentsView.swift CommentThreadCache: a reopened thread shows at once for 30 s.
@@ -52,25 +54,31 @@ export function createCommentsView(context) {
 
     root.innerHTML = `
         <section id="commentsDialog" class="detail-screen comments-screen hidden" role="dialog" aria-modal="true" aria-labelledby="commentsTitle">
-            <div class="detail-screen-header comments-header">
-                <button class="detail-back-button sheet-text-control" aria-label="Close" type="button" data-close-comments><span>Done</span></button>
-                <strong id="commentsTitle">Comments</strong>
-                <span></span>
-            </div>
-            <div class="comments-layout">
-                <div id="commentsContext" class="comments-context"></div>
-                <div id="commentModerationNotice" class="comment-moderation-notice hidden" role="alert"></div>
-                <div id="commentsStatus" class="inline-status" role="status"></div>
-                <div id="commentsList" class="comments-list" aria-live="polite"></div>
-                <button id="loadMoreComments" class="secondary-button hidden" type="button">Load older comments</button>
+            <!-- PollCommentsView: a half-height sheet with a grabber, "Comments" centred and Done on the right. -->
+            <div class="comments-sheet">
+                <div class="comments-sheet-top" data-comments-drag>
+                    <span class="comments-grabber" aria-hidden="true"></span>
+                    <div class="comments-header">
+                        <span></span>
+                        <strong id="commentsTitle">Comments</strong>
+                        <button class="sheet-text-control comments-done" type="button" data-close-comments data-focus-on-open>Done</button>
+                    </div>
+                </div>
+                <div class="comments-layout">
+                    <div id="commentsContext" class="comments-context"></div>
+                    <div id="commentModerationNotice" class="comment-moderation-notice hidden" role="alert"></div>
+                    <div id="commentsStatus" class="inline-status" role="status"></div>
+                    <div id="commentsList" class="comments-list" aria-live="polite"></div>
+                    <button id="loadMoreComments" class="secondary-button hidden" type="button">Load older comments</button>
+                </div>
                 <form id="commentComposer" class="comment-composer">
                     <div id="commentReplyContext" class="comment-reply-context hidden"></div>
                     <label for="commentDraft" class="visually-hidden">Add a comment</label>
                     <div class="comment-composer-row">
                         <textarea id="commentDraft" rows="1" maxlength="280" placeholder="Add a comment…" required></textarea>
-                        <button id="sendComment" class="primary-button" type="submit" disabled>Send</button>
+                        <button id="sendComment" class="comment-send-button" type="submit" aria-label="Send" disabled>${uiIcon("send")}</button>
                     </div>
-                    <div class="comment-composer-meta"><span id="commentRestriction"></span><span id="commentCharacterCount">0/280</span></div>
+                    <div class="comment-composer-meta"><span id="commentRestriction"></span></div>
                 </form>
             </div>
         </section>
@@ -100,6 +108,30 @@ export function createCommentsView(context) {
     const reactionBusy = new Set();
     let moderation = { notice: null, restriction: { is_restricted: false, expires_at: null } };
     let reactorState = { commentId: null, rows: [], hasMore: false, loading: false };
+
+    function installSheetDrag() {
+        const sheet = $(".comments-sheet");
+        const handle = $("[data-comments-drag]");
+        let startY = null;
+        handle.addEventListener("pointerdown", (event) => {
+            if (event.target.closest("button")) return;
+            startY = event.clientY;
+            handle.setPointerCapture?.(event.pointerId);
+        });
+        handle.addEventListener("pointermove", (event) => {
+            if (startY === null) return;
+            setRuntimeStyles(sheet, { "--sheet-drag": `${Math.max(0, event.clientY - startY)}px` });
+        });
+        const finish = (event, cancelled = false) => {
+            if (startY === null) return;
+            const distance = Math.max(0, event.clientY - startY);
+            startY = null;
+            clearRuntimeStyles(sheet, "--sheet-drag");
+            if (!cancelled && distance > 90) closeDetailScreen(dialog);
+        };
+        handle.addEventListener("pointerup", (event) => finish(event));
+        handle.addEventListener("pointercancel", (event) => finish(event, true));
+    }
 
     function targetMethods() {
         if (target?.type === "poll") {
@@ -250,9 +282,8 @@ export function createCommentsView(context) {
 
     function updateComposer() {
         const length = draft.value.length;
-        $("#commentCharacterCount").textContent = `${length}/280`;
         sendButton.disabled = creating || restrictionActive() || draft.value.trim().length < 1 || length > 280;
-        sendButton.textContent = creating ? "Sending…" : "Send";
+        sendButton.setAttribute("aria-busy", String(creating));
         if (!creating && pendingCreate && (pendingCreate.body !== draft.value.trim().split(/\s+/).join(" ") || pendingCreate.parentId !== (replyingTo?.id || null))) pendingCreate = null;
     }
 
@@ -526,6 +557,11 @@ export function createCommentsView(context) {
         }
     }
 
+    // The dimmed area above the sheet closes it, and the grabber drags it down.
+    dialog.addEventListener("click", (event) => {
+        if (event.target === dialog) closeDetailScreen(dialog);
+    });
+    installSheetDrag();
     root.addEventListener("click", (event) => {
         if (event.target.closest("[data-close-comments]")) return closeDetailScreen(dialog);
         if (event.target.closest("[data-acknowledge-comment-notice]")) return void acknowledgeNotice();
