@@ -487,6 +487,11 @@
                         <span><small>Grade <em id="profileGradeBadge"></em></small><strong id="profileGradeValue"></strong></span>
                         <span aria-hidden="true">›</span>
                     </button>
+                    <button class="profile-editor-row" type="button" data-profile-editor="gender">
+                        <span class="profile-editor-row-icon" aria-hidden="true"><img src="../assets/app/profile-person-two.svg" alt="" width="24" height="24" loading="lazy" decoding="async"></span>
+                        <span><small>Gender <em id="profileGenderBadge"></em></small><strong id="profileGenderValue"></strong></span>
+                        <span aria-hidden="true">›</span>
+                    </button>
                 </div>
                 <p id="profileGodModeStatus" class="status-message" role="status"></p>
                 <p id="profileEditStatus" class="status-message" role="status"></p>
@@ -500,6 +505,7 @@
                     <label>First name<input id="profileFirstName" autocomplete="given-name" maxlength="50" required></label>
                     <label>Last name<input id="profileLastName" autocomplete="family-name" maxlength="50" required></label>
                 </div>
+                <p class="form-hint profile-name-hint">Use at least two letters for each name. Hyphens and apostrophes are okay.</p>
                 <p id="profileNameStatus" class="profile-editor-validation" role="status"></p>
                 <button class="primary-button" type="button" data-profile-done="name">Done</button>
             </section>
@@ -540,6 +546,15 @@
                 <button class="primary-button" type="button" data-profile-done="grade">Done</button>
             </section>
 
+            <section class="profile-editor-panel hidden" data-profile-panel="gender">
+                <div class="signup-gender-options profile-gender-options" role="radiogroup" aria-label="Gender">
+                    <button class="signup-gender-option boy" type="button" role="radio" aria-checked="false" data-profile-gender="male"><span aria-hidden="true"><svg class="ui-icon" data-ui-icon="person" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg></span><strong>Boy</strong></button>
+                    <button class="signup-gender-option girl" type="button" role="radio" aria-checked="false" data-profile-gender="female"><span aria-hidden="true"><svg class="ui-icon" data-ui-icon="person" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg></span><strong>Girl</strong></button>
+                    <button class="signup-gender-option non-binary" type="button" role="radio" aria-checked="false" data-profile-gender="non-binary"><span aria-hidden="true"><svg class="ui-icon" data-ui-icon="person" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg></span><strong>Non-binary</strong></button>
+                </div>
+                <button class="primary-button" type="button" data-profile-done="gender">Done</button>
+            </section>
+
             <section class="profile-editor-panel hidden" data-profile-panel="review">
                 <p class="profile-review-heading">Check every change before saving</p>
                 <div id="profileReviewRows" class="profile-review-rows"></div>
@@ -547,7 +562,7 @@
                 <div class="profile-review-cooldown">
                     <span class="profile-change-calendar" aria-hidden="true">▣</span>
                     <strong>Your next profile change will be available in 14 days</strong>
-                    <span>Saving starts the 14-day cooldown for username, name, school, and grade.</span>
+                    <span>Saving starts the 14-day cooldown for username, name, school, grade, and gender.</span>
                 </div>
                 <p id="profileInformationConfirmStatus" class="status-message" role="status"></p>
                 <button id="confirmProfileInformationSave" class="primary-button" type="submit">Confirm and save</button>
@@ -555,16 +570,17 @@
         </form>
     </dialog>
 
-    <dialog id="bioDialog" class="modal">
+    <dialog id="bioDialog" class="modal bio-sheet" aria-labelledby="bioDialogTitle">
         <form id="bioForm" method="dialog">
-            <div class="modal-heading">
-                <h2>Edit bio</h2>
-                <button class="icon-button" value="cancel" aria-label="Close" type="button" data-close-dialog>×</button>
+            <div class="bio-sheet-heading">
+                <button class="bio-sheet-cancel" type="button" data-close-dialog>Cancel</button>
+                <h2 id="bioDialogTitle">Bio</h2>
+                <span aria-hidden="true"></span>
             </div>
-            <label>Bio<textarea id="profileBio" maxlength="160" placeholder="Say something about yourself..."></textarea></label>
-            <p class="form-hint">Tap your bio in Settings whenever you want to change it.</p>
+            <textarea id="profileBio" maxlength="160" placeholder="Say a little about yourself…" aria-labelledby="bioDialogTitle" aria-describedby="profileBioCount"></textarea>
+            <p id="profileBioCount" class="bio-sheet-count" aria-live="polite">0/160</p>
             <p id="bioEditStatus" class="status-message" role="status"></p>
-            <button class="primary-button" type="submit">Save bio</button>
+            <button class="primary-button" type="submit">Save Bio</button>
         </form>
     </dialog>
 

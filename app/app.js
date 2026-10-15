@@ -5253,7 +5253,41 @@ function profileOriginalInformation() {
         school_id: state.profile?.school_id ?? null,
         school_name: currentProfileSchoolName(),
         grade: String(state.profile?.grade || "").trim(),
+        gender: normalizedProfileGender(state.profile?.gender),
     };
+}
+
+// InformationEditSheet.swift: Boy / Girl / Non-binary, sent as male / female / non-binary.
+const PROFILE_GENDER_OPTIONS = [
+    { value: "male", label: "Boy" },
+    { value: "female", label: "Girl" },
+    { value: "non-binary", label: "Non-binary" },
+];
+
+function normalizedProfileGender(value) {
+    const gender = String(value || "").trim().toLowerCase();
+    if (gender === "boy" || gender === "male") return "male";
+    if (gender === "girl" || gender === "female") return "female";
+    if (["non-binary", "nonbinary", "nb"].includes(gender)) return "non-binary";
+    return "";
+}
+
+function profileGenderLabel(value) {
+    return PROFILE_GENDER_OPTIONS.find((option) => option.value === normalizedProfileGender(value))?.label || "Choose your gender";
+}
+
+function profileGenderIsValid(draft = state.profileDraft) {
+    return PROFILE_GENDER_OPTIONS.some((option) => option.value === draft?.gender);
+}
+
+function renderProfileGenderOptions() {
+    const selected = state.profileDraft?.gender || "";
+    $$("[data-profile-gender]").forEach((option) => {
+        const isSelected = option.dataset.profileGender === selected;
+        option.classList.toggle("selected", isSelected);
+        option.setAttribute("aria-checked", String(isSelected));
+    });
+    $('[data-profile-done="gender"]').disabled = !profileGenderIsValid();
 }
 
 function profileNameIsValid(draft = state.profileDraft) {
@@ -5285,6 +5319,7 @@ function profileChangeFlags() {
         name: draft.first_name !== original.first_name || draft.last_name !== original.last_name,
         school: String(draft.school_id ?? "") !== String(original.school_id ?? ""),
         grade: draft.grade !== original.grade,
+        gender: draft.gender !== original.gender,
     };
 }
 
@@ -5303,6 +5338,7 @@ function profileDraftIsValid() {
         && usernameChecked
         && draft?.school_id != null
         && profileGradeIsValid()
+        && profileGenderIsValid(draft)
     );
 }
 
@@ -5327,10 +5363,12 @@ function renderProfileEditorHub() {
     $("#profileNameValue").textContent = `${draft.first_name} ${draft.last_name}`.trim() || "Add your name";
     $("#profileSchoolValue").textContent = draft.school_name || "Choose your school";
     $("#profileGradeValue").textContent = draft.grade || "Choose your grade";
+    $("#profileGenderValue").textContent = profileGenderLabel(draft.gender);
     setProfileBadge($("#profileUsernameBadge"), flags.username, !profileUsernameIsValid(draft) || (flags.username && state.profileCheckedUsername !== draft.username));
     setProfileBadge($("#profileNameBadge"), flags.name, !profileNameIsValid(draft));
     setProfileBadge($("#profileSchoolBadge"), flags.school, draft.school_id == null);
     setProfileBadge($("#profileGradeBadge"), flags.grade, !profileGradeIsValid());
+    setProfileBadge($("#profileGenderBadge"), flags.gender, !profileGenderIsValid(draft));
     $$('[data-profile-editor]').forEach((button) => { button.disabled = informationLocked; });
     const changeCount = profileChangedFieldCount();
     $("#profileReviewButton").textContent = changeCount === 1 ? "Review 1 change" : `Review ${changeCount} changes`;
@@ -5343,8 +5381,13 @@ function renderProfileEditorHub() {
     $("#godModeUnsubscribeLabel").textContent = cancellationScheduled
         ? "God Mode cancellation scheduled"
         : "Unsubscribe from God Mode";
+    // "Oct 20, 2026", as InformationEditSheet's .abbreviated date.
+    const nextChange = new Date(state.profile?.next_information_change_at || "");
+    const lockedMessage = Number.isNaN(nextChange.getTime())
+        ? "Username, name, school, grade, and gender are currently unavailable."
+        : `Username, name, school, grade, and gender will be available again ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(nextChange)}.`;
     $("#profileEditHint").innerHTML = informationLocked
-        ? `<strong>Profile changes are temporarily locked</strong><span>Username, name, school, and grade will be available again ${escapeHTML(relativeTime(state.profile.next_information_change_at))}.</span>`
+        ? `<strong>Profile changes are temporarily locked</strong><span>${escapeHTML(lockedMessage)}</span>`
         : "<strong>Profile changes are available every 14 days</strong><span>Change any combination below. Nothing is saved until you review and confirm everything.</span>";
 }
 
@@ -5566,6 +5609,7 @@ function renderProfileReview() {
     if (flags.username) addRow("Username", `@${original.username}`, `@${draft.username}`);
     if (flags.school) addRow("School", original.school_name, draft.school_name);
     if (flags.grade) addRow("Grade", original.grade, draft.grade);
+    if (flags.gender) addRow("Gender", profileGenderLabel(original.gender), profileGenderLabel(draft.gender));
     $("#profileReviewRows").innerHTML = rows.join("");
     $("#profileSchoolChangeNote").classList.toggle("hidden", !flags.school);
     $("#profileInformationConfirmStatus").textContent = "";
@@ -5576,12 +5620,13 @@ function setProfileEditor(editor) {
     syncProfileDraftFromInputs();
     state.profileEditor = editor;
     $$('[data-profile-panel]').forEach((panel) => panel.classList.toggle("hidden", panel.dataset.profilePanel !== editor));
-    const titles = { hub: "Correct profile information", username: "Username", name: "Name", school: "School", grade: "Grade", review: "Review changes" };
+    const titles = { hub: "Correct profile information", username: "Username", name: "Name", school: "School", grade: "Grade", gender: "Gender", review: "Review changes" };
     $("#profileEditorTitle").textContent = titles[editor] || titles.hub;
     $("#profileEditorBack").classList.toggle("hidden", editor === "hub");
     $("#profileEditorCancel").classList.toggle("hidden", editor !== "hub");
     if (editor === "hub") renderProfileEditorHub();
     if (editor === "grade") renderProfileGradeOptions();
+    if (editor === "gender") renderProfileGenderOptions();
     if (editor === "review") renderProfileReview();
     const focusByEditor = { username: "#profileUsername", name: "#profileFirstName", school: "#profileSchoolZip" };
     requestAnimationFrame(() => $(focusByEditor[editor])?.focus({ preventScroll: true }));
@@ -5602,6 +5647,7 @@ function openProfileDialog() {
     $("#profileSchoolPicker").classList.add("hidden");
     $("#profileSchoolFallback").classList.add("hidden");
     $("#profileEditStatus").textContent = "";
+    $(".profile-name-hint").classList.remove("invalid");
     $("#profileGodModeStatus").textContent = "";
     $("#profileGodModeStatus").classList.remove("is-neutral");
     setProfileEditor("hub");
@@ -5612,7 +5658,7 @@ function openProfileDialog() {
 async function cancelProfileEditor() {
     if (profileChangedFieldCount() && !await confirmSheet({
         title: "Discard your changes?",
-        message: "Your profile information changes won't be saved.",
+        message: "Your profile has not been changed yet.",
         confirmLabel: "Discard",
         cancelLabel: "Keep editing",
         destructive: true,
@@ -5666,6 +5712,7 @@ async function saveProfile(event) {
         username: draft.username,
         grade: draft.grade,
         school_id: draft.school_id,
+        gender: draft.gender,
     };
     state.pendingProfileInformation = { payload: nextInfo, schoolName: draft.school_name, schoolChanged: flags.school };
     const button = $("#confirmProfileInformationSave");
@@ -5693,8 +5740,15 @@ async function saveProfile(event) {
     } finally { setButtonLoading(button, false); }
 }
 
+function renderBioCount() {
+    const bio = $("#profileBio");
+    if (bio.value.length > 160) bio.value = bio.value.slice(0, 160);
+    $("#profileBioCount").textContent = `${bio.value.length}/160`;
+}
+
 function openBioDialog() {
     $("#profileBio").value = state.profile?.bio || "";
+    renderBioCount();
     $("#bioEditStatus").textContent = "";
     $("#bioDialog").showModal();
 }
@@ -6539,8 +6593,8 @@ async function shareClassmateInvite() {
 // edits first, warn accounts without a passkey, then confirm the 5-day deletion.
 async function beginAccountDeletion() {
     if (profileChangedFieldCount() && !await confirmSheet({
-        title: "Discard your changes?",
-        message: "Your profile information changes won't be saved.",
+        title: "Discard edits and continue?",
+        message: "Your username, name, school, grade, and gender edits will not be saved.",
         confirmLabel: "Discard",
         cancelLabel: "Keep editing",
         destructive: true,
@@ -8249,20 +8303,26 @@ function bindEvents() {
         if (done?.dataset.profileDone === "username") finishProfileUsername();
         if (done?.dataset.profileDone === "name") {
             syncProfileDraftFromInputs();
-            $("#profileNameStatus").textContent = profileNameIsValid() ? "" : "Use at least two letters for each name. Hyphens and apostrophes are okay.";
+            $(".profile-name-hint").classList.toggle("invalid", !profileNameIsValid());
             if (profileNameIsValid()) setProfileEditor("hub");
         }
         if (done?.dataset.profileDone === "grade" && profileGradeIsValid()) setProfileEditor("hub");
+        const gender = event.target.closest("[data-profile-gender]");
+        if (gender && state.profileDraft) {
+            state.profileDraft.gender = gender.dataset.profileGender;
+            renderProfileGenderOptions();
+        }
+        if (done?.dataset.profileDone === "gender" && profileGenderIsValid()) setProfileEditor("hub");
     });
     $("#profileFirstName").addEventListener("input", (event) => {
         event.target.value = event.target.value.replace(/[^\p{L}' -]/gu, "");
         syncProfileDraftFromInputs();
-        $("#profileNameStatus").textContent = profileNameIsValid() ? "" : "Use at least two letters for each name. Hyphens and apostrophes are okay.";
+        $(".profile-name-hint").classList.toggle("invalid", !profileNameIsValid());
     });
     $("#profileLastName").addEventListener("input", (event) => {
         event.target.value = event.target.value.replace(/[^\p{L}' -]/gu, "");
         syncProfileDraftFromInputs();
-        $("#profileNameStatus").textContent = profileNameIsValid() ? "" : "Use at least two letters for each name. Hyphens and apostrophes are okay.";
+        $(".profile-name-hint").classList.toggle("invalid", !profileNameIsValid());
     });
     $("#profileUsername").addEventListener("input", (event) => {
         event.target.value = event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "");
@@ -8276,6 +8336,7 @@ function bindEvents() {
     });
     $("#streakCelebration").addEventListener("click", hideStreakCelebration);
     $("#bioForm").addEventListener("submit", saveBio);
+    $("#profileBio").addEventListener("input", renderBioCount);
     $$("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
     addEventListener("valid:session-expired", () => showSignedOut("Your session expired. Sign in with your passkey again."));
     addEventListener("popstate", handleAppPopState);
