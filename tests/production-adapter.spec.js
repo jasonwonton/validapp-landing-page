@@ -973,6 +973,8 @@ test("locked Feed shows received votes, vote-to-unlock, and notification activat
     await expect(notificationButton).toBeVisible();
     await expect(notificationButton).toContainText("Know right away when someone picks you.");
     await notificationButton.click();
+    // iOS: the card opens the soft prompt first; Allow asks the browser.
+    await page.getByRole("button", { name: "Allow", exact: true }).click();
 
     await expect(notificationButton).toBeHidden();
     expect(requests.filter((request) => request.path.endsWith("/web-push-subscriptions"))).toHaveLength(1);

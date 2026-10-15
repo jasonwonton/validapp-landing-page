@@ -360,7 +360,8 @@ test("an Opus-only recorder sends voice through the media ingest", async ({ page
 });
 
 async function installCalls(page) {
-    await page.goto("/app/?demo=1");
+    // Signed in, so the signed-out sign-in sheet isn't over the call UI.
+    await signIn(page);
     await page.evaluate(async () => {
         window.__callLog = [];
         const log = window.__callLog;

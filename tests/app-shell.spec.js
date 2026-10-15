@@ -324,7 +324,8 @@ test.describe("install and update", () => {
 
         test("the locked Feed's vote alerts card leads to Add to Home Screen", async ({ page }) => {
             await signInToDemo(page, "&locked=1");
-            const alerts = page.getByRole("button", { name: "Turn on alerts for votes" });
+            // In the install state the card is labelled with its action.
+            const alerts = page.locator("#feedGateLock .feed-gate-notification");
             await expect(alerts).toBeVisible();
             await alerts.click();
             await expect(page.getByRole("dialog", { name: "Add Valid to your Home Screen" })).toBeVisible();
