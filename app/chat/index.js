@@ -51,7 +51,7 @@ const REFRESH_MS = 30_000;
 const MEMENTO_CAMERA_ART = "../assets/app/memento-camera.webp";
 const SAY_HI_DISMISS_MS = 7 * 24 * 60 * 60_000;
 const SAY_HI_RELOAD_MS = 5 * 60_000;
-// "Add a message, or we’ll send 👋" (ChatSeparateMessageField).
+// The New Chat field placeholder (ChatSeparateMessageField).
 const SEPARATE_MESSAGE_PLACEHOLDER = `Add a message, or we\u2019ll send ${SAY_HI_WAVE}`;
 const MAX_VOICE_RECORDING_MS = 300_000;
 const TIME_REVEAL_WIDTH = 86;
@@ -249,7 +249,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                     <button class="chat-attachment-button" type="button" data-open-stickers aria-label="Send a sticker"><span class="native-sticker-icon" aria-hidden="true"></span></button>
                     <div class="chat-input-wrap"><textarea rows="1" maxlength="2000" placeholder="Message" aria-label="Message" enterkeyhint="send"></textarea><button type="button" class="chat-mic-button" data-record-voice aria-label="Record voice message" aria-description="Hold to record, slide left to cancel, or slide up to lock">${uiIcon('mic')}</button></div>
                     <button class="chat-send-button" type="submit" aria-label="Send message">${uiIcon('send')}</button>
-                    <section class="chat-voice-inline hidden" aria-label="Voice message"><button type="button" data-cancel-voice aria-label="Discard voice message">${uiIcon('trash')}</button><div class="chat-voice-body"><p class="chat-voice-status" role="status"></p><canvas class="chat-voice-waveform" width="192" height="28" aria-hidden="true"></canvas><p class="chat-voice-hint"></p><audio class="chat-inline-audio" aria-label="Voice message preview" hidden></audio><div class="chat-voice-player" hidden><button type="button" data-voice-play aria-label="Play voice preview">${uiIcon('play')}</button><input type="range" min="0" max="100" value="0" step="0.1" aria-label="Voice preview position"><small class="chat-voice-clock" aria-hidden="true">0:00</small><button type="button" class="chat-voice-speed" data-voice-speed aria-label="Playback speed 1×">1×</button></div><div class="chat-voice-preview-actions" hidden><button type="button" class="chat-voice-delete" data-delete-voice>${uiIcon('trash')}<span>Delete</span></button><button type="button" data-record-again>${uiIcon('retake')}<span>Record again</span></button><button type="button" class="chat-voice-send" data-send-voice>${uiIcon('send')}<span>Send</span></button></div></div><button type="button" data-stop-voice aria-label="Stop recording and preview">${uiIcon('stop')}</button></section>
+                    <section class="chat-voice-inline hidden" aria-label="Voice message"><button type="button" data-cancel-voice aria-label="Discard voice message">${uiIcon('trash')}</button><div class="chat-voice-body"><p class="chat-voice-status" role="status"></p><canvas class="chat-voice-waveform" width="192" height="28" aria-hidden="true"></canvas><p class="chat-voice-hint"></p><audio class="chat-inline-audio" aria-label="Voice message preview" hidden></audio><div class="chat-voice-player" hidden><button type="button" data-voice-play aria-label="Play voice preview">${uiIcon('play')}</button><input type="range" min="0" max="100" value="0" step="0.1" aria-label="Voice preview position"><small class="chat-voice-clock" aria-hidden="true">0:00</small><button type="button" class="chat-voice-speed" data-voice-speed aria-label="Playback speed 1×">1×</button></div><div class="chat-voice-preview-actions" hidden><button type="button" class="chat-voice-delete" data-delete-voice>${uiIcon('trash')}<span>Delete</span></button><button type="button" data-record-again>${uiIcon('retake')}<span>Record again</span></button><button type="button" class="chat-voice-send" data-send-voice aria-label="Send voice message">${uiIcon('send')}<span>Send</span></button></div></div><button type="button" data-stop-voice aria-label="Stop recording and preview">${uiIcon('stop')}</button></section>
                 </form>
             </section>
         </div>
@@ -284,7 +284,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 <p class="chat-media-send-count" hidden></p>
                 <div class="chat-media-progress hidden"><span></span></div>
                 <p class="chat-media-status" role="status"></p>
-                <div class="chat-media-review-actions"><button type="button" class="review-save" data-save-chat-media aria-label="Save"><span class="review-save-circle">${uiIcon('save-down')}</span><small>Save</small></button><span class="review-send-chip" data-send-to-chip role="note"><span class="review-chip-avatar" aria-hidden="true"></span><strong></strong></span><button class="primary-button chat-media-publish send-pill" type="submit" disabled><span class="send-pill-copy"><span class="send-pill-title">Send</span><small class="send-pill-subtitle">View once</small></span>${uiIcon('send')}</button></div>
+                <div class="chat-media-review-actions"><button type="button" class="review-save" data-save-chat-media aria-label="Save"><span class="review-save-circle">${uiIcon('save-down')}</span><small>Save</small></button><span class="review-send-chip" data-send-to-chip role="note"><span class="review-chip-avatar" aria-hidden="true"></span><strong></strong></span><button class="primary-button chat-media-publish send-pill" type="submit" aria-label="Send" disabled><span class="send-pill-copy" aria-hidden="true"><span class="send-pill-title">Send</span><small class="send-pill-subtitle">View once</small></span>${uiIcon('send')}</button></div>
                 </section>
                 <input class="chat-media-file-input" type="file" accept="image/*,video/mp4" hidden aria-label="Photo or video file">
             </form>
@@ -1389,8 +1389,9 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         button.innerHTML = `<span class="chat-memento-toolbar-pill">${leading}<i class="chat-memento-toolbar-rule" aria-hidden="true"></i><span class="chat-moment-streak${broken ? ' broken' : ''}">${uiIcon('fire')}<b>${streak}</b></span></span>`;
         button.classList.toggle('complete', eligible > 0 && posted === eligible);
         const waiting = (row?.entries || []).filter(entry => !entry.has_posted).map(entry => entry.first_name || 'a member').join(', ');
-        const streakText = streak > 0 ? `, ${streakAccessibilityLabel(streak, { broken, atRisk })}` : '';
-        button.setAttribute('aria-label', `Mementos, ${posted} of ${eligible} captured.${waiting ? ` Waiting for ${waiting}.` : ''}${left != null ? ` ${streakCountdown(left)} left.` : ''}${streakText}`);
+        const streakText = streak > 0 ? streakAccessibilityLabel(streak, { broken, atRisk }) : '';
+        const parts = [`Mementos, ${posted} of ${eligible} captured`, waiting ? `Waiting for ${waiting}` : '', left != null ? `${streakCountdown(left)} left` : '', streakText];
+        button.setAttribute('aria-label', parts.filter(Boolean).join('. '));
     }
 
     function openMementoGallery() {
@@ -2529,7 +2530,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         await acceptInvitation();
     }
 
-    // Accept → the room appears in place. With a wave, 👋 goes first.
+    // Accept → the room appears in place. With a wave, the wave goes first.
     async function acceptInvitation({ wave = false } = {}) {
         const current = invitation;
         if (!current || current.working) return;
@@ -2560,6 +2561,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         try {
             await api.declineChatInvitation(userId(), current.chat.membership_id);
             invitation = null;
+            renderInvitation();
             showChatList();
             await loadChats({ quiet: true });
         } catch (error) {
@@ -2701,6 +2703,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 mementoSentToday.delete(chatId);
             }
             markPendingFailed(chatId, pendingId, chatTextSendIsRetryable(error) ? "Memento didn't send. It will retry while Valid is open." : userMessage(error, "Memento didn't send"));
+            if (store.state.activeChatId === chatId) renderDailyRow();
         } finally {
             bumpSending(chatId, -1);
             setTimeout(() => URL.revokeObjectURL(previewURL), 60_000);
@@ -2711,13 +2714,14 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     function dropPendingMessage(chatId, pendingId) {
         const kept = store.messages(chatId).filter(message => message.id !== pendingId);
         store.replaceMessages(chatId, kept, store.state.messagePageByChat.get(String(chatId)) || {});
-        if (store.state.activeChatId === chatId) renderMessages(false, { preservePosition: true });
+        // Keeps following the latest message when the room was there.
+        if (store.state.activeChatId === chatId) renderMessages(false);
     }
 
     function markPendingFailed(chatId, pendingId, text) {
         const message = store.messages(chatId).find(item => item.id === pendingId);
         if (message) store.updateMessage(chatId, { ...message, delivery_state: "failed", error_message: text });
-        if (store.state.activeChatId === chatId) renderMessages(false, { preservePosition: true });
+        if (store.state.activeChatId === chatId) renderMessages(false);
         showToast?.(text);
     }
 

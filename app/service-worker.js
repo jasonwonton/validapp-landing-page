@@ -49,6 +49,7 @@ const APP_SHELL = [
     "./chat/message-window.js",
     "./chat/timeline-scroll.js",
     "./chat/models.js",
+    "./chat/inbox-status.js",
     "./chat/call-history.js",
     "./chat/notification-nudge.js",
     "./chat/store.js",

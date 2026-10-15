@@ -84,6 +84,8 @@ export function inboxStatusLineMarkup(status, chat, { now = Date.now() } = {}) {
         const incoming = status.kind === "new" || status.kind === "newCount";
         inner = `${inboxGlyphMarkup(status.type, GLYPH_FILL[status.kind] || "filled")}<span class="${incoming ? "chat-status-word incoming" : "chat-status-word"}">${escapeChatHTML(statusWord(status))}</span>${timeMarkup}`;
     }
+    // Plain lines read as written; the rest say in words what the glyphs show.
+    if (status.kind === "plain") return `<span class="chat-status-line plain"><span class="chat-status-visual">${inner}</span></span>`;
     return `<span class="chat-status-line ${escapeChatHTML(status.kind)}"><span class="visually-hidden">${escapeChatHTML(label)}</span><span class="chat-status-visual" aria-hidden="true">${inner}</span></span>`;
 }
 
