@@ -247,10 +247,10 @@ test("installed Chromium shell opens a previously unvisited Chats overlay journe
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
-    await page.getByRole("button", { name: "Send photo or video" }).click();
+    await page.getByRole("button", { name: "Open camera" }).click();
     const dialog = page.getByRole("dialog", { name: "Send media" });
     await dialog.locator(".chat-media-file-input").setInputFiles("assets/AppIconV2.png");
-    await dialog.getByRole('button', { name: 'Add caption', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Add or edit caption', exact: true }).click();
     await dialog.getByRole("textbox", { name: "Caption" }).fill("Offline draft");
     await dialog.getByRole("textbox", { name: "Caption" }).press("Enter");
     await expect(dialog.getByRole("button", { name: /Media text: Offline draft/ })).toBeVisible();

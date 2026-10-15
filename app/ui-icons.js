@@ -57,8 +57,9 @@ const paths = {
     'arrow-right': '<path d="M4 12h15m-6-6 6 6-6 6"/>',
     // SF pause.fill: two rounded filled bars.
     'pause-fill': '<rect x="6" y="4.5" width="4" height="15" rx="1.2" fill="currentColor" stroke="none"/><rect x="14" y="4.5" width="4" height="15" rx="1.2" fill="currentColor" stroke="none"/>',
-    // Original drawing in the spirit of SF Symbols flame.fill (StreakCounterView.swift).
-    fire: '<path fill="currentColor" stroke="none" fill-rule="evenodd" d="M12.6 1.6C13.2 4.6 15.2 6.6 16.9 8.6C18.8 10.8 20 13 20 15.3C20 19.6 16.4 22.6 12 22.6C7.6 22.6 4 19.6 4 15.3C4 12.6 5.3 10.4 7 8.6C7.2 10.1 7.9 11.3 9 12C9 7.8 10.6 4.4 12.6 1.6ZM12 12.4C12.7 14.4 15.4 15.7 15.4 18.4C15.4 20.3 13.9 21.4 12 21.4C10.1 21.4 8.6 20.3 8.6 18.4C8.6 16.2 10.9 15 12 12.4Z"/>',
+    // Original drawing in the spirit of SF Symbols flame.fill (StreakCounterView.swift):
+    // the tip leans left over a round body, a lick on the left, a small flame cut out.
+    fire: '<path fill="currentColor" stroke="none" fill-rule="evenodd" d="M6.6 1.9C9.5 1.2 13.6 2.2 16.2 4.4C18.9 6.7 20 10.3 20 13.6C20 18.7 16.6 22.5 12 22.5C7.5 22.5 4 19.2 4 14.7C4 12.2 4.9 10.2 5.6 8.3C5.8 7.6 6.1 7.1 6.6 7.1C7.6 7.1 8.3 8.1 8.7 9.1C8.9 6.8 7.8 4.5 6.2 2.9C5.8 2.5 6 1.9 6.6 1.9ZM11.9 11.3C13.2 12.6 14 14.4 14 16.2C14 18.3 12.9 19.8 11.4 19.8C9.9 19.8 8.9 18.5 8.9 17C8.9 15.6 9.4 14.4 10.3 13.6C10.5 14.2 10.8 14.7 11.2 15C11.1 13.6 11.3 12.3 11.9 11.3Z"/>',
     group: '<circle cx="12" cy="7" r="3" fill="currentColor" stroke="none"/><circle cx="4.5" cy="9" r="2.5" fill="currentColor" stroke="none"/><circle cx="19.5" cy="9" r="2.5" fill="currentColor" stroke="none"/><path d="M6 21v-3a6 6 0 0 1 12 0v3ZM1 20v-3a4 4 0 0 1 4-4M23 20v-3a4 4 0 0 0-4-4"/>',
     person: '<circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>',
     check: '<path d="m5 12 4 4L19 6"/>',
@@ -71,6 +72,16 @@ const paths = {
     leave: '<path d="M13 4H4v16h9M10 12h12m-4-4 4 4-4 4"/>',
     'memento': '<path d="m5 15-3-1L5 2l13 3-1 3"/><rect x="7" y="8" width="15" height="13" rx="2"/><circle cx="12" cy="12" r="1" fill="currentColor"/><path d="m8 19 4-4 3 3 3-4 3 5"/>',
     photo: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="2"/><path d="m3 17 6-6 4 4 3-3 5 5"/>',
+    // MementoStreakHourglass.swift: caps, tinted glass, full top bulb (the chat
+    // view draws the sand level from the time left).
+    hourglass: '<path fill="currentColor" fill-opacity=".28" stroke="none" d="M6.5 4.5h11c0 4-4.3 6-4.3 7.5s4.3 3.5 4.3 7.5h-11c0-4 4.3-6 4.3-7.5S6.5 8.5 6.5 4.5Z"/><path fill="currentColor" stroke="none" d="M7.3 5.6h9.4c-.6 2.6-3.5 4.3-3.5 6.4h-2.4c0-2.1-2.9-3.8-3.5-6.4Z"/><rect x="4.5" y="2" width="15" height="2.6" rx="1.3" fill="currentColor" stroke="none"/><rect x="4.5" y="19.4" width="15" height="2.6" rx="1.3" fill="currentColor" stroke="none"/>',
+    // bubble.left.and.bubble.right.fill look-alike (Chats empty state).
+    'chat-pair-filled': '<path fill="currentColor" stroke="none" d="M5 3h8a3.5 3.5 0 0 1 3.5 3.5v5A3.5 3.5 0 0 1 13 15H8l-4.3 3.2c-.5.4-1.2 0-1.2-.6V14.4A3.5 3.5 0 0 1 1.5 11.5v-5A3.5 3.5 0 0 1 5 3Z"/><path fill="currentColor" stroke="none" d="M18 8h1.5a3 3 0 0 1 3 3v4a3 3 0 0 1-1.5 2.6v2.8c0 .5-.6.8-1 .5L16.4 18H12a3 3 0 0 1-2.4-1.2H13a5 5 0 0 0 5-5Z"/>',
+    'eye-slash': '<path d="M2 12s3.6-6.5 10-6.5c2 0 3.7.6 5.1 1.5M22 12s-3.6 6.5-10 6.5c-2 0-3.7-.6-5.1-1.5"/><path d="M9.5 14.5a3.5 3.5 0 0 1 5-5"/><path d="m3 3 18 18"/>',
+    'save-down': '<path d="M12 3v12m-5-5 5 5 5-5M5 20h14"/>',
+    retake: '<path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.6"/><path d="M4 3.5v5.1h5.1"/>',
+    'text-search': '<circle cx="11" cy="11" r="7.5"/><path d="m16.5 16.5 5 5M8 9h6M8 12h4.5M8 15h3"/>',
+    'arrow-right': '<path d="M4 12h16m-7-7 7 7-7 7"/>',
     // SF Symbols bell.badge.fill: a filled bell with the badge dot top right.
     'bell-badge': '<path fill="currentColor" stroke="none" d="M10.5 3.2a1.5 1.5 0 0 1 3 .1 6 6 0 0 1 1.3.5 4.5 4.5 0 0 0 4.2 6.2V14l1.6 2.4A1 1 0 0 1 19.8 18H4.2a1 1 0 0 1-.8-1.6L5 14v-3.5a6 6 0 0 1 5.5-6Zm-1 15.8h5a2.5 2.5 0 0 1-5 0Z"/><circle cx="19" cy="5" r="3" fill="currentColor" stroke="none"/>',
     // Tab bar (MainTabItems.swift TabIcon): outlined, and filled while selected.

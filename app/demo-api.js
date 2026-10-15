@@ -418,6 +418,7 @@ export class DemoAPI {
                 notification_level: "all", chat_photo_url: "../assets/AppIconV2.png",
                 member_previews: this.classmates.slice(0, 3), last_message_body: "Meet at the game?", last_message_kind: "text",
                 last_message_sender_first_name: "Maya", last_message_is_mine: false, last_message_at: ago(4), created_at: ago(10_000), updated_at: ago(4),
+                moment_streak_at_risk: true,
             },
             {
                 id: "chat-noah", display_name: "Noah Williams", name: null, status: "active",
@@ -428,6 +429,32 @@ export class DemoAPI {
                 notification_level: "all", pair_profile_picture_url: "../assets/app/lock.webp",
                 member_previews: [this.classmates[1]], last_message_body: "That was hilarious 😂", last_message_kind: "text",
                 last_message_sender_first_name: "Jules", last_message_is_mine: true, last_message_at: ago(70), created_at: ago(20_000), updated_at: ago(70),
+                last_regular_message_body: "That was hilarious 😂", last_regular_message_kind: "text", last_regular_message_sender_first_name: "Jules",
+                last_regular_message_is_mine: true, last_regular_message_at: ago(70), last_regular_message_room_sequence: 3,
+                last_regular_message_opened_count: 1, last_regular_message_audience_count: 1,
+            },
+            {
+                id: "chat-mateo", display_name: "Mateo Lee", name: null, status: "active",
+                owner_user_id: "demo-user", membership_id: "membership-mateo", membership_status: "accepted", role: "owner",
+                accepted_count: 2, pending_count: 0, moment_streak: 3, moment_streak_broken: true, today_memento_count: 0,
+                today_memento_eligible_count: 2, has_posted_today_memento: false, is_memento_eligible_today: true,
+                member_cap: 50, unread_count: 0, regular_unread_count: 0, last_room_sequence: 1, last_read_sequence: 1,
+                notification_level: "all", pair_profile_picture_url: "../assets/valid_logo.png", member_previews: [this.classmates[5]],
+                last_message_body: null, last_message_kind: "photo", last_message_sender_first_name: "Jules", last_message_is_mine: true, last_message_at: ago(180),
+                last_regular_message_body: null, last_regular_message_kind: "photo", last_regular_message_sender_first_name: "Jules",
+                last_regular_message_is_mine: true, last_regular_message_at: ago(180), last_regular_message_room_sequence: 1,
+                last_regular_message_view_once: true, last_regular_message_opened_count: 0, last_regular_message_audience_count: 1,
+                created_at: ago(30_000), updated_at: ago(180),
+            },
+            {
+                id: "chat-wave", display_name: "Ava Patel", name: null, status: "pending",
+                owner_user_id: "classmate-3", membership_id: "membership-wave", membership_status: "invited", role: "member",
+                accepted_count: 1, pending_count: 1, moment_streak: 0, today_memento_count: 0, today_memento_eligible_count: 1,
+                has_posted_today_memento: false, is_memento_eligible_today: true, member_cap: 50, unread_count: 0,
+                last_room_sequence: 1, last_read_sequence: 0, notification_level: "all", member_previews: [this.classmates[2]],
+                pair_display_name: "Ava Patel", pair_profile_picture_url: "../assets/app/pencil-clipboard.webp",
+                invited_by_first_name: "Ava", invited_by_last_name: "Patel", invitation_preview: "👋",
+                last_message_at: ago(2), created_at: ago(2), updated_at: ago(2),
             },
             {
                 id: "chat-invite", display_name: "Art Club", name: "Art Club", status: "pending",
@@ -438,7 +465,24 @@ export class DemoAPI {
                 invited_by_first_name: "Maya", invited_by_last_name: "Chen", created_at: ago(300), updated_at: ago(300),
             },
         ];
+        this.sayHiSuggestions = [
+            { user_id: "classmate-4", first_name: "Eli", display_name: "Eli Brooks", avatar_url: "../assets/AppIconV2.png", voted_today: true },
+            { user_id: "classmate-5", first_name: "Sofia", display_name: "Sofia Kim", avatar_url: null, voted_today: false },
+        ];
         this.chatMembers = {
+            "chat-invite": [
+                { membership_id: "m-art-owner", user_id: "classmate-1", role: "owner", status: "accepted", ...this.classmates[0] },
+                { membership_id: "m-art-2", role: "member", status: "accepted", ...this.classmates[3] },
+                { membership_id: "m-art-me", user_id: "demo-user", role: "member", status: "invited", first_name: "Jules", last_name: "Rivera" },
+            ],
+            "chat-wave": [
+                { membership_id: "m-wave-owner", role: "owner", status: "accepted", ...this.classmates[2] },
+                { membership_id: "m-wave-me", user_id: "demo-user", role: "member", status: "invited", first_name: "Jules", last_name: "Rivera" },
+            ],
+            "chat-mateo": [
+                { membership_id: "m-mateo-me", user_id: "demo-user", role: "owner", status: "accepted", first_name: "Jules", last_name: "Rivera" },
+                { membership_id: "m-mateo", role: "member", status: "accepted", ...this.classmates[5], last_read_sequence: 0 },
+            ],
             "chat-friends": [
                 { membership_id: "m-demo", user_id: "demo-user", role: "owner", status: "accepted", first_name: "Jules", last_name: "Rivera", profile_picture_url: this.profile.profile_picture_url },
                 ...this.classmates.slice(0, 3).map((person, index) => ({ membership_id: `m-friend-${index}`, user_id: person.user_id, role: "member", status: "accepted", ...person })),
@@ -449,6 +493,12 @@ export class DemoAPI {
             ],
         };
         this.chatMessages = {
+            "chat-wave": [
+                { id: "msg-w1", chat_id: "chat-wave", room_sequence: 1, sender_user_id: "classmate-3", sender_first_name: "Ava", kind: "text", body: "👋", status: "active", viewer_is_sender: false, reaction_count: 0, reaction_summary: {}, created_at: ago(2), updated_at: ago(2) },
+            ],
+            "chat-mateo": [
+                { id: "msg-m1", chat_id: "chat-mateo", room_sequence: 1, sender_user_id: "demo-user", sender_first_name: "Jules", kind: "photo", body: null, photo_image_url: null, view_once: true, view_once_available: true, view_once_consumed: false, view_once_remaining_views: 2, view_once_opened_count: 0, view_once_recipient_count: 1, status: "active", viewer_is_sender: true, reaction_count: 0, reaction_summary: {}, created_at: ago(180), updated_at: ago(180) },
+            ],
             "chat-friends": [
                 { id: "msg-1", chat_id: "chat-friends", room_sequence: 1, sender_user_id: "classmate-1", sender_first_name: "Maya", kind: "text", body: "What are we doing Friday?", status: "active", viewer_is_sender: false, reaction_count: 1, reaction_summary: { love: 1 }, current_user_reaction: null, created_at: ago(55), updated_at: ago(55) },
                 { id: "msg-2", chat_id: "chat-friends", room_sequence: 2, sender_user_id: "demo-user", sender_first_name: "Jules", kind: "text", body: "Game, then food?", status: "active", viewer_is_sender: true, reaction_count: 2, reaction_summary: { fire: 2 }, current_user_reaction: "fire", created_at: ago(35), updated_at: ago(35) },
@@ -467,6 +517,10 @@ export class DemoAPI {
         this.dailyMediaAssets = {};
         this.chatViewSessions = {};
         this.dailyRows = {
+            "chat-mateo": { chat_id: "chat-mateo", ledger_date: ledgerDate, viewer_has_posted_today: false, viewer_has_shared: false, viewer_is_eligible: true, view_gate_locked: true, posted_count: 0, eligible_count: 2, entries: [
+                { user_id: "demo-user", first_name: "Jules", last_name: "Rivera", has_posted: false },
+                { user_id: "classmate-6", first_name: "Mateo", last_name: "Lee", has_posted: false },
+            ] },
             "chat-friends": { chat_id: "chat-friends", ledger_date: ledgerDate, viewer_has_posted_today: false, viewer_has_shared: false, viewer_is_eligible: true, view_gate_locked: true, posted_count: 2, eligible_count: 4, entries: [
                 { user_id: "classmate-1", first_name: "Maya", last_name: "Chen", has_posted: true, entry_id: "entry-maya", caption: "After practice", image_url: "../assets/app/anonymous.webp", swapped_image_url: "../assets/app/lock.webp", published_at: ago(14) },
                 { user_id: "classmate-3", first_name: "Ava", last_name: "Patel", has_posted: true, entry_id: "entry-ava", caption: "Bus ride", image_url: "../assets/app/pencil-clipboard.webp", swapped_image_url: "../assets/app/anonymous.webp", published_at: ago(12) },
@@ -1040,8 +1094,19 @@ export class DemoAPI {
         if (!chat) throw new Error("Chat not found");
         return { chat: structuredClone(chat), members: structuredClone(this.chatMembers[chatId] || []) };
     }
+    async getSayHiSuggestions() {
+        return { items: structuredClone(this.sayHiSuggestions || []) };
+    }
+
+    async acknowledgeMissedCall(_userId, callId) {
+        const chat = this.chats.find((item) => item.unacknowledged_missed_call_id === callId);
+        if (chat) chat.unacknowledged_missed_call_id = null;
+    }
+
     async createChat(_userId, memberIds, name) {
-        const id = `chat-${Date.now()}`;
+        const existing = memberIds.length === 1 && !name && this.chats.find((chat) => chat.membership_status === "accepted" && !chat.name && Number(chat.accepted_count) + Number(chat.pending_count) === 2 && chat.member_previews?.[0]?.user_id === memberIds[0]);
+        if (existing) return structuredClone(existing);
+        const id = `chat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
         const members = this.classmates.filter((person) => memberIds.includes(person.user_id));
         const chat = { id, display_name: name || displayDemoName(members[0]), name: name || null, status: "active", owner_user_id: "demo-user", membership_id: `membership-${id}`, membership_status: "accepted", role: "owner", accepted_count: members.length + 1, pending_count: 0, moment_streak: 0, today_memento_count: 0, today_memento_eligible_count: members.length + 1, has_posted_today_memento: false, is_memento_eligible_today: true, member_cap: 50, unread_count: 0, regular_unread_count: 0, last_room_sequence: 0, last_read_sequence: 0, notification_level: "all", member_previews: members, last_message_body: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
         this.chats.unshift(chat);

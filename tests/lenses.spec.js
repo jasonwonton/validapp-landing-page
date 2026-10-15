@@ -11,7 +11,7 @@ async function openChatCamera(page) {
     await page.getByRole('button', { name: /^sign in$/i }).click();
     await page.getByRole('button', { name: 'Chats', exact: true }).click();
     await page.getByRole('button', { name: /Noah Williams/ }).click();
-    await page.getByRole('button', { name: 'Send photo or video' }).click();
+    await page.getByRole('button', { name: 'Open camera' }).click();
     return page.locator('[data-chat-camera]');
 }
 const controller = 'document.querySelector("[data-chat-camera] .live-camera-stage")?.cameraLenses';
@@ -69,7 +69,7 @@ test('carousel follows iOS: Original first, ring on the selection, tap and swipe
     await page.mouse.down(); await page.mouse.move(stage.x + stage.width * 0.3, stage.y + stage.height * 0.7, { steps: 5 }); await page.mouse.up();
     await expect(carousel.getByRole('button', { name: 'Crying' })).toHaveAttribute('aria-pressed', 'true');
     // Closing the camera removes the overlay, carousel and worker.
-    await page.getByRole('button', { name: 'Cancel' }).click();
+    await page.getByRole('button', { name: 'Close camera' }).click();
     await expect(page.locator('.lens-overlay, .lens-carousel')).toHaveCount(0);
     expect(await page.evaluate(controller)).toBeUndefined();
 });

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { captureMemento, syntheticCamera } from './fixtures/synthetic-camera.js';
 
 async function signIn(page) {
     await page.getByRole('button', { name: /^sign in$/i }).click();
@@ -12,13 +13,13 @@ test('posted chats put progress and authoritative streaks in the header, not the
     await expect(page.getByRole('button', { name: /Noah Williams/ }).locator('.chat-moment-streak')).toHaveText('2');
     await page.getByRole('button', { name: /Noah Williams/ }).click();
     const toolbar = page.locator('[data-open-memento-gallery]');
-    await expect(toolbar).toHaveAccessibleName('Mementos, 2 of 2 captured. Everyone is done, 2 day streak');
-    await expect(page.locator('.chat-daily-row')).toBeHidden();
+    await expect(toolbar).toHaveAccessibleName('Mementos, 2 of 2 captured. 2 day Memento streak');
+    await expect(page.getByRole('button', { name: 'Take a Memento' })).toBeHidden();
     await expect(page.locator('.chat-memento-week')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Send a sticker', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Send photo or video' }).click();
+    await page.getByRole('button', { name: 'Open camera' }).click();
     await expect(page.getByRole('dialog', { name: 'Send media', exact: true })).toBeVisible();
-    await expect(page.getByRole('dialog', { name: 'Create a Memento' })).toBeHidden();
+    await expect(page.getByRole('dialog', { name: "Today's Memento" })).toBeHidden();
 });
 
 test('historical responses cannot replace today’s access or outlive the selected day and chat', async ({ page }) => {
@@ -59,13 +60,16 @@ test('historical responses cannot replace today’s access or outlive the select
     await page.getByRole('button', { name: 'Back to chats' }).click();
     await page.getByRole('button', { name: /Weekend Crew/ }).click();
     await resolve(dates[2]);
-    await expect(toolbar).toBeHidden();
-    await expect(page.locator('.chat-composer')).toBeHidden();
+    // Weekend Crew keeps its own day: its pill, its card, and every message (a room never locks).
+    await expect(toolbar.locator('.chat-moment-streak')).toHaveText('6');
+    await expect(page.getByRole('button', { name: 'Take a Memento' })).toBeVisible();
+    await expect(page.locator('.chat-composer')).toBeVisible();
     await expect(page.locator('.chat-memento-gallery img')).toHaveCount(0);
-    await expect(page.locator('.chat-message')).toHaveCount(0);
+    await expect(page.locator('.chat-message')).toHaveCount(4);
 });
 
 test('posting in another chat never hides this chat’s capture or unlocks its history', async ({ page }) => {
+    await syntheticCamera(page);
     await page.goto('/app/?demo=1&signin=1');
     await page.evaluate(async () => {
         const { DemoAPI } = await import('/app/demo-api.js');
@@ -81,19 +85,18 @@ test('posting in another chat never hides this chat’s capture or unlocks its h
     await expect(page.locator('[data-open-memento-gallery]')).toBeVisible();
     await page.getByRole('button', { name: 'Back to chats' }).click();
     await page.getByRole('button', { name: /Weekend Crew/ }).click();
-    await expect(page.locator('[data-open-memento-gallery]')).toBeHidden();
-    await expect(page.locator('.chat-composer')).toBeHidden();
-    await page.locator('.chat-daily-row > button').click();
-    const capture = page.getByRole('dialog', { name: 'Create a Memento' });
-    await expect(capture).toBeVisible();
-    await capture.locator('.memento-file-input').setInputFiles('assets/AppIconV2.png');
+    // Posted elsewhere today: this chat still asks for its own Memento.
+    await expect(page.getByRole('button', { name: 'Take a Memento' })).toBeVisible();
+    await expect(page.locator('.chat-composer')).toBeVisible();
+    const capture = await captureMemento(page);
     await capture.getByRole('button', { name: 'Send to Weekend Crew', exact: true }).click();
+    await expect(capture).toBeHidden();
     await expect(page.locator('[data-open-memento-gallery]')).toBeVisible();
-    await expect(page.locator('.chat-daily-row')).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Take a Memento' })).toBeHidden();
     await expect(page.locator('.chat-composer')).toBeVisible();
 });
 
-test('changing rooms fails closed while the new Memento access check is unresolved or fails', async ({ page }) => {
+test('a room never waits on its Memento row: messages and the composer show while it loads or fails', async ({ page }) => {
     await page.goto('/app/?demo=1&signin=1');
     await page.evaluate(async () => {
         const { DemoAPI } = await import('/app/demo-api.js');
@@ -109,13 +112,13 @@ test('changing rooms fails closed while the new Memento access check is unresolv
     await page.getByRole('button', { name: 'Back to chats' }).click();
     await page.evaluate(() => { window.failNextLedger = true; });
     await page.getByRole('button', { name: /Weekend Crew/ }).click();
-    await expect(page.locator('.chat-message')).toHaveCount(0);
-    await expect(page.locator('.chat-composer')).toBeHidden();
     await expect.poll(() => page.evaluate(() => Boolean(window.rejectLedger))).toBe(true);
     await page.evaluate(() => window.rejectLedger());
-    await expect(page.locator('.chat-timeline')).toContainText('Could not check Memento access');
-    await expect(page.locator('.chat-message')).toHaveCount(0);
-    await expect(page.locator('.chat-composer')).toBeHidden();
+    // ChatMementoRevealPolicy: a chat never locks; friends' Mementos stay blurred.
+    await expect(page.locator('.chat-message')).toHaveCount(4);
+    await expect(page.locator('.chat-composer')).toBeVisible();
+    await expect(page.locator('.chat-timeline')).not.toContainText('Could not check Memento access');
+    await expect(page.locator('.hidden-memento')).toHaveCount(1);
 });
 
 test('realtime Memento refresh updates the server streak without leaking into a different room', async ({ page }) => {
@@ -158,11 +161,12 @@ test('realtime Memento refresh updates the server streak without leaking into a 
     await expect.poll(() => page.evaluate(() => Boolean(window.resolveRealtimeLedger))).toBe(true);
     await page.getByRole('button', { name: 'Back to chats' }).click();
     await page.getByRole('button', { name: /Weekend Crew/ }).click();
-    await expect(page.locator('.chat-timeline')).toContainText('Chat locked');
+    await expect(page.locator('.chat-timeline')).not.toContainText('Chat locked');
     await page.evaluate(() => window.resolveRealtimeLedger());
-    await expect(toolbar).toBeHidden();
-    await expect(page.locator('.chat-message')).toHaveCount(0);
-    await expect(page.locator('.chat-composer')).toBeHidden();
+    // Noah's late row never lands in Weekend Crew.
+    await expect(toolbar.locator('.chat-moment-streak')).toHaveText('6');
+    await expect(page.locator('.chat-message')).toHaveCount(4);
+    await expect(page.locator('.chat-composer')).toBeVisible();
 });
 
 test('a rapid sticker tap sends once and an explicit retry reuses the request identity', async ({ page }) => {

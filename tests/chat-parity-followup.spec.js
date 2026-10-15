@@ -14,7 +14,7 @@ test('shared history setting saves only after confirmation, reconciles, and supp
   window.historyPuts=[];
   DemoAPI.prototype.setChatHistory=async function(...args){window.historyPuts.push(args);return original.apply(this,args)};
  });
- await room(page);await page.getByRole('button',{name:'Chat settings',exact:true}).click();
+ await room(page);await page.getByRole('button',{name:'Chat details',exact:true}).click();
  const choices=page.locator('[data-history-options]');
  await expect(choices.getByRole('button',{name:/Keep history/})).toBeEnabled();
  await expect(choices.getByRole('button',{name:/Keep history/})).toHaveAttribute('aria-pressed','true');
@@ -89,9 +89,10 @@ test('inbox has pending photo/video actions and Memento indicator; settings are 
  await page.getByRole('button',{name:'Profile',exact:true}).click();
  await expect(page.locator('#privacySettings').getByRole('button',{name:'Activity Status',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Chats',exact:true}).click();
- await expect(page.locator('[data-list-key="chat-friends"] .chat-needs-memento')).toBeVisible();
+ // iOS rows carry no Memento camera; the status line says what is new.
+ await expect(page.locator('[data-list-key="chat-friends"] .chat-needs-memento')).toHaveCount(0);
  await expect(page.locator('[data-pending-media="chat-noah"] i')).toHaveClass('video');
- await page.getByRole('button',{name:'View 1 unopened media item'}).click();
+ await page.getByRole('button',{name:'View 1 unopened snap'}).click();
  await expect(page.getByRole('dialog',{name:'Chat media'})).toBeVisible();
  await page.getByRole('dialog',{name:'Chat media'}).getByRole('button',{name:'Close',exact:true}).click();
  await expect(page.locator('[data-open-memento-gallery] [data-ui-icon="memento"]')).toBeVisible();
@@ -118,7 +119,7 @@ test('history API sends the existing shared contract and never claims a rejected
   const {DemoAPI}=await import('/app/demo-api.js');DemoAPI.prototype.setChatHistory=async()=>{throw Error('offline')};
  });
  await page.getByRole('button',{name:/^sign in$/i}).click();await page.getByRole('button',{name:'Chats',exact:true}).click();await room(page);
- await page.getByRole('button',{name:'Chat settings',exact:true}).click();
+ await page.getByRole('button',{name:'Chat details',exact:true}).click();
  await expect(page.locator('[data-history-mode="afterLeaving"]')).toBeEnabled();
  await page.locator('[data-history-mode="afterLeaving"]').click();await page.getByRole('dialog',{name:'Change history for everyone?'}).getByRole('button',{name:'Change history'}).click();
  await expect(page.locator('[data-history-status]')).toContainText('couldn’t be confirmed');

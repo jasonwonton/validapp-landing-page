@@ -22,10 +22,12 @@ test('Recent shortcuts open the right conversation without replacing the full in
     await page.getByRole('button', { name: /^sign in$/i }).click();
     await page.getByRole('button', { name: 'Chats', exact: true }).click();
     const recent = page.getByRole('region', { name: 'Recent conversations' });
-    await expect(recent.getByRole('link')).toHaveCount(2);
-    await expect(recent.getByRole('link').first()).toHaveAccessibleName(/Weekend Crew.*Memento needed.*2 unread/);
+    await expect(recent.getByRole('link')).toHaveCount(3);
+    // iOS Recent has no Memento badge; unread keeps its dot.
+    await expect(recent.getByRole('link').first()).toHaveAccessibleName('Weekend Crew, 2 unread');
+    await expect(recent.locator('.chat-recent-camera')).toHaveCount(0);
     await expect(recent.getByRole('link', { name: /Art Club/ })).toHaveCount(0);
-    await expect(page.locator('.chat-list .chat-row')).toHaveCount(3);
+    await expect(page.locator('.chat-list .chat-row')).toHaveCount(5);
     // No conversation timestamp is presented as a person's activity status.
     await expect(recent).not.toContainText(/active now|active recently/i);
     await recent.getByRole('link', { name: 'Noah Williams', exact: true }).focus();
@@ -34,5 +36,5 @@ test('Recent shortcuts open the right conversation without replacing the full in
     await expect(page.locator('.chat-room-title')).toContainText('Noah Williams');
     await page.getByRole('button', { name: 'Back to chats', exact: true }).click();
     await expect(recent).toBeVisible();
-    await expect(page.locator('.chat-list .chat-row')).toHaveCount(3);
+    await expect(page.locator('.chat-list .chat-row')).toHaveCount(5);
 });

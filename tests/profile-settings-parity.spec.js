@@ -50,7 +50,7 @@ test('blocked-user management confirms, retains failures, and removes only succe
 test('chat search is requested explicitly and cancel ignores a late response',async({page})=>{
     await profile(page);
     await page.getByRole('button',{name:'Chats',exact:true}).click();
-    const search=page.getByRole('searchbox',{name:'Search chats and messages'});
+    const search=page.getByRole('searchbox',{name:'Search chats & messages'});
     await expect(search).toBeHidden();
     await page.getByRole('button',{name:'Search chats',exact:true}).click();
     await expect(search).toBeFocused();
@@ -59,7 +59,7 @@ test('chat search is requested explicitly and cancel ignores a late response',as
         DemoAPI.prototype.searchChats=()=>new Promise(resolve=>window.finishSearch=()=>resolve({chats:{items:[]},messages:{items:[]}}));
     });
     await search.fill('Noah');
-    await page.getByRole('button',{name:'Search',exact:true}).click();
+    await page.getByRole('button',{name:/Search all chats & messages/}).click();
     await page.getByRole('button',{name:'Cancel',exact:true}).click();
     await page.evaluate(()=>finishSearch());
     await expect(search).toBeHidden();

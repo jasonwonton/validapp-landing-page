@@ -1013,7 +1013,7 @@ export class ValidAPI {
         return this.request(`/users/${userId}/chats-unread-count`);
     }
 
-    createChat(userId, memberUserIds, name = null, clientRequestId = crypto.randomUUID()) {
+    createChat(userId, memberUserIds, name = null, clientRequestId = crypto.randomUUID(), createdFrom = null) {
         return this.request(`/users/${userId}/chats`, {
             method: "POST",
             body: JSON.stringify({
@@ -1021,8 +1021,18 @@ export class ValidAPI {
                 name: name?.trim() || null,
                 client_request_id: clientRequestId,
                 timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+                ...(createdFrom ? { created_from: createdFrom } : {}),
             }),
         });
+    }
+
+    // Friends on Valid the viewer has never messaged (SayHiModel).
+    getSayHiSuggestions(userId, limit = 5) {
+        return this.request(`/users/${userId}/chats/say-hi-suggestions?limit=${Number(limit) || 5}`);
+    }
+
+    acknowledgeMissedCall(userId, callId) {
+        return this.request(`/users/${userId}/calls/${callId}/acknowledge-missed`, { method: "POST" });
     }
 
     getChat(userId, chatId) {

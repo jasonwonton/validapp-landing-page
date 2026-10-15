@@ -722,7 +722,7 @@ h3 { font-size: 1.45rem; }
 .profile-photo-warning { margin: -5px 0 0; color: var(--danger-text); font-size: .8rem; line-height: 1.3; text-align: center; }
 .profile-identity-line { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--muted); }
 .profile-streak { display: inline-flex; align-items: center; gap: 2px; }
-.profile-streak .ui-icon { color: var(--streak); fill: currentColor; stroke-width: 1; }
+.profile-streak .ui-icon { color: var(--streak); fill: currentColor; stroke-width: 0; }
 .profile-streak.needs-activity { animation: profile-streak-pulse 1s ease-in-out infinite alternate; }
 @keyframes profile-streak-pulse { to { transform: scale(1.1); } }
 .profile-bio-button { max-width: 460px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 4px 10px; border: 0; background: transparent; color: var(--muted); cursor: pointer; line-height: 1.4; text-align: center; }

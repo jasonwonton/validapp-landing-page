@@ -57,7 +57,7 @@ test("the chat camera is requested inside the tap, before the camera module load
     await signIn(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
-    await page.getByRole("button", { name: "Send photo or video" }).click();
+    await page.getByRole("button", { name: "Open camera" }).click();
     await expect.poll(() => page.evaluate(() => window.__cameraRequests.filter((request) => request.video).length)).toBeGreaterThan(0);
     const first = await page.evaluate(() => window.__cameraRequests.find((request) => request.video));
     expect(first.inTap).toBe(true);

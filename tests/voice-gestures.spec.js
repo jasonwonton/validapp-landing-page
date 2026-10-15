@@ -34,8 +34,11 @@ test('hold release creates an unsent preview with a custom player and waveform',
     await expect(page.locator('.chat-voice-player')).toBeVisible();
     await expect(page.locator('.chat-voice-waveform')).toBeVisible();
     await expect(page.locator('[data-send-voice]')).toBeEnabled();
+    // The preview card's labeled row (ChatVoicePreviewComposer).
+    await expect(page.locator('.chat-voice-preview-actions')).toContainText('Delete');
+    await expect(page.locator('.chat-voice-preview-actions')).toContainText('Record again');
     await page.screenshot({path: test.info().outputPath('voice-preview.png')});
-    await page.getByRole('button', {name:'Discard voice message'}).click();
+    await page.getByRole('button', {name:'Delete', exact:true}).click();
     await expect(page.locator('.chat-voice-inline')).toBeHidden();
 });
 test('slide left discards without sending and releases microphone tracks', async ({page}) => {
@@ -48,12 +51,12 @@ test('slide left discards without sending and releases microphone tracks', async
 test('slide up locks recording until explicit stop; keyboard toggle remains available', async ({page}) => {
     await openRoom(page); const point = await hold(page);
     await page.mouse.move(point.x,point.y - 90); await page.mouse.up();
-    await expect(page.locator('.chat-voice-hint')).toHaveText('Recording locked');
+    await expect(page.locator('.chat-voice-hint')).toHaveText("Locked · tap stop when you're done");
     await page.screenshot({path: test.info().outputPath('voice-locked.png')});
     await expect(page.getByRole('button', {name:'Stop recording and preview'})).toBeVisible();
     await page.getByRole('button', {name:'Stop recording and preview'}).click();
     await expect(page.locator('.chat-voice-player')).toBeVisible();
-    await page.getByRole('button', {name:'Discard voice message'}).click();
+    await page.getByRole('button', {name:'Delete', exact:true}).click();
     await page.locator('.chat-mic-button').press('Enter');
     await expect(page.getByRole('button', {name:'Stop recording and preview'})).toBeVisible();
 });

@@ -73,7 +73,7 @@ async function openChatCamera(page, query = "") {
     await recordUploads(page);
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Noah Williams/ }).click();
-    await page.getByRole("button", { name: "Send photo or video" }).click();
+    await page.getByRole("button", { name: "Open camera" }).click();
     return page.locator("[data-chat-media-dialog]");
 }
 
@@ -156,7 +156,7 @@ test.describe("chat camera capture", () => {
         const front = await uploadedPixel(page, 0, [[0.2, 0.5], [0.8, 0.5]]);
         expect(isBlue(front.colors[0]) && isRed(front.colors[1])).toBe(true);
 
-        await page.getByRole("button", { name: "Send photo or video" }).click();
+        await page.getByRole("button", { name: "Open camera" }).click();
         await expect(dialog.getByRole("button", { name: "Take photo", exact: true })).toBeEnabled();
         await dialog.getByRole("button", { name: "Switch front and rear camera" }).click();
         await expect(video).not.toHaveClass(/mirrored/);
@@ -265,7 +265,7 @@ test.describe("chat camera capture", () => {
         const [pixel] = (await uploadedPixel(page, 0, [[0.5, 0.5]])).colors;
         expect(pixel[0] - pixel[2]).toBeGreaterThan(12);
 
-        await page.getByRole("button", { name: "Send photo or video" }).click();
+        await page.getByRole("button", { name: "Open camera" }).click();
         await libraryPhoto(page, dialog, { fill: "rgb(40,160,220)" });
         await page.locator(".review-photo").focus();
         await page.keyboard.press("ArrowLeft");
@@ -286,7 +286,7 @@ test.describe("chat camera capture", () => {
         const box = await stage.boundingBox();
         await dialog.getByRole("button", { name: "Draw on this" }).click();
         await expect(dialog.getByRole("button", { name: "Done drawing" })).toBeVisible();
-        await expect(dialog.getByRole("button", { name: "Add caption" })).toBeHidden();
+        await expect(dialog.getByRole("button", { name: "Add or edit caption" })).toBeHidden();
         for (const name of ["White", "Black", "Red", "Yellow", "Green", "Blue", "Purple", "Thin brush", "Medium brush", "Thick brush"]) await expect(dialog.getByRole("button", { name, exact: true })).toBeVisible();
         await dialog.getByRole("button", { name: "Red", exact: true }).click();
         await dialog.getByRole("button", { name: "Thick brush" }).click();
@@ -309,7 +309,7 @@ test.describe("chat camera capture", () => {
         await editor.press("Enter");
         const first = dialog.getByRole("button", { name: /Media text: After practice/ });
         await expect(first).toBeVisible();
-        await dialog.getByRole("button", { name: "Add caption" }).click();
+        await dialog.getByRole("button", { name: "Add or edit caption" }).click();
         await dialog.getByRole("textbox", { name: "Caption" }).fill("Line one\nsecond");
         await expect(dialog.getByRole("button", { name: /Media text: Line one second/ })).toBeVisible();
         // Drag the first caption up.
@@ -348,11 +348,11 @@ test.describe("chat camera capture", () => {
         const dialog = await openChatCamera(page);
         await libraryPhoto(page, dialog);
         for (let index = 0; index < 6; index++) {
-            await dialog.getByRole("button", { name: "Add caption" }).click();
+            await dialog.getByRole("button", { name: "Add or edit caption" }).click();
             await dialog.getByRole("textbox", { name: "Caption" }).fill(`Caption ${index + 1}`);
             await dialog.getByRole("textbox", { name: "Caption" }).press("Enter");
         }
-        await dialog.getByRole("button", { name: "Add caption" }).click();
+        await dialog.getByRole("button", { name: "Add or edit caption" }).click();
         await expect(page.getByText("You can add up to 6 captions.")).toBeVisible();
         await expect(dialog.getByRole("textbox", { name: "Caption" })).toHaveCount(0);
         await expect(dialog.locator(".review-caption")).toHaveCount(6);
@@ -530,11 +530,13 @@ test.describe("chat video recording", () => {
         await expect(dialog.getByLabel("Video preview")).toBeVisible();
         await expect(dialog.locator(".chat-media-send-count")).toHaveText("Sends as 2 videos");
         await expect(dialog.locator(".review-duration")).toHaveText(/^2\d\.\ds$/);
-        await dialog.getByRole("button", { name: "Add caption" }).click();
+        await dialog.getByRole("button", { name: "Add or edit caption" }).click();
         await dialog.getByRole("textbox", { name: "Caption" }).fill("Long clip");
         await dialog.getByRole("textbox", { name: "Caption" }).press("Enter");
         await dialog.locator(".chat-media-publish").click();
-        await expect(page.getByText("2 videos sent", { exact: true })).toBeVisible();
+        // Queued: the camera closes at once and the segments go out behind it.
+        await expect(dialog).toBeHidden();
+        await expect.poll(() => page.evaluate(() => sentPayloads.length)).toBe(2);
         const result = await page.evaluate(() => ({ payloads: sentPayloads, uploads: uploadOptions, files: uploadedFiles.map((f) => f.type) }));
         expect(result.uploads).toEqual([]);
         expect(result.files).toEqual(["video/webm"]);
@@ -578,8 +580,9 @@ test.describe("chat video recording", () => {
         await expect(dialog.getByLabel("Video preview")).toBeVisible();
         await expect(dialog.locator(".chat-media-send-count")).toBeHidden();
         await dialog.locator(".chat-media-publish").click();
-        await expect(dialog.locator(".chat-media-status")).toContainText("That video could not be read. Try a different clip.");
-        await expect(dialog.locator(".chat-media-publish")).toBeEnabled();
+        // The camera closes once the send is queued; the failure shows on the pending bubble.
+        await expect(dialog).toBeHidden();
+        await expect(page.locator(".chat-send-failure")).toContainText("That video could not be read. Try a different clip.");
         const saved = await page.evaluate(async () => (await (await import("/app/chat/outbox.js")).listChatMediaOutbox("demo-user")).length);
         expect(saved).toBe(0);
     });
