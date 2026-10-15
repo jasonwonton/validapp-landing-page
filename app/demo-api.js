@@ -96,8 +96,9 @@ export class DemoAPI {
             profile_picture_url: "../assets/AppIconV2.png",
             profile_picture_url_thumb: "../assets/AppIconV2.png",
             profile_picture_url_medium: "../assets/AppIconV2.png",
-            can_change_information: true,
-            next_information_change_at: null,
+            // ?profilelocked=1: changed recently, so the 14-day lock is on.
+            can_change_information: demoParams.get("profilelocked") !== "1",
+            next_information_change_at: demoParams.get("profilelocked") === "1" ? new Date(Date.now() + 5 * 86_400_000).toISOString() : null,
             active_global_boost: null,
             active_targeted_boosts: [],
         };
