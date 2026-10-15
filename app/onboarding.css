@@ -1,0 +1,216 @@
+/* Onboarding, sign-in and notification asks (iOS flows 1, 2 and 10). */
+
+:root { --onboarding-success: #34c759; --onboarding-gray-medium: rgba(0, 0, 0, .1); }
+:root[data-theme="dark"] { --onboarding-success: #30d158; --onboarding-gray-medium: rgba(255, 255, 255, .14); }
+
+/* SessionRecoveryView */
+.session-recovery-card { justify-self: center; }
+.session-recovery-icon svg { width: 64px; height: 64px; fill: none; stroke: var(--ink); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.session-recovery-icon .session-recovery-badge { fill: var(--ink); stroke: none; }
+.session-recovery-icon .session-recovery-hands { stroke: var(--aqua); stroke-width: 1.6; }
+.session-recovery-card .passkey-copy h1 { font-size: clamp(2rem, 9vw, 2.6rem); line-height: 1.05; }
+.session-recovery-card .passkey-copy p { max-width: 330px; }
+.session-recovery-switch { min-height: 44px; color: var(--muted); font-size: 1rem; }
+
+/* LoginView as a sheet over the age screen */
+.sign-in-sheet { max-height: calc(var(--visual-viewport-height, 100dvh) - 24px); }
+.sign-in-heading .sheet-heading-control { padding-inline: 18px; }
+.sign-in-content { padding: 22px 22px max(28px, env(safe-area-inset-bottom)); }
+.sign-in-section { display: grid; justify-items: center; gap: 18px; text-align: center; }
+.sign-in-section h2 { margin: 0; font-size: clamp(2rem, 9vw, 2.4rem); line-height: 1.05; }
+.sign-in-subtitle { max-width: 320px; margin: 0; color: var(--muted); font-size: 1.12rem; line-height: 1.3; }
+.sign-in-face-icon { width: 100px; height: 100px; display: grid; place-items: center; margin-block: 6px; border-radius: 50%; background: var(--onboarding-gray-medium); }
+.sign-in-face-icon svg { width: 52px; height: 52px; fill: none; stroke: var(--ink); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.sign-in-section .status-message:empty { display: none; }
+.sign-in-section .primary-button { max-width: 340px; }
+.sign-in-passkey-button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
+.sign-in-button-icon svg { width: 24px; height: 24px; display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.sign-in-or { display: grid; justify-items: center; gap: 10px; margin-top: 8px; }
+.sign-in-or > span { color: var(--muted); opacity: .75; }
+.sign-in-or .text-button, .sign-in-secondary { min-height: 44px; color: var(--muted); font-size: 1rem; text-decoration: none; }
+.sign-in-field { width: min(100%, 340px); height: 60px; padding: 0 20px; border: 3px solid var(--outline); border-radius: 30px; background: var(--white); color: var(--ink); font: inherit; font-size: 1.25rem; }
+.sign-in-code-field { text-align: center; font-size: 1.5rem; letter-spacing: .12em; }
+.sign-in-disclosure { max-width: 320px; margin: 0; color: var(--muted); font-size: .8rem; line-height: 1.4; }
+.sign-in-disclosure a { color: var(--dark-teal); }
+.sign-in-section .signup-turnstile:empty { display: none; }
+
+/* GettingStartedView */
+.signup-age-step .signup-terms { order: 0; }
+.signup-step-logo { width: 150px; height: auto; justify-self: center; }
+.signup-entry-step:has(> .signup-step-logo) { padding-top: clamp(40px, 9vh, 96px); }
+.signup-entry-step > .signup-step-logo { margin-bottom: 4px; }
+
+/* ContactsPermissionView */
+.signup-contacts-step { justify-items: center; align-content: center; text-align: center; }
+.signup-contacts-step .signup-step-logo { width: 190px; margin-bottom: 8px; }
+.signup-contacts-step h2 { width: 100%; }
+.signup-contacts-panel { width: min(100%, 420px); display: grid; justify-items: center; gap: 16px; margin-top: clamp(24px, 6vh, 64px); }
+.signup-contacts-copy { margin: 0; padding-inline: 12px; font-size: 1.15rem; line-height: 1.3; }
+.signup-contacts-privacy { margin: 0; padding-inline: 24px; color: var(--muted); font-size: .88rem; line-height: 1.35; }
+.signup-contacts-privacy a { color: var(--dark-teal); }
+.signup-contacts-panel .primary-button { max-width: 340px; }
+.signup-contacts-continue { min-height: 44px; color: var(--muted); }
+.signup-contacts-done-title { font-size: 1.25rem; }
+.onboarding-check-icon svg { width: 54px; height: 54px; display: block; }
+.onboarding-check-icon circle { fill: var(--onboarding-success); stroke: none; }
+.onboarding-check-icon path { fill: none; stroke: #fff; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+
+/* SchoolSelectionView: search first, ZIP card, results, add a school */
+.signup-school-step:not(.hidden) { grid-template-rows: auto auto auto minmax(0, 1fr) auto; }
+.signup-school-step > h2 { grid-row: 1; text-align: center; font-size: clamp(1.8rem, 8vw, 2.2rem); }
+.signup-school-step > .signup-school-search { grid-row: 2; }
+.signup-school-step > #signupSchoolMessage { grid-row: 3; }
+.signup-school-step > .signup-school-body { grid-row: 4; }
+.signup-school-step > #signupSchoolContinue { grid-row: 5; align-self: end; }
+.signup-school-search { position: relative; display: block; }
+.signup-school-search-icon { position: absolute; top: 50%; left: 16px; width: 20px; height: 20px; color: var(--muted); transform: translateY(-50%); pointer-events: none; }
+.signup-school-search-icon svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.signup-flow .signup-school-search input[type="search"] { min-height: 52px; padding: 10px 16px 10px 46px; border-radius: 26px; }
+.signup-school-message { margin: 0; color: var(--muted); font-size: .9rem; text-align: center; }
+.signup-school-body { min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr); }
+.signup-school-body > #signupZipCard, .signup-school-body > #signupSchoolPicker { grid-row: 1; }
+.signup-school-picker:not(.hidden) { grid-template-rows: minmax(0, 1fr) auto; }
+.signup-zip-card { align-self: start; display: grid; justify-items: center; gap: 12px; margin-top: 10px; padding: 22px 20px; border: 3px solid var(--outline); border-radius: 28px; background: var(--white); text-align: center; }
+.signup-zip-icon svg { width: 40px; height: 40px; display: block; fill: none; stroke: var(--ink); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.signup-zip-card strong { font-size: 1.35rem; }
+.signup-zip-card p { margin: 0; color: var(--muted); line-height: 1.35; }
+.signup-flow .signup-zip-card input { max-width: 220px; border-radius: 30px; text-align: center; font-size: 1.2rem; }
+.signup-zip-card .primary-button { max-width: 280px; margin-top: 2px; }
+.signup-zip-card .text-button { min-height: 40px; color: var(--muted); }
+.signup-school-members { display: grid; justify-items: end; line-height: 1; }
+.signup-school-members strong { font-size: 1rem; }
+.signup-school-members small { color: var(--muted); font-size: .68rem; }
+.signup-school-result { grid-template-columns: 46px minmax(0, 1fr) auto; }
+.signup-school-footer { padding: 0 2px 4px; }
+.signup-school-more { width: 100%; display: grid; grid-template-columns: 40px minmax(0, 1fr) 18px; align-items: center; gap: 12px; padding: 12px; border: 1px solid rgba(255, 177, 94, .5); border-radius: 15px; background: rgba(var(--surface-rgb), .6); color: var(--ink); cursor: pointer; text-align: left; }
+.signup-school-more > span:nth-child(2) { display: grid; gap: 2px; }
+.signup-school-more small { color: var(--muted); font-size: .78rem; }
+.signup-school-more-icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; background: rgba(255, 177, 94, .18); font-size: 1.4rem; }
+.signup-school-more-icon svg { width: 22px; height: 22px; fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.signup-school-results > .signup-school-empty { display: grid; justify-items: center; gap: 10px; border: 0; }
+.signup-school-empty strong { color: var(--ink); font-size: 1.1rem; }
+.signup-school-empty p { margin: 0; }
+.signup-school-empty .primary-button { max-width: 260px; min-height: 52px; font-size: 1.1rem; }
+.signup-school-empty-icon svg { width: 38px; height: 38px; fill: none; stroke: var(--muted); stroke-width: 2; stroke-linecap: round; }
+
+/* SchoolRequestView */
+.add-school-sheet { max-height: calc(var(--visual-viewport-height, 100dvh) - 24px); }
+.add-school-content, .add-school-done { display: grid; gap: 12px; padding: 18px 22px max(26px, env(safe-area-inset-bottom)); }
+.add-school-content h2, .add-school-done h2 { margin: 0 0 4px; font-size: clamp(1.8rem, 8vw, 2.2rem); }
+.add-school-content > label, .add-school-content .two-field-row label { display: grid; gap: 6px; font-size: .92rem; }
+.add-school-content input, .add-school-content select { width: 100%; min-height: 50px; padding: 10px 14px; border: 2px solid var(--outline); border-radius: 14px; background: var(--white); color: var(--ink); font: inherit; font-size: 16px; }
+.add-school-grades { display: grid; gap: 8px; margin: 4px 0 0; padding: 0; border: 0; }
+.add-school-grades legend { padding: 0; font-size: 1.05rem; }
+.add-school-done { justify-items: center; text-align: center; padding-top: 34px; }
+.add-school-done .onboarding-check-icon svg { width: 80px; height: 80px; }
+.add-school-done .onboarding-check-icon circle { fill: var(--peach); }
+.add-school-done .onboarding-check-icon path { stroke: var(--on-peach); }
+.add-school-done p { margin: 0; color: var(--muted); font-size: 1.05rem; line-height: 1.35; }
+
+/* PhoneNumberEntryView / PhoneVerificationCodeView */
+.signup-sms-opt-in { width: 100%; display: grid; gap: 6px; text-align: left; }
+.signup-sms-check { display: grid; grid-template-columns: 26px minmax(0, 1fr); align-items: start; gap: 12px; cursor: pointer; font-size: .92rem; line-height: 1.3; }
+.signup-flow .signup-sms-check input[type="checkbox"] { width: 26px; height: 26px; min-height: 0 !important; margin: 0; padding: 0 !important; accent-color: var(--peach); }
+.signup-sms-fine { margin: 0 0 0 38px; color: var(--muted); font-size: .78rem; line-height: 1.35; }
+.signup-sms-fine a { color: var(--dark-teal); }
+.signup-code-step { text-align: center; }
+.signup-code-attempts { text-align: center; }
+.signup-resend-code, .signup-change-phone { min-height: 40px; justify-self: center; }
+.signup-resend-code:disabled { color: var(--muted); cursor: default; text-decoration: none; }
+.signup-change-phone { color: var(--muted); }
+
+/* FirstNameEntryView / LastNameEntryView / UsernameEntryView */
+.signup-name-warning, .signup-username-hint { width: 100%; text-align: center; font-size: .98rem; }
+.signup-vote-banner { width: 100%; margin: 0; color: var(--ink); font-size: 1.1rem; text-align: center; }
+.signup-vote-banner strong { color: var(--heart-pink); font-size: 1.3rem; }
+.signup-username-field { position: relative; display: block; width: 100%; }
+.signup-username-at { position: absolute; top: 50%; left: 18px; color: var(--muted); font-size: 1.25rem; transform: translateY(-50%); pointer-events: none; }
+.signup-flow .signup-username-field input { padding-left: 40px !important; }
+.signup-username-status { width: 100%; min-height: 0; text-align: center; }
+.signup-username-status p { margin: 0; font-size: .92rem; }
+.signup-username-checking { color: var(--muted); }
+.signup-username-warning { color: var(--danger-text); }
+.signup-username-suggestion { display: grid; justify-items: center; gap: 8px; padding: 14px; border: 2px solid rgba(128, 128, 128, .3); border-radius: 14px; background: var(--white); }
+.signup-username-suggestion p { color: var(--danger-text); }
+.signup-username-suggestion small { color: var(--muted); font-size: .85rem; }
+.signup-username-suggestion div { display: flex; align-items: center; gap: 12px; }
+.signup-username-suggestion strong { padding: 6px 12px; border-radius: 8px; background: rgba(255, 177, 94, .2); }
+.signup-username-suggestion button { min-height: 36px; padding: 6px 16px; border: 0; border-radius: 8px; background: var(--peach); color: var(--on-peach); cursor: pointer; font: inherit; }
+
+/* GenderSelectionView */
+.signup-gender-step { justify-items: center; }
+.signup-gender-step .signup-step-logo { width: 130px; }
+.signup-gender-emoji { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", system-ui, sans-serif !important; }
+
+/* PasskeySetupView */
+.signup-passkey-step { justify-items: center; align-content: center; text-align: center; }
+.signup-passkey-panel { width: min(100%, 440px); display: grid; justify-items: center; gap: 14px; }
+.signup-passkey-logo { width: 112px; height: auto; }
+.signup-passkey-key { width: 96px; height: 96px; display: grid; place-items: center; margin-top: 12px; border: 3px solid var(--outline); border-radius: 50%; background: var(--white); }
+.signup-passkey-key svg { width: 44px; height: 44px; fill: none; stroke: var(--ink); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.signup-passkey-step h2 { font-size: clamp(2rem, 9vw, 2.4rem); }
+.signup-passkey-copy { margin: 0; padding-inline: 16px; font-size: 1.12rem; line-height: 1.32; }
+.onboarding-privacy-card { width: 100%; display: grid; grid-template-columns: 32px minmax(0, 1fr); align-items: center; gap: 14px; padding: 16px; border: 2px solid var(--outline); border-radius: 18px; background: var(--white); text-align: left; }
+.onboarding-privacy-card > span:first-child svg { width: 30px; height: 30px; display: block; fill: none; stroke: var(--ink); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.onboarding-privacy-card > span:last-child { display: grid; gap: 3px; }
+.onboarding-privacy-card small { color: var(--muted); font-size: .88rem; line-height: 1.3; }
+.signup-passkey-panel .primary-button { max-width: 360px; margin-top: 14px; }
+.signup-passkey-fine, .passkey-enrollment-fine { margin: 0; color: var(--muted); font-size: .86rem; }
+.signup-passkey-panel .onboarding-check-icon svg { width: 88px; height: 88px; }
+
+/* OnboardingCompletionView */
+.signup-welcome-step { justify-items: center; align-content: center; gap: 22px; text-align: center; }
+.signup-welcome-logo { width: 200px; height: auto; }
+.signup-welcome-step h2 { width: 100%; }
+.signup-welcome-copy { margin: 0; font-size: 1.2rem; }
+.signup-welcome-step .primary-button { max-width: 360px; margin-top: clamp(24px, 8vh, 80px); }
+
+/* FriendsAndClassmatesView / InviteFriendsView */
+.friends-classmates-sheet { position: fixed; inset: 0; width: 100%; max-width: none; height: var(--visual-viewport-height, 100dvh); max-height: none; margin: 0; padding: 0; border: 0; background: var(--aqua); color: var(--ink); }
+.friends-classmates-sheet::backdrop { background: var(--aqua); }
+.friends-classmates-content { width: min(560px, calc(100% - 32px)); height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; margin: 0 auto; padding: max(12px, env(safe-area-inset-top)) 0 max(16px, env(safe-area-inset-bottom)); }
+.friends-classmates-logo { width: 140px; height: auto; justify-self: center; }
+.friends-classmates-panel { min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 12px; }
+#inviteFriendsPanel { grid-template-rows: auto auto minmax(0, 1fr) auto auto; }
+.friends-classmates-panel h2 { margin: 0; font-size: clamp(1.9rem, 8.5vw, 2.4rem); text-align: center; }
+.friends-classmates-subtitle, .friends-classmates-loading { margin: 0; color: var(--muted); text-align: center; }
+.friends-classmates-loading:empty { display: none; }
+.friends-classmates-list { min-height: 0; display: grid; align-content: start; gap: 12px; overflow-y: auto; overscroll-behavior: contain; padding: 4px 2px; }
+.friends-classmates-header { margin: 6px 4px 0; font-size: 1.1rem; }
+.friends-classmates-row { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 16px; border: 2px solid var(--outline); border-radius: 20px; background: var(--white); }
+.friends-classmates-avatar { width: 48px; height: 48px; display: grid; place-items: center; overflow: hidden; border: 2px solid var(--outline); border-radius: 50%; background: var(--onboarding-gray-medium); font-size: 1.05rem; }
+.friends-classmates-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.friends-classmates-copy { min-width: 0; display: grid; gap: 3px; }
+.friends-classmates-copy strong { overflow: hidden; font-size: 1.1rem; text-overflow: ellipsis; white-space: nowrap; }
+.friends-classmates-copy small { color: var(--muted); font-size: .85rem; }
+.friends-classmates-copy em { color: var(--dark-teal); font-size: .75rem; font-style: normal; }
+.friends-classmates-pill, .friends-classmates-invite { padding: 6px 12px; border: 1.5px solid var(--outline); border-radius: 999px; background: var(--peach); color: var(--on-peach); font: inherit; font-size: .88rem; white-space: nowrap; }
+.friends-classmates-invite { min-height: 36px; padding-inline: 14px; cursor: pointer; }
+.friends-classmates-invited { color: var(--muted); font-size: .88rem; }
+.friends-classmates-card { display: grid; justify-items: center; gap: 10px; padding: 18px 16px; border: 2px solid var(--outline); border-radius: 20px; background: var(--white); text-align: center; }
+.friends-classmates-card small { color: var(--muted); font-size: .95rem; }
+.friends-classmates-card .primary-button { min-height: 48px; font-size: 1.05rem; }
+.friends-classmates-panel > .primary-button, .friends-classmates-panel > .secondary-button { max-width: 420px; justify-self: center; }
+
+/* FeedVoteLockedView "Turn on vote alerts" */
+.feed-gate-notification { width: min(100%, 390px); display: grid; grid-template-columns: 44px minmax(0, 1fr) 14px; align-items: center; gap: 12px; margin-top: 10px; padding: 14px 16px; border: 3px solid var(--outline); border-radius: 22px; background: var(--peach); box-shadow: 0 3px 6px rgba(0, 0, 0, .1); color: var(--on-peach); cursor: pointer; font: inherit; text-align: left; }
+.feed-gate-notification:disabled { opacity: var(--button-disabled-opacity); cursor: default; }
+.feed-gate-notification-icon { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; background: rgba(255, 255, 255, .92); color: var(--on-peach); }
+.feed-gate-notification-icon .ui-icon { width: 22px; height: 22px; }
+.feed-gate-notification-copy { min-width: 0; display: grid; gap: 3px; }
+.feed-gate-notification-copy strong { color: var(--on-peach); font-size: 1.1rem; }
+.feed-gate-notification-copy small { color: rgba(0, 0, 0, .75); font-size: .88rem; line-height: 1.3; }
+.feed-gate-notification-chevron { color: rgba(0, 0, 0, .6); font-size: 1.3rem; }
+.feed-gate-notification[data-state="blocked"] { background: var(--white); color: var(--ink); }
+.feed-gate-notification[data-state="blocked"] strong, .feed-gate-notification[data-state="blocked"] .feed-gate-notification-chevron { color: var(--ink); }
+.feed-gate-notification[data-state="blocked"] small { color: var(--muted); }
+.feed-gate-notification[data-state="blocked"] .feed-gate-notification-icon { background: var(--onboarding-gray-medium); color: var(--ink); }
+
+/* In-app banner for a chat push while Valid is open */
+.in-app-push-banner { position: fixed; z-index: 90; inset: max(10px, env(safe-area-inset-top)) 12px auto; width: auto; max-width: 520px; margin: 0 auto; display: grid; grid-template-columns: 36px minmax(0, 1fr); align-items: center; gap: 12px; padding: 12px 14px; border: 2px solid var(--outline); border-radius: 22px; background: var(--white); box-shadow: var(--shadow); color: var(--ink); cursor: pointer; font: inherit; text-align: left; opacity: 0; transform: translateY(-16px); transition: opacity .2s ease, transform .2s ease; }
+.in-app-push-banner.visible { opacity: 1; transform: none; }
+.in-app-push-banner img { width: 36px; height: 36px; border-radius: 9px; }
+.in-app-push-banner > span { min-width: 0; display: grid; gap: 2px; }
+.in-app-push-banner strong, .in-app-push-banner small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.in-app-push-banner small { color: var(--muted); font-size: .88rem; }
+@media (prefers-reduced-motion: reduce) { .in-app-push-banner { transition: none; } }

@@ -260,6 +260,29 @@ export class ValidAPI {
         });
     }
 
+    // Text-code sign-in for browsers. Shown only when config sets
+    // enable_web_phone_login: the send needs Turnstile and the confirm must
+    // answer with the HttpOnly session cookie, like passkey sign-in.
+    requestLoginVerification(phoneNumber, turnstileToken) {
+        return this.request("/auth/login/request/web", {
+            method: "POST",
+            auth: false,
+            body: JSON.stringify({
+                phone_number: phoneNumber,
+                channel: "sms",
+                turnstile_token: turnstileToken,
+            }),
+        });
+    }
+
+    confirmLoginVerification(phoneNumber, code) {
+        return this.request("/auth/login/confirm/web", {
+            method: "POST",
+            auth: false,
+            body: JSON.stringify({ phone_number: phoneNumber, code }),
+        });
+    }
+
     completeWebSignup(payload) {
         return this.request("/auth/passkey/signup/complete", {
             method: "POST",
