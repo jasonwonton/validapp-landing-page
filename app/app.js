@@ -6672,7 +6672,8 @@ function pullRefreshAllowedFrom(target) {
 
 function beginPullRefresh(event) {
     state.pullRefreshStartY = null;
-    if (!document.body.classList.contains("authenticated") || state.pullRefreshing || window.scrollY > 0
+    // iOS refreshes only the Feed and Chats lists by pulling.
+    if (!document.body.classList.contains("authenticated") || !["feed", "chats"].includes(state.activePanel) || state.pullRefreshing || window.scrollY > 0
         || $("dialog[open], .detail-screen:not(.hidden)") || event.touches?.length > 1 || !pullRefreshAllowedFrom(event.target)) return;
     state.pullRefreshStartY = event.touches?.[0]?.clientY ?? null;
     state.pullRefreshDistance = 0;

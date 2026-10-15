@@ -91,7 +91,13 @@ export function createFeedView(context) {
         const visible = state.feedType === "personal" && !state.feedSearch.trim();
         controls.classList.toggle("hidden", !visible);
         if (!visible) return;
-        if (!personalInboxFilters[state.personalInboxFilter]) state.personalInboxFilter = "all";
+        // FeedInboxEntries: TBHs and Ask Me leave when their server switches are off.
+        const hiddenFilters = new Set([
+            ...(tbhRequestsEnabled() ? [] : ["tbhs"]),
+            ...(state.config?.enable_ngl_link === false ? ["ask_me"] : []),
+        ]);
+        if (!personalInboxFilters[state.personalInboxFilter] || hiddenFilters.has(state.personalInboxFilter)) state.personalInboxFilter = "all";
+        $$('[data-inbox-filter]').forEach((button) => button.classList.toggle("hidden", hiddenFilters.has(button.dataset.inboxFilter)));
         const counts = personalInboxUnreadCounts();
         $$('[data-inbox-filter]').forEach((button) => {
             const filter = button.dataset.inboxFilter;
