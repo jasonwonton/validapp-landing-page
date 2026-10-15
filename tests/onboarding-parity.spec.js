@@ -115,6 +115,51 @@ test("new users go through the iOS sign-up order and land on Play", async ({ pag
     await expect(page.getByRole("button", { name: "Play", exact: true })).toHaveAttribute("aria-current", "page");
 });
 
+// ContactsPermissionView moves on once the picker is used, however many
+// contacts the filters keep (a sign-up on Chrome for Android looped here).
+for (const [label, picked, error] of [
+    ["only filtered contacts (family names, non-US numbers)", [{ name: ["Mom"], tel: ["4155550111"] }, { name: ["Bestie"], tel: ["+44 7700 900123"] }, { name: [], tel: ["4155550113"] }], null],
+    ["nothing (the picker closed empty)", [], null],
+    ["a cancelled picker", null, "AbortError"],
+]) {
+    test(`the friends step moves on after picking ${label}`, async ({ page }) => {
+        await page.addInitScript(({ picked, error }) => {
+            if (picked) window.__demoPickedContacts = picked;
+            if (error) window.__demoContactPickerError = error;
+        }, { picked, error });
+        const dialog = await openRoot(page);
+        await dialog.locator('[data-signup-age="16"]').click();
+        await dialog.getByRole("button", { name: "Get Started!" }).click();
+        if (process.env.SIGNUP_SHOTS === "1" && test.info().project.name === "android" && label.startsWith("only")) {
+            await page.screenshot({ path: `${process.env.HOME}/Desktop/validapp-flows/shots/signup-friends/01-choose-friends.png` });
+        }
+        await dialog.getByRole("button", { name: "Choose Friends" }).click();
+        await expect(dialog.getByText("Friends Selected!")).toBeVisible();
+        await expect(dialog.locator("#signupStatus")).toHaveText("");
+        if (process.env.SIGNUP_SHOTS === "1" && test.info().project.name === "android") {
+            await page.screenshot({ path: `${process.env.HOME}/Desktop/validapp-flows/shots/signup-friends/${label.startsWith("only") ? "02-filtered" : label.startsWith("nothing") ? "03-empty" : "04-cancelled"}.png` });
+        }
+        await dialog.getByRole("button", { name: "Continue" }).click();
+        await expect(dialog.getByRole("heading", { name: "Pick your school" })).toBeVisible();
+    });
+}
+
+test("a contact picker that fails to open falls back to the invite card with Continue", async ({ page }) => {
+    await page.addInitScript(() => { window.__demoContactPickerError = "SecurityError"; });
+    const dialog = await openRoot(page);
+    await dialog.locator('[data-signup-age="16"]').click();
+    await dialog.getByRole("button", { name: "Get Started!" }).click();
+    await dialog.getByRole("button", { name: "Choose Friends" }).click();
+    await expect(dialog.getByRole("button", { name: "Invite Friends" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Choose Friends" })).toBeHidden();
+    await expect(dialog.locator("#signupStatus")).toHaveText("");
+    if (process.env.SIGNUP_SHOTS === "1" && test.info().project.name === "android") {
+        await page.screenshot({ path: `${process.env.HOME}/Desktop/validapp-flows/shots/signup-friends/05-picker-failed.png` });
+    }
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await expect(dialog.getByRole("heading", { name: "Pick your school" })).toBeVisible();
+});
+
 test("browsers without a contact picker keep the friends card with an invite", async ({ page }) => {
     await page.addInitScript(() => { window.__demoNoContactPicker = true; });
     const dialog = await openRoot(page);
