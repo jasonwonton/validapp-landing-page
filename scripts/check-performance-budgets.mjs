@@ -53,7 +53,7 @@ for (const match of `${appJS}\n${feedRoute}\n${storiesRoute}`.matchAll(/<img\b[^
 }
 assert.doesNotMatch(`${indexHTML}\n${appJS}\n${feedRoute}\n${storiesRoute}\n${serviceWorker}`, /assets\/app\/[^"')]+\.png/, "App artwork must use optimized formats");
 assert.match(appJS, /function initializeParkedUI\(\)/, "Inactive dialogs must remain on-demand");
-assert.match(feedRoute, /reconcileKeyedElements\(list, sortedRows\)/, "Feed rows must retain keyed DOM identity");
+assert.match(feedRoute, /reconcileKeyedElements\(list, [^;]*sortedRows/, "Feed rows must retain keyed DOM identity");
 assert.match(feedRoute, /export function createFeedView\(context\)/, "Feed rendering must remain in its route chunk");
 assert.doesNotMatch(appJS, /function pendingTbhRows\(/, "Feed row construction must not return to the main module");
 assert.doesNotMatch(appJS, /list\.innerHTML = rows\s*\n?\s*\.sort/, "The feed must not rebuild every row with innerHTML");
@@ -88,7 +88,9 @@ for (const entry of shellEntries) {
 // fixes in the startup modules.
 // 830 KB (web-v116): the base release branch was already over at ~804 KB before
 // this release (web-v108..v115 growth); the chat notification card adds ~6 KB.
-assert.ok(shellTransferEstimate <= 830_000, `Estimated app-shell transfer exceeds 830 KB (${shellTransferEstimate} bytes)`);
+// 900 KB (web-v117): iOS flow parity across Feed, Play, Chats, Profile and
+// sign-up (~67 KB, mostly app.js and chat/index.js). Precache only.
+assert.ok(shellTransferEstimate <= 900_000, `Estimated app-shell transfer exceeds 900 KB (${shellTransferEstimate} bytes)`);
 
 console.log(JSON.stringify({
     fontBytes,

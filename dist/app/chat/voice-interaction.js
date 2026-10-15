@@ -1,16 +1,18 @@
 // Hold gestures never send: release produces a preview; left cancels; up locks.
 // A normal click/keyboard activation remains the accessible toggle fallback.
-// iOS ChatVoiceGesturePolicy: 86 pt left arms "Release to cancel", 76 pt up locks.
+// iOS ChatVoiceGesturePolicy: 86 pt left arms "Release to cancel", 76 pt up
+// arms "Release to lock", and the lock happens on release (ChatVoiceRecordingHint).
 export const VOICE_CANCEL_DISTANCE = 86;
 export const VOICE_LOCK_DISTANCE = 76;
-const HOLD_HINT = 'Slide left to cancel · Up to lock';
+const HOLD_HINT = 'Slide left to cancel · up to lock';
+export const VOICE_LOCKED_HINT = "Locked · tap stop when you're done";
 
 export function bindVoiceGesture(button, { canStart, begin, recording, stop, discard, hint, haptic = () => {} }) {
     let press = null, timer = null, suppressUntil = 0;
     const clear = () => { clearTimeout(timer); timer = null; press = null; hint(''); };
     button.addEventListener('pointerdown', event => {
         if (event.button !== 0 || !canStart()) return;
-        press = { id: event.pointerId, x: event.clientX, y: event.clientY, held: false, locked: false, pending: false, cancelling: false };
+        press = { id: event.pointerId, x: event.clientX, y: event.clientY, held: false, locked: false, lockArmed: false, pending: false, cancelling: false };
         const active = press;
         timer = setTimeout(async () => {
             timer = null;
@@ -21,18 +23,19 @@ export function bindVoiceGesture(button, { canStart, begin, recording, stop, dis
             haptic('light');
             await begin(); active.pending = false;
             if (press === active && !recording()) clear();
-            else if (press === active) hint(active.locked ? 'Recording locked' : active.cancelling ? 'Release to cancel' : HOLD_HINT, active.cancelling);
+            else if (press === active) hint(active.locked ? VOICE_LOCKED_HINT : active.cancelling ? 'Release to cancel' : active.lockArmed ? 'Release to lock' : HOLD_HINT, active.cancelling);
         }, 250);
     });
     button.addEventListener('pointermove', event => {
         if (!press?.held || event.pointerId !== press.id || press.locked) return;
         const cancelling = event.clientX - press.x <= -VOICE_CANCEL_DISTANCE;
-        if (cancelling !== press.cancelling) {
+        const lockArmed = !cancelling && event.clientY - press.y <= -VOICE_LOCK_DISTANCE;
+        if (cancelling !== press.cancelling || lockArmed !== press.lockArmed) {
             press.cancelling = cancelling;
-            hint(cancelling ? 'Release to cancel' : HOLD_HINT, cancelling);
-            if (cancelling) haptic('selection');
+            press.lockArmed = lockArmed;
+            hint(cancelling ? 'Release to cancel' : lockArmed ? 'Release to lock' : HOLD_HINT, cancelling);
+            if (cancelling || lockArmed) haptic('selection');
         }
-        if (!cancelling && event.clientY - press.y <= -VOICE_LOCK_DISTANCE) { press.locked = true; hint('Recording locked'); haptic('medium'); }
     });
     button.addEventListener('pointerup', event => {
         if (!press || event.pointerId !== press.id) return;
@@ -40,8 +43,9 @@ export function bindVoiceGesture(button, { canStart, begin, recording, stop, dis
         if (active.held) {
             suppressUntil = Date.now() + 1500;
             if (active.cancelling) { press = null; clear(); discard(); return; }
+            if (active.lockArmed && !active.pending) { active.locked = true; haptic('medium'); }
             if (!active.locked) { if (active.pending) discard(); else stop(); }
-            hint(active.locked ? 'Recording locked' : '');
+            hint(active.locked ? VOICE_LOCKED_HINT : '');
         }
         press = null;
     });

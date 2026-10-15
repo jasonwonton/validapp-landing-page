@@ -63,6 +63,185 @@ export function chatAttentionPriority(chat, { dailyLedgerEnabled = false, callsE
     return 0;
 }
 
+// ChatSummary.isGroup: a named chat or three or more people.
+export function isGroupChatSummary(chat) {
+    return chat?.name != null || Number(chat?.accepted_count || 0) + Number(chat?.pending_count || 0) >= 3;
+}
+
+// ChatSummary.invitedByDisplayName.
+export function invitedByDisplayName(chat) {
+    const name = [chat?.invited_by_first_name, chat?.invited_by_last_name].filter(Boolean).join(" ").trim();
+    if (name) return name;
+    return chat?.invited_by_username ? `@${chat.invited_by_username}` : "Someone";
+}
+
+// SayHiModel.wave: the opener a Say hi card sends.
+export const SAY_HI_WAVE = "\u{1F44B}";
+
+// ChatInvitationReviewModel.friendOpener: a friend's 1:1 opener (the server
+// sends invitation_preview only between mutual contacts).
+export function friendInvitationOpener(chat) {
+    if (isGroupChatSummary(chat) || chat?.invitation_story_context || chat?.has_viewer_blocked_member === true) return null;
+    return chat?.invitation_preview || null;
+}
+
+// ChatInboxMessageType: the status line's per-type icon and noun.
+const INBOX_MESSAGE_TYPES = { memento: "memento", photo: "photo", video: "video", text: "text", sticker: "sticker", audio: "voice", story: "story" };
+const INBOX_NOUNS = { memento: "Memento", photo: "photo", video: "video", text: "message", sticker: "sticker", voice: "voice note", story: "Story" };
+export function inboxMessageType(kind) { return INBOX_MESSAGE_TYPES[kind] || null; }
+export function inboxMessageNoun(type) { return INBOX_NOUNS[type] || "message"; }
+
+// ChatInboxRowModel.messagePreview: old copy for rows the status line does not describe.
+function inboxMessagePreview(chat, regularUnreadCount) {
+    const separated = chat.regular_unread_count != null && chat.last_regular_message_kind !== undefined;
+    const mine = separated ? chat.last_regular_message_is_mine === true : chat.last_message_is_mine === true;
+    if (regularUnreadCount > 0 && mine) return regularUnreadCount === 1 ? "1 unread message" : `${regularUnreadCount} unread messages`;
+    const sender = mine ? "You" : ((separated ? chat.last_regular_message_sender_first_name : chat.last_message_sender_first_name) || "Someone");
+    const kind = separated ? chat.last_regular_message_kind : chat.last_message_kind;
+    const body = separated ? chat.last_regular_message_body : chat.last_message_body;
+    const nouns = { photo: "a photo", video: "a video", audio: "a voice message", memento: "a Memento", story: "a Story", sticker: "a sticker" };
+    let detail;
+    if (nouns[kind]) detail = `${sender} sent ${nouns[kind]}`;
+    else if (body) detail = kind === "text" ? `${sender}: ${body}` : body;
+    else if (Number(chat.unopened_view_once_count) > 0 && chat.next_view_once_room_sequence != null) detail = "No unread messages";
+    else detail = "No messages yet";
+    return regularUnreadCount > 0 ? `${regularUnreadCount} unread · ${detail}` : detail;
+}
+
+// ChatInboxRowModel.status (iOS 1.6033 status line), highest precedence first.
+// Returns { kind, type?, count?, text?, video? }.
+export function chatInboxStatus(chat, { callsEnabled = false, hasSendFailure = false, isSending = false } = {}) {
+    if (hasSendFailure) return { kind: "failed" };
+    if (chat.membership_status === "invited") {
+        if (isGroupChatSummary(chat)) {
+            if (chat.has_viewer_blocked_member === true) return { kind: "plain", text: "Someone you blocked is in this group · Tap to review" };
+            return { kind: "plain", text: `${invitedByDisplayName(chat)} invited you · ${Number(chat.accepted_count || 0) + Number(chat.pending_count || 0)} people` };
+        }
+        const preview = friendInvitationOpener(chat);
+        if (preview) return { kind: "plain", text: preview === SAY_HI_WAVE ? `Said hi ${SAY_HI_WAVE} · Tap to wave back` : `${preview} · Tap to reply` };
+        return { kind: "plain", text: `${invitedByDisplayName(chat)} invited you · Tap to review` };
+    }
+    if (Number(chat.accepted_count || 0) < 2 && Number(chat.pending_count || 0) > 0) return { kind: "plain", text: "Waiting for them to accept" };
+    if (callsEnabled && chat.unacknowledged_missed_call_id) return { kind: "missedCall", video: chat.unacknowledged_missed_call_media_type === "video" };
+    const regularUnread = Math.max(0, Number(chat.regular_unread_count ?? chat.unread_count ?? 0));
+    const separated = chat.last_regular_message_kind !== undefined;
+    const latestIsMine = separated ? chat.last_regular_message_is_mine === true : chat.last_message_is_mine === true;
+    const latestKind = separated ? chat.last_regular_message_kind : chat.last_message_kind;
+    const latestType = inboxMessageType(latestKind);
+    const hasSnaps = Number(chat.unopened_view_once_count) > 0 && chat.next_view_once_room_sequence != null;
+    const unopenedSnaps = hasSnaps ? Math.max(Number(chat.unopened_view_once_count) || 1, 1) : 0;
+    const newCount = regularUnread + unopenedSnaps;
+    if (newCount > 0) {
+        const newest = regularUnread > 0
+            ? (latestIsMine ? (inboxMessageType(chat.newest_unread_message_kind) || "text") : (latestType || "text"))
+            : (inboxMessageType(chat.next_view_once_kind) || "photo");
+        return newCount === 1 ? { kind: "new", type: newest } : { kind: "newCount", count: newCount, type: newest };
+    }
+    if (isSending) return { kind: "sending", type: latestType || "text" };
+    if (!latestKind) return { kind: "plain", text: "No messages yet" };
+    if (!latestType) return { kind: "plain", text: inboxMessagePreview(chat, regularUnread) };
+    if (!latestIsMine) return { kind: "yourMove", type: latestType };
+    const opened = chat.last_regular_message_opened_count;
+    if (!separated || opened == null) return { kind: "sent", type: latestType };
+    if (Number(opened) <= 0) return { kind: "delivered", type: latestType };
+    if (!isGroupChatSummary(chat)) return { kind: "opened", type: latestType };
+    const audience = Math.max(Number(chat.last_regular_message_audience_count ?? (Number(chat.accepted_count || 0) - 1)), 1);
+    return Number(opened) >= audience ? { kind: "openedByEveryone", type: latestType } : { kind: "openedBy", count: Number(opened), type: latestType };
+}
+
+// When the status line's event happened; null for lines with no time.
+export function chatInboxStatusDate(status, chat) {
+    if (status.kind === "failed" || status.kind === "plain") return null;
+    if (status.kind === "missedCall") return chat.unacknowledged_missed_call_at || chat.last_message_at || chat.updated_at || null;
+    return (chat.last_regular_message_kind !== undefined ? chat.last_regular_message_at : null) || chat.last_message_at || chat.updated_at || null;
+}
+
+// ChatInboxRowModel.compactTime: "now", "5m", "2h", "3d", "2w".
+export function compactChatTime(value, now = Date.now()) {
+    const at = Date.parse(value);
+    if (!Number.isFinite(at)) return "";
+    const seconds = Math.max(0, (now - at) / 1000);
+    if (seconds < 60) return "now";
+    if (seconds < 3_600) return `${Math.floor(seconds / 60)}m`;
+    if (seconds < 86_400) return `${Math.floor(seconds / 3_600)}h`;
+    if (seconds < 7 * 86_400) return `${Math.floor(seconds / 86_400)}d`;
+    return `${Math.floor(seconds / (7 * 86_400))}w`;
+}
+
+// ChatInboxRowModel.accessibilityLabel.
+export function chatInboxStatusLabel(status, { isGroup = false, time = "" } = {}) {
+    const when = time ? `, ${time === "now" ? "just now" : `${time} ago`}` : "";
+    const noun = inboxMessageNoun(status.type);
+    switch (status.kind) {
+    case "failed": return "A message didn't send. Open the chat to retry.";
+    case "plain": return status.text;
+    case "missedCall": return `Missed ${status.video ? "video" : "voice"} call${when}`;
+    case "new": return `New ${noun}${when}`;
+    case "newCount": return `${status.count} new, the newest a ${noun}${when}`;
+    case "sending": return `Sending your ${noun}`;
+    case "yourMove": return `Your move. Their ${noun}${when}`;
+    case "delivered": return `Your ${noun}, delivered, ${isGroup ? "nobody has opened it yet" : "not opened yet"}${when}`;
+    case "opened": return `Your ${noun}, opened${when}`;
+    case "openedBy": return `Your ${noun}, opened by ${status.count} ${status.count === 1 ? "person" : "people"}${when}`;
+    case "openedByEveryone": return `Your ${noun}, opened by everyone${when}`;
+    default: return `You sent a ${noun}${when}`;
+    }
+}
+
+// Memento streak (MementoStreakRiskBadge / MementoStreakDeadline).
+export const STREAK_WARNING_WINDOW_MS = 4 * 60 * 60_000;
+export const STREAK_FINAL_HOUR_MS = 60 * 60_000;
+
+export function streakAtRisk(chat) {
+    return chat?.moment_streak_at_risk === true && Number(chat?.moment_streak) > 0 && Number(chat?.accepted_count) >= 2;
+}
+
+export function streakBroken(chat) {
+    return chat?.moment_streak_broken === true && Number(chat?.moment_streak) > 0 && Number(chat?.accepted_count) >= 2;
+}
+
+// The next local midnight: the end of the viewer's ledger day.
+export function nextLocalMidnight(now = new Date()) {
+    const end = new Date(now);
+    end.setHours(24, 0, 0, 0);
+    return end;
+}
+
+// Time left before an at-risk streak drops while the hourglass shows; null
+// when it is safe or midnight is more than four hours away.
+export function streakTimeLeft(atRisk, now = new Date()) {
+    if (!atRisk) return null;
+    const left = nextLocalMidnight(now) - now;
+    return left > 0 && left <= STREAK_WARNING_WINDOW_MS ? left : null;
+}
+
+export function streakIsFinalHour(timeLeft) { return timeLeft < STREAK_FINAL_HOUR_MS; }
+
+// "1h 48m", "38m", "<1m". Minutes round up; the red final hour never reads "1h 0m".
+export function streakCountdown(timeLeft) {
+    if (!Number.isFinite(timeLeft) || timeLeft <= 0) return "<1m";
+    let minutes = Math.ceil(timeLeft / 60_000);
+    if (streakIsFinalHour(timeLeft)) minutes = Math.min(minutes, 59);
+    if (minutes < 1) return "<1m";
+    if (minutes < 60) return `${minutes}m`;
+    return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
+// MementoStreakWording.accessibilityLabel.
+export function streakAccessibilityLabel(streak, { broken = false, atRisk = false } = {}) {
+    const base = `${streak} day Memento streak`;
+    if (!broken) return base + (atRisk ? ", breaks tonight unless someone posts a Memento" : "");
+    return `${base}, broken. Post a Memento${atRisk ? " by midnight" : ""} to restore it`;
+}
+
+// ChatMementoRevealPolicy.isHidden: someone else's Memento from the viewer's
+// today (or later) waits until the viewer has posted to this chat today.
+export function mementoIsHidden(message, { today, revealsToday }) {
+    if (revealsToday || message?.kind !== "memento" || message.viewer_is_sender) return false;
+    const date = String(message.memento_ledger_date || "").slice(0, 10);
+    return Boolean(date) && date >= today;
+}
+
 export function chatPreview(chat) {
     if (chat.membership_status === "invited") return `${chat.invited_by_first_name || "Someone"} invited you`;
     if (chat.last_message_kind === "memento") return `${chat.last_message_sender_first_name || "Someone"} sent a Memento`;

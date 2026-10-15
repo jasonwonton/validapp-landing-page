@@ -1,0 +1,17 @@
+/* ImageCropperView.swift (.circle): black stage, 62% black outside a white-ringed circle. */
+.avatar-crop-dialog { position: fixed; inset: 0; width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; padding: 0; border: 0; background: #000; color: #fff; overflow: hidden; }
+.avatar-crop-dialog::backdrop { background: #000; }
+.avatar-crop-stage { position: absolute; inset: 0; overflow: hidden; touch-action: none; cursor: grab; user-select: none; }
+.avatar-crop-stage:active { cursor: grabbing; }
+.avatar-crop-image { position: absolute; top: 50%; left: 50%; max-width: none; transform-origin: center; pointer-events: none; }
+.avatar-crop-ring { position: absolute; top: 50%; left: 50%; border: 3px solid #fff; border-radius: 50%; box-shadow: 0 0 0 200vmax rgba(0,0,0,.62); transform: translate(-50%, -50%); pointer-events: none; }
+.avatar-crop-header, .avatar-crop-footer { position: absolute; left: 0; right: 0; z-index: 1; display: flex; align-items: center; gap: 12px; padding: 0 24px; }
+.avatar-crop-header { top: calc(env(safe-area-inset-top) + 24px); display: grid; grid-template-columns: 44px 1fr 44px; }
+.avatar-crop-header h2 { margin: 0; color: #fff; font-size: 22px; font-weight: 400; text-align: center; }
+.avatar-crop-cancel { width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: rgba(255,255,255,.15); color: #fff; cursor: pointer; font-size: 26px; line-height: 1; }
+.avatar-crop-footer { bottom: calc(env(safe-area-inset-bottom) + 24px); flex-wrap: wrap; justify-content: space-between; }
+.avatar-crop-footer p { flex: 1 1 160px; margin: 0; color: rgba(255,255,255,.85); font-size: 16px; }
+.avatar-crop-zoom { order: 3; flex: 1 1 100%; display: flex; }
+.avatar-crop-zoom input { width: 100%; min-height: 44px; accent-color: #fff; }
+.avatar-crop-use { min-height: 44px; padding: 10px 22px; border: 0; border-radius: 999px; background: #fff; color: #000; cursor: pointer; font-size: 18px; }
+.avatar-crop-use:disabled { opacity: .6; cursor: wait; }

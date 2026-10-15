@@ -8,11 +8,12 @@ import { createRealtimeList } from "./realtime-list.js";
 import { activateRoute, preloadRoute } from "./routes/route-loader.js";
 import { clearRuntimeStyles, setRuntimeStyles } from "./runtime-style.js";
 import { configureMediaFallback, imageCandidates, installMediaImageFallback, mediaImageMarkup, setMediaImageSource } from "./media-url.js";
-import { choiceSheet, confirmSheet } from "./ui-dialogs.js";
+import { choiceSheet, confirmReasonSheet, confirmSheet } from "./ui-dialogs.js";
 import { showToast } from "./toast.js";
 import { userMessage } from "./user-message.js";
 import { answerPayload, buildChoicePool, canStartPlay, contactUploadPayload, selectPlayChoices, summarizeContactSync } from "./play-choices.js";
 import { ANONYMOUS_SUBMITTER_NAME, AUTHOR_ANONYMITY_HINT, feedQuestionAttribution, playQuestionAttribution } from "./question-attribution.js";
+import { askForNotifications, configureNotificationSoftPrompt } from "./notification-soft-prompt.js";
 
 // The localhost-only demo fixtures load on demand so they never join the
 // production module graph or the service-worker shell.
@@ -29,44 +30,175 @@ let weeklyGame = null;
 let weeklyGameOpening = false;
 let weeklyGameGeneration = 0;
 
-async function refreshWeeklyGame() {
-    if (!api.user?.id || !api.getWeeklyGame) { document.querySelector('#weeklyGameButton')?.remove(); return; }
+// The Game of the Week in the Inbox (FeedView+PersonalInbox): the first row
+// of the "All" list for a student with a school. One game is a row with its
+// rank and a small × to hide it; two or three live games are a row of tiles
+// (EasterEggGamesCard). Hidden, it leaves a "Show game" row to bring it back.
+// The server already drops games a browser can't host from `games`.
+const weeklyGameState = { featured: null, slots: [], loadedAt: 0, ranks: new Map(), entry: null, artMarkup: null };
+const WEEKLY_GAME_RANK_MAX_AGE_MS = 2 * 60_000;
+const weeklyGameHiddenKey = (userId) => `valid:weekly-game-hidden:${userId}`;
+
+function weeklyGameHidden() {
+    const key = weeklyGameHiddenKey(api.user?.id);
+    try { return sessionStorage.getItem(key) === "1" || localStorage.getItem(key) === "1"; } catch (_) { return false; }
+}
+
+// EasterEggGameStore.hideRow: hidden for this session, and for good while
+// the game still needs discovering.
+function setWeeklyGameHidden(hidden) {
+    const key = weeklyGameHiddenKey(api.user?.id);
+    try {
+        if (hidden) {
+            sessionStorage.setItem(key, "1");
+            if (weeklyGameState.featured?.discovery_required) localStorage.setItem(key, "1");
+        } else {
+            sessionStorage.removeItem(key);
+            localStorage.removeItem(key);
+        }
+    } catch (_) { /* Without storage the row comes back on the next visit. */ }
+}
+
+function resetWeeklyGameEntry() {
+    Object.assign(weeklyGameState, { featured: null, slots: [], loadedAt: 0, entry: null });
+    weeklyGameState.ranks.clear();
+    const root = document.querySelector("#weeklyGameRoot");
+    if (root) { root.replaceChildren(); root.hidden = true; }
+}
+
+function weeklyGameArtMarkup(release, size) {
+    return weeklyGameState.artMarkup?.(release, size) || "";
+}
+
+// PlayCongratsView: "Play ‹title›" below "w aura" when the game is open to
+// this student (a school, and a game the server offers).
+function postPlayWeeklyGame() {
+    if (!state.profile?.school_id || !weeklyGameState.entry || !weeklyGameState.featured?.release) return null;
+    return { release: weeklyGameState.featured.release };
+}
+
+const weeklyGameHome = (release) => (release?.home && typeof release.home === "object" ? release.home : {});
+const weeklyGameShowsScore = (release) => weeklyGameHome(release).score !== false && release?.score_validator !== "unranked-v1";
+
+// EasterEggGameSlot.daysLeft: `ends_on` is a US Pacific date.
+function weeklyGameDaysLeft(endsOn, now = new Date()) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(endsOn || "")) return null;
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+    return Math.round((Date.parse(`${endsOn}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
+}
+
+function weeklyGameSlotTag(slot) {
+    if (slot.label) return slot.label;
+    const days = weeklyGameDaysLeft(slot.ends_on);
+    if (days !== null) {
+        if (days === 0) return "Ends today";
+        if (days === 1) return "Ends tomorrow";
+        const [year, month, day] = slot.ends_on.split("-").map(Number);
+        return `Ends ${new Date(year, month - 1, day).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+    }
+    const rank = weeklyGameShowsScore(slot.release) ? weeklyGameState.ranks.get(slot.release.id)?.rank : null;
+    if (slot.kind === "weekly") return rank ? `This week · #${rank}` : "This week";
+    return rank ? `#${rank}` : "Play";
+}
+
+// The small line under a tile: Admin's caption, or the end date in its last week.
+function weeklyGameSlotCaption(slot) {
+    if (slot.label) return slot.label;
+    const days = weeklyGameDaysLeft(slot.ends_on);
+    return days !== null && days <= 7 ? weeklyGameSlotTag(slot) : "";
+}
+
+function weeklyGamePledge(release) {
+    const home = weeklyGameHome(release);
+    return home.mode === "campaign" && home.title && home.cta && Array.isArray(home.chips) ? home.chips[0] || "" : "";
+}
+
+function renderWeeklyGameEntry() {
+    const root = document.querySelector("#weeklyGameRoot");
+    if (!root) return;
+    const release = weeklyGameState.featured?.release;
+    if (!state.profile?.school_id || !weeklyGameState.entry || !release) {
+        root.replaceChildren();
+        root.hidden = true;
+        return;
+    }
+    root.hidden = false;
+    const hideButton = (label) => `<button class="inbox-row-hide" type="button" data-weekly-game-hide aria-label="${escapeHTML(label)}">${uiIcon("close")}</button>`;
+    if (weeklyGameHidden()) {
+        root.innerHTML = `<button class="weekly-game-recovery" type="button" data-weekly-game-restore aria-label="Show Game of the Week">${uiIcon("gamecontroller")}<span>Game of the Week</span><strong>Show game</strong></button>`;
+        return;
+    }
+    const slots = weeklyGameState.slots;
+    if (slots.length >= 2) {
+        root.innerHTML = `<div class="weekly-game-row weekly-game-tiles">
+            <div class="weekly-game-tile-row">${slots.slice(0, 3).map((slot, index) => {
+                const caption = weeklyGameSlotCaption(slot);
+                const pledge = weeklyGamePledge(slot.release);
+                const tag = weeklyGameSlotTag(slot);
+                const label = [slot.release.title, pledge, tag === "Play" ? "" : tag].filter(Boolean).join(", ");
+                return `<button class="weekly-game-tile" type="button" data-weekly-game-tile="${index}" aria-label="${escapeHTML(label)}"><span class="weekly-game-tile-icon">${weeklyGameArtMarkup(slot.release, 44)}${pledge ? `<span class="weekly-game-pledge">${escapeHTML(pledge)}</span>` : ""}</span><span class="weekly-game-tile-name">${escapeHTML(slot.release.title || "Game")}</span>${caption ? `<small>${escapeHTML(caption)}</small>` : ""}</button>`;
+            }).join("")}</div>
+            ${hideButton("Hide games")}
+        </div>`;
+        return;
+    }
+    const home = weeklyGameHome(release);
+    const rank = weeklyGameShowsScore(release) ? weeklyGameState.ranks.get(release.id)?.rank : null;
+    const subtitle = home.feed_subtitle || `${release.title || "Play"}${rank ? ` · #${rank}` : ""}`;
+    root.innerHTML = `<div class="weekly-game-row">
+        <button class="weekly-game-row-main" type="button" data-weekly-game-open><span class="weekly-game-row-art">${weeklyGameArtMarkup(release, 48)}</span><span class="weekly-game-row-copy"><strong>${escapeHTML(home.feed_title || "Game of the Week")}</strong><small>${escapeHTML(subtitle)}</small></span>${uiIcon("next")}</button>
+        ${hideButton("Hide Game of the Week")}
+    </div>`;
+}
+
+// The school rank under each game (GamesModel.board.me). Reading a board
+// never records discovery or starts a run.
+async function refreshWeeklyGameRanks(generation, { force = false } = {}) {
+    const releases = (weeklyGameState.slots.length >= 2 ? weeklyGameState.slots.map((slot) => slot.release) : [weeklyGameState.featured?.release])
+        .filter((release) => release?.id && weeklyGameShowsScore(release))
+        .filter((release) => force || Date.now() - (weeklyGameState.ranks.get(release.id)?.at || 0) > WEEKLY_GAME_RANK_MAX_AGE_MS);
+    if (!releases.length || !api.getWeeklyGameLeaderboard) return;
+    await Promise.all(releases.map(async (release) => {
+        const board = await api.getWeeklyGameLeaderboard(release.id).catch(() => null);
+        if (generation !== weeklyGameGeneration || !board) return;
+        weeklyGameState.ranks.set(release.id, { rank: board.unlocked === false ? null : board.me?.rank || null, at: Date.now() });
+    }));
+    if (generation === weeklyGameGeneration) renderWeeklyGameEntry();
+}
+
+async function refreshWeeklyGame({ forceRanks = false } = {}) {
+    if (!api.user?.id || !api.getWeeklyGame) { resetWeeklyGameEntry(); return; }
     const generation = ++weeklyGameGeneration;
     try {
         const result = await api.getWeeklyGame();
         if (generation !== weeklyGameGeneration || !api.user?.id) return;
-        // Follow the selected weekly release. Games this web player can't run
-        // yet still appear, opening a friendly iOS-app state; only the
-        // server's generic update notice (no game to name) stays hidden.
-        const { weeklyGameEntry } = await import('./weekly-game/compat.js');
+        const [{ weeklyGameEntry }, { gameArtMarkup }] = await Promise.all([import('./weekly-game/compat.js'), import('./weekly-game/home.js')]);
         if (generation !== weeklyGameGeneration) return;
-        const entry = weeklyGameEntry(result.release);
-        if (!entry) { document.querySelector('#weeklyGameButton')?.remove(); return; }
-        let button = document.querySelector('#weeklyGameButton');
-        if (!button) {
-            button = document.createElement('button');
-            button.id = 'weeklyGameButton'; button.className = 'weekly-game-entry'; button.type = 'button';
-            button.innerHTML = '<span class="weekly-game-entry-art" aria-hidden="true"></span><span><small id="weeklyGameLabel">WEEKLY GAME</small><strong id="weeklyGameTitle"></strong></span><span class="weekly-game-entry-arrow" aria-hidden="true">›</span>';
-            button.addEventListener('click', openWeeklyGame);
-            document.querySelector('#storiesRoot').insertAdjacentElement('afterend', button);
-        }
-        document.querySelector('#weeklyGameTitle').textContent = result.release?.title || 'Weekly game';
-        document.querySelector('#weeklyGameLabel').textContent = entry === 'play' ? 'WEEKLY GAME' : 'WEEKLY GAME · IN THE APP';
-        const artwork = /^https:\/\/validappcdn\.com\/games\/art\/[\w.-]+\.png$/.test(result.release?.artwork_url || '') ? result.release.artwork_url : null;
-        button.querySelector('.weekly-game-entry-art').innerHTML = result.release?.game_id === '67-challenge' ? '67' : result.release?.game_id === 'rose-flight' ? '<img src="/assets/weekly-game/rose.png" alt="" width="48" height="48" decoding="async">'
-            : artwork ? mediaImageMarkup(artwork, { alt: '', className: 'weekly-game-entry-artwork', loading: 'eager', attributes: 'width="52" height="52"' }) : uiIcon('camera');
+        weeklyGameState.artMarkup = gameArtMarkup;
+        weeklyGameState.featured = result || null;
+        // Follow the selected weekly release. A game this web player can't run
+        // yet still appears and its home says where to play it; only the
+        // server's generic update notice (no game to name) stays hidden.
+        weeklyGameState.entry = weeklyGameEntry(result?.release);
+        weeklyGameState.slots = (Array.isArray(result?.games) ? result.games : [])
+            .filter((slot) => slot?.release && weeklyGameEntry(slot.release))
+            .slice(0, 3);
+        weeklyGameState.loadedAt = Date.now();
+        renderWeeklyGameEntry();
+        void refreshWeeklyGameRanks(generation, { force: forceRanks });
     } catch (_) { /* Feed remains usable if the optional game request fails. */ }
 }
 
-async function openWeeklyGame() {
+async function openWeeklyGame({ release = null, launch = false } = {}) {
     if (weeklyGameOpening || !api.user?.id) return;
     const userId = api.user.id;
     weeklyGameOpening = true;
     try {
         const { createWeeklyGame } = await import('./weekly-game/index.js');
         if (api.user?.id !== userId) return;
-        weeklyGame ||= createWeeklyGame({ api, getProfilePhoto: () => state.profile?.profile_picture_url });
-        await weeklyGame.open();
+        // Closing a game refreshes its rank on the Inbox row.
+        weeklyGame ||= createWeeklyGame({ api, getProfilePhoto: () => state.profile?.profile_picture_url, onClose: () => { void refreshWeeklyGame({ forceRanks: true }); } });
+        await weeklyGame.open({ release, launch });
     } catch (error) { showToast(userMessage(error, 'Could not open the weekly game.')); }
     finally { weeklyGameOpening = false; }
 }
@@ -363,11 +495,12 @@ function mountUIRoot(root) {
 
 function initializeParkedUI() {
     document.querySelectorAll("#anonymousAnswerDetailDialog").forEach(parkUIRoot);
-    document.querySelectorAll("dialog:not(#deleteAccountDialog)").forEach((dialog) => {
+    document.querySelectorAll("dialog:not(#deleteAccountDialog):not(#signInDialog)").forEach((dialog) => {
         dialog.addEventListener("close", () => requestAnimationFrame(() => {
             if (!dialog.open) parkUIRoot(dialog);
         }));
-        parkUIRoot(dialog);
+        // The signed-out root (the age screen) can already be open.
+        if (!dialog.open) parkUIRoot(dialog);
     });
 }
 
@@ -507,7 +640,8 @@ function initializeAppNavigation() {
     if (state.navigationInitialized) return;
     state.navigationInitialized = true;
     const requested = new URLSearchParams(location.search).get("tab");
-    const panel = ["feed", "play", "chats", "profile"].includes(requested) ? requested : "feed";
+    // A new account or a fresh sign-in starts on Play, as on iOS.
+    const panel = ["feed", "play", "chats", "profile"].includes(requested) ? requested : (state.postAuthLanding || "feed");
     switchPanel(panel, { historyMode: "replace", restoreScroll: false });
 }
 
@@ -829,7 +963,7 @@ function openDetailScreen(screen, { historyMode = "push" } = {}) {
     document.body.classList.add("detail-screen-open");
     if (historyMode !== "none" && history.state?.detail !== screen.id) writeNavigationState(historyMode, screen.id);
     requestAnimationFrame(() => screen.classList.remove("detail-screen-opening"));
-    screen.querySelector("[aria-label='Close']")?.focus({ preventScroll: true, focusVisible: false });
+    screen.querySelector("[aria-label='Close'], [data-focus-on-open]")?.focus({ preventScroll: true, focusVisible: false });
 }
 
 function closeDetailScreen(screen, { fromHistory = false } = {}) {
@@ -875,7 +1009,9 @@ function toggleDetailActionMenu(button) {
 function showSignedOut(message = "") {
     weeklyGameGeneration++;
     weeklyGame?.close();
-    document.querySelector('#weeklyGameButton')?.remove();
+    resetWeeklyGameEntry();
+    stopPlayInviteRefresh();
+    document.querySelector("#playInviteDialog")?.close();
     void presenceLifecycle?.stop();
     document.querySelectorAll(".activity-settings-dialog").forEach(dialog => dialog.close());
     clearInterval(state.playLockTimer);
@@ -897,7 +1033,8 @@ function showSignedOut(message = "") {
     state.personalInboxVisible = false;
     state.personalInboxCutoff = null;
     void commentsViewPromise?.then((view) => view.clear()).catch(() => null);
-    $("#authStatus").textContent = friendlyErrorMessage(message, "");
+    const text = friendlyErrorMessage(message, "");
+    showSignedOutRoot({ signIn: Boolean(text), message: text });
 }
 
 const PRIOR_SESSION_KEY = "valid:signed-in-before";
@@ -912,18 +1049,9 @@ function showAuthView() {
     $("#authView").classList.remove("hidden");
 }
 
-function isFirstVisit() {
-    try {
-        return localStorage.getItem(PRIOR_SESSION_KEY) !== "1" && !localStorage.getItem("valid.web.installation-id");
-    } catch (_) {
-        return true;
-    }
-}
-
 async function showSignedIn() {
     sessionRestorePending = false;
-    $("#retrySessionButton").classList.add("hidden");
-    $("#createAccountButton").classList.remove("hidden");
+    hideSessionRecovery();
     $("#authView").classList.add("hidden");
     hideLaunchSplash();
     try { localStorage.setItem(PRIOR_SESSION_KEY, "1"); } catch (_) { /* First-visit detection falls back to the installation id. */ }
@@ -979,10 +1107,10 @@ async function showSignedIn() {
             presenceLifecycle = bindPresenceLifecycle(chatPresence);
             const button = document.createElement('button');
             button.id = 'activityStatusButton';
-            button.setAttribute('aria-label', 'Activity status');
+            button.setAttribute('aria-label', 'Activity Status');
             button.type = 'button';
             button.className = 'settings-row';
-            button.innerHTML = `<span class="settings-icon" aria-hidden="true">${uiIcon('activity')}</span><span><strong>Activity status</strong><small>Choose whether people see when you’re active</small></span><span aria-hidden="true">›</span>`;
+            button.innerHTML = `<span class="settings-icon" aria-hidden="true">${uiIcon('activity')}</span><span><strong>Activity Status</strong><small>Choose whether people see when you’re active</small></span><span aria-hidden="true">›</span>`;
             button.addEventListener('click', async () => {
                 try {
                     const { openActivitySettings } = await import('./chat/activity-settings.js');
@@ -1088,11 +1216,22 @@ async function handleNotificationRoute() {
                 target.focus({ preventScroll: true });
             }
         }
-    } else if (isFeedVoteLocked() && notification !== "question_submission") {
-        return;
     } else if (notification === "question_submission") {
-        switchPanel("feed");
+        // question_approved: iOS opens the school-question history from Profile.
+        switchPanel("profile");
         openQuestionDialog({ section: "history", submissionId: params.get("submission_id") });
+    } else if (notification === "comment_moderation_notice") {
+        switchPanel("feed");
+        await showCommentModerationNotice();
+    } else if (isFeedVoteLocked()) {
+        // A locked Feed still opens: its gate is what the push leads to.
+        switchPanel("feed");
+    } else if (notification === "feed") {
+        switchPanel("feed");
+    } else if (notification === "inbox") {
+        // anonymous_question_received / _answered: the Ask Me inbox, or the
+        // question or answer itself when the link names one.
+        await openAskInboxFromPush(params);
     } else if (notification === "tbh_request") {
         switchPanel("feed");
         await loadTbhContent();
@@ -1145,7 +1284,40 @@ async function handleNotificationRoute() {
     params.delete("comment_id");
     params.delete("boost_type");
     params.delete("target_user_id");
+    params.delete("anonymous_question_id");
+    params.delete("anonymous_answer_id");
+    params.delete("notice_id");
     history.replaceState(history.state, "", `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`);
+}
+
+async function openAskInboxFromPush(params) {
+    switchPanel("feed");
+    if (state.feedType !== "personal") $('.segment[data-feed="personal"]')?.click();
+    const askFilter = $('[data-inbox-filter="ask_me"]');
+    if (askFilter && state.personalInboxFilter !== "ask_me") askFilter.click();
+    const questionId = params.get("anonymous_question_id");
+    const answerId = params.get("anonymous_answer_id");
+    if (!questionId && !answerId) return;
+    if (!state.anonymousInbox) await loadAnonymousInbox();
+    if (answerId) openAnonymousAnswerDialog(answerId);
+    else if (state.anonymousInbox?.questions?.some((question) => String(question.id) === String(questionId))) {
+        await openAnonymousQuestionDialog(questionId);
+    }
+}
+
+// comment_moderation_notice: iOS shows the notice overlay at once.
+async function showCommentModerationNotice() {
+    const userId = api.user?.id;
+    const moderation = await api.getCommentModerationState?.(userId).catch(() => null);
+    const notice = moderation?.notice;
+    if (!notice || api.user?.id !== userId) return;
+    const acknowledged = await confirmSheet({
+        title: notice.title || "Comment update",
+        message: notice.message || "Your comment access was updated.",
+        confirmLabel: "Got it",
+        cancelLabel: "Close",
+    });
+    if (acknowledged && notice.id) await api.acknowledgeCommentModerationNotice(userId, notice.id).catch(() => null);
 }
 
 // Notification taps route inside the running app (no reload). The URL contract
@@ -1197,7 +1369,49 @@ function handleServiceWorkerMessage(event) {
     } else if (message.type === "VALID_PUSH_IN_ACTIVE_CHAT") {
         // The open room already shows the message through realtime.
         dispatchEvent(new CustomEvent("valid:push-in-active-chat", { detail: message }));
+    } else if (message.type === "VALID_PUSH_FOREGROUND") {
+        showInAppPushBanner(message.payload || {});
     }
+}
+
+// iOS shows chat pushes as an in-app banner while the app is open; the worker
+// hands them here instead of showing a second, system notification.
+function showInAppPushBanner({ title = "Valid", body = "", url = "" } = {}) {
+    if (!document.body.classList.contains("authenticated")) return;
+    let banner = $("#inAppPushBanner");
+    if (!banner) {
+        banner = document.createElement("button");
+        banner.id = "inAppPushBanner";
+        banner.type = "button";
+        banner.className = "in-app-push-banner";
+        // In the top layer, like the toast, so it shows over an open sheet.
+        if ("popover" in HTMLElement.prototype) banner.setAttribute("popover", "manual");
+        banner.innerHTML = `<img src="../assets/pwa/icon-192.png" alt="" width="36" height="36" decoding="async"><span><strong></strong><small></small></span>`;
+        banner.addEventListener("click", () => {
+            const target = banner.dataset.url;
+            hideInAppPushBanner();
+            if (target) void routeToAppURL(target);
+        });
+        document.body.append(banner);
+    }
+    banner.querySelector("strong").textContent = String(title).slice(0, 120);
+    banner.querySelector("small").textContent = String(body).slice(0, 240);
+    banner.dataset.url = url;
+    banner.setAttribute("aria-label", `${title}. ${body}`.trim());
+    banner.classList.add("visible");
+    try { banner.showPopover?.(); } catch (_) { /* The fixed banner still shows. */ }
+    clearTimeout(state.inAppPushTimer);
+    state.inAppPushTimer = setTimeout(hideInAppPushBanner, 4_000);
+}
+
+function hideInAppPushBanner() {
+    clearTimeout(state.inAppPushTimer);
+    const banner = $("#inAppPushBanner");
+    if (!banner) return;
+    banner.classList.remove("visible");
+    state.inAppPushTimer = setTimeout(() => {
+        try { if (!banner.classList.contains("visible") && banner.matches(":popover-open")) banner.hidePopover(); } catch (_) { /* Already hidden. */ }
+    }, 220);
 }
 
 // Lets the worker skip the system notification for the chat on screen.
@@ -1302,12 +1516,6 @@ function renderProfilePanel() {
     const schoolName = currentProfileSchoolName();
     const grade = formatGrade(profile.grade || "").replace(/^Grade\s+/i, "");
     const canChangeInformation = profile.can_change_information !== false;
-    const nextChangeDate = profile.next_information_change_at ? new Date(profile.next_information_change_at) : null;
-    const informationStatus = !canChangeInformation
-        ? (nextChangeDate && !Number.isNaN(nextChangeDate.getTime())
-            ? `Available again ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(nextChangeDate)}`
-            : "Profile change currently unavailable")
-        : "";
     const streak = Math.max(0, Number(profile.current_streak || 0));
     const pendingPhoto = state.pendingProfilePhoto;
     const hasProfilePhoto = Boolean(pendingPhoto || (imageURL && !String(profile.profile_picture_url || "").includes("default.png")));
@@ -1318,14 +1526,14 @@ function renderProfilePanel() {
             <span class="photo-edit-badge" aria-hidden="true">${pendingPhoto?.status === "failed" ? "!" : uiIcon("edit")}</span>
         </button>
         ${pendingPhoto?.status === "failed" ? '<p class="profile-photo-warning" role="status">Upload failed. Tap your photo to try again.</p>' : ""}
-        ${hasProfilePhoto ? "" : '<p class="profile-photo-warning">Users without profile pictures receive fewer votes.</p>'}
+        ${hasProfilePhoto ? "" : '<p class="profile-photo-warning">\u26a0\ufe0f Users without profile pictures receive less votes.</p>'}
         <h3>${escapeHTML(displayName(profile))}</h3>
         <div class="profile-identity-line"><span class="profile-handle">@${escapeHTML(profile.username || "valid")}</span>${streak ? `<span class="profile-streak ${profile.streak_needs_activity ? "needs-activity" : ""}" aria-label="${streak} day streak">${uiIcon("fire")} ${streak}</span>` : ""}</div>
         <button class="profile-bio-button ${profile.bio ? "" : "empty"}" type="button" data-edit-bio>${profile.bio ? escapeHTML(profile.bio) : '<span>Add bio</span><span class="profile-add-bio-icon" aria-hidden="true">+</span>'}</button>
         ${(schoolName || grade) ? `<div class="profile-school-meta">${schoolName ? `<span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-school.svg" alt=""><span>${escapeHTML(schoolName)}</span></span>` : ""}${grade ? `<span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-graduation-cap.svg" alt=""><span>${escapeHTML(grade)}</span></span>` : ""}</div>` : ""}
         <button class="profile-information-inline" type="button" data-edit-profile>
             <span class="profile-information-icon">${profileInformationIcon(canChangeInformation)}</span>
-            <span class="profile-information-copy"><strong>Profile information</strong>${informationStatus ? `<small>${escapeHTML(informationStatus)}</small>` : ""}</span>
+            <span class="profile-information-copy"><strong>Profile information</strong></span>
             <span class="profile-information-chevron" aria-hidden="true">›</span>
         </button>
         <div class="profile-stats-grid">
@@ -1340,6 +1548,7 @@ function renderProfilePanel() {
     renderPasskeyStatus();
     renderTabBadges();
     renderMemoriesEntry();
+    void loadNotificationCategories();
 }
 
 // Memories + Vault live in a lazily loaded module (app/vault/).
@@ -1361,8 +1570,19 @@ function renderSchoolCard() {
     const container = $("#schoolCard");
     const classmates = [...(state.classmateDirectory?.length ? state.classmateDirectory : (state.classmates || []))];
     const activeClassmates = Number(state.activeClassmatesThisWeek);
-    const activeClassmatesLabel = Number.isFinite(activeClassmates) && activeClassmates > 5
-        ? `<small>• ${activeClassmates.toLocaleString()} classmates active this week</small>`
+    // SettingsView+Sections.communityHeader: shown from 5 active classmates.
+    const activeClassmatesLabel = Number.isFinite(activeClassmates) && activeClassmates >= 5
+        ? `<small>• ${activeClassmates.toLocaleString()} classmate${activeClassmates === 1 ? "" : "s"} active this week</small>`
+        : "";
+    // Locked until the account votes (then until enough classmates join): the
+    // strip blurs under "Vote to unlock" / "More classmates needed".
+    const unlock = state.classmatesStatus;
+    const locked = unlock?.is_unlocked === false;
+    const voteLocked = Boolean(unlock?.lock_reasons?.includes("votes") && Number(unlock.votes_cast || 0) < Number(unlock.required_votes || 0));
+    const joinLocked = Boolean(unlock?.lock_reasons?.includes("joined_users") && Number(unlock.joined_users || 0) < Number(unlock.required_joined_users || 0));
+    const inviteStep = !voteLocked && joinLocked;
+    const lockOverlay = locked
+        ? `<button class="school-lock-button ${inviteStep ? "invite" : ""}" type="button" data-school-unlock="${inviteStep ? "invite" : "vote"}"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7.5 10V7.5a4.5 4.5 0 0 1 9 0V10h.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Zm2.2 0h4.6V7.5a2.3 2.3 0 0 0-4.6 0Z"/></svg><span>${inviteStep ? "More classmates needed" : "Vote to unlock"}</span></button>`
         : "";
     if (state.profile && !classmates.some((classmate) => String(classmate.user_id) === String(state.profile.user_id))) {
         classmates.push(state.profile);
@@ -1381,7 +1601,7 @@ function renderSchoolCard() {
         <div class="school-card-heading"><strong>School</strong>${activeClassmatesLabel}</div>
         ${currentProfileSchoolName() ? `<div class="school-card-name">${escapeHTML(currentProfileSchoolName())}</div>` : ""}
         <p>Spotlight on classmates with the most votes this week.</p>
-        ${ranked.length ? `<div class="school-leaderboard" role="list" aria-label="Classmates ranked by weekly votes">${ranked.map((classmate, index) => {
+        ${ranked.length ? `<div class="school-leaderboard-wrap ${locked ? "locked" : ""}"><div class="school-leaderboard" role="list" aria-label="Classmates ranked by weekly votes" ${locked ? 'inert aria-hidden="true"' : ""}>${ranked.map((classmate, index) => {
             const isCurrentUser = String(classmate.user_id) === String(state.profile?.user_id);
             return `<button class="school-rank-card" type="button" role="listitem" ${isCurrentUser ? `disabled aria-current="true"` : `data-school-classmate="${escapeHTML(classmate.user_id)}"`} aria-label="#${index + 1} ${escapeHTML(displayName(classmate))}, ${Number(classmate.weekly_vote_count || 0).toLocaleString()} votes this week">
                 <span class="school-rank-number">#${index + 1}</span>
@@ -1389,21 +1609,26 @@ function renderSchoolCard() {
                 <strong>${escapeHTML(isCurrentUser ? `${displayName(classmate)} (You)` : displayName(classmate))}</strong>
                 <small><span aria-hidden="true">${uiIcon("heart")}</span> ${Number(classmate.weekly_vote_count || 0).toLocaleString()} this week</small>
             </button>`;
-        }).join("")}</div>` : `<p>No classmates on Valid yet.</p>`}
+        }).join("")}</div>${lockOverlay}</div>` : locked
+            ? `<div class="school-leaderboard-wrap locked"><div class="school-placeholder-strip" aria-hidden="true">${"<span><i></i><b></b><em></em></span>".repeat(3)}</div>${lockOverlay}</div>`
+            : `<p>No classmates on Valid yet. Invite a friend to unlock this feed!</p>`}
         <div class="school-card-actions"><button id="findContactsButton" class="secondary-button" type="button">Contacts</button><button id="viewClassmatesButton" class="secondary-button" type="button">Classmates</button></div>
     </article>`;
 }
 
+// SettingsView+InviteAndPurchases.inviteFriendsSection.
 function renderProfileInviteCard() {
     const container = $("#profileInviteCard");
-    const status = state.inviteStatus;
-    const goal = Math.max(1, Number(status?.aura_reward_goal || 3));
-    const progress = Math.max(0, Math.min(goal, Number(status?.aura_reward_progress || 0)));
-    const remaining = Math.max(0, goal - progress);
+    const invites = godModeInviteProgress();
+    const creator = state.config?.enable_god_mode_ugc_program === true;
+    const reward = invites
+        ? `<p class="profile-invite-reward">${invites.reached ? "God Mode invite goal reached " : `Get ${invites.goal} verified friends to join for `}<strong>\u{1F451} GOD MODE</strong></p>
+        <div class="profile-invite-progress"><progress max="${invites.goal}" value="${invites.progress}" aria-label="${invites.progress} of ${invites.goal} qualifying invites"></progress><small>Qualifying invites: ${invites.progress} / ${invites.goal}</small></div>`
+        : `<p class="profile-invite-reward">Bring your friends in to unlock more polls and see more classmates</p>`;
     container.innerHTML = `<article class="profile-invite-card">
-        <div><strong>${remaining ? `Invite ${remaining} more ${remaining === 1 ? "friend" : "friends"}` : "Invite reward complete"}</strong><p>Bring friends to Valid and earn bonus aura when they join.</p></div>
-        <div class="profile-invite-progress"><span><strong>${progress} / ${goal}</strong><small>qualifying invites</small></span><progress max="${goal}" value="${progress}" aria-label="${progress} of ${goal} qualifying invites"></progress></div>
-        <div class="profile-invite-actions"><button class="profile-share-button snapchat" type="button" data-profile-invite="snapchat"><img loading="lazy" decoding="async" src="../assets/app/snapchat-logo.webp" alt=""><span>Snapchat</span></button><button class="profile-share-button messages" type="button" data-profile-invite="imessage">${appSymbolMarkup("message", "messages-symbol")}<span>Messages</span></button></div>
+        ${reward}
+        <div class="profile-invite-actions"><button class="profile-share-button snapchat" type="button" data-profile-invite="snapchat"><img loading="lazy" decoding="async" src="../assets/app/snapchat-logo.webp" alt=""><span>Invite via Snapchat</span></button><button class="profile-share-button messages" type="button" data-profile-invite="imessage"><svg class="profile-imessage-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#fff"/><path d="M13.25 23.1c0-6.15 4.72-10.35 10.75-10.35s10.75 4.2 10.75 10.35S30.03 33.45 24 33.45c-1.45 0-2.82-.24-4.06-.7-1.95 1.18-4.32 1.8-7.1 1.84 1.23-1.25 2.14-2.68 2.73-4.27-1.47-1.82-2.32-4.3-2.32-7.22Z" fill="#00e02d"/></svg><span>Invite via iMessage</span></button></div>
+        ${creator ? `<button class="profile-creator-link" type="button" data-open-creator-program><span>Or earn God Mode through our Creator program</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6"/></svg></button>` : ""}
         <p id="profileInviteStatus" class="status-message" role="status"></p>
     </article>`;
 }
@@ -1495,19 +1720,23 @@ function personalInboxUnreadCounts() {
     syncPersonalInboxVisit();
     const cutoff = state.personalInboxVisible ? state.personalInboxCutoff : personalInboxReadReference();
     const polls = cutoff === null ? 0 : state.personalFeedItems.filter((item) => feedItemTime(item) > cutoff).length;
-    const tbhs = state.tbhPendingRequests.filter((item) => !item.opened_at).length
-        + state.tbhInboxItems.filter((item) => !item.opened_at).length;
+    const tbhRequests = state.tbhPendingRequests.filter((item) => !item.opened_at).length;
+    const tbhs = tbhRequests + state.tbhInboxItems.filter((item) => !item.opened_at).length;
     const askMe = (state.anonymousInbox?.questions || []).filter((item) => !item.opened_at).length;
-    return { all: polls + tbhs + askMe, polls, tbhs, ask_me: askMe };
+    return { all: polls + tbhs + askMe, polls, tbhs, ask_me: askMe, tbhRequests };
 }
+
+const TAB_BADGE_CAP = 99;
 
 function renderTabBadges() {
     const counts = personalInboxUnreadCounts();
     // While the Inbox is on screen its loaded polls count as read for the tab badge.
     const unread = counts.all - (state.personalInboxVisible ? counts.polls : 0);
+    // FeedTabBadge: unread polls plus waiting TBH requests, at most 99 (TabBadgeCount).
     const feedBadge = $("#feedTabBadge");
-    feedBadge.textContent = unread > 9 ? "9+" : String(unread || "");
-    feedBadge.classList.toggle("hidden", unread < 1);
+    const feedBadgeCount = Math.min(TAB_BADGE_CAP, (state.personalInboxVisible ? 0 : counts.polls) + counts.tbhRequests);
+    feedBadge.textContent = String(feedBadgeCount || "");
+    feedBadge.classList.toggle("hidden", feedBadgeCount < 1);
     if ("setAppBadge" in navigator) {
         const totalUnread = unread + Number(state.chatUnreadCount || 0);
         const badgePromise = totalUnread > 0 ? navigator.setAppBadge(totalUnread) : navigator.clearAppBadge?.();
@@ -1518,49 +1747,255 @@ function renderTabBadges() {
             navigator.serviceWorker?.controller?.postMessage({ type: "VALID_BADGE_SYNC", count: totalUnread });
         }
     }
-    const profileIncomplete = !state.profile?.profile_picture_url || !String(state.profile?.bio || "").trim();
-    $("#profileTabBadge").classList.toggle("hidden", !profileIncomplete);
+    // ProfileTabBadge.needsProfilePicture: "!" only while there is no photo (or the default one).
+    const picture = state.profile?.profile_picture_url;
+    const needsPicture = Boolean(state.profile) && (!picture || String(picture).includes("default.png"));
+    $("#profileTabBadge").classList.toggle("hidden", !needsPicture);
 }
 
 function renderChatUnreadBadge(count) {
     state.chatUnreadCount = Math.max(0, Number(count || 0));
     const badge = $("#chatsTabBadge");
-    badge.textContent = state.chatUnreadCount > 9 ? "9+" : String(state.chatUnreadCount || "");
+    badge.textContent = String(Math.min(TAB_BADGE_CAP, state.chatUnreadCount) || "");
     badge.classList.toggle("hidden", state.chatUnreadCount < 1);
     renderTabBadges();
 }
 
-function renderPasskeyStatus() {
+// SettingsView+Presentations.swift: "Don't lose your account! Set up a
+// passkey" shows only while the account has no passkey, just above Sign out.
+function accountHasPasskey() {
     const count = Math.max(0, Number(state.passkeyStatus?.credentialCount || 0));
-    const registered = state.passkeyStatus?.registered === true || count > 0;
-    const button = $("#addPasskeyButton");
-    button.classList.toggle("hidden", !state.passkeyStatus);
-    renderProfileActionsVisibility();
-    if (!state.passkeyStatus) return;
-    button.querySelector("strong").textContent = registered ? "Add another passkey" : "Register a passkey";
-    $("#passkeyStatusText").textContent = registered
-        ? `${count} ${count === 1 ? "passkey" : "passkeys"} registered`
-        : "Add a secure way to sign in";
+    return state.passkeyStatus?.registered === true || count > 0;
 }
 
-function renderProfileActionsVisibility() {
-    const section = $("#addPasskeyButton").closest(".profile-actions");
-    section.classList.toggle("hidden", [...section.querySelectorAll(".settings-row")].every((row) => row.classList.contains("hidden")));
+function accountNeedsPasskey() {
+    return Boolean(state.passkeyStatus) && !accountHasPasskey();
+}
+
+function renderPasskeyStatus() {
+    $("#addPasskeyButton").classList.toggle("hidden", !accountNeedsPasskey());
+    $("#passkeyStatusText").textContent = "";
+    renderProfileActionsVisibility();
+}
+
+// The Settings card always has Blocked Users; nothing to hide here now.
+function renderProfileActionsVisibility() {}
+
+// Settings → Notifications (NotificationSettingsSheet.swift and
+// NotificationCategoriesStore.swift): four server-side switches. A flip shows
+// at once and saves in the background; saves of one switch run in order and
+// only the last flip is sent; a failed save puts back only its own switch and
+// says so at the bottom of the sheet. Browser permission is separate: while
+// push isn't on here, a banner offers to turn it on and the switches dim.
+const NOTIFICATION_CATEGORIES = [
+    { key: "votes", title: "Votes", subtitle: "When someone picks you or reveals you", icon: '<path fill="currentColor" d="M9.6 2.5a2 2 0 0 1 2 2v5.6l.6-.1c.4-.6 1-.9 1.7-.9.6 0 1.1.3 1.5.7.4-.4 1-.6 1.5-.6.7 0 1.3.3 1.7.9l.3-.1c1.2 0 2.1 1 2.1 2.2v3.1c0 3.6-2.4 6.3-6.2 6.3h-1.2c-2 0-3.4-.7-4.6-2.3l-3.3-4.5a1.8 1.8 0 0 1 2.7-2.3l1.2 1.2V4.5a2 2 0 0 1 2-2Z"/>' },
+    { key: "chats", title: "Chats", subtitle: "Messages, Mementos and chat invites", icon: '<path fill="currentColor" d="M3.5 3.5h9.5A3.5 3.5 0 0 1 16.5 7v4.2a3.5 3.5 0 0 1-3.5 3.5H8.2L4.6 17.4v-2.8A3.4 3.4 0 0 1 0 11.2V7a3.5 3.5 0 0 1 3.5-3.5Z" transform="translate(1.5 .5)"/><path fill="currentColor" d="M19.2 9.2h.3a3 3 0 0 1 3 3v3.6a3 3 0 0 1-2.4 3v2.6l-3.3-2.6h-4.2a3 3 0 0 1-2.6-1.5h3.8a5.4 5.4 0 0 0 5.4-5.4Z"/>' },
+    { key: "activity", title: "Activity", subtitle: "Reactions, comments, Story tags, TBHs and news from Valid", icon: '<path fill="currentColor" d="M10 3.5c.5 3.7 2.3 5.6 6 6-3.7.5-5.5 2.3-6 6-.5-3.7-2.3-5.5-6-6 3.7-.4 5.5-2.3 6-6ZM18 13c.3 2 1.2 3 3.2 3.3-2 .3-2.9 1.2-3.2 3.2-.3-2-1.2-2.9-3.2-3.2 2-.3 2.9-1.3 3.2-3.3ZM18.5 2c.2 1.2.8 1.8 2 2-1.2.2-1.8.8-2 2-.2-1.2-.8-1.8-2-2 1.2-.2 1.8-.8 2-2Z"/>' },
+    { key: "reminders", title: "Reminders", subtitle: "Vote again, streaks and daily nudges", icon: '<path fill="currentColor" fill-rule="evenodd" d="M12 4.5a8.3 8.3 0 1 1 0 16.6 8.3 8.3 0 0 1 0-16.6Zm-.9 3.6v5.6l4 2.4.9-1.5-3.1-1.9V8.1ZM2.6 6.6 6.4 3.4l1.3 1.5-3.8 3.2ZM21.4 6.6l-3.8-3.2-1.3 1.5 3.8 3.2Z"/>' },
+];
+const NOTIFICATION_CATEGORY_REFRESH_MS = 5 * 60_000;
+const ALL_NOTIFICATION_CATEGORIES_ON = Object.freeze({ votes: true, chats: true, activity: true, reminders: true });
+const notificationCategoryStore = {
+    userId: null,
+    values: { ...ALL_NOTIFICATION_CATEGORIES_ON },
+    confirmed: { ...ALL_NOTIFICATION_CATEGORIES_ON },
+    generation: {},
+    pending: new Set(),
+    chains: {},
+    flips: 0,
+    fetchedAt: 0,
+    loading: null,
+    failureTimer: null,
+};
+
+function notificationCategoriesFrom(response) {
+    const categories = response?.categories || {};
+    return Object.fromEntries(NOTIFICATION_CATEGORIES.map(({ key }) => [key, categories[key] !== false]));
+}
+
+function notificationCategoryCacheKey(userId) {
+    return `valid:notification-categories:${userId}`;
+}
+
+function notificationCategoryStoreFor(userId) {
+    const store = notificationCategoryStore;
+    if (store.userId === userId) return store;
+    Object.assign(store, { userId, generation: {}, pending: new Set(), chains: {}, fetchedAt: 0, loading: null });
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(notificationCategoryCacheKey(userId)) || "null"); } catch { saved = null; }
+    store.values = notificationCategoriesFrom({ categories: saved });
+    store.confirmed = { ...store.values };
+    return store;
+}
+
+function applyNotificationCategories(next) {
+    const store = notificationCategoryStore;
+    store.values = { ...next };
+    try { localStorage.setItem(notificationCategoryCacheKey(store.userId), JSON.stringify(store.values)); } catch { /* Shown from the server next time. */ }
+    renderNotificationSettings();
+}
+
+// The server's values for every switch with no save of its own waiting.
+function adoptNotificationCategories(server, except = null) {
+    const store = notificationCategoryStore;
+    const next = { ...store.values };
+    for (const { key } of NOTIFICATION_CATEGORIES) {
+        if (key !== except && !store.pending.has(key)) next[key] = server[key];
+    }
+    applyNotificationCategories(next);
+}
+
+function notificationCategorySummary(values = notificationCategoryStore.values) {
+    const on = NOTIFICATION_CATEGORIES.filter(({ key }) => values[key]);
+    if (on.length === NOTIFICATION_CATEGORIES.length) return "All on";
+    if (!on.length) return "All off";
+    return on.map(({ title }) => title).join(", ");
+}
+
+async function loadNotificationCategories({ force = false } = {}) {
+    const userId = api.user?.id;
+    if (!userId || typeof api.getNotificationPreferences !== "function") return;
+    const store = notificationCategoryStoreFor(userId);
+    renderNotificationSettings();
+    if (!force && (store.loading || Date.now() - store.fetchedAt < NOTIFICATION_CATEGORY_REFRESH_MS)) return store.loading;
+    // A flip made while this read runs may reach the server after it read.
+    const flipsAtStart = store.pending.size ? null : store.flips;
+    const load = api.getNotificationPreferences().then((response) => {
+        if (store.userId !== userId || flipsAtStart === null || store.flips !== flipsAtStart) return;
+        store.fetchedAt = Date.now();
+        store.confirmed = notificationCategoriesFrom(response);
+        adoptNotificationCategories(store.confirmed);
+    }).catch(() => null).finally(() => {
+        if (store.loading === load) store.loading = null;
+    });
+    store.loading = load;
+    return load;
+}
+
+function setNotificationCategory(key, enabled) {
+    const store = notificationCategoryStore;
+    const userId = api.user?.id;
+    const category = NOTIFICATION_CATEGORIES.find((item) => item.key === key);
+    if (!category || !userId || store.userId !== userId || store.values[key] === enabled) return null;
+    if ($("#notificationSaveFailure").dataset.category === key) hideNotificationSaveFailure();
+    store.flips += 1;
+    applyNotificationCategories({ ...store.values, [key]: enabled });
+    const generation = (store.generation[key] || 0) + 1;
+    store.generation[key] = generation;
+    store.pending.add(key);
+    const task = (store.chains[key] || Promise.resolve()).then(async () => {
+        // A newer flip of this switch sends the final value.
+        if (store.userId !== userId || store.generation[key] !== generation) return;
+        try {
+            const saved = notificationCategoriesFrom(await api.updateNotificationCategories({ [key]: enabled }));
+            if (store.userId !== userId) return;
+            store.confirmed = saved;
+            if (store.generation[key] === generation) {
+                store.pending.delete(key);
+                adoptNotificationCategories(saved);
+            } else {
+                adoptNotificationCategories(saved, key);
+            }
+        } catch {
+            if (store.userId !== userId || store.generation[key] !== generation) return;
+            store.pending.delete(key);
+            applyNotificationCategories({ ...store.values, [key]: store.confirmed[key] });
+            showNotificationSaveFailure(key, `Couldn't save ${category.title}. Check your connection and try again.`);
+        }
+    });
+    store.chains[key] = task;
+    return task;
+}
+
+function showNotificationSaveFailure(key, message) {
+    const line = $("#notificationSaveFailure");
+    clearTimeout(notificationCategoryStore.failureTimer);
+    line.dataset.category = key;
+    line.textContent = message;
+    line.classList.remove("hidden");
+    haptic("error");
+    notificationCategoryStore.failureTimer = setTimeout(hideNotificationSaveFailure, 3000);
+}
+
+function hideNotificationSaveFailure() {
+    const line = $("#notificationSaveFailure");
+    clearTimeout(notificationCategoryStore.failureTimer);
+    delete line.dataset.category;
+    line.textContent = "";
+    line.classList.add("hidden");
+}
+
+// "allowed", "denied" (blocked in the browser) or "notAsked" (not on here yet).
+function notificationPermissionState() {
+    if (!webPushSupported()) return "notAsked";
+    if (Notification.permission === "denied") return "denied";
+    return state.webPushSubscription && state.webPushRegistrationState === "on" ? "allowed" : "notAsked";
+}
+
+function renderNotificationSettings() {
+    const summary = $("#notificationStatusText");
+    if (summary) summary.textContent = notificationCategoryStore.userId && notificationCategoryStore.userId === api.user?.id
+        ? notificationCategorySummary()
+        : notificationCategorySummary(ALL_NOTIFICATION_CATEGORIES_ON);
+    const dialog = $("#notificationSettingsDialog");
+    if (!dialog?.open) return;
+    const permission = notificationPermissionState();
+    const off = permission !== "allowed";
+    $("#notificationPermissionBanner").classList.toggle("hidden", !off);
+    $("#notificationPermissionTitle").textContent = permission === "denied" ? "Notifications are off for Valid" : "Notifications aren't on yet";
+    const bannerButton = $("#notificationPermissionButton");
+    bannerButton.disabled = Boolean(state.webPushBusy);
+    bannerButton.setAttribute("aria-busy", String(Boolean(state.webPushBusy)));
+    bannerButton.textContent = state.webPushBusy ? "Turning on…" : "Turn on notifications";
+    const card = $("#notificationCategoryCard");
+    card.classList.toggle("dimmed", off);
+    if (!card.childElementCount) {
+        card.innerHTML = NOTIFICATION_CATEGORIES.map(({ key, title, subtitle, icon }) => `<button class="notification-category-row" type="button" role="switch" aria-checked="true" data-notification-category="${key}" aria-label="${title}" aria-describedby="notificationCategory-${key}">
+            <span class="notification-category-icon" aria-hidden="true"><svg viewBox="0 0 24 24">${icon}</svg></span>
+            <span><strong>${title}</strong><small id="notificationCategory-${key}">${subtitle}</small></span>
+            <span class="settings-switch" aria-hidden="true"><span></span></span>
+        </button>`).join("");
+    }
+    for (const row of card.querySelectorAll("[data-notification-category]")) {
+        const on = notificationCategoryStore.values[row.dataset.notificationCategory] !== false;
+        row.setAttribute("aria-checked", String(on));
+        row.classList.toggle("on", on);
+    }
+}
+
+function openNotificationSettings() {
+    const dialog = $("#notificationSettingsDialog");
+    hideNotificationSaveFailure();
+    if (!dialog.open) dialog.showModal();
+    renderNotificationSettings();
+    // Opening the sheet always reads the server, and the browser permission.
+    void loadNotificationCategories({ force: true });
+    void refreshWebPushStatus();
+}
+
+// GodModeCard.swift: a yellow crown, "$6.99/week", the four value props and
+// "Start God Mode"; subscribers see "God Mode Active" and "\u2728 Active".
+const GOD_MODE_CROWN_ICON = '<svg class="god-mode-crown-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3.2 7.6a1.3 1.3 0 0 1 2-1.3l3.7 3 2.1-4.6a1.1 1.1 0 0 1 2 0l2.1 4.6 3.7-3a1.3 1.3 0 0 1 2 1.3l-1.7 9.2H4.9ZM5.2 18.3h13.6v1.2a1.2 1.2 0 0 1-1.2 1.2H6.4a1.2 1.2 0 0 1-1.2-1.2Z"/></svg>';
+
+function godModeConfigPrice() {
+    return Math.max(0, Number(state.config?.god_mode_price || 6.99));
 }
 
 function renderGodModeCard() {
     const active = api.user?.subscribed_user === true;
     const multiplier = Math.max(1, Number(state.profile?.god_mode_aura_multiplier || 2));
-    const remainingReveals = Math.max(0, Number(state.profile?.remaining_reveals || 0));
     const weeklyReveals = Math.max(1, Number(state.config?.max_full_reveals_per_week || 2));
-    const weeklyPrice = Math.max(0, Number(state.config?.god_mode_price || 6.99));
+    const valueProps = [
+        `${weeklyReveals} weekly reveals for voters or anonymous question authors.`,
+        "First-letter hints on every poll.",
+        `${multiplier}\u00d7 aura on every answer you give.`,
+        "Get boosted to the top of classmates' polls.",
+    ];
     $("#godModeCard").innerHTML = `<article class="god-mode-card ${active ? "active" : ""}">
-        <div class="god-mode-title"><span><img loading="lazy" decoding="async" src="../assets/app/crown.webp" alt=""></span><div><strong>${active ? "God Mode Active" : "God Mode"}</strong><small>${active ? "Everything unlocked" : `$${weeklyPrice.toFixed(2)} / week`}</small></div>${active ? `<span class="god-mode-active">Active</span>` : ""}</div>
-        <p class="god-mode-benefits-heading">${active ? "You're enjoying:" : "Go legendary with:"}</p>
-        <ul><li>${weeklyReveals} weekly reveals to see exactly who voted.</li><li>First-letter hints on every poll.</li><li>${multiplier}× aura on every answer you give.</li><li>Get boosted to the top of classmates' polls.</li></ul>
-        ${active
-        ? `<p>Your subscription is recognized on web · ${remainingReveals} weekly ${remainingReveals === 1 ? "reveal" : "reveals"} left. Billing stays with the store where you subscribed.</p>`
-        : `<button class="god-mode-start-button" type="button" data-open-god-mode><span><strong>Start God Mode</strong><small>$${weeklyPrice.toFixed(2)} per week</small></span></button>`}
+        <div class="god-mode-title"><span>${GOD_MODE_CROWN_ICON}</span><div><strong>${active ? "God Mode Active" : "God Mode"}</strong><small>${active ? "Everything unlocked" : `$${godModeConfigPrice().toFixed(2)}/week`}</small></div>${active ? `<span class="god-mode-active">\u2728 Active</span>` : ""}</div>
+        <p class="god-mode-benefits-heading">${active ? "You\u2019re enjoying:" : "Go legendary with:"}</p>
+        <ul>${valueProps.map((prop) => `<li>${escapeHTML(prop)}</li>`).join("")}</ul>
+        ${active ? "" : `<button class="god-mode-start-button" type="button" data-open-god-mode><span><strong>Start God Mode</strong></span></button>`}
     </article>`;
 }
 
@@ -1577,27 +2012,54 @@ function hasStripeGodMode() {
 
 async function refreshGodModeBilling() {
     const userId = api.user?.id;
-    if (!userId || !hasActiveGodMode() || typeof api.getGodModeBilling !== "function") return;
+    if (!userId || typeof api.getGodModeBilling !== "function") return;
     try {
         const billing = await api.getGodModeBilling(userId);
         if (api.user?.id !== userId) return;
-        state.godModeBilling = { userId, provider: billing?.provider || null };
+        state.godModeBilling = {
+            userId,
+            provider: billing?.provider || null,
+            subscribed: billing?.subscribed === true,
+            stripeStatus: billing?.stripe_status || null,
+            cancelAtPeriodEnd: billing?.cancel_at_period_end === true,
+            expiresAt: billing?.expires_at || null,
+            manage: billing?.manage || null,
+            webPriceLabel: billing?.web_checkout?.price_label || null,
+        };
         if (billing?.cancel_at_period_end === true) state.godModeCancellation = billing;
     } catch {
         return;
     }
-    if (state.profileEditor === "hub") renderProfileEditorHub();
+    if (state.profileEditor === "hub" && $("#profileDialog").open) renderProfileEditorHub();
+}
+
+// GodModeBillingStatus.needsPaymentUpdate: the web payment failed and Stripe
+// still holds the subscription; the fix is the card.
+function godModeNeedsPaymentUpdate() {
+    const billing = state.godModeBilling;
+    if (!billing || billing.userId !== api.user?.id) return false;
+    return ["past_due", "unpaid", "incomplete"].includes(billing.stripeStatus || "");
+}
+
+// The Earn button's line (GodModePitchView.earnGodModeSubtitle), from the
+// God Mode invite goal; older servers only send the aura reward fields.
+function godModeInviteProgress() {
+    const status = state.inviteStatus;
+    if (!status) return null;
+    const progress = Number(status.god_mode_invite_progress ?? status.aura_reward_progress);
+    const goal = Number(status.god_mode_invite_goal ?? status.aura_reward_goal);
+    if (!Number.isFinite(progress) || !Number.isFinite(goal)) return null;
+    const safeGoal = Math.max(1, goal);
+    const reached = (status.god_mode_invite_goal_reached ?? status.aura_reward_max_reached) === true || progress >= safeGoal;
+    return { progress: Math.max(0, Math.min(progress, safeGoal)), goal: safeGoal, reached };
 }
 
 function godModeInviteProgressLabel() {
-    const status = state.inviteStatus;
-    if (!status) return "Loading invite progress...";
-    const goal = Math.max(1, Number(status.aura_reward_goal || 1));
-    const maxReached = status.aura_reward_max_reached === true;
-    const progress = maxReached
-        ? goal
-        : Math.max(0, Math.min(goal, Number(status.aura_reward_progress || 0)));
-    return `${progress} / ${goal} qualifying invites`;
+    if (state.config?.enable_god_mode_ugc_program === true) return "Invite friends or join our Creator program";
+    const invites = godModeInviteProgress();
+    if (!invites) return "Invite friends to unlock God Mode";
+    if (invites.reached) return "God Mode invite goal reached";
+    return `${invites.progress} / ${invites.goal} qualifying invites`;
 }
 
 function syncGodModeCarouselDots() {
@@ -1609,12 +2071,29 @@ function syncGodModeCarouselDots() {
     $$(".god-mode-page-dots span").forEach((dot, index) => dot.classList.toggle("active", index === activeIndex));
 }
 
+// The web price: Stripe's own label from the billing status when the server
+// sends it ("$6.99/week"), else the configured display price.
+function godModeWebPriceLine() {
+    const label = state.godModeBilling?.userId === api.user?.id ? state.godModeBilling?.webPriceLabel : null;
+    if (label) return label.replace(/\/(\w+)$/, " per $1");
+    return `$${godModeConfigPrice().toFixed(2)} per week`;
+}
+
 function renderGodModePitch() {
     const weeklyReveals = Math.max(1, Number(state.config?.max_full_reveals_per_week || 2));
-    const weeklyPrice = Math.max(0, Number(state.config?.god_mode_price || 6.99));
+    if (!state.godModeBilling?.webPriceLabel) {
+        void refreshGodModeBilling().then(() => {
+            const price = $("#godModeCheckoutPrice");
+            if (price) price.textContent = godModeWebPriceLine();
+        });
+    }
     const multiplier = Math.max(1, Number(state.profile?.god_mode_aura_multiplier || 2));
     const revealNames = ["Sydney Sweeney", "LaMelo Ball", "Jordan Lee", "Taylor Swift"];
-    $("#godModePitchBody").innerHTML = `<div class="god-mode-pitch-topbar"><button class="god-mode-close-button" type="button" data-close-dialog aria-label="Close God Mode">×</button></div>
+    // GodModePitchView: a sheet with a grabber and no close button; drag down or "Maybe later".
+    const earnSubtitle = state.config?.enable_god_mode_ugc_program === true
+        ? "Invite friends or join our Creator program"
+        : godModeInviteProgressLabel();
+    $("#godModePitchBody").innerHTML = `<span class="god-mode-pitch-grabber" aria-hidden="true"></span>
         <section class="god-mode-pitch-hero">
             <h2>See who likes you with</h2>
             <div class="god-mode-pitch-brand"><img loading="lazy" decoding="async" src="../assets/app/crown.webp" alt=""><strong>God Mode</strong></div>
@@ -1625,20 +2104,21 @@ function renderGodModePitch() {
                     <img loading="lazy" decoding="async" class="god-mode-letter" src="../assets/app/letter_aligned.webp" alt="">
                     <span class="god-mode-lens"><img loading="lazy" decoding="async" src="../assets/app/magnifying_glass.webp" alt=""><span class="god-mode-reveal-names">${revealNames.map((name) => `<strong>${escapeHTML(name).replace(" ", "<br>")}</strong>`).join("")}</span></span>
                 </div>
-                <h3>${weeklyReveals} Reveals / Week</h3><p>See the full names on ${weeklyReveals} polls every week.</p>
+                <h3>${weeklyReveals} Reveals / Week</h3><p>Reveal voters or anonymous school-question authors up to ${weeklyReveals} times every week.</p>
             </article>
             <article class="god-mode-benefit-card"><img loading="lazy" decoding="async" class="god-mode-benefit-image scroll" src="../assets/app/scroll.webp" alt=""><h3>First-Letter Hints</h3><p>Get the first letter on every personal poll automatically.</p></article>
             <article class="god-mode-benefit-card"><img loading="lazy" decoding="async" class="god-mode-benefit-image aura" src="../assets/app/aura.webp" alt=""><h3>${multiplier}× Aura Boost</h3><p>Earn ${multiplier === 2 ? "double" : `${multiplier}×`} aura for every answer you give in Play.</p></article>
-            <article class="god-mode-benefit-card"><img loading="lazy" decoding="async" class="god-mode-benefit-image rocket" src="../assets/app/rocket.webp" alt=""><h3>Get boosted</h3><p>Get boosted to the top of your classmates' polls to see what they think of you.</p></article>
+            <article class="god-mode-benefit-card"><img loading="lazy" decoding="async" class="god-mode-benefit-image rocket" src="../assets/app/rocket.webp" alt=""><h3>Get boosted</h3><p>Get boosted to the top of your classmates polls to see what they think of you</p></article>
         </div>
         <div class="god-mode-page-dots" aria-hidden="true"><span class="active"></span><span></span><span></span><span></span></div>
         <div class="god-mode-pitch-actions">
-            <button class="god-mode-earn-button" type="button" data-earn-god-mode><strong>Earn God Mode</strong><small id="godModeInviteProgress">${escapeHTML(godModeInviteProgressLabel())}</small></button>
-            <button class="god-mode-checkout-button" type="button" data-start-god-mode><span><strong>Start God Mode</strong><small>$${weeklyPrice.toFixed(2)} per week</small></span></button>
+            <button class="god-mode-earn-button" type="button" data-earn-god-mode><strong>Earn God Mode</strong><small id="godModeInviteProgress">${escapeHTML(earnSubtitle)}</small></button>
+            <button class="god-mode-checkout-button" type="button" data-start-god-mode><span><strong>Start God Mode</strong><small id="godModeCheckoutPrice">${escapeHTML(godModeWebPriceLine())}</small></span></button>
             <button class="god-mode-maybe-button" type="button" data-close-dialog>Maybe later</button>
             <p id="godModeCheckoutStatus" class="status-message" role="status"></p>
             <p class="god-mode-legal"><a href="/terms.html">Terms</a><span>·</span><a href="/privacy-policy.html">Privacy Policy</a></p>
-        </div>`;
+        </div>
+        <p class="god-mode-terms">Payment is charged by Stripe at checkout and renews every week until you cancel. Cancel anytime from Edit information; God Mode stays on until the end of the paid week.</p>`;
     $(".god-mode-benefit-carousel")?.addEventListener("scroll", syncGodModeCarouselDots, { passive: true });
 }
 
@@ -1654,7 +2134,7 @@ function openGodModePitch() {
     api.getInviteStatus(api.user.id).then((inviteStatus) => {
         state.inviteStatus = inviteStatus;
         const progress = $("#godModeInviteProgress");
-        if (progress) progress.textContent = godModeInviteProgressLabel();
+        if (progress && state.config?.enable_god_mode_ugc_program !== true) progress.textContent = godModeInviteProgressLabel();
     }).catch(() => {
         const progress = $("#godModeInviteProgress");
         if (progress && !state.inviteStatus) progress.textContent = "Invite friends for God Mode rewards";
@@ -1732,22 +2212,43 @@ async function startGodModeCheckout(button) {
 
 function renderEarnGodModeProgress() {
     const container = $("#earnGodModeProgress");
-    const status = state.inviteStatus;
-    if (!status) {
-        container.innerHTML = `<div class="earn-invite-progress"><span><strong>Qualifying invites</strong><small>Loading…</small></span><progress max="1" value="0" aria-label="Loading invite progress"></progress></div>`;
+    const invites = godModeInviteProgress();
+    if (!invites) {
+        container.innerHTML = state.inviteStatus ? "" : `<div class="earn-invite-progress"><span><strong>Qualifying invites</strong><small>Loading…</small></span><progress max="1" value="0" aria-label="Loading invite progress"></progress></div>`;
         return;
     }
-    const goal = Math.max(1, Number(status.aura_reward_goal || 1));
-    const maxReached = status.aura_reward_max_reached === true;
-    const progress = maxReached ? goal : Math.max(0, Math.min(goal, Number(status.aura_reward_progress || 0)));
-    const remaining = Math.max(0, goal - progress);
+    const remaining = Math.max(0, invites.goal - invites.progress);
     container.innerHTML = `<div class="earn-invite-progress">
-        <span><strong>Qualifying invites: ${progress} / ${goal}</strong><small>${maxReached ? "Reward earned" : `${remaining} to go`}</small></span>
-        <progress max="${goal}" value="${progress}" aria-label="${progress} of ${goal} qualifying invites"></progress>
+        <span><strong>Qualifying invites: ${invites.progress} / ${invites.goal}</strong><small>${invites.reached ? "Reward earned" : `${remaining} to go`}</small></span>
+        <progress max="${invites.goal}" value="${invites.progress}" aria-label="${invites.progress} of ${invites.goal} qualifying invites"></progress>
     </div>`;
 }
 
+// GodModeEarnView.swift: "Invite N friends" or, with the Creator program on,
+// "Join our Creator program".
+function renderGodModeEarnChooser() {
+    const creator = state.config?.enable_god_mode_ugc_program === true;
+    const invites = godModeInviteProgress();
+    const goal = invites?.goal || Math.max(1, Number(state.config?.god_mode_invite_friend_goal || 5));
+    $("#godModeEarnChooserSubtitle").textContent = creator ? "Choose how you want to unlock reveals." : "Invite friends to unlock reveals.";
+    $("#godModeEarnInviteTitle").textContent = `Invite ${goal} friends`;
+    $("#godModeEarnInviteSubtitle").textContent = invites
+        ? `${invites.progress} / ${invites.goal} qualifying invites`
+        : `Earn God Mode when ${goal} qualifying friends join.`;
+    $("#godModeEarnCreator").classList.toggle("hidden", !creator);
+}
+
 async function openEarnGodModeDialog() {
+    const dialog = $("#godModeEarnChooserDialog");
+    renderGodModeEarnChooser();
+    if (!dialog.open) dialog.showModal();
+    try {
+        state.inviteStatus = await api.getInviteStatus(api.user.id);
+        renderGodModeEarnChooser();
+    } catch (_) { /* The chooser still works without fresh progress. */ }
+}
+
+async function openInviteFriendsDialog() {
     const dialog = $("#earnGodModeDialog");
     $("#earnGodModeStatus").textContent = "";
     renderEarnGodModeProgress();
@@ -1756,6 +2257,11 @@ async function openEarnGodModeDialog() {
         state.inviteStatus = await api.getInviteStatus(api.user.id);
         renderEarnGodModeProgress();
     } catch (_) { /* Sharing still works when progress is temporarily unavailable. */ }
+}
+
+// The Creator program lives on the website (CreatorProgramView.swift on iOS).
+function openCreatorProgram() {
+    window.open("/creatorprogram.html", "_blank", "noopener");
 }
 
 async function shareGodModeInvite(button, channel) {
@@ -1826,10 +2332,11 @@ function renderAuraPurchases() {
             : label;
         return `<button class="aura-price-button ${insufficient ? "insufficient" : ""}" type="button" data-buy-aura="${kind}" aria-label="${escapeHTML(ariaLabel)}" ${active || insufficient ? "disabled" : ""}>${active ? "Active" : `<span>${cost.toLocaleString()}</span><img loading="lazy" decoding="async" src="../assets/app/aura.webp" alt="aura">`}</button>`;
     };
-    container.innerHTML = `<article class="purchase-row"><span><strong>Get boosted</strong><small>Jump to the top of classmates' polls for 5 days or until you get voted 10 times.</small></span>${purchaseButton("global", globalCost, globalBoost ? "Global boost active" : `Get boosted for ${globalCost.toLocaleString()} aura`, Boolean(globalBoost))}</article>
-        <article class="purchase-row"><span><strong>See what your crush thinks about you</strong><small>Your crush stays top secret. You appear more often in their polls.</small></span>${purchaseButton("targeted", targetedCost, `Choose a crush for ${targetedCost.toLocaleString()} aura`)}</article>
+    // SettingsView+InviteAndPurchases.perksSection's titles and subtitles.
+    container.innerHTML = `<article class="purchase-row"><span><strong>Get boosted</strong><small>Guaranteed to find out what your classmates think of you \u{1F4AC}</small></span>${purchaseButton("global", globalCost, globalBoost ? "Global boost active" : `Get boosted for ${globalCost.toLocaleString()} aura`, Boolean(globalBoost))}</article>
+        <article class="purchase-row"><span><strong>Target a classmate</strong><small>They won't know who targeted them \u{1F92B}</small></span>${purchaseButton("targeted", targetedCost, `Target a classmate for ${targetedCost.toLocaleString()} aura`)}</article>
         ${tbhRequestsEnabled() ? `<article class="purchase-row"><span><strong>Request a TBH</strong><small>Ask a classmate for their honest take on you.</small></span>${purchaseButton("tbh", tbhCost, `Request a TBH for ${tbhCost.toLocaleString()} aura`)}</article>` : ""}
-        <article class="purchase-row"><span><strong>Submit a school question</strong><small>Create a poll for your school and choose whether to show your name.</small></span>${purchaseButton("question", questionCost, `Submit a school question for ${questionCost.toLocaleString()} aura`)}</article>`;
+        <article class="purchase-row"><span><strong>Submit a school question</strong><small>Anonymously create a poll that your school will answer.</small></span>${purchaseButton("question", questionCost, `Submit a school question for ${questionCost.toLocaleString()} aura`)}</article>`;
 }
 
 function newIdempotencyKey() {
@@ -2484,21 +2991,281 @@ async function addBackupPasskey(trigger = null) {
     }
 }
 
+// LoginView.swift: the Face ID sign-in. The browser needs a tap before it shows
+// the passkey prompt, so "Log in" on the age screen starts it in that tap.
 async function handlePasskeySignIn() {
     const button = $("#passkeyButton");
+    if (state.passkeySignInRunning) return;
+    state.passkeySignInRunning = true;
     $("#authStatus").textContent = "";
-    setButtonLoading(button, true, "Checking your passkey...");
+    $("#authBrowserHelp").classList.add("hidden");
+    button.disabled = true;
+    $("#passkeyButtonLabel").textContent = "Signing in...";
     try {
         const login = demoMode ? await api.demoLogin() : await signInWithPasskey(api);
         api.saveSession(login);
-        await showSignedIn();
+        await finishSignIn();
     } catch (error) {
         reportAuthFailure(error);
         showAuthBrowserHelp(error, false);
-        $("#authStatus").textContent = friendlyErrorMessage(error, "Passkey sign-in failed. Please try again.");
+        $("#authStatus").textContent = passkeySignInErrorMessage(error);
+    } finally {
+        state.passkeySignInRunning = false;
+        button.disabled = !passkeysSupported() && !demoMode;
+        $("#passkeyButtonLabel").textContent = deviceAuthCopy()["sign-in"];
+    }
+}
+
+// LoginView.swift errors point to phone sign-in when the web offers it.
+function passkeySignInErrorMessage(error) {
+    const fallback = "Passkey sign-in failed. Please try again.";
+    if (!phoneSignInEnabled()) return friendlyErrorMessage(error, fallback);
+    if (error?.code === "passkey_not_completed" || error?.name === "NotAllowedError") return "No passkey found. Please sign in with your phone number.";
+    if (error?.status === 408 || error?.code === "request_timeout") return "The server took too long to respond. Try again or use your phone number.";
+    if (["embedded_browser", "passkeys_unavailable", "related_origins_unavailable", "unsupported_origin", "secure_context"].includes(error?.code)) {
+        return `${friendlyErrorMessage(error, fallback)} You can also sign in with your phone number.`;
+    }
+    if (error?.status === 429) return friendlyErrorMessage(error, fallback);
+    return "Sign in failed. Please try again or use your phone number.";
+}
+
+// Face ID is what iPhone owners know the passkey by; elsewhere it is the
+// phone's screen lock, so the iOS copy names that instead.
+function deviceAuthCopy() {
+    return isAppleTouchDevice() ? {
+        "sign-in": "Sign in with Face ID",
+        back: "Back to Face ID sign in",
+        private: "Face ID stays on your iPhone. Valid never sees it.",
+        required: "Required to finish setup · Secured by Apple",
+        secured: "Secured by Apple · Valid never sees your Face ID",
+        signed: "You can sign back into Valid with Face ID.",
+    } : {
+        "sign-in": "Sign in with a passkey",
+        back: "Back to passkey sign in",
+        private: "Your screen lock stays on your phone. Valid never sees it.",
+        required: "Required to finish setup · Secured by your phone",
+        secured: "Secured by your phone · Valid never sees your screen lock",
+        signed: "You can sign back into Valid with your passkey.",
+    };
+}
+
+function applyDeviceAuthCopy() {
+    const copy = deviceAuthCopy();
+    $$("[data-device-copy]").forEach((element) => {
+        const text = copy[element.dataset.deviceCopy];
+        if (text) element.textContent = text;
+    });
+}
+
+// Signed out, the age screen is the root for everyone (GettingStartedView).
+// Sign-in is a sheet over it; session trouble gets its own recovery card.
+function showSignedOutRoot({ signIn = false, message = "" } = {}) {
+    showAuthView();
+    hideSessionRecovery();
+    if (!$("#signupDialog").open) openSignupDialog();
+    if (signIn) openSignInSheet({ message });
+}
+
+function closeSignedOutRoot() {
+    for (const id of ["#signInDialog", "#addSchoolDialog", "#signupDialog"]) {
+        if ($(id).open) $(id).close();
+    }
+    clearInterval(state.signInResendTimer);
+    clearInterval(state.signupResendTimer);
+}
+
+// SessionRecoveryView (RootScreens.swift).
+function showSessionRecovery(message, { checking = false } = {}) {
+    showAuthView();
+    for (const id of ["#signInDialog", "#addSchoolDialog", "#signupDialog"]) {
+        if ($(id).open) $(id).close();
+    }
+    $("#sessionRecoveryCard").classList.remove("hidden");
+    $("#sessionRecoveryStatus").textContent = message;
+    $("#retrySessionButton").disabled = checking;
+    $("#retrySessionButton").textContent = checking ? "Loading account…" : "Try again";
+}
+
+function hideSessionRecovery() {
+    $("#sessionRecoveryCard").classList.add("hidden");
+}
+
+async function useAnotherAccount() {
+    const button = $("#useAnotherAccountButton");
+    button.disabled = true;
+    try {
+        await api.logout?.().catch(() => null);
+        api.clearSession();
+    } finally {
+        button.disabled = false;
+    }
+    sessionRestorePending = false;
+    showSignedOutRoot();
+}
+
+function openSignInSheet({ startPasskey = false, message = "" } = {}) {
+    const dialog = $("#signInDialog");
+    showSignInSection("passkey");
+    $("#authStatus").textContent = message;
+    if (!passkeysSupported() && !demoMode) {
+        $("#passkeyButton").disabled = true;
+        $("#authStatus").textContent ||= "This browser does not support passkeys. Try current Chrome, Safari, or Edge.";
+        showAuthBrowserHelp({ code: "passkeys_unavailable" }, false);
+    }
+    if (!dialog.open) {
+        dialog.showModal();
+        // Not the Cancel button: the sheet opens without a focus ring, as on iOS.
+        if (document.activeElement?.matches?.("[data-sign-in-cancel]")) document.activeElement.blur();
+    }
+    renderSignInPhoneOption();
+    void loadSignedOutConfig().then(renderSignInPhoneOption);
+    if (startPasskey && !$("#passkeyButton").disabled) void handlePasskeySignIn();
+    else if (message) requestAnimationFrame(() => $("#passkeyButton").focus());
+}
+
+function closeSignInSheet() {
+    clearInterval(state.signInResendTimer);
+    if ($("#signInDialog").open) $("#signInDialog").close();
+}
+
+// The config read is public; signed out it tells the sign-up and sign-in
+// screens which optional steps the server has turned on.
+async function loadSignedOutConfig() {
+    if (state.config) return state.config;
+    state.signedOutConfigLoad ||= api.getConfig().then((config) => {
+        if (!state.config && config) state.config = config;
+        return state.config;
+    }).catch(() => null).finally(() => { state.signedOutConfigLoad = null; });
+    return state.signedOutConfigLoad;
+}
+
+// Text-code sign-in needs browser-safe login routes (Turnstile on the send,
+// an HttpOnly cookie on the confirm). The server turns it on in config.
+function phoneSignInEnabled() {
+    return state.config?.enable_web_phone_login === true && typeof api?.requestLoginVerification === "function";
+}
+
+function renderSignInPhoneOption() {
+    $("#signInPhoneOption").classList.toggle("hidden", !phoneSignInEnabled());
+}
+
+function showSignInSection(section) {
+    $("#signInPasskeySection").classList.toggle("hidden", section !== "passkey");
+    $("#signInPhoneSection").classList.toggle("hidden", section !== "phone");
+    $("#signInCodeSection").classList.toggle("hidden", section !== "code");
+    if (section === "phone") {
+        $("#signInPhoneStatus").textContent = "";
+        $("#signInSendCode").disabled = signupPhoneDigits($("#signInPhone").value).length !== 10;
+        setTimeout(() => $("#signInPhone").focus({ preventScroll: true }), 400);
+    }
+    if (section === "code") {
+        $("#signInCodeStatus").textContent = "";
+        $("#signInCode").value = "";
+        $("#signInVerify").disabled = true;
+        setTimeout(() => $("#signInCode").focus({ preventScroll: true }), 300);
+    }
+}
+
+async function sendSignInCode(button = $("#signInSendCode")) {
+    const phoneNumber = signupPhoneDigits($("#signInPhone").value);
+    const status = state.signInPhone && !$("#signInCodeSection").classList.contains("hidden") ? $("#signInCodeStatus") : $("#signInPhoneStatus");
+    if (phoneNumber.length !== 10) {
+        status.textContent = "Enter a valid 10-digit phone number.";
+        return;
+    }
+    if (state.signInSending) return;
+    state.signInSending = true;
+    setButtonLoading(button, true, "Sending...");
+    status.textContent = "";
+    try {
+        const turnstileToken = await getSignupTurnstileToken("#signInTurnstile");
+        const session = await api.requestLoginVerification(phoneNumber, turnstileToken);
+        resetSignupTurnstile();
+        state.signInPhone = phoneNumber;
+        if ($("#signInCodeSection").classList.contains("hidden")) showSignInSection("code");
+        else $("#signInCodeStatus").textContent = "A verification code was sent. Enter the newest code below.";
+        startResendCountdown($("#signInResend"), session?.resend_available_at, "signInResendTimer");
+    } catch (error) {
+        if (error.status === 404) {
+            await showNumberNotSignedUp(phoneNumber);
+            return;
+        }
+        status.textContent = userMessage(error, "Unable to send a verification code. Please try again.");
+    } finally {
+        state.signInSending = false;
+        setButtonLoading(button, false);
+        if (button === $("#signInSendCode")) button.disabled = signupPhoneDigits($("#signInPhone").value).length !== 10;
+    }
+}
+
+async function verifySignInCode() {
+    const button = $("#signInVerify");
+    const code = $("#signInCode").value.replace(/\D/g, "");
+    if (code.length !== 6 || !state.signInPhone) return;
+    setButtonLoading(button, true, "Signing in...");
+    $("#signInCodeStatus").textContent = "";
+    try {
+        const login = await api.confirmLoginVerification(state.signInPhone, code);
+        api.saveSession(login);
+        state.signInPhone = null;
+        await finishSignIn();
+    } catch (error) {
+        if (error.status === 404) {
+            await showNumberNotSignedUp(state.signInPhone);
+            return;
+        }
+        $("#signInCodeStatus").textContent = userMessage(error, "Unable to verify the code. Please try again.");
     } finally {
         setButtonLoading(button, false);
+        button.disabled = $("#signInCode").value.replace(/\D/g, "").length !== 6;
     }
+}
+
+// LoginView.swift "Number Not Signed Up": the number goes to sign-up instead.
+async function showNumberNotSignedUp(phoneNumber) {
+    const proceed = await confirmSheet({
+        title: "Number Not Signed Up",
+        message: "This phone number isn't signed up yet. We'll help you create a new account.",
+        confirmLabel: "Continue",
+        cancelLabel: "Cancel",
+    });
+    if (!proceed) return;
+    closeSignInSheet();
+    if (phoneNumber) $("#signupPhone").value = formatSignupPhone(phoneNumber);
+    if (!$("#signupDialog").open) openSignupDialog();
+    setSignupStep(SIGNUP_STEP.age);
+}
+
+// Resend Code / Resend in Ns, from the server's resend time (30 s by default).
+function startResendCountdown(button, availableAt, timerKey) {
+    clearInterval(state[timerKey]);
+    const parsed = Date.parse(availableAt || "");
+    const readyAt = Number.isFinite(parsed) ? parsed : Date.now() + 30_000;
+    const tick = () => {
+        const seconds = Math.max(0, Math.ceil((readyAt - Date.now()) / 1000));
+        button.disabled = seconds > 0;
+        button.textContent = seconds > 0 ? `Resend in ${seconds}s` : "Resend Code";
+        if (!seconds) clearInterval(state[timerKey]);
+    };
+    tick();
+    state[timerKey] = setInterval(tick, 1000);
+}
+
+// Sign-in (passkey or text code) from the age screen lands on Play after the
+// same sheets as a new account. A link keeps its own destination: a push tap
+// or chat link, and ?signin=1 links (which keep the Feed landing they always
+// had). ?postauth=1 asks for the iOS landing explicitly (also in the demo).
+async function finishSignIn() {
+    const params = new URLSearchParams(location.search);
+    const routed = ["tab", "notification", "chat", "manage", "story", "call"].some((key) => params.has(key));
+    const explicit = params.get("postauth") === "1";
+    const landsOnPlay = !routed && (explicit || (!demoMode && params.get("signin") !== "1"));
+    closeSignedOutRoot();
+    state.postAuthLanding = landsOnPlay ? "play" : null;
+    await showSignedIn();
+    if (state.postAuthLanding !== "play") return;
+    if (state.activePanel !== "play") switchPanel("play", { historyMode: "replace", restoreScroll: false });
+    void runPostAuthSheets({ reason: "signin" });
 }
 
 function deviceInstallationId() {
@@ -2513,7 +3280,7 @@ function deviceInstallationId() {
 
 function dateOfBirthFromAge(value) {
     const age = Number(value);
-    if (!Number.isInteger(age) || age < 13 || age > 27) return null;
+    if (!Number.isInteger(age) || age < SIGNUP_MIN_AGE || age > SIGNUP_MAX_AGE) return null;
     return `${new Date().getFullYear() - age}-01-01T00:00:00Z`;
 }
 
@@ -2540,8 +3307,17 @@ const signupGradeCatalog = [
     { name: "Senior", gradeNumber: 12 },
 ];
 
+// AgeWheelPicker.ages: 13...35.
+const SIGNUP_MIN_AGE = 13;
+const SIGNUP_MAX_AGE = 35;
+// OnboardingFlowView order.
+const SIGNUP_STEP = Object.freeze({
+    age: 0, contacts: 1, school: 2, grade: 3, phone: 4, code: 5, firstName: 6,
+    lastName: 7, username: 8, gender: 9, photo: 10, passkey: 11, welcome: 12,
+});
+
 function selectSignupAge(value, { scroll = true, smooth = false } = {}) {
-    const age = Math.max(13, Math.min(27, Number(value) || 13));
+    const age = Math.max(SIGNUP_MIN_AGE, Math.min(SIGNUP_MAX_AGE, Number(value) || SIGNUP_MIN_AGE));
     $("#signupAge").value = String(age);
     $("#signupAgeValue").textContent = String(age);
     $$('[data-signup-age]').forEach((option) => {
@@ -2612,22 +3388,16 @@ function showAuthBrowserHelp(error, signup) {
     }
 }
 
-async function openSignupDialog() {
-    if (!demoMode) {
-        try {
-            await checkPasskeyEnvironment();
-            if (!await enablePreviewSignup()) return;
-        }
-        catch (error) {
-            $('#authStatus').textContent = userMessage(error, "Passkeys aren’t available in this browser right now.");
-            showAuthBrowserHelp(error, false);
-            const help = $('#authBrowserHelp');
-            if (!help.classList.contains('hidden')) help.href = authBrowserURL({ signup: true });
-            reportAuthFailure(error);
-            return;
-        }
-    }
+// Opens the age screen, the signed-out root. The passkey environment is checked
+// when "Get Started!" is tapped, so the root always shows.
+function openSignupDialog() {
     state.signupCompletionUncertain = false;
+    state.signupAccountCreated = false;
+    state.signupPickedContacts = [];
+    state.signupVoteCount = 0;
+    state.signupUsernameChecked = null;
+    readInviteToken();
+    void loadSignedOutConfig().then(renderSignupConfigOptions);
     $('#signupForm').querySelectorAll('button[type="submit"]').forEach(button => { button.disabled = false; });
     $('#signupRecoverAccount').classList.add('hidden');
     $('#signupBrowserHelp').classList.add('hidden');
@@ -2639,11 +3409,49 @@ async function openSignupDialog() {
     state.signupVerifiedPhone = null;
     resetSignupTurnstile({ remove: true });
     $("#signupPhoneCode").value = "";
-    selectSignupAge($("#signupAge").value || 13, { scroll: false });
+    $("#signupSmsOptInBox").checked = false;
+    $("#signupUsernameStatus").replaceChildren();
+    $("#signupPasskeyExplainer").classList.remove("hidden");
+    $("#signupPasskeyDone").classList.add("hidden");
+    selectSignupAge($("#signupAge").value || SIGNUP_MIN_AGE, { scroll: false });
     renderSignupGradeOptions();
-    setSignupStep(0);
+    setSignupStep(SIGNUP_STEP.age);
     $("#signupDialog").showModal();
+    // The dialog focuses its first link (Terms); iOS shows no focus here.
+    if ($("#signupDialog").contains(document.activeElement) && document.activeElement.matches("a")) document.activeElement.blur();
     requestAnimationFrame(() => selectSignupAge($("#signupAge").value));
+}
+
+// PhoneNumberEntryView shows the SMS opt-in only when the server turns it on;
+// ContactsPermissionView's note comes from contacts_upload_disclosure_text.
+function renderSignupConfigOptions() {
+    $("#signupSmsOptIn").classList.toggle("hidden", state.config?.enable_sms_opt_in_prompt !== true);
+    const note = String(state.config?.contacts_upload_disclosure_text || "").trim();
+    const privacy = $("#signupContactsPrivacy");
+    if (note) privacy.innerHTML = `${escapeHTML(note)} <a href="../privacy-policy.html" target="_blank">Privacy Policy</a>`;
+    else privacy.textContent = "Valid really cares about your privacy. We will never spam your contacts.";
+}
+
+// Invite credit: a link that reaches the web app with ?invite=<token> keeps
+// the token for this tab and sends it with signup (backend inviteToken).
+const INVITE_TOKEN_KEY = "valid:invite-token";
+
+function readInviteToken() {
+    const url = new URL(location.href);
+    const token = url.searchParams.get("invite") || url.searchParams.get("inviteToken");
+    if (token !== null) {
+        url.searchParams.delete("invite");
+        url.searchParams.delete("inviteToken");
+        history.replaceState(history.state, "", `${url.pathname}${url.search}${url.hash}`);
+        if (/^[A-Za-z0-9_-]{8,128}$/.test(token)) {
+            state.inviteToken = token;
+            try { sessionStorage.setItem(INVITE_TOKEN_KEY, token); } catch (_) { /* Kept in memory for this page. */ }
+        }
+    }
+    if (!state.inviteToken) {
+        try { state.inviteToken = sessionStorage.getItem(INVITE_TOKEN_KEY) || null; } catch (_) { /* No stored invite. */ }
+    }
+    return state.inviteToken;
 }
 
 async function turnstileSiteKey() {
@@ -2679,10 +3487,13 @@ function resetSignupTurnstile({ remove = false } = {}) {
     window.turnstile.reset(state.turnstileWidgetId);
 }
 
-async function getSignupTurnstileToken() {
+async function getSignupTurnstileToken(container = "#signupTurnstile") {
     if (demoMode) return "demo";
     const [sitekey, turnstile] = await Promise.all([turnstileSiteKey(), waitForTurnstileAPI()]);
     if (!sitekey) throw new Error("Security verification is not configured yet.");
+    // One widget at a time: sign-up and the sign-in sheet each have a slot.
+    if (state.turnstileWidgetId !== null && state.turnstileContainer !== container) resetSignupTurnstile({ remove: true });
+    state.turnstileContainer = container;
 
     state.turnstileToken = null;
     const tokenPromise = new Promise((resolve, reject) => {
@@ -2705,7 +3516,7 @@ async function getSignupTurnstileToken() {
     });
 
     if (state.turnstileWidgetId === null) {
-        state.turnstileWidgetId = turnstile.render("#signupTurnstile", {
+        state.turnstileWidgetId = turnstile.render(container, {
             sitekey,
             action: TURNSTILE_ACTION,
             appearance: "interaction-only",
@@ -2734,76 +3545,123 @@ async function getSignupTurnstileToken() {
 function resetSignupSchoolPicker() {
     state.signupNearbySchools = [];
     state.signupSelectedSchool = null;
-    state.signupSchoolFallback = false;
+    state.signupSchoolLoading = false;
+    state.signupZipLookups = 0;
+    state.signupZipMode = null;
+    state.signupLastZip = "";
+    state.signupAddedSchool = null;
     state.signupSchoolLookupGeneration += 1;
-    $("#signupSchoolPicker").classList.add("hidden");
-    $("#signupSchoolFallback").classList.add("hidden");
     $("#signupSchoolResults").replaceChildren();
+    $("#signupSchoolFooter").replaceChildren();
     $("#signupSchoolSearch").value = "";
-    $("#signupSchoolContinue").disabled = true;
-    for (const input of [$("#signupSchool"), $("#signupCity"), $("#signupState")]) {
-        input.disabled = true;
-        input.required = false;
-    }
+    $("#signupZip").value = "";
+    renderSignupSchoolStep();
 }
 
 function schoolLocationLabel(school) {
     return [school.city, school.state].filter(Boolean).join(", ");
 }
 
+// SchoolSelectionView: search first ("School, city, or ZIP"). The web has no
+// bundled school list, so the ZIP card fills the list, and typing a ZIP in
+// the search box does the same.
+function renderSignupSchoolStep() {
+    const hasList = state.signupNearbySchools.length > 0;
+    const beforeAdding = state.signupZipMode === "before-adding";
+    const showZipCard = !hasList || beforeAdding;
+    $("#signupZipCard").classList.toggle("hidden", !showZipCard);
+    $("#signupSchoolPicker").classList.toggle("hidden", showZipCard);
+    $("#signupZipTitle").textContent = beforeAdding ? "One more way to find it" : "Find schools nearby";
+    $("#signupZipCopy").textContent = beforeAdding
+        ? "Your school may be listed under a different name. Enter your ZIP code to check nearby schools before adding a new one."
+        : "Enter your ZIP code so we can show schools around you.";
+    $("#signupZipAlt").classList.toggle("hidden", !beforeAdding);
+    const findButton = $("#signupFindSchools");
+    findButton.disabled = state.signupSchoolLoading || $("#signupZip").value.length !== 5;
+    findButton.textContent = state.signupSchoolLoading ? "Finding..." : "Find schools";
+    $("#signupZipAlt").disabled = state.signupSchoolLoading;
+    $("#signupSchoolContinue").classList.toggle("hidden", !state.signupSelectedSchool);
+    $("#signupSchoolContinue").disabled = !state.signupSelectedSchool;
+    if (!showZipCard) renderSignupSchoolResults();
+}
+
 function renderSignupSchoolResults() {
-    const query = $("#signupSchoolSearch").value.trim().toLowerCase();
+    const rawQuery = $("#signupSchoolSearch").value.trim();
+    const query = rawQuery.toLowerCase();
+    const zipQuery = /^\d{5}$/.test(query);
     const schools = state.signupNearbySchools.filter((school) => {
-        if (!query) return true;
+        if (!query || zipQuery) return true;
         return `${school.name} ${school.city || ""} ${school.state || ""}`.toLowerCase().includes(query);
     });
     const container = $("#signupSchoolResults");
+    const footer = $("#signupSchoolFooter");
+    // After a second ZIP the next step is adding the school (iOS: "Add a school").
+    const canAddSchool = state.signupZipLookups >= 2;
+    footer.innerHTML = canAddSchool
+        ? `<button class="signup-school-more" type="button" data-signup-add-school><span class="signup-school-more-icon" aria-hidden="true">+</span><span><strong>Add a school</strong><small>Can't find your school? Add it here.</small></span><span aria-hidden="true">›</span></button>`
+        : `<button class="signup-school-more" type="button" data-signup-zip-again><span class="signup-school-more-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 18s-5.5-4.6-5.5-9a5.5 5.5 0 0 1 11 0c0 4.4-5.5 9-5.5 9Z"/><circle cx="12" cy="9" r="2"/></svg></span><span><strong>Can't find your school?</strong><small>Search by ZIP before adding a new school.</small></span><span aria-hidden="true">›</span></button>`;
     if (!schools.length) {
-        container.innerHTML = `<p class="signup-school-empty">No nearby schools match that search.</p>`;
+        container.innerHTML = `<div class="signup-school-empty">
+            <span class="signup-school-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg></span>
+            <strong>No results for "${escapeHTML(rawQuery)}"</strong>
+            <p>${canAddSchool ? "Still can't find your school? You can add it below." : "Your school may be listed under a different name. Try your ZIP code before adding a new school."}</p>
+            <button class="primary-button" type="button" ${canAddSchool ? "data-signup-add-school" : "data-signup-zip-again"}>${canAddSchool ? "Add a school" : "Search by ZIP code"}</button>
+        </div>`;
         return;
     }
     container.innerHTML = schools.map((school) => {
         const selected = String(state.signupSelectedSchool?.id) === String(school.id);
         const logoURL = school.logo_url ? api.assetURL(school.logo_url) : "";
         const initials = String(school.name || "S").split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase();
+        const members = Math.max(0, Number(school.member_count || 0));
+        const trailing = selected
+            ? `<span class="signup-school-check" aria-hidden="true">✓</span>`
+            : members ? `<span class="signup-school-members"><strong>${members.toLocaleString()}</strong><small>on Valid</small></span>` : `<span class="signup-school-check" aria-hidden="true">›</span>`;
         return `<button class="signup-school-result ${selected ? "selected" : ""}" type="button" role="option" aria-selected="${selected}" data-signup-school="${escapeHTML(school.id)}">
             <span class="signup-school-logo">${logoURL ? mediaImageMarkup(logoURL, { initials }) : escapeHTML(initials)}</span>
-            <span><strong>${escapeHTML(school.name)}</strong><small>${escapeHTML(schoolLocationLabel(school))}${Number.isFinite(Number(school.distance_miles)) ? ` · ${Number(school.distance_miles).toFixed(1)} mi` : ""}</small></span>
-            <span class="signup-school-check" aria-hidden="true">${selected ? "✓" : "›"}</span>
+            <span><strong>${escapeHTML(school.name)}</strong><small>${escapeHTML(schoolLocationLabel(school))}${Number.isFinite(Number(school.distance_miles)) && school.distance_miles !== null ? ` · ${Number(school.distance_miles).toFixed(1)} mi` : ""}</small></span>
+            ${trailing}
         </button>`;
     }).join("");
 }
 
-async function lookupSignupSchools() {
-    const zipCode = $("#signupZip").value.replace(/\D/g, "").slice(0, 5);
-    $("#signupZip").value = zipCode;
+async function lookupSignupSchools(zipValue = $("#signupZip").value) {
+    const zipCode = String(zipValue || "").replace(/\D/g, "").slice(0, 5);
     if (!/^\d{5}$/.test(zipCode)) {
         $("#signupStatus").textContent = "Enter a 5-digit ZIP code.";
         return;
     }
+    $("#signupZip").value = zipCode;
     const generation = ++state.signupSchoolLookupGeneration;
-    $("#signupStatus").textContent = "Finding the 50 closest schools...";
+    state.signupSchoolLoading = true;
+    $("#signupStatus").textContent = "";
+    renderSignupSchoolStep();
     try {
         const response = await api.getNearbySchools(zipCode, 50);
         if (generation !== state.signupSchoolLookupGeneration) return;
-        state.signupNearbySchools = response.schools || [];
-        state.signupSelectedSchool = null;
-        state.signupSchoolFallback = false;
-        $("#signupSchoolSearch").value = "";
-        $("#signupSchoolPicker").classList.remove("hidden");
-        $("#signupSchoolFallback").classList.add("hidden");
-        $("#signupSchoolContinue").disabled = true;
-        renderSignupSchoolResults();
-        $("#signupStatus").textContent = state.signupNearbySchools.length
-            ? `Showing ${state.signupNearbySchools.length} schools near ${zipCode}.`
-            : "No schools were found near that ZIP code.";
+        const schools = response.schools || [];
+        state.signupLastZip = zipCode;
+        state.signupZipLookups += 1;
+        if (!schools.length) {
+            $("#signupStatus").textContent = "No schools were found near that ZIP code.";
+            return;
+        }
+        const added = state.signupAddedSchool;
+        state.signupNearbySchools = added ? [added, ...schools.filter((school) => String(school.id) !== String(added.id))] : schools;
+        if (state.signupSelectedSchool && !state.signupNearbySchools.some((school) => String(school.id) === String(state.signupSelectedSchool.id))) {
+            state.signupSelectedSchool = null;
+        }
+        state.signupZipMode = null;
+        if (!/^\d{5}$/.test($("#signupSchoolSearch").value.trim())) $("#signupSchoolSearch").value = "";
+        $("#signupSchoolResults").scrollTop = 0;
     } catch (error) {
         if (generation !== state.signupSchoolLookupGeneration) return;
-        state.signupNearbySchools = [];
-        state.signupSelectedSchool = null;
-        $("#signupSchoolPicker").classList.add("hidden");
-        showSignupSchoolFallback(true);
-        $("#signupStatus").textContent = userMessage(error, "Couldn't load nearby schools. Enter your school manually.");
+        $("#signupStatus").textContent = userMessage(error, "Couldn't load nearby schools. Try again.");
+    } finally {
+        if (generation === state.signupSchoolLookupGeneration) {
+            state.signupSchoolLoading = false;
+            renderSignupSchoolStep();
+        }
     }
 }
 
@@ -2811,40 +3669,189 @@ function selectSignupSchool(schoolId) {
     const school = state.signupNearbySchools.find((candidate) => String(candidate.id) === String(schoolId));
     if (!school) return;
     state.signupSelectedSchool = school;
-    state.signupSchoolFallback = false;
-    $("#signupSchoolContinue").disabled = false;
     $("#signupStatus").textContent = "";
     renderSignupGradeOptions();
-    renderSignupSchoolResults();
+    renderSignupSchoolStep();
 }
 
-function showSignupSchoolFallback(show) {
-    state.signupSchoolFallback = show;
-    state.signupSelectedSchool = show ? null : state.signupSelectedSchool;
-    $("#signupSchoolFallback").classList.toggle("hidden", !show);
-    $("#signupSchoolPicker").classList.toggle("hidden", show || !state.signupNearbySchools.length);
-    for (const input of [$("#signupSchool"), $("#signupCity"), $("#signupState")]) {
-        input.disabled = !show;
-        input.required = show;
+function showSignupZipCard(mode = "before-adding") {
+    state.signupZipMode = mode;
+    $("#signupZip").value = "";
+    $("#signupStatus").textContent = "";
+    renderSignupSchoolStep();
+    requestAnimationFrame(() => $("#signupZip").focus({ preventScroll: true }));
+}
+
+// SchoolRequestView: name, city, state, the school's ZIP and its grade range.
+// The school is resolved (found or created) here, before sign-up continues.
+function openAddSchoolSheet() {
+    const query = $("#signupSchoolSearch").value.trim();
+    $("#addSchoolForm").reset();
+    $("#addSchoolName").value = /^\d{5}$/.test(query) ? "" : query;
+    $("#addSchoolZip").value = state.signupLastZip || "";
+    $("#addSchoolMinGrade").value = "9";
+    $("#addSchoolMaxGrade").value = "12";
+    $("#addSchoolStatus").textContent = "";
+    $("#addSchoolFields").classList.remove("hidden");
+    $("#addSchoolDone").classList.add("hidden");
+    state.signupAddedSchool = null;
+    $("#addSchoolDialog").showModal();
+    requestAnimationFrame(() => $(query && !/^\d{5}$/.test(query) ? "#addSchoolCity" : "#addSchoolName").focus({ preventScroll: true }));
+}
+
+function syncAddSchoolGrades(changed) {
+    const min = $("#addSchoolMinGrade");
+    const max = $("#addSchoolMaxGrade");
+    if (Number(max.value) >= Number(min.value)) return;
+    if (changed === min) max.value = min.value;
+    else min.value = max.value;
+}
+
+async function submitAddSchool(event) {
+    event.preventDefault();
+    const name = $("#addSchoolName").value.trim();
+    const city = $("#addSchoolCity").value.trim();
+    const stateCode = $("#addSchoolState").value.trim().toUpperCase();
+    const zip = $("#addSchoolZip").value.replace(/\D/g, "").slice(0, 5);
+    const minGrade = Number($("#addSchoolMinGrade").value);
+    const maxGrade = Number($("#addSchoolMaxGrade").value);
+    const status = $("#addSchoolStatus");
+    if (!name) {
+        status.textContent = "Enter your school's name.";
+        $("#addSchoolName").focus();
+        return;
     }
-    $("#signupSchoolContinue").disabled = show ? false : !state.signupSelectedSchool;
-    $("#signupStatus").textContent = show ? "Enter the school exactly as it should appear." : "Choose a nearby school.";
-    if (show) $("#signupSchool").focus();
+    if (zip.length !== 5) {
+        status.textContent = "Enter the school's 5-digit ZIP code.";
+        $("#addSchoolZip").focus();
+        return;
+    }
+    if (stateCode && !/^[A-Z]{2}$/.test(stateCode)) {
+        status.textContent = "Use the two-letter state code, like CA.";
+        $("#addSchoolState").focus();
+        return;
+    }
+    const button = $("#addSchoolSubmit");
+    setButtonLoading(button, true, "Adding...");
+    status.textContent = "";
+    try {
+        const result = await api.resolveSchool({
+            school_name: name,
+            ...(city ? { city } : {}),
+            ...(stateCode ? { state: stateCode } : {}),
+            zip,
+            grades: `${minGrade}-${maxGrade}`,
+            min_grade: minGrade,
+            max_grade: maxGrade,
+        });
+        const school = result?.school;
+        if (!school?.id) throw new Error("We couldn't set up that school. Check its name and location.");
+        const found = result.status === "duplicate";
+        state.signupAddedSchool = {
+            ...school,
+            min_grade: school.min_grade ?? minGrade,
+            max_grade: school.max_grade ?? maxGrade,
+        };
+        $("#addSchoolDoneTitle").textContent = found ? "School Found!" : "School Added!";
+        $("#addSchoolDoneCopy").textContent = found
+            ? `We found ${school.name} nearby. It's ready for you to select.`
+            : `${school.name} has been added and is ready for you to select.`;
+        $("#addSchoolSelect").textContent = `Select ${school.name}`;
+        $("#addSchoolFields").classList.add("hidden");
+        $("#addSchoolDone").classList.remove("hidden");
+        successHaptic();
+    } catch (error) {
+        status.textContent = userMessage(error, "Could not add that school. Please try again.");
+    } finally {
+        setButtonLoading(button, false);
+    }
+}
+
+function selectAddedSchool() {
+    const school = state.signupAddedSchool;
+    if (!school) return;
+    state.signupNearbySchools = [school, ...state.signupNearbySchools.filter((candidate) => String(candidate.id) !== String(school.id))];
+    state.signupZipMode = null;
+    $("#signupSchoolSearch").value = "";
+    $("#addSchoolDialog").close();
+    selectSignupSchool(school.id);
+}
+
+// ContactsPermissionView: picked before school. The Contact Picker exists only
+// in Chrome on Android; elsewhere the same card offers the invite share.
+function renderSignupContactsStep() {
+    const picked = state.signupPickedContacts.length > 0;
+    const supported = contactsPickerSupported();
+    $("#signupContactsDone").classList.toggle("hidden", !picked);
+    $("#signupContactsChoose").classList.toggle("hidden", picked || !supported);
+    $("#signupContactsInvite").classList.toggle("hidden", picked || supported);
+}
+
+async function chooseSignupContacts(button) {
+    setButtonLoading(button, true, "Opening...");
+    $("#signupStatus").textContent = "";
+    try {
+        const selected = demoMode
+            ? (window.__demoPickedContacts || [{ name: ["Riley Demo"], tel: ["4155550111"] }, { name: ["Casey Demo"], tel: ["4155550112"] }])
+            : await navigator.contacts.select(["name", "tel"], { multiple: true });
+        const payload = contactUploadPayload(selected, state.config?.contact_filter_rules);
+        if (!payload.contacts.length) {
+            $("#signupStatus").textContent = selected?.length ? "Choose friends with a name and a US phone number." : "";
+            return;
+        }
+        state.signupPickedContacts = payload.contacts;
+        successHaptic();
+        renderSignupContactsStep();
+    } catch (error) {
+        if (error.name !== "AbortError") $("#signupStatus").textContent = userMessage(error, "Could not open your contacts.");
+    } finally {
+        setButtonLoading(button, false);
+    }
+}
+
+async function shareSignupInvite(button) {
+    const url = "https://validapp.lol/";
+    try {
+        if (navigator.share) await navigator.share({ title: "Join me on Valid", text: "Join my school on Valid so we can play", url });
+        else {
+            await navigator.clipboard.writeText(url);
+            showToast("Invite link copied");
+        }
+        button.textContent = "Invite more friends";
+    } catch (error) {
+        if (error.name !== "AbortError") $("#signupStatus").textContent = userMessage(error, "Could not share the invite.");
+    }
+}
+
+// Uploads the friends picked before the account existed; their matches fill
+// the Friends & Classmates sheet.
+function startSignupContactUpload() {
+    const contacts = state.signupPickedContacts;
+    const userId = api.user?.id;
+    if (!contacts.length || !userId) return Promise.resolve(null);
+    return uploadContactChunks(userId, contacts).then(({ accepted }) => {
+        state.signupContactHashes = new Map(accepted
+            .filter((row) => row?.hashed_phone_number)
+            .map((row) => [String(row.phone_number), String(row.hashed_phone_number).toLowerCase()]));
+        return accepted;
+    }).catch(() => null);
 }
 
 function setSignupStep(index) {
     const focused = document.activeElement;
     if (focused && $("#signupDialog").contains(focused) && focused.matches("input, select, textarea")) focused.blur();
-    state.signupStep = Math.max(0, Math.min(9, index));
+    state.signupStep = Math.max(SIGNUP_STEP.age, Math.min(SIGNUP_STEP.welcome, index));
     $$('[data-signup-step]').forEach((step) => step.classList.toggle("hidden", Number(step.dataset.signupStep) !== state.signupStep));
     $("#signupStatus").textContent = "";
+    $("#signupBrowserHelp").classList.add("hidden");
     const autofocusByStep = {
-        3: "#signupPhone",
-        4: "#signupPhoneCode",
-        5: "#signupFirstName",
-        6: "#signupLastName",
-        7: "#signupUsername",
+        [SIGNUP_STEP.phone]: "#signupPhone",
+        [SIGNUP_STEP.code]: "#signupPhoneCode",
+        [SIGNUP_STEP.firstName]: "#signupFirstName",
+        [SIGNUP_STEP.lastName]: "#signupLastName",
+        [SIGNUP_STEP.username]: "#signupUsername",
     };
+    if (state.signupStep === SIGNUP_STEP.username) prefillSignupUsername();
     const autofocusInput = $(autofocusByStep[state.signupStep]);
     if (autofocusInput) {
         autofocusInput.focus({ preventScroll: true });
@@ -2856,28 +3863,150 @@ function setSignupStep(index) {
         $(`[data-signup-step="${state.signupStep}"]`).scrollTop = 0;
         if (autofocusInput) keepFocusedControlVisible();
     });
-    $(".signup-back-button").classList.toggle("hidden", state.signupStep === 0);
-    if (state.signupStep === 2) renderSignupGradeOptions();
-    if (state.signupStep === 9) {
-        resetSignupPhotoPreview();
-        $("#signupPicture").value = "";
+    // iOS has no Back on the school step, after the account exists, or on welcome.
+    const noBack = [SIGNUP_STEP.age, SIGNUP_STEP.school, SIGNUP_STEP.welcome].includes(state.signupStep)
+        || (state.signupStep === SIGNUP_STEP.passkey && state.signupAccountCreated);
+    $(".signup-back-button").classList.toggle("hidden", noBack);
+    if (state.signupStep === SIGNUP_STEP.contacts) renderSignupContactsStep();
+    if (state.signupStep === SIGNUP_STEP.school) renderSignupSchoolStep();
+    if (state.signupStep === SIGNUP_STEP.grade) renderSignupGradeOptions();
+    if (state.signupStep === SIGNUP_STEP.firstName) renderSignupVoteBanner();
+    if (state.signupStep === SIGNUP_STEP.welcome) void preloadNotificationSoftPrompt();
+}
+
+function signupStepBack() {
+    let previous = state.signupStep - 1;
+    // A verified number skips its code step on the way back.
+    if (previous === SIGNUP_STEP.code && (state.signupPhoneVerified || demoMode)) previous = SIGNUP_STEP.phone;
+    if (state.signupStep === SIGNUP_STEP.code) clearInterval(state.signupResendTimer);
+    setSignupStep(previous);
+}
+
+// FirstNameEntryView: "You've been voted for N times already!" (and a party emoji) from the
+// phone check's vote_count.
+function renderSignupVoteBanner() {
+    const count = Math.max(0, Number(state.signupVoteCount || 0));
+    const banner = $("#signupVoteBanner");
+    banner.classList.toggle("hidden", count < 1);
+    banner.innerHTML = count > 0
+        ? `You've been voted for <strong>${count.toLocaleString()}</strong> ${count === 1 ? "time" : "times"} already! \u{1F389}`
+        : "";
+}
+
+function renderSignupCodeSession(verification, phoneNumber) {
+    $("#signupCodeHint").textContent = `Sent to ${formatSignupPhone(phoneNumber)}`;
+    const attempts = Number(verification?.attempts_remaining);
+    $("#signupCodeAttempts").classList.toggle("hidden", !Number.isFinite(attempts));
+    $("#signupCodeAttempts").textContent = Number.isFinite(attempts) ? `Attempts remaining: ${attempts}` : "";
+    startResendCountdown($("[data-signup-resend-code]"), verification?.resend_available_at, "signupResendTimer");
+}
+
+const ACCOUNT_EXISTS_MESSAGE = "An account already exists for this phone number. Please log in.";
+
+// UsernameEntryView: pre-filled from first + last name, checked as you type,
+// and a taken name offers "Try this instead: @name1" with "Use".
+function prefillSignupUsername() {
+    const input = $("#signupUsername");
+    if (input.value) return;
+    const suggestion = `${$("#signupFirstName").value}${$("#signupLastName").value}`.toLowerCase().replace(/[^a-z]/g, "").slice(0, 15);
+    input.value = suggestion;
+    if (suggestion) scheduleSignupUsernameCheck(0);
+}
+
+function scheduleSignupUsernameCheck(delay = 450) {
+    clearTimeout(state.signupUsernameTimer);
+    const username = $("#signupUsername").value;
+    state.signupUsernameGeneration = (state.signupUsernameGeneration || 0) + 1;
+    if (!username) {
+        renderSignupUsernameStatus(null);
+        return;
+    }
+    if (username.length < 3) {
+        renderSignupUsernameStatus({ kind: "short" });
+        return;
+    }
+    state.signupUsernameTimer = setTimeout(() => void checkSignupUsername(username), delay);
+}
+
+function renderSignupUsernameStatus(status) {
+    const container = $("#signupUsernameStatus");
+    state.signupUsernameState = status;
+    if (!status) {
+        container.replaceChildren();
+        return;
+    }
+    if (status.kind === "checking") container.innerHTML = `<p class="signup-username-checking">Checking availability...</p>`;
+    else if (status.kind === "short") container.innerHTML = `<p class="signup-username-warning">Username must be at least 3 characters</p>`;
+    else if (status.kind === "taken") {
+        container.innerHTML = status.suggestion
+            ? `<div class="signup-username-suggestion"><p>Username '${escapeHTML(status.username)}' is already taken</p><small>Try this instead:</small><div><strong>@${escapeHTML(status.suggestion)}</strong><button type="button" data-signup-use-username="${escapeHTML(status.suggestion)}">Use</button></div></div>`
+            : `<p class="signup-username-warning">Username '${escapeHTML(status.username)}' is already taken</p>`;
+    } else container.replaceChildren();
+}
+
+// Resolves true when `username` is free. A taken name looks for a numbered
+// variant (OnboardingFlowModel.suggestAvailableUsername, bounded on the web).
+async function checkSignupUsername(username) {
+    const generation = state.signupUsernameGeneration;
+    renderSignupUsernameStatus({ kind: "checking" });
+    try {
+        const result = await api.checkUsernameAvailability(username);
+        if (generation !== state.signupUsernameGeneration) return null;
+        if (result.available) {
+            state.signupUsernameChecked = username;
+            renderSignupUsernameStatus({ kind: "available" });
+            return true;
+        }
+        let suggestion = null;
+        for (let attempt = 1; attempt <= 9 && !suggestion; attempt += 1) {
+            const candidate = `${username}${attempt}`;
+            if (candidate.length > 30) break;
+            const variant = await api.checkUsernameAvailability(candidate).catch(() => null);
+            if (generation !== state.signupUsernameGeneration) return null;
+            if (variant?.available) suggestion = candidate;
+        }
+        renderSignupUsernameStatus({ kind: "taken", username, suggestion });
+        return false;
+    } catch (error) {
+        if (generation !== state.signupUsernameGeneration) return null;
+        renderSignupUsernameStatus(null);
+        $("#signupStatus").textContent = userMessage(error, "Could not check that username.");
+        return false;
     }
 }
 
 async function advanceSignup(button) {
-    const step = $(`[data-signup-step="${state.signupStep}"]`);
-    const fields = [...step.querySelectorAll("input, select")];
-    const invalid = fields.find((field) => !field.checkValidity());
-    if (invalid) return invalid.reportValidity();
-    if (state.signupStep === 1 && !state.signupSelectedSchool && !state.signupSchoolFallback) {
+    const stepIndex = state.signupStep;
+    const step = $(`[data-signup-step="${stepIndex}"]`);
+    if (stepIndex !== SIGNUP_STEP.school) {
+        const fields = [...step.querySelectorAll("input, select")];
+        const invalid = fields.find((field) => !field.checkValidity());
+        if (invalid) return invalid.reportValidity();
+    }
+    if (stepIndex === SIGNUP_STEP.age) {
+        if (!demoMode) {
+            try {
+                await checkPasskeyEnvironment();
+                if (!await enablePreviewSignup()) return;
+            } catch (error) {
+                $("#signupStatus").textContent = userMessage(error, "Passkeys aren’t available in this browser right now.");
+                showAuthBrowserHelp(error, true);
+                reportAuthFailure(error);
+                return;
+            }
+        }
+        setSignupStep(SIGNUP_STEP.contacts);
+        return;
+    }
+    if (stepIndex === SIGNUP_STEP.school && !state.signupSelectedSchool) {
         $("#signupStatus").textContent = "Choose your school before continuing.";
         return;
     }
-    if (state.signupStep === 2 && !$("#signupGrade").value) {
+    if (stepIndex === SIGNUP_STEP.grade && !$("#signupGrade").value) {
         $("#signupStatus").textContent = "Choose your grade before continuing.";
         return;
     }
-    if (state.signupStep === 3) {
+    if (stepIndex === SIGNUP_STEP.phone) {
         const phoneNumber = signupPhoneDigits($("#signupPhone").value);
         if (phoneNumber.length !== 10) {
             $("#signupStatus").textContent = "Enter a valid 10-digit phone number.";
@@ -2889,40 +4018,39 @@ async function advanceSignup(button) {
         $("#signupPhoneCode").value = "";
         // Keep this transition inside the tap gesture so mobile Safari and
         // Chrome can open the numeric code keyboard without requiring a second tap.
-        setSignupStep(demoMode ? 5 : 4);
+        setSignupStep(demoMode ? SIGNUP_STEP.firstName : SIGNUP_STEP.code);
+        $("#signupCodeHint").textContent = `Sent to ${formatSignupPhone(phoneNumber)}`;
         setButtonLoading(button, true, "Checking...");
         try {
             const result = await api.checkPhoneRegistration(phoneNumber, deviceInstallationId());
             if (result.exists) {
-                $("#signupDialog").close();
-                $("#authStatus").textContent = "An account already exists for this phone number. Sign in.";
-                requestAnimationFrame(() => $("#passkeyButton").focus());
+                setSignupStep(SIGNUP_STEP.phone);
+                openSignInSheet({ message: ACCOUNT_EXISTS_MESSAGE });
                 return;
             }
+            state.signupVoteCount = Math.max(0, Number(result.vote_count || 0));
+            if (state.signupStep === SIGNUP_STEP.firstName) renderSignupVoteBanner();
             if (!demoMode) {
                 $("#signupStatus").textContent = "Completing a quick security check…";
                 const turnstileToken = await getSignupTurnstileToken();
                 const verification = await api.requestPhoneVerification(phoneNumber, turnstileToken);
                 resetSignupTurnstile();
-                $("#signupCodeHint").textContent = `We sent a verification code to ${formatSignupPhone(phoneNumber)}.`;
-                $("#signupStatus").textContent = verification.can_resend
-                    ? "Enter the code from your text message."
-                    : "Enter the code from your text message.";
+                renderSignupCodeSession(verification, phoneNumber);
+                $("#signupStatus").textContent = "";
             }
         } catch (error) {
             if (error.status === 409) {
-                $("#signupDialog").close();
-                $("#authStatus").textContent = "An account already exists for this phone number. Sign in.";
-                requestAnimationFrame(() => $("#passkeyButton").focus());
+                setSignupStep(SIGNUP_STEP.phone);
+                openSignInSheet({ message: ACCOUNT_EXISTS_MESSAGE });
                 return;
             }
-            setSignupStep(3);
+            setSignupStep(SIGNUP_STEP.phone);
             $("#signupStatus").textContent = userMessage(error, "Could not check that phone number.");
             return;
         } finally { setButtonLoading(button, false); }
         return;
     }
-    if (state.signupStep === 4) {
+    if (stepIndex === SIGNUP_STEP.code) {
         const phoneNumber = signupPhoneDigits($("#signupPhone").value);
         const code = $("#signupPhoneCode").value.replace(/\D/g, "");
         if (!/^\d{4,10}$/.test(code)) {
@@ -2933,104 +4061,119 @@ async function advanceSignup(button) {
         try {
             const verification = await api.confirmPhoneVerification(phoneNumber, code);
             if (!verification.is_approved) {
+                const attempts = Number(verification.attempts_remaining);
+                if (Number.isFinite(attempts)) $("#signupCodeAttempts").textContent = `Attempts remaining: ${attempts}`;
                 $("#signupStatus").textContent = "That code was not approved. Try again.";
                 return;
             }
             state.signupPhoneVerified = true;
             state.signupVerifiedPhone = phoneNumber;
-            setSignupStep(5);
+            clearInterval(state.signupResendTimer);
+            setSignupStep(SIGNUP_STEP.firstName);
         } catch (error) {
             $("#signupStatus").textContent = userMessage(error, "Could not verify that code.");
         } finally { setButtonLoading(button, false); }
         return;
     }
-    if (state.signupStep === 8 && !$("#signupGender").value) {
+    if (stepIndex === SIGNUP_STEP.username) {
+        const username = $("#signupUsername").value.trim().toLowerCase();
+        if (username.length < 3) {
+            renderSignupUsernameStatus({ kind: "short" });
+            return;
+        }
+        if (state.signupUsernameChecked !== username) {
+            clearTimeout(state.signupUsernameTimer);
+            state.signupUsernameGeneration = (state.signupUsernameGeneration || 0) + 1;
+            setButtonLoading(button, true, "Continue");
+            const available = await checkSignupUsername(username).finally(() => setButtonLoading(button, false));
+            if (!available || $("#signupUsername").value.trim().toLowerCase() !== username) return;
+        }
+    }
+    if (stepIndex === SIGNUP_STEP.gender && !$("#signupGender").value) {
         $("#signupStatus").textContent = "Choose a gender before continuing.";
         return;
     }
-    if (state.signupStep === 7) {
-        setButtonLoading(button, true, "Checking username...");
-        try {
-            const result = await api.checkUsernameAvailability($("#signupUsername").value.trim().toLowerCase());
-            if (!result.available) {
-                $("#signupStatus").textContent = "That username is not available. Try another one.";
-                return;
-            }
-        } catch (error) {
-            $("#signupStatus").textContent = userMessage(error, "Could not check that username.");
-            return;
-        } finally { setButtonLoading(button, false); }
-    }
-    setSignupStep(state.signupStep + 1);
+    if (stepIndex === SIGNUP_STEP.passkey && !state.signupAccountCreated) return;
+    setSignupStep(stepIndex + 1);
 }
 
 async function resendSignupPhoneCode(button) {
     const phoneNumber = signupPhoneDigits($("#signupPhone").value);
     if (phoneNumber.length !== 10) {
-        setSignupStep(3);
+        setSignupStep(SIGNUP_STEP.phone);
         $("#signupStatus").textContent = "Enter a valid 10-digit phone number.";
         return;
     }
     setButtonLoading(button, true, "Sending...");
     $("#signupStatus").textContent = "";
+    let verification = null;
     try {
         $("#signupStatus").textContent = "Completing a quick security check…";
         const turnstileToken = await getSignupTurnstileToken();
-        await api.requestPhoneVerification(phoneNumber, turnstileToken);
+        verification = await api.requestPhoneVerification(phoneNumber, turnstileToken);
         resetSignupTurnstile();
-        $("#signupCodeHint").textContent = `We sent a new verification code to ${formatSignupPhone(phoneNumber)}.`;
+        $("#signupStatus").textContent = "A verification code was sent. Enter the newest code below.";
         $("#signupPhoneCode").value = "";
         $("#signupPhoneCode").focus({ preventScroll: true });
     } catch (error) {
         if (error.status === 409) {
-            $("#signupDialog").close();
-            $("#authStatus").textContent = "An account already exists for this phone number. Sign in.";
-            requestAnimationFrame(() => $("#passkeyButton").focus());
+            setSignupStep(SIGNUP_STEP.phone);
+            openSignInSheet({ message: ACCOUNT_EXISTS_MESSAGE });
             return;
         }
         $("#signupStatus").textContent = userMessage(error, "Could not send another code.");
     } finally {
         setButtonLoading(button, false);
+        if (verification) renderSignupCodeSession(verification, phoneNumber);
+        else startResendCountdown(button, null, "signupResendTimer");
     }
 }
 
+function changeSignupPhone() {
+    clearInterval(state.signupResendTimer);
+    $("#signupPhoneCode").value = "";
+    resetSignupTurnstile();
+    setSignupStep(SIGNUP_STEP.phone);
+}
+
+// PasskeySetupView: "Create passkey" makes the passkey and the account in one
+// step (the web account is created with its passkey), then "Your account is
+// secured" moves on by itself after 1.5 s.
 async function createAccount(event) {
     event.preventDefault();
-    if (state.signupCompletionUncertain) return;
+    if (state.signupStep !== SIGNUP_STEP.passkey) {
+        // Enter in a field submits the form: treat it as that step's Continue.
+        const next = $(`[data-signup-step="${state.signupStep}"] [data-signup-next]:not(.hidden)`);
+        if (next && !next.disabled) advanceSignup(next);
+        return;
+    }
+    if (state.signupCompletionUncertain || state.signupAccountCreated) return;
     const form = event.currentTarget;
-    const button = event.submitter || form.querySelector("button[type=submit]");
+    const button = $("#signupCreatePasskey");
     const dateOfBirth = dateOfBirthFromAge($("#signupAge").value);
     if (!dateOfBirth) {
-        $("#signupStatus").textContent = "Choose an age between 13 and 27.";
+        $("#signupStatus").textContent = `Choose an age between ${SIGNUP_MIN_AGE} and ${SIGNUP_MAX_AGE}.`;
         return;
     }
     const username = $("#signupUsername").value.trim().toLowerCase();
     const signupPhone = signupPhoneDigits($("#signupPhone").value);
     if (!demoMode && (!state.signupPhoneVerified || state.signupVerifiedPhone !== signupPhone)) {
-        setSignupStep(3);
+        setSignupStep(SIGNUP_STEP.phone);
         $("#signupStatus").textContent = "Verify your phone number before creating your account.";
+        return;
+    }
+    const school = state.signupSelectedSchool;
+    if (!school?.id) {
+        setSignupStep(SIGNUP_STEP.school);
+        $("#signupStatus").textContent = "Choose your school before continuing.";
         return;
     }
     const profilePicture = state.signupPhotoFile;
     const submitButtons = [...form.querySelectorAll("button[type=submit]")];
     submitButtons.forEach((candidate) => { candidate.disabled = true; });
-    setButtonLoading(button, true, "Creating your account...");
-    $("#signupStatus").textContent = "Creating your account...";
+    setButtonLoading(button, true, "Creating passkey...");
+    $("#signupStatus").textContent = "";
     try {
-        let school = state.signupSelectedSchool;
-        if (!school) {
-            $("#signupStatus").textContent = "Checking your school...";
-            const schoolResult = await api.resolveSchool({
-                school_name: $("#signupSchool").value.trim(),
-                city: $("#signupCity").value.trim(),
-                state: $("#signupState").value.trim().toUpperCase(),
-                grades: "6-12",
-                min_grade: 6,
-                max_grade: 12,
-            });
-            school = schoolResult.school;
-        }
-        if (!school?.id) throw new Error("We couldn't set up that school. Check its name and location.");
         const profile = {
             first_name: $("#signupFirstName").value.trim(),
             last_name: $("#signupLastName").value.trim(),
@@ -3041,45 +4184,46 @@ async function createAccount(event) {
             username,
             profile_picture_filename: null,
         };
-        $("#signupStatus").textContent = "Finish the setup prompt on your device.";
         let login;
         if (demoMode) {
             login = await api.demoSignup({ profile, school_name: school.name });
         } else {
             const credential = await createSignupPasskey(api, username);
+            const smsOptIn = state.config?.enable_sms_opt_in_prompt === true
+                ? { smsOptedIn: $("#signupSmsOptInBox").checked, smsOptInRespondedAt: new Date().toISOString() }
+                : {};
             login = await completeSignupSafely(api, {
                 ...credential,
                 phoneNumber: signupPhone,
                 deviceInstallationId: deviceInstallationId(),
                 idempotencyKey: crypto.randomUUID(),
                 profile,
+                ...(state.inviteToken ? { inviteToken: state.inviteToken } : {}),
+                ...smsOptIn,
             });
         }
         api.saveSession(login);
-        let photoUploadFailed = false;
-        if (profilePicture) {
-            try { await api.uploadProfilePicture(api.user.id, profilePicture); }
-            catch (_) { photoUploadFailed = true; }
-        }
-        form.reset();
-        selectSignupAge(13, { scroll: false });
-        selectSignupGrade("");
-        selectSignupGender("");
-        state.signupPhoneVerified = false;
-        state.signupVerifiedPhone = null;
-        resetSignupSchoolPicker();
-        resetSignupPhotoPreview();
-        $("#signupDialog").close();
-        await showSignedIn();
-        showToast(photoUploadFailed ? "Welcome! Add your photo from Profile when you're ready." : "Welcome to Valid");
-        setTimeout(() => { if (api.hasSession()) openClassmatesDialog({ onboarding: true }); }, 700);
+        state.signupAccountCreated = true;
+        state.inviteToken = null;
+        try { sessionStorage.removeItem(INVITE_TOKEN_KEY); } catch (_) { /* Nothing stored. */ }
+        state.signupPhotoUpload = profilePicture
+            ? api.uploadProfilePicture(api.user.id, profilePicture).then(() => true, () => false)
+            : Promise.resolve(true);
+        state.signupContactUpload = startSignupContactUpload();
+        $("#signupPasskeyExplainer").classList.add("hidden");
+        $("#signupPasskeyDone").classList.remove("hidden");
+        $(".signup-back-button").classList.add("hidden");
+        successHaptic();
+        setTimeout(() => {
+            if (state.signupAccountCreated && state.signupStep === SIGNUP_STEP.passkey) setSignupStep(SIGNUP_STEP.welcome);
+        }, 1500);
     } catch (error) {
         reportAuthFailure(error);
         if (needsPhoneReverification(error)) {
             state.signupPhoneVerified = false;
             state.signupVerifiedPhone = null;
             $("#signupPhoneCode").value = "";
-            setSignupStep(3);
+            setSignupStep(SIGNUP_STEP.phone);
             $("#signupStatus").textContent = "Your phone verification expired. Request a new code to finish signup. Your other details are still here.";
             return;
         }
@@ -3090,6 +4234,266 @@ async function createAccount(event) {
     } finally {
         setButtonLoading(button, false);
         submitButtons.forEach((candidate) => { candidate.disabled = state.signupCompletionUncertain; });
+    }
+}
+
+// OnboardingCompletionView "Let's Go!": into the app on Play, then the
+// notifications ask, Friends & Classmates and Invite.
+async function finishSignupOnboarding(button) {
+    if (!state.signupAccountCreated || state.signupFinishing) return;
+    state.signupFinishing = true;
+    button.disabled = true;
+    void preloadNotificationSoftPrompt();
+    const photoSaved = await (state.signupPhotoUpload || Promise.resolve(true));
+    resetSignupForm();
+    closeSignedOutRoot();
+    state.postAuthLanding = "play";
+    try {
+        await showSignedIn();
+    } finally {
+        state.signupFinishing = false;
+        button.disabled = false;
+    }
+    if (!api.user?.id) return;
+    if (state.activePanel !== "play") switchPanel("play", { historyMode: "replace", restoreScroll: false });
+    if (!photoSaved) showToast("Welcome! Add your photo from Profile when you're ready.");
+    void runPostAuthSheets({ reason: "signup" });
+}
+
+function resetSignupForm() {
+    $("#signupForm").reset();
+    selectSignupAge(SIGNUP_MIN_AGE, { scroll: false });
+    selectSignupGrade("");
+    selectSignupGender("");
+    state.signupPhoneVerified = false;
+    state.signupVerifiedPhone = null;
+    state.signupAccountCreated = false;
+    state.signupUsernameChecked = null;
+    clearInterval(state.signupResendTimer);
+    resetSignupSchoolPicker();
+    resetSignupPhotoPreview();
+}
+
+// The notification soft prompt (NotificationSoftPromptView) is built by the
+// Play flow as ./notification-soft-prompt.js. Until it ships, fall back to
+// asking the browser directly.
+let notificationSoftPrompt = null;
+let notificationSoftPromptLoad = null;
+
+function preloadNotificationSoftPrompt() {
+    if (notificationSoftPrompt !== null) return Promise.resolve(notificationSoftPrompt);
+    notificationSoftPromptLoad ||= import("./notification-soft-prompt.js")
+        .then((module) => { notificationSoftPrompt = typeof module?.askForNotifications === "function" ? module : false; })
+        .catch(() => { notificationSoftPrompt = false; })
+        .then(() => notificationSoftPrompt);
+    return notificationSoftPromptLoad;
+}
+
+async function askForNotificationsAfterAuth(reason) {
+    // iPhone Safari has no Web Push outside the Home Screen app: show the
+    // install steps once, after sign-up.
+    if (!webPushSupported() && iosInstallAvailable()) {
+        if (reason === "signup") await openIOSInstallAfterSignup();
+        return;
+    }
+    await refreshWebPushStatus().catch(() => null);
+    if (state.webPushSubscription && state.webPushRegistrationState === "on") return;
+    const softPrompt = await preloadNotificationSoftPrompt();
+    if (softPrompt) {
+        try {
+            await softPrompt.askForNotifications({ reason });
+            return;
+        } catch (_) { /* Fall back to the browser prompt below. */ }
+    }
+    if (webPushSupported() && Notification.permission === "default") await enableWebPushFromPrompt();
+}
+
+const IOS_INSTALL_AFTER_SIGNUP_KEY = "valid:ios-install-after-signup";
+
+async function openIOSInstallAfterSignup() {
+    try {
+        if (localStorage.getItem(IOS_INSTALL_AFTER_SIGNUP_KEY) === "1") return;
+        localStorage.setItem(IOS_INSTALL_AFTER_SIGNUP_KEY, "1");
+    } catch (_) { /* Shown once in this page. */ }
+    try {
+        const { openIOSInstallSheet } = await import("./ios-install.js");
+        await new Promise((resolve) => openIOSInstallSheet({ onClose: () => {
+            try { localStorage.setItem(IOS_INSTALL_SHOWN_KEY, String(Date.now())); } catch (_) { /* Shown again next time. */ }
+            renderFeedNotificationPrompt();
+            resolve();
+        } }));
+    } catch (_) { /* The Feed card still offers the steps. */ }
+}
+
+// Waits for other sheets (passkey offer, deletion notice) before the next.
+async function waitForNoOpenDialog(timeoutMs = 20_000) {
+    const startedAt = Date.now();
+    while ($("dialog[open]") && Date.now() - startedAt < timeoutMs) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+}
+
+// After sign-up and sign-in, as on iOS: notifications ask, then Friends &
+// Classmates, then Invite Friends when contacts were picked.
+async function runPostAuthSheets({ reason }) {
+    if (state.postAuthSheetsRunning) return;
+    state.postAuthSheetsRunning = true;
+    const userId = api.user?.id;
+    try {
+        await waitForNoOpenDialog();
+        await askForNotificationsAfterAuth(reason);
+        if (!userId || api.user?.id !== userId) return;
+        await waitForNoOpenDialog();
+        if (api.user?.id !== userId) return;
+        await openFriendsClassmatesSheet();
+    } finally {
+        state.postAuthSheetsRunning = false;
+        state.signupPickedContacts = [];
+    }
+}
+
+function friendsSectionHeader(title) {
+    return `<h3 class="friends-classmates-header">${escapeHTML(title)}</h3>`;
+}
+
+function inviteViaMessagesLabel() {
+    return isAppleTouchDevice() ? "Invite via iMessage" : "Invite via text";
+}
+
+function friendsInviteCard(title, subtitle) {
+    return `<div class="friends-classmates-card friends-classmates-empty">
+        <strong>${escapeHTML(title)}</strong>
+        <small>${escapeHTML(subtitle)}</small>
+        <button class="primary-button" type="button" data-onboarding-invite>${inviteViaMessagesLabel()}</button>
+    </div>`;
+}
+
+// FriendsAndClassmatesView.
+async function openFriendsClassmatesSheet() {
+    const userId = api.user?.id;
+    if (!userId) return;
+    const dialog = $("#friendsClassmatesDialog");
+    $("#friendsClassmatesPanel").classList.remove("hidden");
+    $("#inviteFriendsPanel").classList.add("hidden");
+    $("#friendsClassmatesTitle").textContent = "Friends & Classmates";
+    $("#friendsClassmatesTitle").classList.add("hidden");
+    $("#friendsClassmatesStatus").textContent = "Finding friends and classmates...";
+    $("#friendsClassmatesList").replaceChildren();
+    $("#friendsClassmatesContinue").classList.add("hidden");
+    const closed = new Promise((resolve) => dialog.addEventListener("close", resolve, { once: true }));
+    dialog.showModal();
+    await (state.signupContactUpload || Promise.resolve());
+    // The upload is processed in the background; matches show up on GET.
+    if (state.signupContactUpload) await new Promise((resolve) => setTimeout(resolve, demoMode ? 0 : 1200));
+    const [contacts, classmatesResult] = await Promise.all([
+        api.getAllContacts(userId).catch(() => null),
+        api.getClassmatesWithMetadata(userId, "", 500).catch(() => null),
+    ]);
+    state.signupContactUpload = null;
+    if (api.user?.id !== userId || !dialog.open) return closed;
+    if (Array.isArray(contacts)) {
+        state.playContacts = contacts;
+        rememberContactAccounts(contacts);
+    }
+    if (classmatesResult?.classmates) {
+        state.classmateDirectory = classmatesResult.classmates;
+        state.classmates = classmatesResult.classmates;
+    }
+    const contactRows = Array.isArray(contacts) ? contacts : [];
+    const friends = contactRows.filter((contact) => contact?.is_six7_user && contact.user_id && String(contact.user_id) !== String(userId));
+    const classmates = (classmatesResult?.classmates || []).filter((classmate) => String(classmate.user_id) !== String(userId));
+    const hasContactAccess = contactRows.length > 0 || state.signupPickedContacts.length > 0;
+    state.onboardingFriendsOnValid = new Set(friends.map((friend) => String(friend.phone_number || "").toLowerCase()));
+    const schoolName = state.profile?.school_name || "";
+    $("#friendsClassmatesTitle").textContent = hasContactAccess ? "Friends & Classmates" : "Classmates";
+    $("#friendsClassmatesTitle").classList.remove("hidden");
+    $("#friendsClassmatesStatus").textContent = "";
+    const parts = [];
+    if (friends.length) {
+        parts.push(friendsSectionHeader(`Friends on Valid (${friends.length})`));
+        parts.push(...friends.map((friend) => {
+            const votes = Math.max(0, Number(friend.vote_count || 0));
+            const mutuals = Math.max(0, Number(friend.recommendation_strength || 0));
+            const details = [mutuals ? `${mutuals} mutual${mutuals === 1 ? "" : "s"}` : "", votes ? `${votes} vote${votes === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ") || "Friend on Valid";
+            return `<div class="friends-classmates-row"><span class="friends-classmates-avatar" aria-hidden="true">${escapeHTML(initials({ first_name: String(friend.name || "").split(/\s+/)[0], last_name: String(friend.name || "").split(/\s+/)[1] || "" }))}</span><span class="friends-classmates-copy"><strong>${escapeHTML(friend.name || "Friend")}</strong><small>${escapeHTML(details)}</small></span><span class="friends-classmates-pill">On Valid</span></div>`;
+        }));
+    }
+    if (classmates.length) {
+        parts.push(friendsSectionHeader(`Classmates on Valid (${classmates.length})`));
+        parts.push(...classmates.map((classmate) => `<div class="friends-classmates-row">${avatarMarkup(classmate, "friends-classmates-avatar")}<span class="friends-classmates-copy"><strong>${escapeHTML(displayName(classmate))}</strong><small>${escapeHTML(classmate.username || "")}</small>${schoolName ? `<em>${escapeHTML(schoolName)}</em>` : ""}</span></div>`));
+    } else if (friends.length) {
+        parts.push(friendsSectionHeader("Classmates on Valid"));
+        parts.push(friendsInviteCard("No classmates yet", "Invite your classmates to join!"));
+    }
+    if (!friends.length && !classmates.length) {
+        parts.push(friendsInviteCard(hasContactAccess ? "No friends or classmates found yet" : "No classmates found yet", "Invite your friends to join!"));
+    }
+    $("#friendsClassmatesList").innerHTML = parts.join("");
+    $("#friendsClassmatesContinue").classList.remove("hidden");
+    return closed;
+}
+
+// InviteFriendsView, after Friends & Classmates when contacts were picked.
+function showInviteFriendsPanel() {
+    const picked = state.signupPickedContacts.filter((contact) => {
+        const hash = state.signupContactHashes?.get(String(contact.phone_number));
+        return !hash || !state.onboardingFriendsOnValid?.has(hash);
+    });
+    if (!picked.length) {
+        $("#friendsClassmatesDialog").close();
+        return;
+    }
+    $("#friendsClassmatesPanel").classList.add("hidden");
+    $("#inviteFriendsPanel").classList.remove("hidden");
+    $("#inviteFriendsList").innerHTML = picked.map((contact) => `<div class="friends-classmates-row"><span class="friends-classmates-avatar" aria-hidden="true">${escapeHTML(initials({ first_name: String(contact.name || "").split(/\s+/)[0], last_name: String(contact.name || "").split(/\s+/)[1] || "" }))}</span><span class="friends-classmates-copy"><strong>${escapeHTML(contact.name || formatSignupPhone(contact.phone_number))}</strong></span><button class="friends-classmates-invite" type="button" data-onboarding-invite="${escapeHTML(contact.phone_number)}">Invite</button></div>`).join("");
+}
+
+// iOS opens the Messages composer with the invite link; the web opens the
+// phone's texting app the same way, and shares the link on a computer.
+async function inviteFromOnboarding(button) {
+    const phone = button.dataset.onboardingInvite || "";
+    const label = button.textContent;
+    setButtonLoading(button, true, "Opening…");
+    try {
+        const invite = await api.createInvite(api.user.id, isAppleTouchDevice() ? "imessage" : "other");
+        const link = invite?.share_url;
+        if (!link) throw new Error("Couldn't create your invite link. Please try again.");
+        if (isAppleTouchDevice() || isAndroidDevice()) {
+            const recipient = phone ? `+1${signupPhoneDigits(phone)}` : "";
+            location.href = `sms:${recipient}${isAppleTouchDevice() ? "&" : "?"}body=${encodeURIComponent(link)}`;
+        } else if (navigator.share) {
+            await navigator.share({ title: "Join me on Valid", url: link });
+        } else {
+            await navigator.clipboard.writeText(link);
+            showToast("Invite link copied");
+        }
+        if (phone) {
+            button.replaceWith(Object.assign(document.createElement("span"), { className: "friends-classmates-invited", textContent: "Invited" }));
+            return;
+        }
+    } catch (error) {
+        if (error.name !== "AbortError") showToast(userMessage(error, "Couldn't create your invite link. Please try again."));
+    } finally {
+        if (button.isConnected) {
+            setButtonLoading(button, false);
+            button.textContent = label;
+        }
+    }
+}
+
+async function shareOnboardingInvite(button) {
+    setButtonLoading(button, true, "Making your invite...");
+    try {
+        const invite = await api.createInvite(api.user.id, "other");
+        if (navigator.share) await navigator.share({ title: "Join me on Valid", text: "Join my school on Valid so we can play", url: invite.share_url });
+        else {
+            await navigator.clipboard.writeText(invite.share_url);
+            showToast("Invite link copied");
+        }
+    } catch (error) {
+        if (error.name !== "AbortError") showToast(userMessage(error, "Could not create an invite."));
+    } finally {
+        setButtonLoading(button, false);
     }
 }
 
@@ -3253,7 +4657,6 @@ function selectFeedClassmate(classmateId) {
     state.myVotesOnly = false;
     state.schoolFeedContent = "all";
     $$("[data-feed]").forEach((button) => button.classList.toggle("active", button.dataset.feed === "school"));
-    $("#myVotesFilter").classList.add("hidden");
     $("#schoolFeedControls").classList.remove("hidden");
     loadFeed(true);
 }
@@ -3462,9 +4865,9 @@ async function revealQuestionSubmitter(button) {
     const cost = Number(state.config?.full_reveal_aura_cost ?? DEFAULT_FULL_REVEAL_AURA_COST);
     if (remaining <= 0 && Number(state.profile?.aura_points || 0) < cost) return showToast('You need another reveal or more aura to do that.');
     if (!await confirmSheet({
-        title: "Reveal who submitted this question?",
-        message: remaining > 0 ? "This uses 1 of your reveals." : `This spends ${cost.toLocaleString()} aura.`,
-        confirmLabel: remaining > 0 ? "Use 1 reveal" : `Spend ${cost.toLocaleString()} aura`,
+        title: "Reveal who made this question?",
+        message: remaining > 0 ? freeRevealConfirmationMessage(remaining) : `Spend ${cost.toLocaleString()} aura to reveal the classmate who submitted it.`,
+        confirmLabel: remaining > 0 ? "Use 1 Reveal" : `Spend ${cost.toLocaleString()} aura`,
     })) return;
     button.disabled = true;
     try {
@@ -3488,10 +4891,8 @@ function renderFeedDetail() {
         || (item.item_type === "received_vote" ? displayName(state.profile) : "Someone");
     const options = Array.isArray(item.presented_options) ? item.presented_options : [];
     const artworkURL = api.assetURL(item.image_url);
-    const revealed = item.voter_name ? `<div class="revealed-sender-row">${avatarMarkup({ first_name: item.voter_name, profile_picture_url: item.voter_profile_picture_url }, "row-avatar")}<strong>Sent by ${escapeHTML(item.voter_name)}</strong></div>` : "";
-    const firstLetter = item.voter_name ? "" : voterFirstLetterHint(item);
-    const firstLetterHint = firstLetter ? `<p class="feed-detail-first-letter-hint">Hint: starts with ${escapeHTML(firstLetter)}</p>` : "";
-    $("#feedDetailDialog .detail-screen-header > strong").textContent = formatVoterStatement(item);
+    // QuestionDetailToolbar: the voter line is the title, and there is none without a gender.
+    $("#feedDetailDialog .detail-screen-header > strong").textContent = item.voter_gender ? formatVoterStatement(item) : "";
     $("#feedDetailBody").innerHTML = `<article class="feed-detail-card">
         <div class="feed-detail-prompt"><h3>${escapeHTML(item.question_text)}</h3>
         ${item.is_nomination ? "" : questionSubmitterMarkup(item)}</div>
@@ -3502,24 +4903,47 @@ function renderFeedDetail() {
             const selected = index === (explicit >= 0 ? explicit : options.findIndex(candidate => (candidate.name || candidate.contact_name) === selectedName));
             return `<div class="feed-detail-option ${selected ? "selected" : ""}"><strong>${escapeHTML(name)}</strong>${selected ? `<span class="feed-detail-selection-indicator" aria-label="Picked">👆</span>` : ""}</div>`;
         }).join("")}</div>` : `<div class="feed-detail-legacy-selection"><strong>Selected: ${escapeHTML(selectedName)}</strong><small>Options not available for this older vote</small></div>`}
-        ${firstLetterHint}
-        ${revealed}
-    </article><div class="detail-engagement-row">${feedView?.reactionControlMarkup(item, "poll", item.question_answer_id) || ""}${commentDetailButtonMarkup(item, "poll", item.question_answer_id, "feed-detail-comment-button")}${detailSendButton("poll", item.question_answer_id)}</div>`;
+    </article>`;
+    $("#feedDetailEngagement").innerHTML = `<div class="detail-engagement-row">${feedView?.reactionControlMarkup(item, "poll", item.question_answer_id) || ""}${commentDetailButtonMarkup(item, "poll", item.question_answer_id, "feed-detail-comment-button")}${detailSendButton("poll", item.question_answer_id)}</div>`;
+    renderFeedDetailShareRow();
     $("#blockFeedSubmitterButton").classList.toggle("hidden", !item.question_submitted_by_user_id || item.question_is_anonymous === true);
+    // QuestionDetailRevealSenderButton: "Sent by …" takes the button's place once revealed.
     const revealButton = $("#revealFeedSenderButton");
-    const canRevealThisVote = item.item_type === "received_vote" && !item.voter_name;
+    const personalVote = item.item_type === "received_vote";
+    const canRevealThisVote = personalVote && !item.voter_name;
     revealButton.classList.toggle("hidden", !canRevealThisVote);
+    const revealedSender = $("#feedDetailRevealedSender");
+    revealedSender.classList.toggle("hidden", !(personalVote && item.voter_name));
+    revealedSender.innerHTML = personalVote && item.voter_name ? `${avatarMarkup({ first_name: item.voter_name, profile_picture_url: item.voter_profile_picture_url }, "row-avatar")}<strong>Sent by ${escapeHTML(item.voter_name)}</strong>` : "";
     if (canRevealThisVote) {
         const remaining = Math.max(0, Number(state.profile?.remaining_reveals || 0));
         const auraCost = Math.max(0, Number(state.config?.full_reveal_aura_cost ?? DEFAULT_FULL_REVEAL_AURA_COST));
         const subscribed = api.user?.subscribed_user === true;
+        const action = item.is_nomination ? "who nominated you" : "who sent this";
         const label = subscribed
-            ? (remaining > 0 ? `Reveal who sent this (${remaining} remaining)` : `Reveal who sent this (${auraCost.toLocaleString()} aura)`)
-            : "Get God Mode to Reveal who sent this";
+            ? (remaining > 0 ? `Reveal ${action} (${remaining} remaining)` : `Reveal ${action} (${auraCost} aura)`)
+            : `Get God Mode to Reveal ${action}`;
         revealButton.innerHTML = `<span>${escapeHTML(label)}</span>`;
         revealButton.disabled = subscribed && remaining === 0 && Number(state.profile?.aura_points || 0) < auraCost;
     }
     $("#feedDetailStatus").textContent = "";
+}
+
+// QuestionDetailShareRow: a wide "Share on Snapchat" with Instagram (and
+// TikTok when enabled) beside it; without Snapchat both expand with labels.
+function renderFeedDetailShareRow() {
+    const showsSnapchat = state.config?.enable_share_on_snapchat !== false;
+    const showsTikTok = state.config?.enable_share_on_tiktok === true;
+    const labels = { snapchat: "Snapchat", instagram: "Instagram", tiktok: "TikTok" };
+    $$("#feedDetailDialog [data-share-feed-platform]").forEach((button) => {
+        const platform = button.dataset.shareFeedPlatform;
+        const visible = platform === "snapchat" ? showsSnapchat : platform === "tiktok" ? showsTikTok : true;
+        const expanded = platform === "snapchat" || !showsSnapchat;
+        button.classList.toggle("hidden", !visible);
+        if (button.classList.contains("expanded") === expanded && button.childElementCount) return;
+        button.classList.toggle("expanded", expanded);
+        button.innerHTML = `${shareIconMarkup(platform)}${expanded ? `<span>Share on ${labels[platform]}</span>` : ""}`;
+    });
 }
 
 async function openFeedDetail(answerId) {
@@ -3631,6 +5055,11 @@ async function shareFeedItem(platform = "other") {
     }
 }
 
+function freeRevealConfirmationMessage(remaining) {
+    const left = Math.max(0, Number(remaining || 0) - 1);
+    return `This uses 1 of your weekly reveals. You will have ${left} ${left === 1 ? "reveal" : "reveals"} left.`;
+}
+
 async function revealFeedSender() {
     const item = selectedFeedItem();
     if (!item || item.voter_name) return;
@@ -3649,6 +5078,13 @@ async function revealFeedSender() {
         openAuraSpend("reveal", item);
         return;
     }
+    // QuestionDetailRevealConfirmations: a free reveal is spent only after "Use 1 Reveal".
+    if (!await confirmSheet({
+        title: "Reveal who sent this?",
+        message: freeRevealConfirmationMessage(remaining),
+        confirmLabel: "Use 1 Reveal",
+    })) return;
+    if (selectedFeedItem() !== item || item.voter_name) return;
     setButtonLoading(button, true, "Revealing...");
     $("#feedDetailStatus").textContent = "";
     try {
@@ -3677,17 +5113,24 @@ function applyFeedSenderReveal(item, result) {
 async function moderateFeedItem(action) {
     const item = selectedFeedItem();
     if (!item) return;
+    // QuestionDetailModerationConfirmations.
     const sheets = {
-        block: { title: "Block this question submitter?", message: "Their submitted questions will be hidden from you.", confirmLabel: "Block" },
-        dismiss: { title: "Delete this question?", message: "This question and its votes will be deleted from your Inbox and School Feed. It won't be reported or affect anyone else.", confirmLabel: "Delete" },
-        report: { title: "Report this question?", message: "Valid's moderation team will review it.", confirmLabel: "Report" },
+        block: { title: "Block User", message: "You will no longer see questions submitted by this user.", confirmLabel: "Block", destructive: true },
+        dismiss: { title: "Delete This Question?", message: "This question and its votes will be deleted from your Inbox and School Feed. It won't be reported or affect anyone else.", confirmLabel: "Delete" },
+        report: { title: "Report a Safety Issue", message: "Report only if this shared question is unsafe or breaks the rules. Reporting hides the question across your feeds and sends it for review.", confirmLabel: "Report for Review", destructive: true, reasonPlaceholder: "Explain why you're reporting this question..." },
     };
     const sheet = sheets[action];
     if (!sheet) return;
-    if (!await confirmSheet({ ...sheet, destructive: true })) return;
+    let reason = null;
+    if (action === "report") {
+        const answer = await confirmReasonSheet(sheet);
+        if (!answer) return;
+        reason = answer.reason;
+    } else if (!await confirmSheet(sheet)) return;
     try {
         if (action === "block") await api.blockQuestionSubmitter(api.user.id, item.question_id);
         else if (action === "dismiss") await api.dismissFeedQuestion(api.user.id, item.question_id);
+        else if (reason) await api.reportQuestion(api.user.id, item.question_id, reason);
         else await api.reportQuestion(api.user.id, item.question_id);
         state.feedItems = state.feedItems.filter((candidate) => candidate.question_id !== item.question_id);
         state.selectedFeedItemId = null;
@@ -3714,6 +5157,8 @@ function isFeedVoteLocked() {
     return Boolean(progress?.lock_reasons?.includes("votes") && Number(progress.votes_cast || 0) < Number(progress.required_votes || 0));
 }
 
+// FeedVoteLockedView.swift: the unread count (not lifetime votes) picks the
+// title, and the vote-alerts card offers notifications only here.
 function renderFeedGate() {
     const locked = isFeedVoteLocked();
     $("#feedGateLock").classList.toggle("hidden", !locked);
@@ -3722,53 +5167,120 @@ function renderFeedGate() {
         renderFeedNotificationPrompt();
         return;
     }
-    const cast = Number(state.classmatesStatus?.votes_cast || 0);
-    const required = Number(state.classmatesStatus?.required_votes || 0);
-    const remaining = Math.max(0, required - cast);
-    const received = Math.max(0, Number(state.profile?.vote_count || 0));
-    const receivedLabel = received === 1 ? "vote" : "votes";
-    $("#feedGateLock").innerHTML = `<article class="feed-gate-card">
-        <img loading="lazy" decoding="async" class="feed-gate-lock" src="../assets/app/lock.webp" alt="" aria-hidden="true">
-        <p class="feed-gate-eyebrow">You got</p>
-        <h3 class="feed-gate-vote-count">${received.toLocaleString()} ${receivedLabel}</h3>
-        <p>Cast ${remaining} more ${remaining === 1 ? "vote" : "votes"} to unlock your Feed and see what classmates said.</p>
-        <progress class="feed-gate-progress" max="${Math.max(1, required)}" value="${Math.min(cast, Math.max(1, required))}" aria-label="Votes required to unlock Feed"></progress>
-        <strong>${cast} / ${required} votes cast</strong>
-        <button class="primary-button" type="button" data-vote-to-unlock>Vote now to unlock Feed</button>
-        <section class="feed-gate-notification" aria-label="Enable vote notifications">
-            <strong>Don’t miss your next vote</strong>
-            <small>Enable notifications to know when someone picks you.</small>
-            <button class="secondary-button" type="button" data-enable-feed-notifications>Enable notifications</button>
-        </section>
-    </article>`;
+    const cast = Math.max(0, Number(state.classmatesStatus?.votes_cast || 0));
+    const required = Math.max(0, Number(state.classmatesStatus?.required_votes || 0));
+    const unread = personalInboxUnreadCounts().polls;
+    const hasUnread = unread > 0;
+    const votesText = required > 0 ? `${Math.min(cast, required)} / ${required} votes cast` : "";
+    $("#feedGateLock").innerHTML = `<div class="feed-gate-screen">
+        <article class="feed-gate-card">
+            <span class="feed-gate-lock-symbol" aria-hidden="true">${uiIcon("lock-filled")}</span>
+            ${hasUnread ? `<strong class="feed-gate-new-votes">${unread === 1 ? "1 NEW VOTE" : `${unread} NEW VOTES`}</strong>` : ""}
+            <div class="feed-gate-copy">
+                <h3>${hasUnread ? "You got voted for" : "Feed is locked"}</h3>
+                <p>${hasUnread ? "See what people are saying." : "Answer a few polls to see what everyone is saying."}</p>
+            </div>
+            ${votesText ? `<span class="feed-gate-votes-cast"><i aria-hidden="true"></i>${votesText}</span>` : ""}
+            <button class="primary-button feed-gate-vote-button" type="button" data-vote-to-unlock>Vote now to unlock Feed</button>
+        </article>
+        <button class="feed-gate-notification feed-lock-alerts" type="button" data-enable-feed-notifications aria-label="Turn on alerts for votes">
+            <span class="feed-lock-alerts-icon" aria-hidden="true">${uiIcon("bell-badge")}</span>
+            <span class="feed-lock-alerts-copy"><strong>Turn on vote alerts</strong><small>Know right away when someone picks you.</small></span>
+            <span class="feed-lock-alerts-chevron" aria-hidden="true">${uiIcon("next")}</span>
+        </button>
+    </div>`;
     renderFeedNotificationPrompt();
+    void refreshLockedUnreadVoteCount();
+}
+
+// FeedViewModel.refreshLockedUnreadVoteCount: the lock and the tab badge read
+// the unread count, so load the first Inbox page without showing its rows.
+let lockedUnreadRefresh = null;
+let lockedUnreadRefreshedAt = 0;
+async function refreshLockedUnreadVoteCount() {
+    if (lockedUnreadRefresh || !api.user?.id || Date.now() - lockedUnreadRefreshedAt < 60_000) return;
+    lockedUnreadRefreshedAt = Date.now();
+    const userId = api.user.id;
+    lockedUnreadRefresh = (async () => {
+        try {
+            const items = await api.getPersonalFeed(userId, 0, "");
+            if (api.user?.id !== userId) return;
+            state.personalFeedItems = Array.isArray(items) ? items.slice() : [];
+            state.personalFeedHasMore = state.personalFeedItems.length >= PERSONAL_FEED_PAGE_SIZE;
+            state.personalFeedLoaded = true;
+            renderTabBadges();
+            if (isFeedVoteLocked()) renderFeedGate();
+        } catch (_) { /* The lock keeps its last count. */ }
+    })();
+    try { await lockedUnreadRefresh; } finally { lockedUnreadRefresh = null; }
+}
+
+// FeedVoteLockedView "Turn on vote alerts" and the unlocked Feed card. A
+// browser that blocked notifications keeps a card with the "How to turn on"
+// steps; iPhone Safari gets the Home Screen steps.
+function feedNotificationCardState() {
+    const supported = webPushSupported();
+    if (!supported) return iosInstallAvailable() && !iosInstallRecentlyShown() ? "install" : null;
+    if (Notification.permission === "denied") return "blocked";
+    if (state.webPushSubscription && state.webPushRegistrationState === "on") return null;
+    if (state.webPushRegistrationState === "syncing") return "syncing";
+    if (state.webPushRegistrationState === "error") return "error";
+    return "ask";
 }
 
 function renderFeedNotificationPrompt() {
-    const supported = webPushSupported();
-    const enabled = supported && state.webPushSubscription && state.webPushRegistrationState === "on";
-    const syncing = supported && state.webPushRegistrationState === "syncing";
-    const failed = supported && state.webPushRegistrationState === "error";
-    const blocked = supported && Notification.permission === "denied";
-    const label = blocked
-        ? "Fix notification settings"
-        : failed
-        ? "Retry notifications"
-        : syncing
-        ? "Finishing setup…"
-        : "Enable notifications";
-    // iPhone Safari has no Web Push outside the installed app: offer the
-    // Home Screen steps instead (hidden for a week after they were shown).
-    const iosInstall = !supported && iosInstallAvailable() && !iosInstallRecentlyShown();
-    const prompts = [$("#feedNotificationPrompt"), ...$$(".feed-gate-notification")].filter(Boolean);
-    prompts.forEach((prompt) => {
-        prompt.classList.toggle("hidden", !iosInstall && (!supported || Boolean(enabled) || blocked));
-        const detail = prompt.querySelector("small");
-        if (detail) detail.textContent = iosInstall ? "Add Valid to your Home Screen to know when someone picks you." : "Enable notifications to know when someone picks you.";
-        const button = prompt.querySelector("button");
-        if (!button) return;
-        button.textContent = iosInstall ? "Add to Home Screen" : label;
-        button.disabled = !iosInstall && (state.webPushBusy || syncing);
+    const cardState = feedNotificationCardState();
+    const copy = {
+        install: ["Turn on vote alerts", "Add Valid to your Home Screen to know when someone picks you.", "Add to Home Screen"],
+        blocked: ["Notifications are blocked", "Allow notifications for Valid in your browser settings to know when someone picks you.", "How to turn on"],
+        error: ["Turn on vote alerts", "Know right away when someone picks you.", "Retry notifications"],
+        syncing: ["Turn on vote alerts", "Know right away when someone picks you.", "Finishing setup…"],
+        ask: ["Turn on vote alerts", "Know right away when someone picks you.", "Turn on"],
+    }[cardState] || null;
+    if (cardState === "ask") void preloadNotificationSoftPrompt();
+    // iOS has no card on the unlocked Feed; only the vote lock carries one.
+    const banner = $("#feedNotificationPrompt");
+    if (banner) banner.classList.toggle("hidden", !copy);
+    if (banner) banner.dataset.state = cardState || "";
+    if (copy && banner) {
+        banner.querySelector("strong").textContent = copy[0];
+        banner.querySelector("small").textContent = copy[1];
+        const button = banner.querySelector("button");
+        button.textContent = copy[2];
+        button.disabled = state.webPushBusy || cardState === "syncing";
+    }
+    for (const card of $$(".feed-gate-notification")) {
+        card.classList.toggle("hidden", !copy);
+        card.dataset.state = cardState || "";
+        card.disabled = Boolean(copy) && (state.webPushBusy || cardState === "syncing");
+        if (!copy) continue;
+        card.querySelector("strong").textContent = copy[0];
+        card.querySelector("small").textContent = copy[1];
+        card.setAttribute("aria-label", cardState === "ask" || cardState === "error" ? "Turn on alerts for votes" : `${copy[0]}. ${copy[2]}`);
+    }
+}
+
+// The card is a tap: the soft prompt (or the browser, as a fallback) is
+// asked from inside it.
+function handleFeedNotificationCard() {
+    const cardState = feedNotificationCardState();
+    if (cardState === "install") return openIOSInstall();
+    if (cardState === "blocked") {
+        void import("./chat/notification-nudge.js")
+            .then(({ openNotificationHelpSheet }) => openNotificationHelpSheet())
+            .catch(() => showToast("Allow notifications for Valid in your browser settings."));
+        return;
+    }
+    if (cardState === "error" || state.webPushBusy) return toggleWebPush();
+    if (notificationSoftPrompt) {
+        void Promise.resolve(notificationSoftPrompt.askForNotifications({ reason: "feed" }))
+            .catch(() => enableWebPushFromPrompt())
+            .finally(renderWebPushStatus);
+        return;
+    }
+    void enableWebPushFromPrompt().then((result) => {
+        if (result?.subscribed) showToast("Notifications are on");
+        else if (result?.permission === "denied") showToast("Notifications were not enabled.");
     });
 }
 
@@ -4121,8 +5633,11 @@ async function loadFeed(reset = false) {
     }
     const status = $("#feedStatus");
     const loadMore = $("#loadMoreFeed");
-    status.textContent = hadVisibleFeed && reset ? "Refreshing…" : "Loading votes...";
-    loadMore.classList.add("hidden");
+    if (reset) {
+        status.textContent = hadVisibleFeed ? "Refreshing…" : "Loading votes...";
+        loadMore.classList.add("hidden");
+    }
+    loadMore.classList.toggle("loading", !reset);
     try {
         let items;
         if (feedType === "personal") items = await api.getPersonalFeed(api.user.id, state.feedOffset, search);
@@ -4147,11 +5662,39 @@ async function loadFeed(reset = false) {
             writeAppCache("feed-personal", state.feedItems.slice(0, 60));
         }
         renderFeed();
+        loadMore.classList.remove("loading");
         loadMore.classList.toggle("hidden", schoolSort === "hottest" || schoolContent === "tbhs" || items.length < 20);
+        // Still in reach after this page (a short list or a tall screen): ask for the next one.
+        requestAnimationFrame(maybeLoadMoreFeed);
     } catch (error) {
         if (generation !== state.feedGeneration) return;
+        loadMore.classList.remove("loading");
         status.textContent = userMessage(error, "Could not load the feed.");
     }
+}
+
+function maybeLoadMoreFeed() {
+    const sentinel = $("#loadMoreFeed");
+    if (!sentinel || sentinel.classList.contains("hidden") || sentinel.classList.contains("loading")) return;
+    if (state.activePanel !== "feed" || isFeedVoteLocked() || $("#feedStatus").textContent) return;
+    if (sentinel.getBoundingClientRect().top > window.innerHeight + 600) return;
+    void loadFeed(false);
+}
+
+// TbhGiveInboxCard → TbhGiveInboxSheet.
+function openGiveTbhSheet() {
+    $("#giveTbhList").innerHTML = state.tbhPendingRequests.map((request) => `<button class="give-tbh-row" type="button" data-give-tbh-request="${escapeHTML(request.id)}">${avatarMarkup({ first_name: request.requester_first_name, last_name: request.requester_last_name, profile_picture_url: request.requester_profile_picture_url }, "row-avatar")}<span><strong>TBH for ${escapeHTML(request.requester_first_name)}</strong><small>${escapeHTML(promptForKey(request.prompt_key).title)}</small></span><span class="give-tbh-write">Write</span></button>`).join("");
+    $("#giveTbhDialog").showModal();
+}
+
+// FeedItemRow.openSchoolProfile: a classmate's avatar or name opens their profile.
+async function openFeedRowProfile(userId) {
+    const known = () => [...(state.classmateDirectory || []), ...(state.classmates || [])].some((classmate) => String(classmate.user_id) === String(userId));
+    if (!known() && !state.classmateDirectory) {
+        try { state.classmateDirectory = await api.getClassmates(api.user.id, "", 500); } catch (_) { /* Answered below. */ }
+    }
+    if (!known()) return showToast("This person doesn’t have an available profile yet.");
+    await openClassmateProfile(userId);
 }
 
 // Kinds: selection | light | medium | heavy | success | warning | error (preferences.js).
@@ -4299,7 +5842,7 @@ function choicesForQuestion(question) {
 }
 
 function choiceMarkup(choice) {
-    return `<button class="choice-button" type="button" data-choice="${escapeHTML(choice.id)}"><span>${escapeHTML(choice.name)}</span></button>`;
+    return `<button class="choice-button" type="button" data-choice="${escapeHTML(choice.id)}"><span>${escapeHTML(cleanDisplayName(choice.name) || choice.name)}</span></button>`;
 }
 
 // Contacts the server matched to accounts sort first in the classmate directory.
@@ -4341,20 +5884,183 @@ async function loadPlayRoster() {
     return rebuildPlayPool();
 }
 
-function renderNotEnoughFriends() {
-    $("#playProgress").textContent = "";
-    $("#playCard").innerHTML = `<div class="empty-card locked-card"><img loading="lazy" decoding="async" class="empty-state-art" src="../assets/app/lock.webp" alt=""><strong>Add more friends to play Valid.</strong><span>You need at least four classmates or contacts.</span><button class="primary-button" type="button" data-find-classmates>Find classmates</button><button class="secondary-button" type="button" data-invite-unlock>Share an invite</button></div>`;
+// Play shows its streak / "Question X of Y" / aura row only while answering
+// (PlayGameView.counterHeader); loading, congrats and lock screens have none.
+function setPlayHeaderVisible(visible) {
+    $("#playPanel").classList.toggle("play-header-hidden", !visible);
+    if (!visible) $("#playProgress").textContent = "";
 }
 
+// PlayView.LoadingView: a 96 pt spinning gear, title and subtitle, centred.
+function renderPlayLoading() {
+    setPlayHeaderVisible(false);
+    const card = $("#playCard");
+    card.replaceChildren();
+    delete card.dataset.questionId;
+    $("#playStatus").innerHTML = `<span class="play-loading-state"><img class="play-loading-gear" src="../assets/app/setting-gear.webp" width="96" height="96" decoding="async" alt=""><strong>Loading polls...</strong><span>Spinning up your classmates’ questions.</span></span>`;
+}
+
+function renderNotEnoughFriends() {
+    setPlayHeaderVisible(false);
+    $("#playCard").innerHTML = `<div class="empty-card locked-card"><img loading="lazy" decoding="async" class="empty-state-art" src="../assets/app/lock.webp" alt=""><strong>Add more classmates to play Valid.</strong><span>You need at least four classmates or contacts.</span><button class="primary-button" type="button" data-find-classmates>Find classmates</button><button class="secondary-button" type="button" data-invite-unlock>Share an invite</button></div>`;
+}
+
+// String.cleanedForDisplay: names without emoji or doubled spaces.
+function cleanDisplayName(value) {
+    return String(value || "")
+        .replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\u{FE0F}\u{200D}\u{20E3}]/gu, "")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+// PlayLockedView.firstName: "Maya" from "Maya Lopez", the whole name when it has no space.
+function playContactFirstName(contact) {
+    const cleaned = cleanDisplayName(contact?.name);
+    return cleaned.split(" ")[0] || "your friend";
+}
+
+const playContactKey = (contact) => String(contact?.hashed_phone_number || contact?.phone_number || contact?.name || "");
+
+// SuggestedInviteHistory: friends this account already invited, so the next
+// lock names someone new. Per account, the most recent 50.
+const playInvitedKey = (userId) => `valid:play:suggested-invites:${userId}`;
+
+function readPlayInvited() {
+    try { return new Set(JSON.parse(localStorage.getItem(playInvitedKey(api.user?.id)) || "[]")); }
+    catch (_) { return new Set(); }
+}
+
+function recordPlayInvited(contact) {
+    const key = playContactKey(contact);
+    if (!api.user?.id || !key) return;
+    try {
+        const keys = [...readPlayInvited()].filter((item) => item !== key);
+        keys.push(key);
+        localStorage.setItem(playInvitedKey(api.user.id), JSON.stringify(keys.slice(-50)));
+    } catch (_) { /* Without storage the same friend may be suggested again. */ }
+}
+
+// InviteFriendsViewModel.prepareContacts: uploaded contacts not on Valid,
+// suggested friends first (most votes first), then mutuals, votes and name.
+function invitablePlayContacts() {
+    const suggestionsFirst = state.config?.enable_invite_suggestions !== false;
+    const seen = new Set();
+    return (state.playContacts || [])
+        .filter((contact) => {
+            const key = playContactKey(contact);
+            if (contact?.is_six7_user || contact?.user_id || !cleanDisplayName(contact?.name) || !key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        })
+        .sort((first, second) => {
+            const firstSuggested = first.invite_suggested === true;
+            const secondSuggested = second.invite_suggested === true;
+            const votes = (contact) => Math.max(0, Number(contact.vote_count || 0));
+            if (suggestionsFirst && firstSuggested !== secondSuggested) return firstSuggested ? -1 : 1;
+            if (suggestionsFirst && firstSuggested && votes(first) !== votes(second)) return votes(second) - votes(first);
+            const mutuals = (contact) => Math.max(0, Number(contact.recommendation_strength || 0));
+            if (mutuals(first) !== mutuals(second)) return mutuals(second) - mutuals(first);
+            if (votes(first) !== votes(second)) return votes(second) - votes(first);
+            return cleanDisplayName(first.name).localeCompare(cleanDisplayName(second.name), undefined, { sensitivity: "base" });
+        });
+}
+
+// PlayLockedView.loadSuggestedFriend: the invite sheet's first suggested
+// friend who hasn't been invited from here yet.
+function suggestedPlayFriend() {
+    if (state.config?.enable_invite_suggestions === false) return null;
+    const invited = readPlayInvited();
+    return invitablePlayContacts().find((contact) => contact.invite_suggested === true && !invited.has(playContactKey(contact))) || null;
+}
+
+function inviteResetDescription(status) {
+    const reset = Date.parse(status?.next_reset_at || "");
+    if (!Number.isFinite(reset)) return "";
+    const time = new Date(reset).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const seconds = Math.round((reset - Date.now()) / 1000);
+    const [value, unit] = Math.abs(seconds) >= 86_400 ? [Math.round(seconds / 86_400), "day"]
+        : Math.abs(seconds) >= 3_600 ? [Math.round(seconds / 3_600), "hour"]
+            : Math.abs(seconds) >= 60 ? [Math.round(seconds / 60), "minute"] : [seconds, "second"];
+    let relative = "";
+    try { relative = new Intl.RelativeTimeFormat(undefined, { style: "short", numeric: "always" }).format(value, unit); } catch (_) { relative = ""; }
+    return relative ? `${time} (${relative})` : time;
+}
+
+function inviteLimitMessage(status) {
+    if (!status) return "Daily invite unlocks are unavailable right now.";
+    const reset = inviteResetDescription(status);
+    return reset
+        ? `You've used today's invite unlocks. More are available at ${reset}.`
+        : "You've used today's invite unlocks. More are available soon.";
+}
+
+// PlayLockedActionButton: a full-width 52 pt peach card with a 32 pt icon.
+function playLockedButton({ label, icon, attributes = "", disabled = false }) {
+    return `<button class="play-locked-action" type="button" ${attributes} ${disabled ? "disabled" : ""}><span class="play-locked-action-icon" aria-hidden="true">${icon}</span><span class="play-locked-action-label">${escapeHTML(label)}</span></button>`;
+}
+
+const playInviteIcon = () => `<span class="play-invite-glyph">${uiIcon("message-fill")}</span>`;
+
+// PlayLockedView.inviteUnlockSection: loading, the named suggestion, the
+// generic ask, or the used-up message.
 function renderInviteUnlock() {
-    const remaining = Number(state.inviteStatus?.remaining || 0);
-    return `<div class="invite-unlock">
-        <span class="or-label">OR UNLOCK NOW</span>
-        <strong>Invite 1 friend to get your next poll set</strong>
-        <span>Invite a friend and you'll earn an extra poll unlock.</span>
-        ${state.inviteStatus ? `<small>${remaining} invite ${remaining === 1 ? "unlock" : "unlocks"} left today</small>` : ""}
-        <button class="primary-button" type="button" data-invite-unlock ${remaining < 1 && state.inviteStatus ? "disabled" : ""}>Invite & unlock polls</button>
-    </div>`;
+    const status = state.inviteStatus;
+    const divider = '<span class="play-locked-divider" aria-hidden="true"></span>';
+    if (!status && !state.playInviteStatusLoaded) {
+        return `${divider}<p class="play-invite-checking"><span class="play-spinner" aria-hidden="true"></span>Checking invite unlocks…</p>`;
+    }
+    const remaining = Math.max(0, Number(status?.remaining || 0));
+    if (!status || remaining < 1) return `${divider}<p class="play-invite-limit">${escapeHTML(inviteLimitMessage(status))}</p>`;
+    const friend = suggestedPlayFriend();
+    if (friend) {
+        const name = playContactFirstName(friend);
+        return `${divider}<p class="play-invite-headline">${escapeHTML(name)} has ${Math.max(0, Number(friend.vote_count || 0)).toLocaleString()} votes waiting</p>
+            ${playLockedButton({ label: `Invite ${name} to unlock`, icon: playInviteIcon(), attributes: `data-invite-suggested="${escapeHTML(playContactKey(friend))}"` })}
+            <p class="play-invite-meta"><button class="play-invite-other" type="button" data-invite-unlock>Choose someone else</button><span>· ${remaining} left today</span></p>`;
+    }
+    return `${divider}<p class="play-invite-headline">Invite 1 friend to unlock now</p>
+        ${playLockedButton({ label: "Invite & unlock polls", icon: playInviteIcon(), attributes: "data-invite-unlock" })}
+        <p class="play-invite-meta">${remaining} invite ${remaining === 1 ? "unlock" : "unlocks"} left today</p>`;
+}
+
+function renderPlayInviteBlock() {
+    const block = $("#playInviteBlock");
+    if (block) block.innerHTML = renderInviteUnlock();
+}
+
+// PlayLockedView refreshes the invite status when it appears and every 60 s.
+const PLAY_INVITE_REFRESH_MS = 60_000;
+
+async function refreshPlayInviteStatus({ maxAgeMs = 0 } = {}) {
+    const userId = api.user?.id;
+    if (!userId) return;
+    if (maxAgeMs && state.inviteStatus && Date.now() - (state.playInviteStatusAt || 0) < maxAgeMs) {
+        state.playInviteStatusLoaded = true;
+        renderPlayInviteBlock();
+        return;
+    }
+    const status = await api.getInviteStatus(userId).catch(() => undefined);
+    if (api.user?.id !== userId) return;
+    if (status !== undefined) {
+        state.inviteStatus = status;
+        state.playInviteStatusAt = Date.now();
+    }
+    state.playInviteStatusLoaded = true;
+    renderPlayInviteBlock();
+}
+
+function stopPlayInviteRefresh() {
+    clearInterval(state.playInviteTimer);
+    state.playInviteTimer = null;
+}
+
+function startPlayInviteRefresh() {
+    stopPlayInviteRefresh();
+    void refreshPlayInviteStatus({ maxAgeMs: 10_000 });
+    state.playInviteTimer = setInterval(() => {
+        if (!$("#playInviteBlock")) return stopPlayInviteRefresh();
+        if (!document.hidden) void refreshPlayInviteStatus();
+    }, PLAY_INVITE_REFRESH_MS);
 }
 
 // PlayLockedView.swift formatTime: "1h 5m", "1h", "4m 30s", "4m", "12s".
@@ -4368,17 +6074,32 @@ function formatLockRemaining(totalSeconds) {
     return `${rest}s`;
 }
 
+function playChatsEnabled() {
+    return state.config?.enable_chats === true && state.config?.enable_web_chats === true;
+}
+
+// PlayLockedView (1.6034), top to bottom: headline, lock art, countdown, the
+// invite block, "Send a memento", then "Submit a school question" with its cost.
 function renderLockedPlay() {
+    setPlayHeaderVisible(false);
     const until = state.playLocked?.locked_until;
     clearInterval(state.playLockTimer);
     state.playLockTimer = state.playLockTick = null;
+    const cost = Math.max(0, Number(state.config?.question_submission_aura_cost ?? 200));
+    const aura = Math.max(0, Number(state.profile?.aura_points || 0));
+    const canSubmit = aura >= cost;
     $("#playCard").innerHTML = `<article class="locked-play-card">
         <h3>Next Poll Set Locked</h3>
-        <img loading="lazy" decoding="async" class="lock-art" src="../assets/app/lock.webp" alt="">
-        <p id="playLockMessage">${until ? "Checking unlock time..." : "New polls drop soon."}</p>
-        ${renderInviteUnlock()}
-        <button class="question-secondary-action" type="button" data-open-question><img loading="lazy" decoding="async" src="../assets/app/pencil-clipboard.webp" alt="">Submit a school question</button>
+        <img decoding="async" class="lock-art" src="../assets/app/lock.webp" width="200" height="200" alt="">
+        <p id="playLockMessage" class="play-lock-message">${until ? "Checking unlock time..." : "New polls drop soon."}</p>
+        <div id="playInviteBlock" class="play-invite-block">${renderInviteUnlock()}</div>
+        ${playChatsEnabled() ? playLockedButton({ label: "Send a memento", icon: '<img src="../assets/app/memento-camera.webp" width="32" height="32" decoding="async" alt="">', attributes: "data-play-memento" }) : ""}
+        <div class="play-submit-question">
+            ${playLockedButton({ label: "Submit a school question", icon: '<img src="../assets/app/pencil-clipboard.webp" width="32" height="32" decoding="async" alt="">', attributes: "data-open-question", disabled: !canSubmit })}
+            <p class="play-invite-meta">${canSubmit ? `Create a poll for your school for ${cost.toLocaleString()} aura.` : `Costs ${cost.toLocaleString()} aura · you need ${(cost - aura).toLocaleString()} more`}</p>
+        </div>
     </article>`;
+    startPlayInviteRefresh();
     if (until) {
         const tick = () => {
             const remaining = Math.max(0, Math.ceil((new Date(until).getTime() - Date.now()) / 1000));
@@ -4387,14 +6108,7 @@ function renderLockedPlay() {
                 ? `Unlocks in ${formatLockRemaining(remaining)}`
                 : "Unlocking your next polls...";
             if (remaining > 0) return;
-            clearInterval(state.playLockTimer);
-            state.playLockTimer = state.playLockTick = null;
-            state.playLocked = null;
-            state.questions = [];
-            state.questionIndex = 0;
-            state.choicesByQuestion.clear();
-            state.skipsUsedInSet = 0;
-            loadPlay();
+            unlockPlay();
         };
         tick();
         // Ticks only while the page is visible (see the visibilitychange listener).
@@ -4405,14 +6119,187 @@ function renderLockedPlay() {
     }
 }
 
+// PlayViewModel.unlockGame: stop the timer, show "Loading polls..." and ask
+// for the next set. A server that is still locked answers 423, which redraws
+// the lock with its own unlock time.
+function unlockPlay() {
+    clearInterval(state.playLockTimer);
+    state.playLockTimer = state.playLockTick = null;
+    stopPlayInviteRefresh();
+    state.playLocked = null;
+    state.questions = [];
+    state.questionIndex = 0;
+    state.choicesByQuestion.clear();
+    state.skipsUsedInSet = 0;
+    return loadPlay();
+}
+
+// PlayViewModel.handleInviteSuccess: a sent invite re-checks the invite
+// status and tries the next set at once.
+async function handlePlayInviteSuccess() {
+    state.playInviteCheckPending = Date.now();
+    state.inviteStatus = await api.getInviteStatus(api.user.id).catch(() => state.inviteStatus);
+    state.playInviteStatusAt = Date.now();
+    await unlockPlay();
+}
+
+// An invite opened later (after the person came back to the app) can unlock
+// too: re-check whenever the lock screen becomes visible again, for 30 minutes
+// after a share.
+function recheckPlayInviteOnReturn() {
+    if (document.visibilityState !== "visible" || state.activePanel !== "play" || !$("#playInviteBlock")) return;
+    void refreshPlayInviteStatus();
+    if (state.playInviteCheckPending && Date.now() - state.playInviteCheckPending < 30 * 60_000) void unlockPlay();
+    else state.playInviteCheckPending = 0;
+}
+
+// One invite, shared the web way: the system share sheet, or a copied link
+// (iOS SnapchatInviteModal's fallback copies the link, then opens Snapchat).
+async function sharePlayInvite({ channel = "web", surface = "play_lock", button = null } = {}) {
+    if (button) setButtonLoading(button, true, "Opening…");
+    try {
+        const invite = await api.createInvite(api.user.id, channel, { surface });
+        if (navigator.share) {
+            await navigator.share({ title: "Join me on Valid", text: "Join Valid and unlock my next polls", url: invite.share_url });
+            return true;
+        }
+        await navigator.clipboard.writeText(invite.share_url);
+        if (channel === "snapchat" && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+            showToast("Invite link copied. Paste it in Snapchat.");
+            setTimeout(() => { location.href = "snapchat://"; }, 220);
+        } else showToast("Invite link copied");
+        return true;
+    } catch (error) {
+        if (error?.name !== "AbortError") showToast(userMessage(error, "Couldn't create your invite link. Please try again."));
+        return false;
+    } finally {
+        if (button?.isConnected) setButtonLoading(button, false);
+    }
+}
+
+function playInviteRowMarkup(contact) {
+    const name = cleanDisplayName(contact.name) || "Unknown";
+    const letters = name.split(" ").map((part) => part[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "S";
+    const mutuals = Math.max(0, Number(contact.recommendation_strength || 0));
+    const votes = Math.max(0, Number(contact.vote_count || 0));
+    return `<li class="play-invite-row" data-play-invite-row="${escapeHTML(playContactKey(contact))}">
+        <span class="play-invite-avatar" aria-hidden="true">${escapeHTML(letters)}</span>
+        <span class="play-invite-copy"><strong>${escapeHTML(name)}</strong><small>${mutuals ? `<span class="play-invite-mutuals">${uiIcon("person-2-fill")}${mutuals} mutual${mutuals === 1 ? "" : "s"}</span>` : ""}<span class="play-invite-votes ${votes ? "has-votes" : ""}">${uiIcon("heart")}${votes} vote${votes === 1 ? "" : "s"}</span></small></span>
+        <button class="play-invite-row-button" type="button" data-play-invite-contact="${escapeHTML(playContactKey(contact))}" aria-label="Invite ${escapeHTML(name)}">Invite</button>
+    </li>`;
+}
+
+// InviteFriendsView: "Unlock More Polls" from the lock screen, "Invite
+// Friends" after a set. Resolves when the sheet closes.
+function openPlayInviteDialog({ mode = "unlock" } = {}) {
+    document.querySelector("#playInviteDialog")?.close();
+    const unlock = mode === "unlock";
+    const surface = unlock ? "play_lock" : "play_congrats";
+    const contacts = invitablePlayContacts();
+    const dialog = document.createElement("dialog");
+    dialog.id = "playInviteDialog";
+    dialog.className = "ui-sheet play-invite-dialog";
+    dialog.setAttribute("aria-labelledby", "playInviteTitle");
+    const snapchat = `<div class="play-invite-snapchat"><img src="../assets/app/snapchat-logo.webp" width="40" height="40" decoding="async" alt=""><span><strong>Share on Snapchat</strong><small>Invite your friends to join</small></span><button type="button" data-play-invite-snapchat>Share</button></div>`;
+    dialog.innerHTML = `<div class="play-invite-sheet">
+        <div class="play-invite-toolbar"><span class="ui-sheet-grabber" aria-hidden="true"></span><button class="play-invite-done" type="button" data-play-invite-done>Done</button></div>
+        <header class="play-invite-header"><div><img src="../assets/app/letter_aligned.webp" width="96" height="96" decoding="async" alt=""><h2 id="playInviteTitle">${unlock ? "Unlock More Polls" : "Invite Friends"}</h2></div><p>${unlock ? "Invite one friend to earn an unlock for your next poll set." : "Valid is more fun when there are more classmates"}</p></header>
+        ${contacts.length
+            ? `<div class="play-invite-scroll">${snapchat}<ul class="play-invite-list" aria-label="Contacts to invite">${contacts.map(playInviteRowMarkup).join("")}</ul></div>`
+            : `<div class="play-invite-empty"><span class="play-invite-empty-icon" aria-hidden="true">${uiIcon("person-2-fill")}</span><strong>No contacts to invite</strong><p>Invite your friends to join Valid!</p><button class="play-invite-snapchat-button" type="button" data-play-invite-snapchat><img src="../assets/app/snapchat-logo.webp" width="28" height="28" decoding="async" alt="">Share on Snapchat</button><button class="play-invite-messages-button" type="button" data-play-invite-messages>${uiIcon("message-fill")}Invite via Messages</button></div>`}
+    </div>`;
+    return new Promise((resolve) => {
+        let succeeded = false;
+        const success = (contact = null) => {
+            if (contact?.invite_suggested) recordPlayInvited(contact);
+            if (!unlock) return;
+            succeeded = true;
+            dialog.close();
+        };
+        dialog.addEventListener("click", async (event) => {
+            if (event.target === dialog) {
+                const box = dialog.getBoundingClientRect();
+                if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) dialog.close();
+                return;
+            }
+            if (event.target.closest("[data-play-invite-done]")) return dialog.close();
+            const snap = event.target.closest("[data-play-invite-snapchat]");
+            if (snap && await sharePlayInvite({ channel: "snapchat", surface, button: snap })) return success();
+            const messages = event.target.closest("[data-play-invite-messages]");
+            if (messages && await sharePlayInvite({ channel: "imessage", surface, button: messages })) return success();
+            const invite = event.target.closest("[data-play-invite-contact]");
+            if (!invite) return;
+            const contact = contacts.find((item) => playContactKey(item) === invite.dataset.playInviteContact);
+            if (!await sharePlayInvite({ channel: "web", surface, button: invite })) return;
+            invite.replaceWith(Object.assign(document.createElement("span"), { className: "play-invite-row-done", textContent: "Invited" }));
+            success(contact);
+        });
+        dialog.addEventListener("close", () => {
+            dialog.remove();
+            resolve(succeeded);
+            if (succeeded) void handlePlayInviteSuccess();
+        }, { once: true });
+        document.body.append(dialog);
+        dialog.showModal();
+        dialog.querySelector("[data-play-invite-done]").focus({ preventScroll: true });
+    });
+}
+
+// The lock screen's invite: the sheet with contacts and Snapchat when there
+// are contacts to invite, else straight to the share sheet (iOS: Messages).
+async function inviteAndUnlock(button) {
+    const locked = Boolean($("#playInviteBlock"));
+    if (locked && invitablePlayContacts().length) {
+        await openPlayInviteDialog({ mode: "unlock" });
+        return;
+    }
+    const shared = await sharePlayInvite({ channel: "web", surface: locked ? "play_lock" : "play_not_enough_friends", button });
+    if (shared && locked) await handlePlayInviteSuccess();
+}
+
+// PlayLockedView.inviteSuggestedFriend: one tap invites the named friend.
+async function inviteSuggestedPlayFriend(button) {
+    const friend = invitablePlayContacts().find((contact) => playContactKey(contact) === button.dataset.inviteSuggested);
+    if (!friend) return;
+    if (!await sharePlayInvite({ channel: "web", surface: "play_lock_suggestion", button })) return;
+    recordPlayInvited(friend);
+    await handlePlayInviteSuccess();
+}
+
+// MainTabView: "Send a memento" opens the Chats tab's new-chat flow.
+async function openMementoFromPlay() {
+    switchPanel("chats");
+    for (let attempt = 0; attempt < 40 && state.activePanel === "chats"; attempt += 1) {
+        const compose = document.querySelector("#chatsPanel [data-new-chat]");
+        if (compose && compose.offsetParent) {
+            compose.click();
+            return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 75));
+    }
+}
+
+// PlayCongratsView: "Congrats", the aura (with the crown and 2× for God
+// Mode), "you just earned N aura", "w aura", then "Play ‹game›".
 function renderPlayCongrats() {
-    $("#playProgress").textContent = "Complete";
-    $("#playCard").innerHTML = `<article class="play-congrats-card">
-        <h3>Congrats!</h3>
-        <img loading="lazy" decoding="async" src="../assets/app/aura.webp" alt="">
-        <p>You just earned <strong>${Number(state.playAuraEarned).toLocaleString()} aura</strong></p>
-        <button class="primary-button" type="button" data-finish-play>W aura</button>
+    setPlayHeaderVisible(false);
+    const godMode = api.user?.subscribed_user === true;
+    const game = postPlayWeeklyGame();
+    $("#playCard").innerHTML = `<article class="play-congrats">
+        <h3>Congrats</h3>
+        <div class="play-congrats-art">
+            <img class="play-congrats-aura" decoding="async" src="../assets/app/aura.webp" width="150" height="150" alt="">
+            ${godMode ? '<img class="play-congrats-crown" decoding="async" src="../assets/app/crown.webp" width="60" height="60" alt=""><img class="play-congrats-two-x" decoding="async" src="../assets/app/two-x.webp" width="80" height="80" alt="2x">' : ""}
+        </div>
+        <p>you just earned ${Number(state.playAuraEarned).toLocaleString()} aura</p>
+        <div class="play-congrats-actions">
+            <button class="primary-button" type="button" data-finish-play>w aura</button>
+            ${game ? `<button class="play-congrats-game" type="button" data-play-congrats-game>${weeklyGameArtMarkup(game.release, 32)}<span>Play ${escapeHTML(game.release.title || "Game of the Week")}</span>${uiIcon("arrow-right")}</button>` : ""}
+        </div>
     </article>`;
+    if (!game && !weeklyGameState.loadedAt) void refreshWeeklyGame().then(() => {
+        if (state.playComplete && postPlayWeeklyGame() && $("#playCard .play-congrats")) renderPlayCongrats();
+    });
 }
 
 function renderPlay() {
@@ -4434,9 +6321,13 @@ function renderPlay() {
     }
     const choices = choicesForQuestion(question);
     if (choices.length < 4) return renderNotEnoughFriends();
+    setPlayHeaderVisible(true);
+    $("#playProgress").textContent = `Question ${Math.min(state.questionIndex + 1, state.questions.length)} of ${state.questions.length}`;
     const artworkURL = api.assetURL(question.image_url);
     const submitter = playQuestionAttribution(question, api.user?.id);
-    const attribution = submitter.kind !== "none" ? `<div class="question-attribution">${submitterAttributionContent(submitter, question.submitted_by_avatar_url)}<div class="detail-overflow play-overflow"><button class="detail-overflow-button play-overflow-button" type="button" data-toggle-play-menu aria-label="More question actions" aria-expanded="false">•••</button><div class="detail-overflow-menu hidden" role="menu" aria-label="Question actions"><button type="button" role="menuitem" data-play-question-action="report">Report question</button>${question.is_anonymous ? "" : `<button type="button" role="menuitem" data-play-question-action="block">Block submitter</button>`}</div></div></div>` : "";
+    const reveal = submitter.kind === "anonymous" && !submitter.viewerIsAuthor && question.can_reveal_submitter
+        ? `<button class="play-reveal-submitter" type="button" data-play-reveal-submitter aria-label="Reveal who submitted this question"><img src="../assets/app/crown.webp" width="22" height="22" alt="" decoding="async"><span>Reveal</span></button>` : "";
+    const attribution = submitter.kind !== "none" ? `<div class="question-attribution">${submitterAttributionContent(submitter, question.submitted_by_avatar_url)}${reveal}<div class="detail-overflow play-overflow"><button class="detail-overflow-button play-overflow-button" type="button" data-toggle-play-menu aria-label="More question actions" aria-expanded="false">•••</button><div class="detail-overflow-menu hidden" role="menu" aria-label="Question actions"><button type="button" role="menuitem" data-play-question-action="report">Report a Safety Issue</button>${question.is_anonymous ? "" : `<button type="button" role="menuitem" data-play-question-action="block">Block User</button>`}</div></div></div>` : "";
     const remainingSkips = Math.max(0, Number(state.config?.max_skips_per_set ?? 3) - state.skipsUsedInSet);
     const previousCard = card.dataset.questionId && card.dataset.questionId !== String(question.id) ? card.querySelector(":scope > .play-card") : null;
     card.innerHTML = `<article class="play-card">
@@ -4495,7 +6386,14 @@ const PLAY_CONFIG_FALLBACK = {
 // starts the server's play lock, so it is only requested once four people exist.
 async function loadPlay() {
     if (state.questions.length || state.playLocked) return renderPlay();
-    $("#playStatus").innerHTML = `<span class="play-loading-state"><img class="play-loading-gear" src="../assets/app/setting-gear.webp" width="58" height="58" decoding="async" alt=""><span>Finding questions and classmates…</span></span>`;
+    // One request chain at a time: a timer, an invite and a return to the
+    // page can all ask for the next set at once.
+    state.playLoading ||= loadPlaySet().finally(() => { state.playLoading = null; });
+    return state.playLoading;
+}
+
+async function loadPlaySet() {
+    renderPlayLoading();
     try {
         const [config, inviteStatus] = await Promise.all([
             state.config ? Promise.resolve(state.config) : api.getConfig().catch(() => ({ ...PLAY_CONFIG_FALLBACK })),
@@ -4503,6 +6401,8 @@ async function loadPlay() {
         ]);
         state.config = config;
         state.inviteStatus = inviteStatus;
+        state.playInviteStatusAt = Date.now();
+        state.playInviteStatusLoaded = true;
         await loadPlayRoster();
         state.choicesByQuestion.clear();
         if (!canStartPlay(state.playPool)) {
@@ -4521,9 +6421,14 @@ async function loadPlay() {
         if (error.status === 423) {
             state.playLocked = error.detail || {};
             state.inviteStatus = await api.getInviteStatus(api.user.id).catch(() => null);
+            state.playInviteStatusAt = Date.now();
+            state.playInviteStatusLoaded = true;
             $("#playStatus").textContent = "";
             renderLockedPlay();
-        } else $("#playStatus").textContent = userMessage(error, "Could not load Play.");
+        } else {
+            setPlayHeaderVisible(false);
+            $("#playStatus").textContent = userMessage(error, "Could not load Play.");
+        }
     }
 }
 
@@ -4541,19 +6446,59 @@ function nominationCandidates() {
     return state.playPool.filter((choice) => choice.user_id !== String(api.user.id) && !shown.has(choice.id));
 }
 
+// NominationSearchView: "Classmates (N)" / "Not on Valid (N)" tabs. Classmates
+// rank by votes, contacts by mutual connections, then by name; without a
+// search each tab shows its first 50.
+function nominationTabLists() {
+    const byName = (first, second) => cleanDisplayName(first.name).toLowerCase().localeCompare(cleanDisplayName(second.name).toLowerCase());
+    const candidates = nominationCandidates();
+    const classmates = candidates.filter((candidate) => candidate.is_classmate)
+        .sort((first, second) => Number(second.vote_count || 0) - Number(first.vote_count || 0) || byName(first, second));
+    const contacts = candidates.filter((candidate) => !candidate.is_six7_user && cleanDisplayName(candidate.name))
+        .sort((first, second) => Number(second.mutual_strength || 0) - Number(first.mutual_strength || 0) || byName(first, second));
+    return { classmates, contacts };
+}
+
+function nominationRowMarkup(candidate, cost) {
+    const name = cleanDisplayName(candidate.name) || candidate.name;
+    const mutuals = Math.max(0, Number(candidate.mutual_strength || 0));
+    const detail = candidate.is_classmate
+        ? (candidate.grade ? formatGrade(candidate.grade) : "")
+        : mutuals ? `${mutuals} mutual connection${mutuals === 1 ? "" : "s"}` : "";
+    return `<button class="nomination-row" type="button" data-nomination="${escapeHTML(candidate.id)}">
+        ${avatarMarkup({ ...candidate, first_name: name, last_name: "" }, "choice-avatar")}<span class="nomination-row-copy"><strong>${escapeHTML(name)}</strong>${detail ? `<small>${escapeHTML(detail)}</small>` : ""}</span>
+        <span class="nomination-cost"><img loading="lazy" decoding="async" src="../assets/app/aura.webp" alt="">${cost}</span>
+    </button>`;
+}
+
 function renderNominationList() {
     const query = $("#nominationSearch").value.trim().toLowerCase();
-    const candidates = nominationCandidates().filter((candidate) => candidate.name.toLowerCase().includes(query));
+    const lists = nominationTabLists();
+    const tab = state.nominationTab === "contacts" ? "contacts" : "classmates";
+    const tabs = $("#nominationTabs");
+    tabs.hidden = !lists.classmates.length && !lists.contacts.length;
+    tabs.querySelector('[data-nomination-tab="classmates"]').textContent = `Classmates (${lists.classmates.length})`;
+    tabs.querySelector('[data-nomination-tab="contacts"]').textContent = `Not on Valid (${lists.contacts.length})`;
+    tabs.querySelectorAll("[data-nomination-tab]").forEach((button) => {
+        const selected = button.dataset.nominationTab === tab;
+        button.classList.toggle("active", selected);
+        button.setAttribute("aria-selected", String(selected));
+    });
+    $("#nominationSearch").placeholder = tab === "classmates" ? "Search classmates" : "Search contacts";
+    const base = lists[tab];
+    const results = query ? base.filter((candidate) => cleanDisplayName(candidate.name).toLowerCase().includes(query)) : base.slice(0, 50);
     const cost = Number(state.config?.nomination_aura_cost ?? 100);
-    $("#nominationList").innerHTML = candidates.length ? candidates.map((candidate) => `<button class="nomination-row" type="button" data-nomination="${escapeHTML(candidate.id)}">
-        ${avatarMarkup(candidate, "choice-avatar")}<strong>${escapeHTML(candidate.name)}</strong>
-        <span class="nomination-cost"><img loading="lazy" decoding="async" src="../assets/app/aura.webp" alt="">${cost}</span>
-    </button>`).join("") : `<div class="empty-card">${query ? "No matching classmates." : "Everyone else is already in this round. Shuffle for new choices."}</div>`;
+    $("#nominationList").innerHTML = results.length
+        ? results.map((candidate) => nominationRowMarkup(candidate, cost)).join("")
+        : query
+            ? `<div class="nomination-empty">${uiIcon("person-slash")}<strong>No results found</strong><span>Try a different search term</span></div>`
+            : `<div class="nomination-empty">${uiIcon("person-badge-plus")}<strong>No one available to nominate</strong></div>`;
 }
 
 function openNominationDialog() {
     $("#nominationSearch").value = "";
     $("#nominationStatus").textContent = "";
+    state.nominationTab = "classmates";
     renderNominationList();
     $("#nominationDialog").showModal();
     $("#nominationSearch").focus();
@@ -4571,6 +6516,13 @@ function nominateClassmate(candidateId) {
     $("#nominationStatus").textContent = "";
     // Same confirm-and-spend sheet as boosts and reveals; it calls submitNomination.
     openAuraSpend("nominate", { candidate, question });
+    // PlayGameView+Overlays: "This will cost N aura points." and a "Nominate" button.
+    if ($("#auraSpendDialog").open && state.pendingAuraPurchase?.kind === "nominate") {
+        $("#auraSpendMessage").textContent = `This will cost ${cost.toLocaleString()} aura points.`;
+        const confirm = $("#confirmAuraSpend");
+        confirm.dataset.label = "Nominate";
+        confirm.innerHTML = "<span>Nominate</span>";
+    }
 }
 
 async function submitNomination({ candidate, question }) {
@@ -4642,7 +6594,11 @@ async function answerPlayQuestion(choiceId) {
         renderProfileHeader();
         animateAuraChange(expectedAura, selectedButton);
     }
-    schedulePlayAdvance(question, PLAY_ANSWER_HOLD_MS);
+    // PlayViewModel+Answering: a vote for a contact who isn't on Valid asks to
+    // invite them, and the next question waits for that answer.
+    const invitePrompt = votePromptInvite(selected);
+    if (invitePrompt) void promptVoteInvite(question, invitePrompt);
+    else schedulePlayAdvance(question, PLAY_ANSWER_HOLD_MS);
     try {
         const result = await api.answerQuestion(api.user.id, answerPayload({
             questionId: question.id,
@@ -4684,7 +6640,47 @@ async function answerPlayQuestion(choiceId) {
     }
 }
 
-function finishPlaySet() {
+// enable_invite_after_vote; with enable_invite_suggestions on, only once the
+// friend has 3 votes (InvitePromptInfo.suggestionMinVotes), counting this one.
+function votePromptInvite(choice) {
+    if (state.config?.enable_invite_after_vote !== true || !choice || choice.user_id || choice.is_six7_user) return null;
+    const suggestionsOn = state.config?.enable_invite_suggestions !== false;
+    const votes = Math.max(0, Number(choice.vote_count || 0)) + 1;
+    if (suggestionsOn && votes < 3) return null;
+    return { name: cleanDisplayName(choice.name) || "your friend", votes: suggestionsOn ? votes : null };
+}
+
+// PlayGameView+Overlays' ConfirmationModal, then the invite, then the toast.
+async function promptVoteInvite(question, { name, votes }) {
+    const accepted = await confirmSheet({
+        title: `Invite ${name}?`,
+        message: votes ? `They have ${votes.toLocaleString()} votes waiting on Valid.` : "Valid is more fun with more people! :)",
+        confirmLabel: "Invite",
+        cancelLabel: "Cancel",
+    });
+    if (accepted && await sharePlayInvite({ channel: "web", surface: "vote_prompt" })) {
+        showToast(`\u{1F525} nice - ${name} can vote on you when they join`);
+    }
+    schedulePlayAdvance(question, 0);
+}
+
+// PlayCongratsView.handleContinue: "w aura" asks for notifications first,
+// then shows the invite sheet (when there are contacts to invite), and the
+// lock starts once that closes.
+async function finishPlaySet(button = null) {
+    if (state.playFinishing) return;
+    state.playFinishing = true;
+    if (button) button.disabled = true;
+    try {
+        await askForNotifications({ reason: "play_congrats" });
+        if (api.user?.id && state.playComplete && invitablePlayContacts().length) await openPlayInviteDialog({ mode: "congrats" });
+    } catch (_) { /* The lock still starts. */ }
+    finally { state.playFinishing = false; }
+    if (!state.playComplete) return;
+    beginPlayCooldown();
+}
+
+function beginPlayCooldown() {
     state.playComplete = false;
     state.playAuraEarned = 0;
     state.skipsUsedInSet = 0;
@@ -4740,16 +6736,45 @@ function retryPendingPlaySkips() {
     }
 }
 
+// PlayGameView+Overlays: "Report a Safety Issue" with a reason field, and
+// "Block User".
+function playReportSheet() {
+    return new Promise((resolve) => {
+        const dialog = document.createElement("dialog");
+        dialog.className = "ui-sheet play-report-sheet";
+        dialog.setAttribute("aria-labelledby", "playReportTitle");
+        dialog.dataset.destructive = "true";
+        dialog.innerHTML = `<form method="dialog" class="ui-sheet-content">
+            <span class="ui-sheet-grabber" aria-hidden="true"></span>
+            <h2 id="playReportTitle">Report a Safety Issue</h2>
+            <p class="ui-sheet-message">Report only if this question is unsafe or breaks the rules. If you just don't want to answer it, use Skip instead.</p>
+            <label class="ui-sheet-details"><span class="visually-hidden">Reason</span><textarea rows="3" maxlength="500" placeholder="Explain why you're reporting this question..."></textarea></label>
+            <div class="ui-sheet-actions"><button class="danger-button ui-sheet-confirm" type="submit" value="confirm">Report for Review</button><button class="secondary-button ui-sheet-cancel" type="button" data-cancel>Cancel</button></div>
+        </form>`;
+        let result = null;
+        dialog.querySelector("form").addEventListener("submit", (event) => {
+            event.preventDefault();
+            result = { reason: dialog.querySelector("textarea").value.trim() };
+            dialog.close();
+        });
+        dialog.querySelector("[data-cancel]").addEventListener("click", () => dialog.close());
+        dialog.addEventListener("close", () => { dialog.remove(); resolve(result); }, { once: true });
+        document.body.append(dialog);
+        dialog.showModal();
+        dialog.querySelector("textarea").focus({ preventScroll: true });
+    });
+}
+
 async function moderatePlayQuestion(action) {
     const question = state.questions[state.questionIndex];
     if (!question?.is_user_submitted) return;
-    const confirmed = await confirmSheet(action === "block"
-        ? { title: "Block this question's submitter?", message: "You'll skip this poll and won't see their questions again.", confirmLabel: "Block", destructive: true }
-        : { title: "Report this question?", message: "Valid will review it, and you'll skip this poll.", confirmLabel: "Report", destructive: true });
-    if (!confirmed) return;
+    const report = action === "block"
+        ? (await confirmSheet({ title: "Block User", message: "You will no longer see this user's questions.", confirmLabel: "Block", destructive: true }) ? {} : null)
+        : await playReportSheet();
+    if (!report) return;
     try {
         if (action === "block") await api.blockQuestionSubmitter(api.user.id, question.id);
-        else await api.reportQuestion(api.user.id, question.id);
+        else await api.reportQuestion(api.user.id, question.id, report.reason || undefined);
         state.questionIndex += 1;
         renderPlay();
         showToast(action === "block" ? "Submitter blocked" : "Reported to Valid");
@@ -4758,19 +6783,32 @@ async function moderatePlayQuestion(action) {
     }
 }
 
-async function inviteAndUnlock(button) {
-    setButtonLoading(button, true, "Making your invite...");
+// PlayGameView.anonymousSubmitterRow: God Mode's crown "Reveal" on an
+// anonymous question, with the reveal or aura confirm first.
+async function revealPlayQuestionSubmitter(button) {
+    const question = state.questions[state.questionIndex];
+    if (!question?.can_reveal_submitter || question.submitter_revealed) return;
+    if (api.user?.subscribed_user !== true) return openGodModePitch();
+    const remaining = Math.max(0, Number(state.profile?.remaining_reveals || 0));
+    const cost = Math.max(0, Number(state.config?.full_reveal_aura_cost ?? DEFAULT_FULL_REVEAL_AURA_COST));
+    if (remaining <= 0 && Number(state.profile?.aura_points || 0) < cost) return showToast(`You need ${cost.toLocaleString()} aura.`);
+    const left = Math.max(0, remaining - 1);
+    if (!await confirmSheet(remaining > 0
+        ? { title: "Reveal who made this question?", message: `This uses 1 of your weekly reveals. You will have ${left} ${left === 1 ? "reveal" : "reveals"} left.`, confirmLabel: "Use 1 Reveal" }
+        : { title: "Reveal who made this question?", message: `Spend ${cost.toLocaleString()} aura to reveal the classmate who submitted it.`, confirmLabel: `Spend ${cost.toLocaleString()} aura` })) return;
+    button.disabled = true;
     try {
-        const invite = await api.createInvite(api.user.id, "web");
-        if (navigator.share) await navigator.share({ title: "Join me on Valid", text: "Join Valid and unlock my next polls", url: invite.share_url });
-        else {
-            await navigator.clipboard.writeText(invite.share_url);
-            showToast("Invite link copied");
+        const result = await api.revealQuestionSubmitter(api.user.id, question.id);
+        Object.assign(question, { submitter_revealed: true, submitted_by_name: result.full_name, submitted_by_user_id: result.submitted_by_user_id, submitted_by_avatar_url: result.profile_picture_url });
+        if (state.profile) {
+            state.profile.remaining_reveals = Math.max(0, Number(result.remaining_reveals || 0));
+            if (Number.isFinite(Number(result.total_aura_points))) state.profile.aura_points = Number(result.total_aura_points);
+            renderProfileHeader();
         }
+        if (state.questions[state.questionIndex] === question && !state.playTransition) renderPlay();
     } catch (error) {
-        if (error.name !== "AbortError") showToast(userMessage(error, "Could not create an invite."));
-    } finally {
-        setButtonLoading(button, false);
+        showToast(userMessage(error, "Could not reveal question author."));
+        if (button.isConnected) button.disabled = false;
     }
 }
 
@@ -5059,7 +7097,41 @@ function profileOriginalInformation() {
         school_id: state.profile?.school_id ?? null,
         school_name: currentProfileSchoolName(),
         grade: String(state.profile?.grade || "").trim(),
+        gender: normalizedProfileGender(state.profile?.gender),
     };
+}
+
+// InformationEditSheet.swift: Boy / Girl / Non-binary, sent as male / female / non-binary.
+const PROFILE_GENDER_OPTIONS = [
+    { value: "male", label: "Boy" },
+    { value: "female", label: "Girl" },
+    { value: "non-binary", label: "Non-binary" },
+];
+
+function normalizedProfileGender(value) {
+    const gender = String(value || "").trim().toLowerCase();
+    if (gender === "boy" || gender === "male") return "male";
+    if (gender === "girl" || gender === "female") return "female";
+    if (["non-binary", "nonbinary", "nb"].includes(gender)) return "non-binary";
+    return "";
+}
+
+function profileGenderLabel(value) {
+    return PROFILE_GENDER_OPTIONS.find((option) => option.value === normalizedProfileGender(value))?.label || "Choose your gender";
+}
+
+function profileGenderIsValid(draft = state.profileDraft) {
+    return PROFILE_GENDER_OPTIONS.some((option) => option.value === draft?.gender);
+}
+
+function renderProfileGenderOptions() {
+    const selected = state.profileDraft?.gender || "";
+    $$("[data-profile-gender]").forEach((option) => {
+        const isSelected = option.dataset.profileGender === selected;
+        option.classList.toggle("selected", isSelected);
+        option.setAttribute("aria-checked", String(isSelected));
+    });
+    $('[data-profile-done="gender"]').disabled = !profileGenderIsValid();
 }
 
 function profileNameIsValid(draft = state.profileDraft) {
@@ -5091,6 +7163,7 @@ function profileChangeFlags() {
         name: draft.first_name !== original.first_name || draft.last_name !== original.last_name,
         school: String(draft.school_id ?? "") !== String(original.school_id ?? ""),
         grade: draft.grade !== original.grade,
+        gender: draft.gender !== original.gender,
     };
 }
 
@@ -5109,6 +7182,7 @@ function profileDraftIsValid() {
         && usernameChecked
         && draft?.school_id != null
         && profileGradeIsValid()
+        && profileGenderIsValid(draft)
     );
 }
 
@@ -5133,25 +7207,89 @@ function renderProfileEditorHub() {
     $("#profileNameValue").textContent = `${draft.first_name} ${draft.last_name}`.trim() || "Add your name";
     $("#profileSchoolValue").textContent = draft.school_name || "Choose your school";
     $("#profileGradeValue").textContent = draft.grade || "Choose your grade";
+    $("#profileGenderValue").textContent = profileGenderLabel(draft.gender);
     setProfileBadge($("#profileUsernameBadge"), flags.username, !profileUsernameIsValid(draft) || (flags.username && state.profileCheckedUsername !== draft.username));
     setProfileBadge($("#profileNameBadge"), flags.name, !profileNameIsValid(draft));
     setProfileBadge($("#profileSchoolBadge"), flags.school, draft.school_id == null);
     setProfileBadge($("#profileGradeBadge"), flags.grade, !profileGradeIsValid());
+    setProfileBadge($("#profileGenderBadge"), flags.gender, !profileGenderIsValid(draft));
     $$('[data-profile-editor]').forEach((button) => { button.disabled = informationLocked; });
     const changeCount = profileChangedFieldCount();
     $("#profileReviewButton").textContent = changeCount === 1 ? "Review 1 change" : `Review ${changeCount} changes`;
     $("#profileReviewButton").disabled = !profileDraftIsValid();
     $("#deleteAccountButton").classList.toggle("hidden", state.config?.enable_delete_account === false);
-    const unsubscribeButton = $("#godModeUnsubscribeButton");
-    const cancellationScheduled = state.godModeCancellation?.cancel_at_period_end === true;
-    unsubscribeButton.classList.toggle("hidden", !hasStripeGodMode());
-    unsubscribeButton.disabled = cancellationScheduled;
-    $("#godModeUnsubscribeLabel").textContent = cancellationScheduled
-        ? "God Mode cancellation scheduled"
-        : "Unsubscribe from God Mode";
+    renderGodModeManageEntry();
+    // "Oct 20, 2026", as InformationEditSheet's .abbreviated date.
+    const nextChange = new Date(state.profile?.next_information_change_at || "");
+    const lockedMessage = Number.isNaN(nextChange.getTime())
+        ? "Username, name, school, grade, and gender are currently unavailable."
+        : `Username, name, school, grade, and gender will be available again ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(nextChange)}.`;
     $("#profileEditHint").innerHTML = informationLocked
-        ? `<strong>Profile changes are temporarily locked</strong><span>Username, name, school, and grade will be available again ${escapeHTML(relativeTime(state.profile.next_information_change_at))}.</span>`
+        ? `<strong>Profile changes are temporarily locked</strong><span>${escapeHTML(lockedMessage)}</span>`
         : "<strong>Profile changes are available every 14 days</strong><span>Change any combination below. Nothing is saved until you review and confirm everything.</span>";
+}
+
+// GodModeSubscriptionRow.swift, for web (Stripe) billing: a failed payment
+// shows the full "Payment failed — update your card" row; a healthy
+// subscription a quiet "Manage God Mode" (the plan sheet); one set to cancel
+// "God Mode ends Oct 8".
+function godModeEndsAt() {
+    if (state.godModeCancellation?.cancel_at_period_end !== true) return null;
+    return state.godModeCancellation.subscription_expires_at || state.godModeCancellation.expires_at || null;
+}
+
+function renderGodModeManageEntry() {
+    const needsPayment = godModeNeedsPaymentUpdate();
+    $("#godModeBillingRow").classList.toggle("hidden", !needsPayment);
+    const button = $("#godModeUnsubscribeButton");
+    const cancelling = state.godModeCancellation?.cancel_at_period_end === true;
+    button.classList.toggle("hidden", needsPayment || !hasStripeGodMode());
+    button.disabled = cancelling;
+    const endsAt = formatBillingShortDate(godModeEndsAt());
+    $("#godModeUnsubscribeLabel").textContent = cancelling
+        ? (endsAt ? `God Mode ends ${endsAt}` : "Won\u2019t renew")
+        : "Manage God Mode";
+}
+
+// GodModePlan.statusLine: "Renews Oct 15 · on the web" while Stripe says it
+// renews, "Active through Oct 15 · on the web" otherwise.
+function godModePlanStatusLine() {
+    const billing = state.godModeBilling;
+    const date = formatBillingShortDate(billing?.expiresAt || api.user?.subscription_expires_at);
+    const renews = ["active", "trialing"].includes(billing?.stripeStatus || "") && billing?.cancelAtPeriodEnd !== true;
+    const stateLine = date ? (renews ? `Renews ${date}` : `Active through ${date}`) : "Active";
+    return `${stateLine} \u00b7 on the web`;
+}
+
+function openGodModePlan() {
+    if (!hasStripeGodMode() || state.godModeCancellation?.cancel_at_period_end === true) return;
+    $("#godModePlanStatus").textContent = godModePlanStatusLine();
+    const unsubscribe = $("#godModePlanUnsubscribe");
+    unsubscribe.disabled = false;
+    unsubscribe.removeAttribute("aria-busy");
+    $("#godModePlanDialog").showModal();
+}
+
+async function openGodModeBillingPortal() {
+    const row = $("#godModeBillingRow");
+    const status = $("#profileGodModeStatus");
+    if (row.disabled) return;
+    row.disabled = true;
+    row.setAttribute("aria-busy", "true");
+    status.classList.remove("is-neutral");
+    status.textContent = "";
+    const portalWindow = window.open("about:blank", "_blank");
+    try {
+        const { url } = await api.createGodModeBillingPortal(api.user.id);
+        if (portalWindow) portalWindow.location.href = url;
+        else window.location.href = url;
+    } catch (error) {
+        portalWindow?.close();
+        status.textContent = friendlyErrorMessage(error, "Could not open billing. Try again.");
+    } finally {
+        row.disabled = false;
+        row.removeAttribute("aria-busy");
+    }
 }
 
 async function godModeRetentionOffer() {
@@ -5185,14 +7323,15 @@ async function offerGodModeFreeWeek(offer) {
     const second = formatBillingShortDate(offer.second_reveal_at);
     // The free week gets no weekly refill: two reveals (day 2, day 5), each
     // only while still subscribed (granted by the server).
-    const terms = [];
-    if (first && second) terms.push(`Reveals on ${first} and ${second} while you’re still subscribed.`);
-    if (to) terms.push(`Then ${offer.price_label || "your regular price"} starting ${to}.`);
-    if (from && to) terms.push(`Cancel before ${to} and it ends ${from}.`);
+    // GodModeRetentionOffer.offerTerms: "Then $9.99/week. Cancel before Oct 15
+    // and you'll lose your free week (God Mode ends Oct 8)."
+    const terms = from && to
+        ? `${offer.price_label ? `Then ${offer.price_label}. ` : ""}Cancel before ${to} and you'll lose your free week (God Mode ends ${from}).`
+        : "";
     const choice = await choiceSheet({
         title: "Stay for a free week?",
         message: first && second ? "Your next week is on us, with 2 reveals." : "Your next week is on us.",
-        finePrint: terms.join(" "),
+        finePrint: terms,
         confirmLabel: "Get my free week",
         secondaryLabel: "Unsubscribe anyway",
     });
@@ -5236,13 +7375,13 @@ async function unsubscribeFromGodMode() {
         if (await offerGodModeFreeWeek(offer)) return;
     } else {
         // Cancelling during the free week takes it back (server-enforced).
-        const paidThrough = offer?.reason === "in_free_week" ? formatBillingShortDate(offer.paid_through) : "";
+        const inFreeWeek = offer?.reason === "in_free_week";
         // Keeping is the primary action; unsubscribing stays a full,
         // clearly labeled button right below it.
         const choice = await choiceSheet({
             title: "Unsubscribe from God Mode?",
-            message: paidThrough
-                ? `Your free week ends and God Mode stays active through ${paidThrough}, then it won’t renew.`
+            message: inFreeWeek
+                ? "You'll lose your free week."
                 : "You’ll keep God Mode through the end of your current billing period, and then it won’t renew.",
             confirmLabel: "Keep God Mode",
             secondaryLabel: "Unsubscribe",
@@ -5260,7 +7399,7 @@ async function unsubscribeFromGodMode() {
         state.godModeCancellation = result;
         const ending = formatBillingShortDate(result.subscription_expires_at);
         status.textContent = ending
-            ? `Unsubscribed. God Mode stays active through ${ending}.`
+            ? `Unsubscribed. God Mode ends ${ending}.`
             : "Unsubscribed. God Mode stays active through the current billing period.";
         showToast("God Mode renewal canceled");
         renderProfileEditorHub();
@@ -5372,6 +7511,7 @@ function renderProfileReview() {
     if (flags.username) addRow("Username", `@${original.username}`, `@${draft.username}`);
     if (flags.school) addRow("School", original.school_name, draft.school_name);
     if (flags.grade) addRow("Grade", original.grade, draft.grade);
+    if (flags.gender) addRow("Gender", profileGenderLabel(original.gender), profileGenderLabel(draft.gender));
     $("#profileReviewRows").innerHTML = rows.join("");
     $("#profileSchoolChangeNote").classList.toggle("hidden", !flags.school);
     $("#profileInformationConfirmStatus").textContent = "";
@@ -5382,12 +7522,13 @@ function setProfileEditor(editor) {
     syncProfileDraftFromInputs();
     state.profileEditor = editor;
     $$('[data-profile-panel]').forEach((panel) => panel.classList.toggle("hidden", panel.dataset.profilePanel !== editor));
-    const titles = { hub: "Correct profile information", username: "Username", name: "Name", school: "School", grade: "Grade", review: "Review changes" };
+    const titles = { hub: "Correct profile information", username: "Username", name: "Name", school: "School", grade: "Grade", gender: "Gender", review: "Review changes" };
     $("#profileEditorTitle").textContent = titles[editor] || titles.hub;
     $("#profileEditorBack").classList.toggle("hidden", editor === "hub");
     $("#profileEditorCancel").classList.toggle("hidden", editor !== "hub");
     if (editor === "hub") renderProfileEditorHub();
     if (editor === "grade") renderProfileGradeOptions();
+    if (editor === "gender") renderProfileGenderOptions();
     if (editor === "review") renderProfileReview();
     const focusByEditor = { username: "#profileUsername", name: "#profileFirstName", school: "#profileSchoolZip" };
     requestAnimationFrame(() => $(focusByEditor[editor])?.focus({ preventScroll: true }));
@@ -5408,6 +7549,7 @@ function openProfileDialog() {
     $("#profileSchoolPicker").classList.add("hidden");
     $("#profileSchoolFallback").classList.add("hidden");
     $("#profileEditStatus").textContent = "";
+    $(".profile-name-hint").classList.remove("invalid");
     $("#profileGodModeStatus").textContent = "";
     $("#profileGodModeStatus").classList.remove("is-neutral");
     setProfileEditor("hub");
@@ -5418,7 +7560,7 @@ function openProfileDialog() {
 async function cancelProfileEditor() {
     if (profileChangedFieldCount() && !await confirmSheet({
         title: "Discard your changes?",
-        message: "Your profile information changes won't be saved.",
+        message: "Your profile has not been changed yet.",
         confirmLabel: "Discard",
         cancelLabel: "Keep editing",
         destructive: true,
@@ -5472,6 +7614,7 @@ async function saveProfile(event) {
         username: draft.username,
         grade: draft.grade,
         school_id: draft.school_id,
+        gender: draft.gender,
     };
     state.pendingProfileInformation = { payload: nextInfo, schoolName: draft.school_name, schoolChanged: flags.school };
     const button = $("#confirmProfileInformationSave");
@@ -5499,8 +7642,15 @@ async function saveProfile(event) {
     } finally { setButtonLoading(button, false); }
 }
 
+function renderBioCount() {
+    const bio = $("#profileBio");
+    if (bio.value.length > 160) bio.value = bio.value.slice(0, 160);
+    $("#profileBioCount").textContent = `${bio.value.length}/160`;
+}
+
 function openBioDialog() {
     $("#profileBio").value = state.profile?.bio || "";
+    renderBioCount();
     $("#bioEditStatus").textContent = "";
     $("#bioDialog").showModal();
 }
@@ -5550,7 +7700,7 @@ function renderFeedbackHistory() {
             ? `${item.report_subject_type === "profile" ? "Profile" : "Question"} report update`
             : "Your feedback";
         const responseMarkup = responses.length
-            ? responses.map((response) => `<div class="feedback-team-response"><strong>Valid team</strong><p>${escapeHTML(response.response_text || "")}</p><time datetime="${escapeHTML(response.created_at || "")}">${escapeHTML(feedbackHistoryDate(response.created_at))}</time></div>`).join("")
+            ? responses.map((response) => `<div class="feedback-team-response"><strong class="valid-team-label">${uiIcon("seal-check")}Valid team</strong><p>${escapeHTML(response.response_text || "")}</p><time datetime="${escapeHTML(response.created_at || "")}">${escapeHTML(feedbackHistoryDate(response.created_at))}</time></div>`).join("")
             : `<p class="form-hint">No team reply yet.</p>`;
         return `<article class="feedback-history-card ${isTarget ? "notification-target" : ""}" data-feedback-history="${escapeHTML(item.id)}" tabindex="-1"><header><strong>${escapeHTML(label)}</strong><time datetime="${escapeHTML(item.created_at || "")}">${escapeHTML(feedbackHistoryDate(item.created_at))}</time></header><p>${escapeHTML(item.feedback_text || "")}</p>${responseMarkup}</article>`;
     }).join("");
@@ -5615,10 +7765,10 @@ async function submitFeedback(event) {
 // Profile photos go through the iOS circle crop and upload format (≤1024 px JPEG
 // 0.82), so large camera photos no longer hit a 5 MB wall. The new photo shows
 // at once with an uploading state, and a failed upload stays retryable.
-async function cropProfilePhoto(file) {
+async function cropProfilePhoto(file, options = {}) {
     try {
         const { cropAvatar } = await import("./avatar-crop.js");
-        return await cropAvatar(file);
+        return await cropAvatar(file, options);
     } catch (error) {
         showToast(userMessage(error, "That photo could not be opened. Choose a JPEG or PNG."));
         return null;
@@ -5652,7 +7802,8 @@ async function changeProfilePicture(event) {
     const file = input.files[0];
     input.value = "";
     if (!file) return;
-    const cropped = await cropProfilePhoto(file);
+    // SettingsView's circle cropper strings.
+    const cropped = await cropProfilePhoto(file, { title: "Choose your profile photo", instructions: "Pinch to zoom and drag to frame your photo." });
     if (cropped) await uploadProfilePhoto(cropped);
 }
 
@@ -6174,7 +8325,8 @@ async function previewSignupPhoto() {
     const file = input.files[0];
     input.value = "";
     if (!file) return;
-    const cropped = await cropProfilePhoto(file);
+    // ProfilePhotoSelectionView's cropper copy.
+    const cropped = await cropProfilePhoto(file, { title: "Choose your profile photo", instructions: "Pinch to zoom and drag to frame your photo." });
     if (!cropped) return;
     if (state.signupPhotoURL) URL.revokeObjectURL(state.signupPhotoURL);
     state.signupPhotoFile = cropped;
@@ -6345,8 +8497,8 @@ async function shareClassmateInvite() {
 // edits first, warn accounts without a passkey, then confirm the 5-day deletion.
 async function beginAccountDeletion() {
     if (profileChangedFieldCount() && !await confirmSheet({
-        title: "Discard your changes?",
-        message: "Your profile information changes won't be saved.",
+        title: "Discard edits and continue?",
+        message: "Your username, name, school, grade, and gender edits will not be saved.",
         confirmLabel: "Discard",
         cancelLabel: "Keep editing",
         destructive: true,
@@ -6354,82 +8506,188 @@ async function beginAccountDeletion() {
     state.profileDraft = null;
     state.pendingProfileInformation = null;
     if ($("#profileDialog").open) $("#profileDialog").close();
-    const passkeys = state.passkeyStatus;
-    const missingPasskey = passkeys && passkeys.registered !== true && Number(passkeys.credentialCount || 0) < 1;
-    if (missingPasskey) {
-        let setUpPasskey = false;
-        const noteChoice = (event) => { if (event.target.closest?.(".ui-sheet-cancel")) setUpPasskey = true; };
-        document.addEventListener("click", noteChoice, true);
-        const deleteAnyway = await confirmSheet({
+    // SettingsView.passkeyWarningMessage(.deleteAccount): "Set Up Passkey" is the main button.
+    if (accountNeedsPasskey()) {
+        const choice = await choiceSheet({
             title: "Don't Lose Your Account",
-            message: "You don't have a passkey. If you lose access to this phone number during the 5-day countdown, you won't be able to recover your account. Set up a passkey first.",
-            confirmLabel: "Delete Anyway",
-            cancelLabel: "Set Up Passkey",
-            destructive: true,
+            message: "You don't have a passkey. If you delete the app and lose access to this phone number during the 5-day countdown, you won't be able to recover your account. Set up a passkey first.",
+            confirmLabel: "Set Up Passkey",
+            secondaryLabel: "Delete Anyway",
         });
-        document.removeEventListener("click", noteChoice, true);
-        if (!deleteAnyway) {
-            if (setUpPasskey) void addBackupPasskey();
-            return;
-        }
+        if (choice === "confirm") return void addBackupPasskey();
+        if (choice !== "secondary") return;
     }
     openDeleteAccountDialog();
 }
 
-function openDeleteAccountDialog() {
-    $("#deleteAccountForm").reset();
-    $("#deleteAccountStatus").textContent = "";
-    $("#deleteAccountDialog").showModal();
+const ACCOUNT_DELETION_GRACE_DAYS = 5;
+const accountDeletionHidesKey = (userId) => `valid:account-deletion-hides-from-polls:${userId}`;
+
+// GodModeDeletionNotice.lines: deleting never cancels a subscription.
+function accountDeletionBillingNotices() {
+    const billing = state.godModeBilling?.userId === api.user?.id ? state.godModeBilling : null;
+    const lines = [];
+    if (billing?.provider === "apple" || billing?.manage === "app_store") {
+        lines.push("Deleting your account doesn't cancel your App Store subscription. Manage it in Settings > Apple Account > Subscriptions.");
+    }
+    const webBilling = billing?.provider === "stripe" || billing?.manage === "stripe_portal"
+        || ["active", "trialing", "past_due", "unpaid", "paused", "incomplete"].includes(billing?.stripeStatus || "");
+    if (webBilling) lines.push("Deleting your account doesn't cancel your web subscription.");
+    return lines;
 }
 
+function renderDeleteAccountDialog() {
+    const hide = $("#deleteAccountHideFromPolls").getAttribute("aria-checked") === "true";
+    const voting = $("#deleteAccountVotingLine");
+    voting.textContent = hide
+        ? "No one will be able to vote for you in polls, even friends who have your number saved."
+        : "Once it's gone, friends who have your number saved can still vote for you in polls.";
+    voting.classList.toggle("emphasis", hide);
+    $("#deleteAccountHideFromPolls").classList.toggle("on", hide);
+    $("#deleteAccountBillingNotices").innerHTML = accountDeletionBillingNotices().map((line) => `<p>${escapeHTML(line)}</p>`).join("");
+}
+
+function openDeleteAccountDialog() {
+    $("#deleteAccountForm").reset();
+    // Off by default: hiding is opt-in (DeleteAccountModal.hideFromPollsByDefault).
+    $("#deleteAccountHideFromPolls").setAttribute("aria-checked", "false");
+    $("#deleteAccountStatus").textContent = "";
+    renderDeleteAccountDialog();
+    $("#deleteAccountDialog").showModal();
+    // The billing lines arrive with the billing status.
+    void refreshGodModeBilling().then(() => {
+        if ($("#deleteAccountDialog").open) renderDeleteAccountDialog();
+    });
+}
+
+// SettingsViewModel.requestAccountDeletion: the account stays signed in and
+// the countdown screen takes over.
 async function requestAccountDeletion(event) {
     event.preventDefault();
     const button = event.currentTarget.querySelector("button[type=submit]");
+    const hideFromPolls = $("#deleteAccountHideFromPolls").getAttribute("aria-checked") === "true";
     setButtonLoading(button, true, "Scheduling...");
     $("#deleteAccountStatus").textContent = "";
+    let result;
     try {
-        await preloadRoute("chats").then((route) => route?.beforeSessionEnd?.()).catch(() => null);
-        await stopCallListener();
-        const result = await api.requestAccountDeletion(api.user.id);
-        await presenceLifecycle?.stop();
-        const scheduled = new Intl.DateTimeFormat(undefined, { dateStyle: "long", timeStyle: "short" }).format(new Date(result.scheduled_for));
-        $("#deleteAccountDialog").close();
-        await import("./chat/outbox.js")
-            .then(({ clearChatOutboxes }) => clearChatOutboxes(api.user.id))
-            .catch(() => null);
-        clearQuestionSubmissionState();
-        api.clearSession();
-        showSignedOut(`Account deletion is scheduled for ${scheduled}. Sign in with your passkey before then if you want to keep it.`);
+        result = await api.requestAccountDeletion(api.user.id, { hideFromPolls });
     } catch (error) {
-        $("#deleteAccountStatus").textContent = userMessage(error, "Could not schedule account deletion.");
+        setButtonLoading(button, false);
+        $("#deleteAccountStatus").textContent = hideFromPolls
+            ? "We couldn't delete your account or hide your number. Nothing changed. Please try again."
+            : "We couldn't schedule deletion. Please try again.";
+        return;
+    }
+    setButtonLoading(button, false);
+    const hidden = result?.hidden_from_polls === true;
+    try { localStorage.setItem(accountDeletionHidesKey(api.user.id), hidden ? "1" : "0"); } catch { /* The note falls back to the default wording. */ }
+    api.user.deletion_requested_at = result?.requested_at || new Date().toISOString();
+    state.accountDeletionScheduledFor = result?.scheduled_for || null;
+    $("#deleteAccountDialog").close();
+    if (hideFromPolls && !hidden) {
+        // An older server, or one that skipped the hide: the account is still deleted.
+        await confirmSheet({ title: "Couldn't hide your number", message: `Your account will still be deleted in ${ACCOUNT_DELETION_GRACE_DAYS} days.`, confirmLabel: "OK", cancelLabel: "Close" });
+    }
+    showPendingDeletion();
+}
+
+function accountDeletionScheduledFor() {
+    const scheduled = new Date(state.accountDeletionScheduledFor || "");
+    if (!Number.isNaN(scheduled.getTime())) return scheduled;
+    const requestedAt = new Date(api.user?.deletion_requested_at || "");
+    return new Date(requestedAt.getTime() + ACCOUNT_DELETION_GRACE_DAYS * 86_400_000);
+}
+
+function renderPendingDeletionCountdown() {
+    const scheduled = accountDeletionScheduledFor();
+    if (Number.isNaN(scheduled.getTime())) return;
+    const total = Math.max(0, Math.ceil((scheduled.getTime() - Date.now()) / 1000));
+    const parts = { days: Math.floor(total / 86_400), hours: Math.floor((total % 86_400) / 3_600), minutes: Math.floor((total % 3_600) / 60), seconds: total % 60 };
+    const units = { days: "d", hours: "h", minutes: "m", seconds: "s" };
+    for (const [key, value] of Object.entries(parts)) {
+        $(`[data-countdown-unit="${key}"]`).textContent = `${String(value).padStart(2, "0")} ${units[key]}`;
+    }
+    $("#pendingDeletionCountdown").setAttribute("aria-label", `${parts.days} days, ${parts.hours} hours, ${parts.minutes} minutes, ${parts.seconds} seconds remaining`);
+    if (total <= 0) {
+        // AuthService.finishExpiredAccountDeletion: time's up, sign out here.
+        clearInterval(state.pendingDeletionTimer);
+        state.pendingDeletionTimer = null;
+        $("#pendingDeletionDialog").close();
+        api.clearSession();
+        showSignedOut("Your account has been deleted.");
+    }
+}
+
+function showPendingDeletion() {
+    let hides = false;
+    try { hides = localStorage.getItem(accountDeletionHidesKey(api.user?.id)) === "1"; } catch { hides = false; }
+    $("#pendingDeletionCopy").textContent = hides
+        ? "After deletion, you won't receive any more compliments in Valid. No one can vote for you in polls, even friends who have your number saved, until you come back."
+        : "After deletion, you won't receive any more compliments in Valid, but friends who have your number saved can still vote for you in polls.";
+    $("#pendingDeletionStatus").textContent = "";
+    clearInterval(state.pendingDeletionTimer);
+    renderPendingDeletionCountdown();
+    state.pendingDeletionTimer = setInterval(renderPendingDeletionCountdown, 1000);
+    const dialog = $("#pendingDeletionDialog");
+    if (!dialog.open) dialog.showModal();
+}
+
+async function cancelAccountDeletion() {
+    const button = $("#cancelDeletionButton");
+    setButtonLoading(button, true, "Keeping account…");
+    $("#pendingDeletionStatus").textContent = "";
+    try {
+        await api.cancelAccountDeletion(api.user.id);
+        api.user.deletion_requested_at = null;
+        state.accountDeletionScheduledFor = null;
+        clearInterval(state.pendingDeletionTimer);
+        state.pendingDeletionTimer = null;
+        try { localStorage.removeItem(accountDeletionHidesKey(api.user.id)); } catch { /* Nothing saved. */ }
+        $("#pendingDeletionDialog").close();
+        showToast("Your account is staying on Valid");
+    } catch (error) {
+        $("#pendingDeletionStatus").textContent = "We couldn't keep your account. Check your connection and try again.";
     } finally {
         setButtonLoading(button, false);
     }
 }
 
-function showPendingDeletion() {
-    const requestedAt = new Date(api.user.deletion_requested_at);
-    const scheduledAt = new Date(requestedAt.getTime() + 5 * 86_400_000);
-    const when = Number.isFinite(scheduledAt.getTime())
-        ? new Intl.DateTimeFormat(undefined, { dateStyle: "long", timeStyle: "short" }).format(scheduledAt)
-        : "after the five-day grace period";
-    $("#pendingDeletionCopy").textContent = `It will be permanently deleted ${when}. Keep it now to restore normal use.`;
-    $("#pendingDeletionStatus").textContent = "";
-    $("#pendingDeletionDialog").showModal();
-}
+const PASSKEY_SIGN_OUT_WARNING = "You don't have a passkey. If you lose access to this phone number after signing out, you won't be able to recover your account. Set up a passkey first.";
 
-async function cancelAccountDeletion() {
-    const button = $("#cancelDeletionButton");
-    setButtonLoading(button, true, "Restoring...");
+// SettingsView.beginPasskeyProtectedAction(.signOut): an account without a
+// passkey is warned first ("Set Up Passkey" is the main button); then unsent
+// chat items are counted (SignOutUnsentItemsAlert.swift) before signing out.
+async function confirmSignOut() {
+    const button = $("#profileSignOutButton");
+    if (button.disabled) return;
+    if (accountNeedsPasskey()) {
+        const choice = await choiceSheet({
+            title: "Don't Lose Your Account",
+            message: PASSKEY_SIGN_OUT_WARNING,
+            confirmLabel: "Set Up Passkey",
+            secondaryLabel: "Sign Out Anyway",
+        });
+        if (choice === "confirm") return void addBackupPasskey();
+        if (choice !== "secondary") return;
+    }
+    button.disabled = true;
     try {
-        await api.cancelAccountDeletion(api.user.id);
-        api.user.deletion_requested_at = null;
-        $("#pendingDeletionDialog").close();
-        showToast("Your account is staying on Valid");
-    } catch (error) {
-        $("#pendingDeletionStatus").textContent = userMessage(error, "Could not keep your account.");
+        const userId = api.user?.id;
+        const unsent = userId ? await import("./chat/outbox.js")
+            .then(async ({ listChatTextOutbox, listChatMediaOutbox }) => (await listChatTextOutbox(userId)).length + (await listChatMediaOutbox(userId)).length)
+            .catch(() => 0) : 0;
+        if (unsent > 0 && !await confirmSheet({
+            title: "Sign out?",
+            message: unsent === 1 ? "You have 1 unsent item that will be discarded." : `You have ${unsent} unsent items that will be discarded.`,
+            confirmLabel: "Sign Out",
+            destructive: true,
+        })) return;
+        if (userId) {
+            try { localStorage.removeItem(notificationCategoryCacheKey(userId)); } catch { /* Nothing saved. */ }
+        }
+        await logoutAndReset();
     } finally {
-        setButtonLoading(button, false);
+        button.disabled = false;
     }
 }
 
@@ -6520,7 +8778,7 @@ function activatePanelRoute(panel) {
         notifications: chatNotificationBridge,
         onPlay: async () => {
             if (!state.profile?.school_id) return showToast('Join a school to play the Game of the Week.');
-            await openWeeklyGame();
+            await openWeeklyGame({ launch: true });
             void refreshWeeklyGame();
         },
     });
@@ -6563,7 +8821,8 @@ function pullRefreshAllowedFrom(target) {
 
 function beginPullRefresh(event) {
     state.pullRefreshStartY = null;
-    if (!document.body.classList.contains("authenticated") || state.pullRefreshing || window.scrollY > 0
+    // iOS refreshes only the Feed and Chats lists by pulling.
+    if (!document.body.classList.contains("authenticated") || !["feed", "chats"].includes(state.activePanel) || state.pullRefreshing || window.scrollY > 0
         || $("dialog[open], .detail-screen:not(.hidden)") || event.touches?.length > 1 || !pullRefreshAllowedFrom(event.target)) return;
     state.pullRefreshStartY = event.touches?.[0]?.clientY ?? null;
     state.pullRefreshDistance = 0;
@@ -6630,14 +8889,16 @@ function installNativeSheetGestures() {
     if (edgeSwipeBackSupported()) {
         for (const screen of $$(".detail-screen")) installEdgeSwipeBack(screen, () => closeDetailScreen(screen));
     }
-    if (!isAndroidDevice()) return;
-    for (const dialog of $$("dialog.modal")) {
+    // Sheets drag down on every phone, iPhone included (styles.css: dialog.modal at <=470px).
+    for (const dialog of $$("dialog.modal, #godModePitchDialog")) {
         if (dialog.dataset.sheetGesture === "1" || dialog.classList.contains("reaction-picker-dialog")) continue;
         dialog.dataset.sheetGesture = "1";
         let startY = null;
         let dragDistance = 0;
         let dragFrame = null;
         dialog.addEventListener("pointerdown", (event) => {
+            // The God Mode paywall is a sheet at every width (GodModePitchView).
+            if (dialog.id !== "godModePitchDialog" && !matchMedia("(max-width: 470px)").matches) return;
             const rect = dialog.getBoundingClientRect();
             if (event.clientY - rect.top > 72 || event.target.closest("button, input, textarea, select, a")) return;
             startY = event.clientY;
@@ -7135,35 +9396,9 @@ function urlBase64ToUint8Array(value) {
 }
 
 function renderWebPushStatus() {
-    const button = $("#notificationButton");
-    if (!webPushSupported()) {
-        button.classList.add("hidden");
-        renderProfileActionsVisibility();
-        renderFeedNotificationPrompt();
-        dispatchEvent(new CustomEvent("valid:web-push-status"));
-        return;
-    }
-    button.classList.remove("hidden");
-    renderProfileActionsVisibility();
-    const status = $("#notificationStatusText");
-    const enabled = Boolean(state.webPushSubscription && state.webPushRegistrationState === "on");
-    button.setAttribute("aria-checked", String(enabled));
-    button.classList.toggle("on", enabled);
-    if (Notification.permission === "denied") {
-        status.textContent = "Blocked in browser settings";
-    } else if (state.webPushSubscription && state.webPushRegistrationState === "on") {
-        status.textContent = "On · tap to turn off";
-    } else if (state.webPushSubscription && state.webPushRegistrationState === "syncing") {
-        status.textContent = "Finishing setup…";
-    } else if (state.webPushSubscription && state.webPushRegistrationState === "error") {
-        status.textContent = "Setup incomplete · tap to retry";
-    } else {
-        status.textContent = "Off · tap to turn on";
-    }
-    // The switch already shows on/off; surface the states that need attention.
-    const attention = Notification.permission === "denied" || ["syncing", "error"].includes(state.webPushRegistrationState) && Boolean(state.webPushSubscription);
-    status.classList.toggle("visually-hidden", !attention);
-    status.classList.toggle("settings-row-warning", attention && status.textContent !== "Finishing setup…");
+    // Settings → Notifications: the row's summary and the sheet's banner
+    // follow permission and subscription changes.
+    renderNotificationSettings();
     renderFeedNotificationPrompt();
     // The chat notification cards follow permission and subscription changes.
     dispatchEvent(new CustomEvent("valid:web-push-status"));
@@ -7478,26 +9713,81 @@ async function finishWebPushFromPrompt(prompted, permissionPromise) {
 // What the chat notification cards need. iPhone Safari outside the Home
 // Screen app has no Web Push; it keeps the Add to Home Screen sheet instead.
 const chatNotificationBridge = {
+    // iPhone Safari outside the Home Screen app cannot get Web Push: the chat
+    // card still shows there, offering "Add to Home Screen".
     permission() {
-        if (!webPushSupported() || iosInstallAvailable()) return "unsupported";
+        if (!webPushSupported()) return iosInstallAvailable() ? "install" : "unsupported";
         return Notification.permission;
     },
+    install: () => openIOSInstall(),
     enable: enableWebPushFromPrompt,
     ensureSubscribed: (source) => resubscribeWebPushQuietly(source),
     record: (action, source) => api.recordNotificationPreferencesAction(action, source),
 };
 
+// The notification soft prompt (Play congrats, onboarding) uses the same
+// Web Push path as the chat cards. The localhost demo has no push service:
+// ?push=default|denied fakes a browser there (?pushanswer= what it answers).
+function demoNotificationBridge() {
+    const params = new URLSearchParams(location.search);
+    let permission = params.get("push");
+    if (!["default", "denied", "granted"].includes(permission)) return null;
+    return {
+        permission: () => permission,
+        enable() {
+            const prompted = permission === "default";
+            if (prompted) permission = ["granted", "denied", "default"].includes(params.get("pushanswer")) ? params.get("pushanswer") : "granted";
+            return new Promise((resolve) => setTimeout(() => resolve({ permission, prompted, subscribed: permission === "granted" }), 150));
+        },
+        ensureSubscribed: () => Promise.resolve(false),
+        record: () => Promise.resolve(null),
+    };
+}
+configureNotificationSoftPrompt((demoMode && demoNotificationBridge()) || chatNotificationBridge);
+
 function bindEvents() {
     $("#passkeyButton").addEventListener("click", handlePasskeySignIn);
-    $("#createAccountButton").addEventListener("click", openSignupDialog);
-    $('#signupRecoverAccount').addEventListener('click', async () => {
-        $('#signupDialog').close();
-        await handlePasskeySignIn();
+    $('#signupRecoverAccount').addEventListener('click', () => openSignInSheet({ startPasskey: true }));
+    // "Already have an account? Log in" opens the sheet and, in the same tap,
+    // the passkey prompt (iOS starts Face ID as the sheet appears).
+    $("[data-signup-login]").addEventListener("click", () => openSignInSheet({ startPasskey: true }));
+    $("#signInDialog").addEventListener("click", (event) => {
+        if (event.target.closest("[data-sign-in-cancel]")) closeSignInSheet();
+        if (event.target.closest("[data-sign-in-phone]")) showSignInSection("phone");
+        if (event.target.closest("[data-sign-in-passkey]")) showSignInSection("passkey");
+        if (event.target.closest("[data-sign-in-change-phone]")) {
+            clearInterval(state.signInResendTimer);
+            state.signInPhone = null;
+            showSignInSection("phone");
+        }
     });
-    $("[data-signup-login]").addEventListener("click", () => {
-        $("#signupDialog").close();
-        handlePasskeySignIn();
+    $("#signInDialog").addEventListener("close", () => clearInterval(state.signInResendTimer));
+    $("#signInPhone").addEventListener("input", (event) => {
+        event.currentTarget.value = formatSignupPhone(event.currentTarget.value);
+        $("#signInSendCode").disabled = signupPhoneDigits(event.currentTarget.value).length !== 10;
+        $("#signInPhoneStatus").textContent = "";
     });
+    $("#signInPhone").addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !$("#signInSendCode").disabled) {
+            event.preventDefault();
+            sendSignInCode();
+        }
+    });
+    $("#signInSendCode").addEventListener("click", () => sendSignInCode());
+    $("#signInResend").addEventListener("click", (event) => sendSignInCode(event.currentTarget));
+    $("#signInCode").addEventListener("input", (event) => {
+        event.currentTarget.value = event.currentTarget.value.replace(/\D/g, "").slice(0, 6);
+        $("#signInVerify").disabled = event.currentTarget.value.length !== 6;
+        $("#signInCodeStatus").textContent = "";
+    });
+    $("#signInCode").addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !$("#signInVerify").disabled) {
+            event.preventDefault();
+            verifySignInCode();
+        }
+    });
+    $("#signInVerify").addEventListener("click", verifySignInCode);
+    $("#useAnotherAccountButton").addEventListener("click", useAnotherAccount);
     $("#signupForm").addEventListener("submit", createAccount);
     $("#signupPicture").addEventListener("change", previewSignupPhoto);
     $("#signupPhone").addEventListener("input", (event) => {
@@ -7517,20 +9807,23 @@ function bindEvents() {
     $("#signupUsername").addEventListener("input", (event) => {
         const input = event.currentTarget;
         const cursor = input.selectionStart;
-        input.value = input.value.toLowerCase();
-        if (cursor !== null) input.setSelectionRange(cursor, cursor);
+        input.value = input.value.toLowerCase().replace(/[^a-z0-9_]/g, "");
+        if (cursor !== null) input.setSelectionRange(Math.min(cursor, input.value.length), Math.min(cursor, input.value.length));
+        state.signupUsernameChecked = null;
         $("#signupStatus").textContent = "";
+        scheduleSignupUsernameCheck();
+    });
+    $("#signupUsernameStatus").addEventListener("click", (event) => {
+        const use = event.target.closest("[data-signup-use-username]");
+        if (!use) return;
+        $("#signupUsername").value = use.dataset.signupUseUsername;
+        state.signupUsernameChecked = null;
+        advanceSignup($("#signupUsernameContinue"));
     });
     $("#signupZip").addEventListener("input", (event) => {
         event.currentTarget.value = event.currentTarget.value.replace(/\D/g, "").slice(0, 5);
-        state.signupSchoolLookupGeneration += 1;
-        state.signupNearbySchools = [];
-        state.signupSelectedSchool = null;
-        state.signupSchoolFallback = false;
-        $("#signupSchoolPicker").classList.add("hidden");
-        $("#signupSchoolFallback").classList.add("hidden");
-        $("#signupSchoolContinue").disabled = true;
         $("#signupStatus").textContent = "";
+        renderSignupSchoolStep();
         if (event.currentTarget.value.length === 5) lookupSignupSchools();
     });
     $("#signupZip").addEventListener("keydown", (event) => {
@@ -7539,13 +9832,41 @@ function bindEvents() {
             lookupSignupSchools();
         }
     });
-    $("#signupSchoolSearch").addEventListener("input", renderSignupSchoolResults);
-    $("#signupSchoolResults").addEventListener("click", (event) => {
+    $("#signupFindSchools").addEventListener("click", () => lookupSignupSchools());
+    $("#signupZipAlt").addEventListener("click", openAddSchoolSheet);
+    $("#signupSchoolSearch").addEventListener("input", (event) => {
+        const query = event.currentTarget.value.trim();
+        $("#signupStatus").textContent = "";
+        // A ZIP typed in the search box finds the schools around it.
+        if (/^\d{5}$/.test(query) && query !== state.signupLastZip) void lookupSignupSchools(query);
+        else renderSignupSchoolStep();
+    });
+    $("#signupSchoolSearch").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") event.preventDefault();
+    });
+    $(".signup-school-step").addEventListener("click", (event) => {
         const school = event.target.closest("[data-signup-school]");
         if (school) selectSignupSchool(school.dataset.signupSchool);
+        if (event.target.closest("[data-signup-zip-again]")) showSignupZipCard("before-adding");
+        if (event.target.closest("[data-signup-add-school]")) openAddSchoolSheet();
     });
-    $("#signupShowSchoolFallback").addEventListener("click", () => showSignupSchoolFallback(true));
-    $("#signupBackToNearby").addEventListener("click", () => showSignupSchoolFallback(false));
+    $("#addSchoolForm").addEventListener("submit", submitAddSchool);
+    $("#addSchoolMinGrade").addEventListener("change", (event) => syncAddSchoolGrades(event.currentTarget));
+    $("#addSchoolMaxGrade").addEventListener("change", (event) => syncAddSchoolGrades(event.currentTarget));
+    $("#addSchoolZip").addEventListener("input", (event) => { event.currentTarget.value = event.currentTarget.value.replace(/\D/g, "").slice(0, 5); });
+    $("#addSchoolState").addEventListener("input", (event) => { event.currentTarget.value = event.currentTarget.value.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase(); });
+    $("#addSchoolSelect").addEventListener("click", selectAddedSchool);
+    $("#signupChooseFriends").addEventListener("click", (event) => chooseSignupContacts(event.currentTarget));
+    $("#signupInviteFriends").addEventListener("click", (event) => shareSignupInvite(event.currentTarget));
+    $("#signupLetsGo").addEventListener("click", (event) => finishSignupOnboarding(event.currentTarget));
+    $("#friendsClassmatesDialog").addEventListener("cancel", (event) => event.preventDefault());
+    $("#friendsClassmatesDialog").addEventListener("click", (event) => {
+        const invite = event.target.closest("[data-onboarding-invite]");
+        if (invite) inviteFromOnboarding(invite);
+    });
+    $("#friendsClassmatesContinue").addEventListener("click", showInviteFriendsPanel);
+    $("#inviteFriendsShare").addEventListener("click", (event) => shareOnboardingInvite(event.currentTarget));
+    $("#inviteFriendsDone").addEventListener("click", () => $("#friendsClassmatesDialog").close());
     let signupAgeScrollFrame = null;
     $("#signupAgeWheel").addEventListener("scroll", (event) => {
         const wheel = event.currentTarget;
@@ -7553,11 +9874,11 @@ function bindEvents() {
         signupAgeScrollFrame = requestAnimationFrame(() => {
             // Hiding the age step can reset the scroller and emit a late event.
             // Never let that overwrite the age the user already committed.
-            if (state.signupStep !== 0) {
+            if (state.signupStep !== SIGNUP_STEP.age) {
                 signupAgeScrollFrame = null;
                 return;
             }
-            const age = 13 + Math.round(wheel.scrollTop / 40);
+            const age = SIGNUP_MIN_AGE + Math.round(wheel.scrollTop / 40);
             selectSignupAge(age, { scroll: false });
             signupAgeScrollFrame = null;
         });
@@ -7567,6 +9888,11 @@ function bindEvents() {
         event.preventDefault();
         const direction = event.key === 'ArrowDown' ? 1 : -1;
         selectSignupAge(Number($("#signupAge").value) + direction);
+    });
+    $("#signupDialog").addEventListener("cancel", (event) => {
+        // The age screen is the signed-out root: Escape never closes it.
+        event.preventDefault();
+        if (state.signupStep > SIGNUP_STEP.age && !$(".signup-back-button").classList.contains("hidden")) signupStepBack();
     });
     $("#signupDialog").addEventListener("click", (event) => {
         const age = event.target.closest("[data-signup-age]");
@@ -7579,9 +9905,14 @@ function bindEvents() {
         if (gender) selectSignupGender(gender.dataset.signupGender);
         const next = event.target.closest("[data-signup-next]");
         if (next) advanceSignup(next);
+        if (event.target.closest("[data-signup-skip-photo]")) {
+            resetSignupPhotoPreview();
+            setSignupStep(SIGNUP_STEP.passkey);
+        }
         const resendCode = event.target.closest("[data-signup-resend-code]");
         if (resendCode) resendSignupPhoneCode(resendCode);
-        if (event.target.closest("[data-signup-back]")) setSignupStep(state.signupStep - 1);
+        if (event.target.closest("[data-signup-change-phone]")) changeSignupPhone();
+        if (event.target.closest("[data-signup-back]")) signupStepBack();
     });
     $("#logoutButton").addEventListener("click", logoutAndReset);
     $$(".segment").forEach((button) => button.addEventListener("click", () => {
@@ -7589,12 +9920,8 @@ function bindEvents() {
         state.myVotesOnly = false;
         state.schoolFeedContent = "all";
         $$(".segment").forEach((segment) => segment.classList.toggle("active", segment === button));
-        $("#myVotesFilter").classList.add("hidden");
         $("#schoolFeedControls").classList.toggle("hidden", state.feedType !== "school");
         $("#personalInboxControls").classList.toggle("hidden", state.feedType !== "personal");
-        $("#myVotesFilter").classList.remove("active");
-        $("#myVotesFilter").setAttribute("aria-pressed", "false");
-        $("#myVotesFilter").textContent = "○ My Votes";
         loadFeed(true);
     }));
     $("#personalInboxControls").addEventListener("click", (event) => {
@@ -7621,13 +9948,6 @@ function bindEvents() {
         }
         if (sort || content) loadFeed(true);
     });
-    $("#myVotesFilter").addEventListener("click", (event) => {
-        state.myVotesOnly = !state.myVotesOnly;
-        event.currentTarget.classList.toggle("active", state.myVotesOnly);
-        event.currentTarget.setAttribute("aria-pressed", String(state.myVotesOnly));
-        event.currentTarget.textContent = `${state.myVotesOnly ? "✓" : "○"} My Votes`;
-        loadFeed(true);
-    });
     $("#feedSearch").addEventListener("input", (event) => {
         state.feedSearch = event.currentTarget.value;
         state.feedClassmateResults = [];
@@ -7638,7 +9958,18 @@ function bindEvents() {
         const classmate = event.target.closest("[data-feed-classmate]");
         if (classmate) selectFeedClassmate(classmate.dataset.feedClassmate);
     });
-    $("#loadMoreFeed").addEventListener("click", () => loadFeed(false));
+    $("#giveTbhList").addEventListener("click", (event) => {
+        const request = event.target.closest("[data-give-tbh-request]");
+        if (!request) return;
+        $("#giveTbhDialog").close();
+        openTbhComposer(request.dataset.giveTbhRequest);
+    });
+    // FeedView+PersonalInbox pages ahead on its own: a sentinel below the list.
+    if ("IntersectionObserver" in window) {
+        new IntersectionObserver((entries) => {
+            if (entries.some((entry) => entry.isIntersecting)) maybeLoadMoreFeed();
+        }, { rootMargin: "0px 0px 600px 0px" }).observe($("#loadMoreFeed"));
+    }
     for (const root of [$('#feedDetailDialog'), $('#tbhDetailDialog')]) root.addEventListener('click', event => {
         const send = event.target.closest('[data-send-content]');
         if (send) void sendContentLink(send);
@@ -7659,6 +9990,9 @@ function bindEvents() {
         const reactors = event.target.closest("[data-reactors]");
         if (reactionPicker) return openReactionPicker(reactionPicker.dataset.reactionPicker, reactionPicker);
         if (reactors) return openReactorList(reactors.dataset.reactors);
+        if (event.target.closest("[data-give-tbh]")) return openGiveTbhSheet();
+        const feedProfile = event.target.closest("[data-feed-profile]");
+        if (feedProfile) return void openFeedRowProfile(feedProfile.dataset.feedProfile);
         const tbhRequest = event.target.closest("[data-tbh-request]");
         const tbhDismiss = event.target.closest("[data-tbh-dismiss]");
         const tbhSuppress = event.target.closest("[data-tbh-suppress]");
@@ -7701,9 +10035,8 @@ function bindEvents() {
     });
     $("#feedGateLock").addEventListener("click", (event) => {
         if (event.target.closest("[data-vote-to-unlock]")) switchPanel("play");
-        if (event.target.closest("[data-enable-feed-notifications]")) toggleWebPush();
+        if (event.target.closest("[data-enable-feed-notifications]")) handleFeedNotificationCard();
     });
-    $("#feedNotificationButton").addEventListener("click", toggleWebPush);
     $("#anonymousAnswerForm").addEventListener("submit", answerAnonymousQuestion);
     $("#anonymousAnswerText").addEventListener("input", updateAnonymousAnswerButton);
     $("#anonymousReportForm").addEventListener("submit", submitAnonymousReport);
@@ -7727,9 +10060,10 @@ function bindEvents() {
     document.addEventListener("click", (event) => {
         if (!event.target.closest(".detail-overflow")) closeDetailActionMenus();
     });
-    const tabIcons = { feed: "newspaper", play: "play-circle", chats: "chat-pair", profile: "person-circle" };
     $$(".nav-item").forEach((button) => {
-        button.querySelector("svg").outerHTML = uiIcon(tabIcons[button.dataset.panel]);
+        // The outlined icon, and the filled one shown while the tab is selected (TabIcon).
+        const wrap = button.querySelector("[data-tab-icon]");
+        if (wrap && !wrap.querySelector("svg")) wrap.insertAdjacentHTML("afterbegin", uiIcon(wrap.dataset.tabIcon) + uiIcon(`${wrap.dataset.tabIcon}-filled`));
         const preload = () => { void preloadRoute(button.dataset.panel); };
         button.addEventListener("pointerenter", preload, { passive: true });
         button.addEventListener("focus", preload);
@@ -7772,10 +10106,40 @@ function bindEvents() {
             closeDetailActionMenus();
             moderatePlayQuestion(safetyAction.dataset.playQuestionAction);
         }
-        if (event.target.closest("[data-finish-play]")) finishPlaySet();
+        const finish = event.target.closest("[data-finish-play]");
+        if (finish) finishPlaySet(finish);
         if (event.target.closest("[data-open-question]")) openQuestionDialog();
+        const revealSubmitter = event.target.closest("[data-play-reveal-submitter]");
+        if (revealSubmitter) revealPlayQuestionSubmitter(revealSubmitter);
+        const suggested = event.target.closest("[data-invite-suggested]");
+        if (suggested) inviteSuggestedPlayFriend(suggested);
+        if (event.target.closest("[data-play-memento]")) openMementoFromPlay();
+        if (event.target.closest("[data-play-congrats-game]")) openWeeklyGame();
+    });
+    document.addEventListener("visibilitychange", recheckPlayInviteOnReturn);
+    $("#weeklyGameRoot").addEventListener("click", (event) => {
+        if (event.target.closest("[data-weekly-game-hide]")) {
+            setWeeklyGameHidden(true);
+            softHaptic();
+            return renderWeeklyGameEntry();
+        }
+        if (event.target.closest("[data-weekly-game-restore]")) {
+            setWeeklyGameHidden(false);
+            softHaptic();
+            return renderWeeklyGameEntry();
+        }
+        const tile = event.target.closest("[data-weekly-game-tile]");
+        if (tile) return void openWeeklyGame({ release: weeklyGameState.slots[Number(tile.dataset.weeklyGameTile)]?.release || null });
+        if (event.target.closest("[data-weekly-game-open]")) void openWeeklyGame();
     });
     $("#nominationSearch").addEventListener("input", renderNominationList);
+    $("#nominationTabs").addEventListener("click", (event) => {
+        const tab = event.target.closest("[data-nomination-tab]");
+        if (!tab || state.nominationTab === tab.dataset.nominationTab) return;
+        state.nominationTab = tab.dataset.nominationTab;
+        softHaptic();
+        renderNominationList();
+    });
     $("#nominationList").addEventListener("click", (event) => {
         const candidate = event.target.closest("[data-nomination]");
         if (candidate) nominateClassmate(candidate.dataset.nomination);
@@ -7812,9 +10176,13 @@ function bindEvents() {
         if (event.target.closest("[data-edit-profile]")) openProfileDialog();
         if (event.target.closest("#viewClassmatesButton")) openClassmateDirectory();
         if (event.target.closest("#findContactsButton")) openClassmatesDialog();
-        if (event.target.closest("#profileSignOutButton")) logoutAndReset();
+        if (event.target.closest("#profileSignOutButton")) void confirmSignOut();
         const invite = event.target.closest("[data-profile-invite]");
         if (invite) shareProfileInvite(invite, invite.dataset.profileInvite);
+        if (event.target.closest("[data-open-creator-program]")) openCreatorProgram();
+        const schoolUnlock = event.target.closest("[data-school-unlock]");
+        if (schoolUnlock?.dataset.schoolUnlock === "vote") switchPanel("play");
+        if (schoolUnlock?.dataset.schoolUnlock === "invite") shareProfileInvite(schoolUnlock, "imessage");
         const rankedClassmate = event.target.closest("[data-school-classmate]");
         if (rankedClassmate) openClassmateProfile(rankedClassmate.dataset.schoolClassmate);
         const poll = event.target.closest("[data-top-poll]");
@@ -7892,6 +10260,13 @@ function bindEvents() {
         $("#godModePitchDialog").close();
         openEarnGodModeDialog();
     });
+    $("#godModeEarnChooserDialog").addEventListener("click", (event) => {
+        const option = event.target.closest("[data-earn-option]")?.dataset.earnOption;
+        if (!option) return;
+        $("#godModeEarnChooserDialog").close();
+        if (option === "invite") void openInviteFriendsDialog();
+        if (option === "creator") openCreatorProgram();
+    });
     $("#earnGodModeDialog").addEventListener("click", (event) => {
         const button = event.target.closest("[data-share-god-mode-invite]");
         if (button) shareGodModeInvite(button, button.dataset.shareGodModeInvite);
@@ -7951,7 +10326,12 @@ function bindEvents() {
     $("#deleteAccountForm").addEventListener("submit", requestAccountDeletion);
     $("#deleteAccountButton").addEventListener("click", () => void beginAccountDeletion());
     $("#cancelDeletionButton").addEventListener("click", cancelAccountDeletion);
-    $("#pendingDeletionLogout").addEventListener("click", logoutAndReset);
+    $("#deleteAccountHideFromPolls").addEventListener("click", (event) => {
+        const button = event.currentTarget;
+        button.setAttribute("aria-checked", String(button.getAttribute("aria-checked") !== "true"));
+        haptic("selection");
+        renderDeleteAccountDialog();
+    });
     $("#installAppButton").addEventListener("click", installWebApp);
     $("#androidInstallButton").addEventListener("click", installWebApp);
     $("#androidInstallDialog").addEventListener("cancel", (event) => event.preventDefault());
@@ -7961,7 +10341,18 @@ function bindEvents() {
             setAppUpdateButton("retry");
         });
     });
-    $("#notificationButton").addEventListener("click", toggleWebPush);
+    $("#notificationButton").addEventListener("click", openNotificationSettings);
+    $("#notificationPermissionButton").addEventListener("click", () => {
+        // Asked inside the tap: mobile browsers need the user gesture.
+        void toggleWebPush().finally(renderNotificationSettings);
+        renderNotificationSettings();
+    });
+    $("#notificationCategoryCard").addEventListener("click", (event) => {
+        const row = event.target.closest("[data-notification-category]");
+        if (!row) return;
+        haptic("selection");
+        void setNotificationCategory(row.dataset.notificationCategory, row.getAttribute("aria-checked") !== "true");
+    });
     $("#questionForm").addEventListener("submit", reviewQuestionSubmission);
     $("#questionForm").addEventListener("input", resetQuestionSubmissionIfDraftChanged);
     $("#questionForm").addEventListener("change", resetQuestionSubmissionIfDraftChanged);
@@ -8002,7 +10393,13 @@ function bindEvents() {
     $("#profileEditorBack").addEventListener("click", () => setProfileEditor("hub"));
     $("#profileEditorCancel").addEventListener("click", cancelProfileEditor);
     $("#profileReviewButton").addEventListener("click", () => setProfileEditor("review"));
-    $("#godModeUnsubscribeButton").addEventListener("click", unsubscribeFromGodMode);
+    $("#godModeUnsubscribeButton").addEventListener("click", openGodModePlan);
+    $("#godModeBillingRow").addEventListener("click", () => void openGodModeBillingPortal());
+    $("#godModePlanUnsubscribe").addEventListener("click", () => {
+        // "Unsubscribe" is the final intent: only now is the free-week offer checked.
+        $("#godModePlanDialog").close();
+        void unsubscribeFromGodMode();
+    });
     $("#profileSchoolLookup").addEventListener("click", lookupProfileSchools);
     $("#profileSchoolSearch").addEventListener("input", renderProfileSchoolResults);
     $("#profileShowSchoolFallback").addEventListener("click", () => {
@@ -8031,20 +10428,26 @@ function bindEvents() {
         if (done?.dataset.profileDone === "username") finishProfileUsername();
         if (done?.dataset.profileDone === "name") {
             syncProfileDraftFromInputs();
-            $("#profileNameStatus").textContent = profileNameIsValid() ? "" : "Use at least two letters for each name. Hyphens and apostrophes are okay.";
+            $(".profile-name-hint").classList.toggle("invalid", !profileNameIsValid());
             if (profileNameIsValid()) setProfileEditor("hub");
         }
         if (done?.dataset.profileDone === "grade" && profileGradeIsValid()) setProfileEditor("hub");
+        const gender = event.target.closest("[data-profile-gender]");
+        if (gender && state.profileDraft) {
+            state.profileDraft.gender = gender.dataset.profileGender;
+            renderProfileGenderOptions();
+        }
+        if (done?.dataset.profileDone === "gender" && profileGenderIsValid()) setProfileEditor("hub");
     });
     $("#profileFirstName").addEventListener("input", (event) => {
         event.target.value = event.target.value.replace(/[^\p{L}' -]/gu, "");
         syncProfileDraftFromInputs();
-        $("#profileNameStatus").textContent = profileNameIsValid() ? "" : "Use at least two letters for each name. Hyphens and apostrophes are okay.";
+        $(".profile-name-hint").classList.toggle("invalid", !profileNameIsValid());
     });
     $("#profileLastName").addEventListener("input", (event) => {
         event.target.value = event.target.value.replace(/[^\p{L}' -]/gu, "");
         syncProfileDraftFromInputs();
-        $("#profileNameStatus").textContent = profileNameIsValid() ? "" : "Use at least two letters for each name. Hyphens and apostrophes are okay.";
+        $(".profile-name-hint").classList.toggle("invalid", !profileNameIsValid());
     });
     $("#profileUsername").addEventListener("input", (event) => {
         event.target.value = event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "");
@@ -8058,6 +10461,7 @@ function bindEvents() {
     });
     $("#streakCelebration").addEventListener("click", hideStreakCelebration);
     $("#bioForm").addEventListener("submit", saveBio);
+    $("#profileBio").addEventListener("input", renderBioCount);
     $$("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
     addEventListener("valid:session-expired", () => showSignedOut("Your session expired. Sign in with your passkey again."));
     addEventListener("popstate", handleAppPopState);
@@ -8120,6 +10524,7 @@ function startApp() {
     // Start the session check before wiring the UI so a returning user's
     // request is on the network as early as possible; its result lands after
     // this synchronous setup.
+    applyDeviceAuthCopy();
     if (!passkeysSupported() && !demoMode) {
         $("#passkeyButton").disabled = true;
         $("#authStatus").textContent = "This browser does not support passkeys. Try current Chrome, Safari, or Edge.";
@@ -8175,49 +10580,45 @@ async function restoreOrStartAuthFlow() {
     if (!demoMode) {
         sessionRestoreInFlight = true;
         // Keep the launch splash while the session is unknown; a very slow check
-        // falls back to the sign-in card with its "Checking your session" status.
+        // falls back to the recovery card with its "Checking your session" status.
         clearTimeout(state.launchSplashTimer);
-        state.launchSplashTimer = setTimeout(showAuthView, 6_000);
+        state.launchSplashTimer = setTimeout(() => showSessionRecovery("Checking your session…", { checking: true }), 6_000);
         const revision = api.sessionRevision;
         $("#retrySessionButton").disabled = true;
-        $("#createAccountButton").classList.add("hidden");
-        $("#authStatus").textContent = "Checking your session…";
+        $("#retrySessionButton").textContent = "Loading account…";
+        if (!$("#sessionRecoveryCard").classList.contains("hidden")) $("#sessionRecoveryStatus").textContent = "Checking your session…";
         try {
             const session = await api.restoreSession();
             // An explicit sign-in completed while this older read was in flight.
             if (api.sessionRevision !== revision) return;
             if (!session?.user?.id) throw new Error("Incomplete session response");
             api.saveSession(session);
-            $("#authStatus").textContent = "";
             await showSignedIn();
             return;
         } catch (error) {
             if (api.hasSession()) return;
-            showAuthView();
             if (!error.confirmedSessionInvalid) {
                 sessionRestorePending = true;
-                $("#retrySessionButton").classList.remove("hidden");
-                $("#authStatus").textContent = navigator.onLine === false
+                showSessionRecovery(navigator.onLine === false
                     ? "You’re offline. Reconnect to restore your session."
-                    : "We couldn’t check your session. Reconnect and try again; you don’t need to create another account.";
+                    : "We couldn’t check your session. Reconnect and try again; you don’t need to create another account.");
                 return;
             }
             sessionRestorePending = false;
-            $("#retrySessionButton").classList.add("hidden");
-            $("#createAccountButton").classList.remove("hidden");
-            $("#authStatus").textContent = "";
+            hideSessionRecovery();
         } finally {
             sessionRestoreInFlight = false;
             $("#retrySessionButton").disabled = false;
+            $("#retrySessionButton").textContent = "Try again";
         }
     }
-    showAuthView();
-    // Returning users whose cookie expired land on "Welcome Back"; only an
-    // explicit ?signup=1 or a first-ever visit opens account creation.
+    // GettingStartedView is the root for new and returning visitors alike;
+    // ?signin=1 (sign-out, push links) opens the sign-in sheet over it.
+    // The localhost demo also opens it by default (its fixtures sign in with
+    // one tap); ?signup=1 shows the bare age screen there.
     const authParams = new URLSearchParams(window.location.search);
-    if (authParams.get("signup") === "1" || (!demoMode && authParams.get("signin") !== "1" && isFirstVisit())) {
-        requestAnimationFrame(openSignupDialog);
-    }
+    const signIn = authParams.get("signup") !== "1" && (authParams.get("signin") === "1" || demoMode);
+    showSignedOutRoot({ signIn });
 }
 
 if (demoMode) {

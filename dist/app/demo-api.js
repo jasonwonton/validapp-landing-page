@@ -27,12 +27,32 @@ export class DemoAPI {
     async getWeeklyGame() {
         assertLocalDemo();
         const { DEMO_RELEASE, DEMO_SCUBA_RELEASE } = await import('./weekly-game/demo-release.js');
-        const scuba = new URLSearchParams(window.location.search).get('weeklygame') === 'scuba';
-        return { release: structuredClone(scuba ? DEMO_SCUBA_RELEASE : DEMO_RELEASE), discovery_required: false };
+        const params = new URLSearchParams(window.location.search);
+        const scuba = params.get('weeklygame') === 'scuba';
+        const release = structuredClone(scuba ? DEMO_SCUBA_RELEASE : DEMO_RELEASE);
+        // ?games=3: Admin's Live games, shown as tiles (EasterEggGamesCard).
+        if (params.get('games') === '3' || params.get('games') === '2') {
+            const day = (offset) => new Date(Date.now() + offset * 86_400_000).toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+            const games = [
+                { release, kind: 'weekly', ends_on: null, label: null },
+                { release: structuredClone(scuba ? DEMO_RELEASE : DEMO_SCUBA_RELEASE), kind: 'pinned', ends_on: day(1), label: null },
+                { release: { ...structuredClone(DEMO_RELEASE), id: 'e'.repeat(64), game_id: 'air-high-five', title: 'Air High Five', artwork_url: null }, kind: 'pinned', ends_on: null, label: 'Spirit Week' },
+            ].slice(0, Number(params.get('games')));
+            return { release, games, discovery_required: false };
+        }
+        return { release, discovery_required: false };
     }
 
     async getWeeklyGameLeaderboard() {
-        return { unlocked: true, entries: [{ rank: 1, name: 'Maya Chen', score: 67 }] };
+        return {
+            unlocked: true, personal_best: 31,
+            entries: [
+                { user_id: 'classmate-1', rank: 1, name: 'Maya Chen', score: 67 },
+                { user_id: 'classmate-2', rank: 2, name: 'Noah Williams', score: 52 },
+                { user_id: 'classmate-3', rank: 3, name: 'Ava Patel', score: 44 },
+            ],
+            me: { user_id: 'demo-user', rank: 4, name: 'Jules Rivera', score: 31 },
+        };
     }
 
     async unlockWeeklyGame() { return { unlocked: true }; }
@@ -96,8 +116,9 @@ export class DemoAPI {
             profile_picture_url: "../assets/AppIconV2.png",
             profile_picture_url_thumb: "../assets/AppIconV2.png",
             profile_picture_url_medium: "../assets/AppIconV2.png",
-            can_change_information: true,
-            next_information_change_at: null,
+            // ?profilelocked=1: changed recently, so the 14-day lock is on.
+            can_change_information: demoParams.get("profilelocked") !== "1",
+            next_information_change_at: demoParams.get("profilelocked") === "1" ? new Date(Date.now() + 5 * 86_400_000).toISOString() : null,
             active_global_boost: null,
             active_targeted_boosts: [],
         };
@@ -170,6 +191,7 @@ export class DemoAPI {
                 image_url: "../assets/app/anonymous.webp",
                 question_answer_id: 9003,
                 voted_for_name: "Maya Chen",
+                contact_user_id: "classmate-1",
                 voted_for_profile_picture_url: "../assets/app/anonymous.webp",
                 voter_gender: "female",
                 voter_grade: "Junior",
@@ -192,6 +214,7 @@ export class DemoAPI {
                 question_text: "Who is most likely to start a company?",
                 question_answer_id: 9004,
                 voted_for_name: "Noah Williams",
+                contact_user_id: "classmate-2",
                 voted_for_profile_picture_url: "../assets/app/lock.webp",
                 voter_gender: "male",
                 voter_grade: "Sophomore",
@@ -212,7 +235,10 @@ export class DemoAPI {
         this.questions = [
             { id: 201, question_text: "Who would survive longest on a deserted island?", image_url: "../assets/app/lock.webp" },
             { id: 202, question_text: "Who should plan the senior trip?", image_url: "../assets/app/pencil-clipboard.webp", is_user_submitted: true, is_anonymous: false, submitted_by_name: "Maya Chen", submitted_by_avatar_url: "../assets/app/anonymous.webp" },
-            { id: 203, question_text: "Who gives the best advice?", image_url: "../assets/app/anonymous.webp" },
+            // ?anonq=1: an anonymous classmate question God Mode can reveal.
+            demoParams.get("anonq") === "1"
+                ? { id: 203, question_text: "Who gives the best advice?", image_url: "../assets/app/anonymous.webp", is_user_submitted: true, is_anonymous: true, can_reveal_submitter: true }
+                : { id: 203, question_text: "Who gives the best advice?", image_url: "../assets/app/anonymous.webp" },
             { id: 204, question_text: "Who is secretly the funniest person here?", image_url: "../assets/AppIconV2.png" },
         ];
         this.questionSubmissions = [
@@ -227,7 +253,14 @@ export class DemoAPI {
             { user_id: "classmate-5", first_name: "Sofia", last_name: "Kim", username: "sofiak", grade: "Freshman", school_name: "Westview High School", vote_count: 27, weekly_vote_count: 9, profile_picture_url: "../assets/app/aura.webp" },
             { user_id: "classmate-6", first_name: "Mateo", last_name: "Lee", username: "mateol", grade: "Senior", school_name: "Westview High School", vote_count: 24, weekly_vote_count: 7, profile_picture_url: "../assets/valid_logo.png" },
         ];
-        this.inviteStatus = { limit: 3, sent_today: 1, remaining: 2, next_reset_at: ago(-720), qualifying_invites: 0, aura_reward_progress: 0, aura_reward_goal: 3, aura_reward_amount: 50, aura_rewards_claimed: 0, aura_rewards_max: 1, aura_reward_max_reached: false };
+        // ?contacts=1: uploaded contacts, some not on Valid with votes waiting
+        // (the Play lock suggestion, invite sheet and post-vote invite).
+        if (demoParams.get("contacts") === "1") this.contacts = [
+            { phone_number: "1".repeat(64), name: "Maya Lopez", is_six7_user: false, user_id: null, recommendation_strength: 3, vote_count: 5, weekly_vote_count: 2, invite_suggested: true, visibility_boosts: [] },
+            { phone_number: "2".repeat(64), name: "Diego Ramos", is_six7_user: false, user_id: null, recommendation_strength: 1, vote_count: 2, weekly_vote_count: 1, invite_suggested: false, visibility_boosts: [] },
+            { phone_number: "3".repeat(64), name: "Priya Shah", is_six7_user: false, user_id: null, recommendation_strength: 0, vote_count: 0, weekly_vote_count: 0, invite_suggested: false, visibility_boosts: [] },
+        ];
+        this.inviteStatus = { limit: 3, sent_today: demoParams.get("invites") === "0" ? 3 : 1, remaining: demoParams.get("invites") === "0" ? 0 : 2, next_reset_at: ago(-180), qualifying_invites: 0, aura_reward_progress: 0, aura_reward_goal: 3, aura_reward_amount: 50, aura_rewards_claimed: 0, aura_rewards_max: 1, aura_reward_max_reached: false, god_mode_invite_progress: 1, god_mode_invite_goal: 5, god_mode_invite_goal_reached: false, god_mode_invite_device_exclusions: 0 };
         this.askLink = {
             share_url: "https://validapp.lol/a/jules-demo",
             is_active: true,
@@ -385,6 +418,7 @@ export class DemoAPI {
                 notification_level: "all", chat_photo_url: "../assets/AppIconV2.png",
                 member_previews: this.classmates.slice(0, 3), last_message_body: "Meet at the game?", last_message_kind: "text",
                 last_message_sender_first_name: "Maya", last_message_is_mine: false, last_message_at: ago(4), created_at: ago(10_000), updated_at: ago(4),
+                moment_streak_at_risk: true,
             },
             {
                 id: "chat-noah", display_name: "Noah Williams", name: null, status: "active",
@@ -395,6 +429,32 @@ export class DemoAPI {
                 notification_level: "all", pair_profile_picture_url: "../assets/app/lock.webp",
                 member_previews: [this.classmates[1]], last_message_body: "That was hilarious 😂", last_message_kind: "text",
                 last_message_sender_first_name: "Jules", last_message_is_mine: true, last_message_at: ago(70), created_at: ago(20_000), updated_at: ago(70),
+                last_regular_message_body: "That was hilarious 😂", last_regular_message_kind: "text", last_regular_message_sender_first_name: "Jules",
+                last_regular_message_is_mine: true, last_regular_message_at: ago(70), last_regular_message_room_sequence: 3,
+                last_regular_message_opened_count: 1, last_regular_message_audience_count: 1,
+            },
+            {
+                id: "chat-mateo", display_name: "Mateo Lee", name: null, status: "active",
+                owner_user_id: "demo-user", membership_id: "membership-mateo", membership_status: "accepted", role: "owner",
+                accepted_count: 2, pending_count: 0, moment_streak: 3, moment_streak_broken: true, today_memento_count: 0,
+                today_memento_eligible_count: 2, has_posted_today_memento: false, is_memento_eligible_today: true,
+                member_cap: 50, unread_count: 0, regular_unread_count: 0, last_room_sequence: 1, last_read_sequence: 1,
+                notification_level: "all", pair_profile_picture_url: "../assets/valid_logo.png", member_previews: [this.classmates[5]],
+                last_message_body: null, last_message_kind: "photo", last_message_sender_first_name: "Jules", last_message_is_mine: true, last_message_at: ago(180),
+                last_regular_message_body: null, last_regular_message_kind: "photo", last_regular_message_sender_first_name: "Jules",
+                last_regular_message_is_mine: true, last_regular_message_at: ago(180), last_regular_message_room_sequence: 1,
+                last_regular_message_view_once: true, last_regular_message_opened_count: 0, last_regular_message_audience_count: 1,
+                created_at: ago(30_000), updated_at: ago(180),
+            },
+            {
+                id: "chat-wave", display_name: "Ava Patel", name: null, status: "pending",
+                owner_user_id: "classmate-3", membership_id: "membership-wave", membership_status: "invited", role: "member",
+                accepted_count: 1, pending_count: 1, moment_streak: 0, today_memento_count: 0, today_memento_eligible_count: 1,
+                has_posted_today_memento: false, is_memento_eligible_today: true, member_cap: 50, unread_count: 0,
+                last_room_sequence: 1, last_read_sequence: 0, notification_level: "all", member_previews: [this.classmates[2]],
+                pair_display_name: "Ava Patel", pair_profile_picture_url: "../assets/app/pencil-clipboard.webp",
+                invited_by_first_name: "Ava", invited_by_last_name: "Patel", invitation_preview: "👋",
+                last_message_at: ago(2), created_at: ago(2), updated_at: ago(2),
             },
             {
                 id: "chat-invite", display_name: "Art Club", name: "Art Club", status: "pending",
@@ -405,7 +465,24 @@ export class DemoAPI {
                 invited_by_first_name: "Maya", invited_by_last_name: "Chen", created_at: ago(300), updated_at: ago(300),
             },
         ];
+        this.sayHiSuggestions = [
+            { user_id: "classmate-4", first_name: "Eli", display_name: "Eli Brooks", avatar_url: "../assets/AppIconV2.png", voted_today: true },
+            { user_id: "classmate-5", first_name: "Sofia", display_name: "Sofia Kim", avatar_url: null, voted_today: false },
+        ];
         this.chatMembers = {
+            "chat-invite": [
+                { membership_id: "m-art-owner", user_id: "classmate-1", role: "owner", status: "accepted", ...this.classmates[0] },
+                { membership_id: "m-art-2", role: "member", status: "accepted", ...this.classmates[3] },
+                { membership_id: "m-art-me", user_id: "demo-user", role: "member", status: "invited", first_name: "Jules", last_name: "Rivera" },
+            ],
+            "chat-wave": [
+                { membership_id: "m-wave-owner", role: "owner", status: "accepted", ...this.classmates[2] },
+                { membership_id: "m-wave-me", user_id: "demo-user", role: "member", status: "invited", first_name: "Jules", last_name: "Rivera" },
+            ],
+            "chat-mateo": [
+                { membership_id: "m-mateo-me", user_id: "demo-user", role: "owner", status: "accepted", first_name: "Jules", last_name: "Rivera" },
+                { membership_id: "m-mateo", role: "member", status: "accepted", ...this.classmates[5], last_read_sequence: 0 },
+            ],
             "chat-friends": [
                 { membership_id: "m-demo", user_id: "demo-user", role: "owner", status: "accepted", first_name: "Jules", last_name: "Rivera", profile_picture_url: this.profile.profile_picture_url },
                 ...this.classmates.slice(0, 3).map((person, index) => ({ membership_id: `m-friend-${index}`, user_id: person.user_id, role: "member", status: "accepted", ...person })),
@@ -416,6 +493,12 @@ export class DemoAPI {
             ],
         };
         this.chatMessages = {
+            "chat-wave": [
+                { id: "msg-w1", chat_id: "chat-wave", room_sequence: 1, sender_user_id: "classmate-3", sender_first_name: "Ava", kind: "text", body: "👋", status: "active", viewer_is_sender: false, reaction_count: 0, reaction_summary: {}, created_at: ago(2), updated_at: ago(2) },
+            ],
+            "chat-mateo": [
+                { id: "msg-m1", chat_id: "chat-mateo", room_sequence: 1, sender_user_id: "demo-user", sender_first_name: "Jules", kind: "photo", body: null, photo_image_url: null, view_once: true, view_once_available: true, view_once_consumed: false, view_once_remaining_views: 2, view_once_opened_count: 0, view_once_recipient_count: 1, status: "active", viewer_is_sender: true, reaction_count: 0, reaction_summary: {}, created_at: ago(180), updated_at: ago(180) },
+            ],
             "chat-friends": [
                 { id: "msg-1", chat_id: "chat-friends", room_sequence: 1, sender_user_id: "classmate-1", sender_first_name: "Maya", kind: "text", body: "What are we doing Friday?", status: "active", viewer_is_sender: false, reaction_count: 1, reaction_summary: { love: 1 }, current_user_reaction: null, created_at: ago(55), updated_at: ago(55) },
                 { id: "msg-2", chat_id: "chat-friends", room_sequence: 2, sender_user_id: "demo-user", sender_first_name: "Jules", kind: "text", body: "Game, then food?", status: "active", viewer_is_sender: true, reaction_count: 2, reaction_summary: { fire: 2 }, current_user_reaction: "fire", created_at: ago(35), updated_at: ago(35) },
@@ -434,6 +517,10 @@ export class DemoAPI {
         this.dailyMediaAssets = {};
         this.chatViewSessions = {};
         this.dailyRows = {
+            "chat-mateo": { chat_id: "chat-mateo", ledger_date: ledgerDate, viewer_has_posted_today: false, viewer_has_shared: false, viewer_is_eligible: true, view_gate_locked: true, posted_count: 0, eligible_count: 2, entries: [
+                { user_id: "demo-user", first_name: "Jules", last_name: "Rivera", has_posted: false },
+                { user_id: "classmate-6", first_name: "Mateo", last_name: "Lee", has_posted: false },
+            ] },
             "chat-friends": { chat_id: "chat-friends", ledger_date: ledgerDate, viewer_has_posted_today: false, viewer_has_shared: false, viewer_is_eligible: true, view_gate_locked: true, posted_count: 2, eligible_count: 4, entries: [
                 { user_id: "classmate-1", first_name: "Maya", last_name: "Chen", has_posted: true, entry_id: "entry-maya", caption: "After practice", image_url: "../assets/app/anonymous.webp", swapped_image_url: "../assets/app/lock.webp", published_at: ago(14) },
                 { user_id: "classmate-3", first_name: "Ava", last_name: "Patel", has_posted: true, entry_id: "entry-ava", caption: "Bus ride", image_url: "../assets/app/pencil-clipboard.webp", swapped_image_url: "../assets/app/anonymous.webp", published_at: ago(12) },
@@ -459,9 +546,11 @@ export class DemoAPI {
     }
 
     async resolveSchool(payload) {
-        const school = { id: 1000 + (this.resolvedSchools?.length || 0), name: payload.school_name, city: payload.city, state: payload.state, min_grade: 6, max_grade: 12 };
+        const existing = (this.nearbySchools || []).find((school) => school.name.toLowerCase() === String(payload.school_name || "").trim().toLowerCase());
+        if (existing) return { status: "duplicate", school: existing };
+        const school = { id: 1000 + (this.resolvedSchools?.length || 0), name: payload.school_name, city: payload.city || "Beverly Hills", state: payload.state || "CA", min_grade: payload.min_grade ?? 6, max_grade: payload.max_grade ?? 12 };
         this.resolvedSchools = [...(this.resolvedSchools || []), school];
-        return { school };
+        return { status: "created", school };
     }
 
     async getNearbySchools(zipCode, limit = 50) {
@@ -494,8 +583,21 @@ export class DemoAPI {
         return { available: /^[a-z0-9_]{3,30}$/.test(normalized) && !inappropriate && normalized !== "taken" };
     }
 
-    async checkPhoneRegistration() {
+    async checkPhoneRegistration(phoneNumber) {
+        // 4155550100 stands for a number that already has an account.
+        if (String(phoneNumber).endsWith("5550100")) return { exists: true, vote_count: 0, status: "existing_complete_account", has_profile: true };
         return { exists: false, vote_count: 3, status: "available", has_profile: false };
+    }
+
+    async requestLoginVerification(phoneNumber) {
+        // 4155550199 stands for a number that is not signed up.
+        if (String(phoneNumber).endsWith("5550199")) throw Object.assign(new Error("Account not found for this phone number."), { status: 404 });
+        return { resend_available_at: new Date(Date.now() + 30_000).toISOString(), attempts_remaining: 5, can_resend: false };
+    }
+
+    async confirmLoginVerification(_phoneNumber, code) {
+        if (code !== "123456") throw Object.assign(new Error("Invalid or expired verification code."), { status: 400 });
+        return this.demoLogin();
     }
 
     async demoSignup(payload) {
@@ -555,12 +657,26 @@ export class DemoAPI {
     }
 
     async getPersonalFeed(_userId, offset = 0) {
+        // ?emptyfeed=1: no polls in the Inbox (FeedEmptyStateView under Polls).
+        if (new URLSearchParams(location.search).get("emptyfeed") === "1") return [];
+        // ?feedpages=1: 45 Inbox polls served 20 at a time, for automatic paging.
+        if (new URLSearchParams(location.search).get("feedpages") === "1") {
+            this.pagedPersonalFeed ||= [...this.personalFeed, ...Array.from({ length: 45 - this.personalFeed.length }, (_, index) => ({
+                ...this.personalFeed[index % this.personalFeed.length],
+                question_answer_id: 9100 + index,
+                question_text: `Older poll ${index + 1}`,
+                timestamp: new Date(Date.now() - (3 + index) * 86_400_000).toISOString(),
+            }))];
+            return this.pagedPersonalFeed.slice(offset, offset + 20).map((item) => ({ ...item }));
+        }
         return offset ? [] : this.personalFeed.map((item) => ({ ...item }));
     }
 
     async getSchoolFeed(_userId, cursor = null, _search = "", sort = "recent") {
         if (cursor) return [];
         const items = this.schoolFeed.map((item) => ({ ...item }));
+        // ?nominations=1: a School nomination ("👑 Ava Patel got nominated").
+        if (new URLSearchParams(location.search).get("nominations") === "1") items.unshift({ ...items[0], question_answer_id: 9010, timestamp: new Date(Date.now() - 60_000).toISOString(), question_text: "Who should be Homecoming royalty?", is_nomination: true, voted_for_name: "Ava Patel", selected_contact_name: "Ava Patel", contact_user_id: "classmate-3", voted_for_profile_picture_url: "../assets/app/pencil-clipboard.webp", presented_options: [] });
         if (sort === "hottest") items.sort((left, right) => Number(right.reaction_count || 0) - Number(left.reaction_count || 0));
         return items;
     }
@@ -855,9 +971,14 @@ export class DemoAPI {
             full_reveal_aura_cost: 1000,
             max_full_reveals_per_week: 2,
             god_mode_price: 6.99,
+            enable_god_mode_ugc_program: query.get("ugc") !== "0",
+            god_mode_invite_friend_goal: 5,
             global_visibility_boost_cost: 400,
             targeted_visibility_boost_cost: 200,
             enable_tbh_requests: true,
+            // QuestionDetailShareRow reads these (?snapchatshare=0 shows the expanded Instagram/TikTok row).
+            enable_share_on_snapchat: new URLSearchParams(location.search).get("snapchatshare") !== "0",
+            enable_share_on_tiktok: true,
             enable_delete_account: true,
             enable_chats: true,
             enable_web_chats: true,
@@ -869,6 +990,10 @@ export class DemoAPI {
             enable_web_calls: this.demoCallsEnabled,
             enable_web_comments: new URLSearchParams(location.search).get("comments") !== "0",
             enable_vault: new URLSearchParams(location.search).get("vault") !== "0",
+            enable_invite_after_vote: new URLSearchParams(location.search).get("contacts") === "1",
+            enable_invite_suggestions: true,
+            enable_web_phone_login: query.get("phonelogin") !== "0",
+            enable_sms_opt_in_prompt: query.get("smsoptin") !== "0",
         };
     }
 
@@ -969,8 +1094,19 @@ export class DemoAPI {
         if (!chat) throw new Error("Chat not found");
         return { chat: structuredClone(chat), members: structuredClone(this.chatMembers[chatId] || []) };
     }
+    async getSayHiSuggestions() {
+        return { items: structuredClone(this.sayHiSuggestions || []) };
+    }
+
+    async acknowledgeMissedCall(_userId, callId) {
+        const chat = this.chats.find((item) => item.unacknowledged_missed_call_id === callId);
+        if (chat) chat.unacknowledged_missed_call_id = null;
+    }
+
     async createChat(_userId, memberIds, name) {
-        const id = `chat-${Date.now()}`;
+        const existing = memberIds.length === 1 && !name && this.chats.find((chat) => chat.membership_status === "accepted" && !chat.name && Number(chat.accepted_count) + Number(chat.pending_count) === 2 && chat.member_previews?.[0]?.user_id === memberIds[0]);
+        if (existing) return structuredClone(existing);
+        const id = `chat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
         const members = this.classmates.filter((person) => memberIds.includes(person.user_id));
         const chat = { id, display_name: name || displayDemoName(members[0]), name: name || null, status: "active", owner_user_id: "demo-user", membership_id: `membership-${id}`, membership_status: "accepted", role: "owner", accepted_count: members.length + 1, pending_count: 0, moment_streak: 0, today_memento_count: 0, today_memento_eligible_count: members.length + 1, has_posted_today_memento: false, is_memento_eligible_today: true, member_cap: 50, unread_count: 0, regular_unread_count: 0, last_room_sequence: 0, last_read_sequence: 0, notification_level: "all", member_previews: members, last_message_body: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
         this.chats.unshift(chat);
@@ -1340,12 +1476,23 @@ export class DemoAPI {
         return { completed: false, subscribed: false };
     }
 
+    // ?godmodebilling=past_due: the web payment failed (God Mode off, card to fix).
     async getGodModeBilling() {
+        const pastDue = new URLSearchParams(location.search).get("godmodebilling") === "past_due";
+        const stripe = this.demoGodMode && this.demoGodModeProvider === "stripe";
         return {
-            subscribed: this.demoGodMode,
-            provider: this.demoGodMode ? this.demoGodModeProvider : "none",
+            subscribed: this.demoGodMode && !pastDue,
+            provider: pastDue ? "none" : this.demoGodMode ? this.demoGodModeProvider : "none",
+            expires_at: this.demoGodMode ? ago(-4 * 24 * 60) : null,
+            stripe_status: pastDue ? "past_due" : stripe ? "active" : null,
             cancel_at_period_end: false,
+            manage: pastDue ? "stripe_portal" : null,
+            web_checkout: { available: !this.demoGodMode, reason: this.demoGodMode ? "subscribed" : null, price_label: this.demoGodMode ? null : "$6.99/week", price_cents: 699, price_interval: "week" },
         };
+    }
+
+    async createGodModeBillingPortal() {
+        return { url: "https://billing.stripe.com/demo" };
     }
 
     async getGodModeRetentionOffer() {
@@ -1468,7 +1615,8 @@ export class DemoAPI {
         this.anonymousInbox.questions = this.anonymousInbox.questions.filter((item) => item.id !== questionId);
     }
 
-    async requestAccountDeletion() {
+    async requestAccountDeletion(_userId, { hideFromPolls = false } = {}) {
+        this.lastDeletionHideFromPolls = hideFromPolls;
         const requestedAt = new Date();
         const scheduledFor = new Date(requestedAt.getTime() + 5 * 86_400_000);
         this.deletionRequestedAt = requestedAt.toISOString();
@@ -1477,6 +1625,7 @@ export class DemoAPI {
             message: "Account deletion scheduled.",
             requested_at: requestedAt.toISOString(),
             scheduled_for: scheduledFor.toISOString(),
+            hidden_from_polls: hideFromPolls === true,
         };
     }
 
@@ -1484,6 +1633,29 @@ export class DemoAPI {
         this.deletionRequestedAt = null;
         this.user.deletion_requested_at = null;
         return { message: "Account deletion cancelled." };
+    }
+
+    // Settings → Notifications. ?notifoff=chats,reminders starts those off;
+    // ?notiffail=1 makes every save fail (the switch flips back).
+    async getNotificationPreferences() {
+        this.notificationCategories ||= this.initialNotificationCategories();
+        return { user_id: "demo-user", soft_prompt_shown_count: 0, categories: { ...this.notificationCategories } };
+    }
+
+    async updateNotificationCategories(changes) {
+        this.notificationCategories ||= this.initialNotificationCategories();
+        this.notificationCategoryUpdates = [...(this.notificationCategoryUpdates || []), { ...changes }];
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        if (new URLSearchParams(location.search).get("notiffail") === "1") throw new Error("Couldn't reach Valid.");
+        for (const key of ["votes", "chats", "activity", "reminders"]) {
+            if (typeof changes[key] === "boolean") this.notificationCategories[key] = changes[key];
+        }
+        return { user_id: "demo-user", soft_prompt_shown_count: 0, categories: { ...this.notificationCategories } };
+    }
+
+    initialNotificationCategories() {
+        const off = new Set(String(new URLSearchParams(location.search).get("notifoff") || "").split(",").filter(Boolean));
+        return Object.fromEntries(["votes", "chats", "activity", "reminders"].map((key) => [key, !off.has(key)]));
     }
 
 }
