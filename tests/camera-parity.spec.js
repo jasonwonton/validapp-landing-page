@@ -329,6 +329,8 @@ test.describe("chat camera capture", () => {
 
         await dialog.locator(".chat-media-publish").click();
         await expect(dialog).toBeHidden();
+        // The camera closes on queue; the send itself follows in the background.
+        await expect.poll(() => page.evaluate(() => sentPayloads.length)).toBeGreaterThan(0);
         const overlay = (await page.evaluate(() => sentPayloads.at(-1))).media_text_overlay;
         expect(overlay.overlays).toHaveLength(2);
         expect(overlay).toMatchObject({ text: "After practice", x: 0.5 });

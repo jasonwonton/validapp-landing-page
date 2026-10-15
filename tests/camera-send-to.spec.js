@@ -169,9 +169,27 @@ test.describe("Camera tab and Send to", () => {
         const send = camera.locator(".chat-media-publish");
         await expect(send).toBeEnabled();
         await expect(camera.locator("[data-send-to-chip]")).toBeHidden();
-        await expect(camera.locator("[data-chat-view-once]")).toBeHidden();
         await expect(camera.getByRole("button", { name: "Save" })).toBeVisible();
+        // Stickers open with no chat behind the camera.
+        await camera.getByRole("button", { name: "Open My Stickers" }).click();
+        const stickers = page.getByRole("dialog", { name: "My Stickers" });
+        await expect(stickers).toBeVisible();
+        await expect(stickers.getByText("Choose a sticker to add to this photo.")).toBeVisible();
+        await stickers.getByRole("button", { name: "Close" }).click();
+        await expect(stickers).toBeHidden();
+        // ①/∞ is on this camera too: Keep in chat sends chats that stay.
+        const viewOnce = camera.getByRole("switch", { name: "View once" });
+        await expect(viewOnce).toHaveAttribute("aria-checked", "true");
+        await expect(send).toContainText("View once");
+        await viewOnce.click();
+        await expect(viewOnce).toHaveAttribute("aria-checked", "false");
+        await expect(send).toContainText("Keep in chat");
         await shot(page, "07-shoot-first-review");
+        // Words and arrow sit together in the middle of the pill; Save lines up with it.
+        const pill = await send.boundingBox(), title = await send.locator(".send-pill-copy").boundingBox(), arrow = await send.locator("svg").boundingBox();
+        expect(Math.abs((title.x + arrow.x + arrow.width) / 2 - (pill.x + pill.width / 2))).toBeLessThan(3);
+        const circle = await camera.locator("[data-save-chat-media] .review-save-circle").boundingBox();
+        expect(Math.abs((circle.y + circle.height / 2) - (pill.y + pill.height / 2))).toBeLessThan(2);
         await send.click();
 
         const sheet = page.getByRole("dialog", { name: "Send to" });
@@ -194,6 +212,11 @@ test.describe("Camera tab and Send to", () => {
         await sheet.getByRole("button", { name: "Weekend Crew", exact: true }).click();
         await expect(sheet.locator(".send-to-send")).toHaveText("Post + send to 3");
         await expect(sheet.locator(".send-to-summary")).toHaveText("My Story, Maya Chen +2");
+        await expect(sheet.locator(".send-to-caption")).toHaveText("Stays in the chats");
+        const bar = await sheet.locator(".send-to-send").boundingBox(), label = await sheet.locator(".send-to-send-title").evaluate((node) => {
+            const range = document.createRange(); range.selectNodeContents(node); const box = range.getBoundingClientRect(); return { x: box.x, width: box.width };
+        });
+        expect(Math.abs(label.x + label.width / 2 - (bar.x + bar.width / 2))).toBeLessThan(3);
         await shot(page, "10-post-and-send-to-3");
         await sheet.locator(".send-to-send").click();
         await expect(sheet).toBeHidden();
@@ -201,7 +224,7 @@ test.describe("Camera tab and Send to", () => {
         await expect.poll(() => page.evaluate(() => sends.created)).toEqual([["classmate-1"]]);
         await expect.poll(() => page.evaluate(() => sends.stories.length)).toBe(1);
         await expect.poll(() => page.evaluate(() => sends.chats.length)).toBe(3);
-        expect(await page.evaluate(() => sends.chats.every((send) => send.viewOnce === true))).toBe(true);
+        expect(await page.evaluate(() => sends.chats.every((send) => send.viewOnce === false))).toBe(true);
     });
 
     test("the Story rail + opens the camera with My Story ticked, tags classmates, and shows Posting… then Tap to retry", async ({ page }) => {

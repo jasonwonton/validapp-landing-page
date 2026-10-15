@@ -1199,3 +1199,19 @@
 .camera-mode-bar button.selected::after { content: ""; position: absolute; left: 50%; bottom: 0; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: var(--peach); }
 .chat-sheet.is-capturing:has(.camera-mode-bar:not([hidden])) .live-camera-hint { visibility: hidden; }
 .chat-sheet.is-capturing:has(.camera-mode-bar:not([hidden])) .live-camera-controls { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 40px); }
+
+/* Review rows line up on the circles: the Save label hangs below its circle
+   instead of making the button taller, and the pill keeps its words and arrow
+   together in the middle (CameraReviewControls.actionRow). */
+.review-save { position: relative; }
+.chat-camera-sheet .chat-media-review-actions > .review-save, .memento-sheet .memento-review-actions .review-save { align-self: center; }
+.review-save small { position: absolute; top: calc(100% + 4px); left: 50%; transform: translateX(-50%); white-space: nowrap; }
+.chat-camera-sheet .chat-media-review-actions > .chat-media-publish.send-pill { justify-content: center; gap: 12px; }
+.chat-camera-sheet .chat-media-review-actions > .chat-media-publish .send-pill-copy { justify-items: center; text-align: center; }
+.chat-camera-sheet .chat-media-review-actions, .chat-camera-sheet:has(.review-stage) .chat-media-review-actions { align-items: center; padding-bottom: 18px; }
+.memento-sheet .memento-review-actions { align-items: center; padding-bottom: 18px; }
+/* The chip's name gets room before the pill shrinks to its minimum. */
+.chat-camera-sheet .chat-media-review-actions, .chat-camera-sheet:has(.review-stage) .chat-media-review-actions { grid-template-columns: 56px minmax(0, 1.15fr) minmax(118px, 1fr); }
+.chat-camera-sheet .chat-media-review-actions > .chat-media-publish.send-pill { min-width: 118px; }
+.review-send-chip strong { max-width: none; min-width: 0; flex: 1; }
+.chat-camera-sheet.is-shoot-first .chat-media-review-actions, .chat-camera-sheet.is-shoot-first:has(.review-stage) .chat-media-review-actions { grid-template-columns: 56px minmax(0, 1fr); }
