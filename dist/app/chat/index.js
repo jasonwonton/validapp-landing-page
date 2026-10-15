@@ -2947,8 +2947,9 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         const chat = shootFirst ? null : store.state.chats.find(item => item.id === store.state.activeChatId) || store.state.detail?.chat;
         const chip = $('[data-send-to-chip]');
         chip.hidden = !chat;
-        $('.chat-media-publish .send-pill-subtitle').hidden = Boolean(shootFirst);
-        $('[data-chat-view-once]').hidden = Boolean(shootFirst);
+        // The ①/∞ toggle stays on every camera, so a shoot-first send can keep in chat too.
+        $('.chat-media-publish .send-pill-subtitle').hidden = false;
+        $('[data-chat-view-once]').hidden = false;
         if (!chat) return;
         chip.querySelector('strong').textContent = chat.display_name;
         chip.querySelector('.review-chip-avatar').innerHTML = conversationAvatarMarkup(chat);
@@ -2997,9 +2998,11 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     }
 
     function openStickerLibrary({ photo = false } = {}) {
-        if (!store.state.activeChatId || chatAccessUnavailable()) return;
+        // Stickers on a photo need no open chat (the Camera tab has none).
+        if ((!photo && !store.state.activeChatId) || chatAccessUnavailable()) return;
         photoStickerMode = photo;
         $('[data-sticker-library-dialog] > section > header strong').textContent = photo ? 'My Stickers' : 'Send a Sticker';
+        $('[data-sticker-library-dialog]').setAttribute('aria-label', photo ? 'My Stickers' : 'Send a sticker');
         $('[data-sticker-library-dialog] > section > p').textContent = photo ? 'Choose a sticker to add to this photo.' : 'Tap a sticker to send it.';
         $('.chat-sticker-status').textContent = '';
         $('[data-sticker-library-dialog]').classList.remove('is-editing');
@@ -3362,7 +3365,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     }
 
     // Shoot-first "Send" (CameraFirstFlowView): pick in Send to, queue every
-    // destination, close the camera. Chats always open once.
+    // destination, close the camera. Chats open once unless ∞ was chosen.
     async function sendShootFirst() {
         const context = shootFirst;
         const media = selectedChatMedia;
@@ -3380,14 +3383,14 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         if (!payload || media !== selectedChatMedia || shootFirst !== context) return;
         const { openSendTo } = await loadSendTo();
         const choice = await openSendTo({
-            api, userId: userId(), config: getConfig(), mode: "capture",
+            api, userId: userId(), config: getConfig(), mode: "capture", chatsViewOnce: chatViewOnce, showsChatsCaption: true,
             startsWithStory: context.startsWithStory, allowsStory: storiesEnabled(), allowsChats: chatsEnabled(), haptic: feedback,
         });
         if (!choice || media !== selectedChatMedia || shootFirst !== context) return;
         chatMediaPublishing = true;
         setChatMediaWorking(true);
         const { queueCapture, queueFailureMessage } = await loadCaptureQueue();
-        const failed = await queueCapture({ api, userId: userId(), media: payload, story: choice.story, tags: choice.tags, chatIds: choice.chatIds, viewOnce: true, showToast });
+        const failed = await queueCapture({ api, userId: userId(), media: payload, story: choice.story, tags: choice.tags, chatIds: choice.chatIds, viewOnce: chatViewOnce, showToast });
         chatMediaPublishing = false;
         if (choice.chatIds.length) successHaptic?.();
         if (failed.story || failed.chats) {
