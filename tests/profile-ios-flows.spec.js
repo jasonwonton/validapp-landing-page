@@ -79,8 +79,9 @@ test("an account without a passkey sees the CTA above Sign out, and Sign out war
     const warning = page.getByRole("dialog", { name: "Don't Lose Your Account" });
     await expect(warning).toContainText("If you lose access to this phone number after signing out");
     const buttons = warning.locator(".ui-sheet-actions button");
-    await expect(buttons.nth(0)).toHaveText("Set Up Passkey");
-    await expect(buttons.nth(1)).toHaveText("Sign Out Anyway");
+    // ConfirmationModal: Cancel ("Sign Out Anyway") left, Set Up Passkey right.
+    await expect(buttons.nth(0)).toHaveText("Sign Out Anyway");
+    await expect(buttons.nth(1)).toHaveText("Set Up Passkey");
     await warning.getByRole("button", { name: "Set Up Passkey" }).click();
     await expect(cta).toBeHidden();
 });
@@ -160,7 +161,7 @@ test("deletion without a passkey: Set Up Passkey is the main button", async ({ p
     await page.locator("#profileDialog").getByRole("button", { name: "Delete account" }).click();
     const warning = page.getByRole("dialog", { name: "Don't Lose Your Account" });
     await expect(warning).toContainText("If you delete the app and lose access to this phone number during the 5-day countdown");
-    await expect(warning.locator(".ui-sheet-actions button")).toHaveText(["Set Up Passkey", "Delete Anyway"]);
+    await expect(warning.locator(".ui-sheet-actions button")).toHaveText(["Delete Anyway", "Set Up Passkey"]);
 });
 
 test("Invite Friends, Purchases and the School card use iOS copy", async ({ page }) => {

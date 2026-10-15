@@ -936,6 +936,8 @@ export class DemoAPI {
             enable_web_calls: this.demoCallsEnabled,
             enable_web_comments: new URLSearchParams(location.search).get("comments") !== "0",
             enable_vault: new URLSearchParams(location.search).get("vault") !== "0",
+            enable_invite_after_vote: new URLSearchParams(location.search).get("contacts") === "1",
+            enable_invite_suggestions: true,
             enable_web_phone_login: query.get("phonelogin") !== "0",
             enable_sms_opt_in_prompt: query.get("smsoptin") !== "0",
         };
