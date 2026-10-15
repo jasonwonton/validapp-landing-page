@@ -131,3 +131,10 @@
     .vault-pin-dots i { transition: none; }
     .vault-screen:not(.hidden) { animation: none; }
 }
+/* A video still converting for browsers (video_state "processing"), as the Story viewer shows it. */
+.vault-media-state { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 8px; padding: 24px; background: rgba(0, 0, 0, .45); color: #fff; text-align: center; pointer-events: none; }
+.vault-media-state strong { font-size: 18px; }
+.vault-media-state small { max-width: 280px; color: rgba(255, 255, 255, .8); font-size: 14px; }
+.vault-media-spinner { display: none; width: 28px; height: 28px; border: 3px solid rgba(255, 255, 255, .35); border-top-color: #fff; border-radius: 50%; animation: vault-spin .8s linear infinite; }
+.vault-media-state.spinning .vault-media-spinner { display: block; }
+@media (prefers-reduced-motion: reduce) { .vault-media-spinner { animation-duration: 2.4s; } }
