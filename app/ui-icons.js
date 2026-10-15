@@ -45,6 +45,18 @@ const paths = {
     heart: '<path d="M12 21 3.6 12.6C-1.3 7.6 5.4 1 10.3 5.9L12 7.6l1.7-1.7c4.9-4.9 11.6 1.7 6.7 6.7Z"/>',
     'shield-check': '<path d="M12 2 3 6v6c0 5 9 10 9 10s9-5 9-10V6Z"/><path d="m8 12 3 3 5-6"/>',
     'person-question': '<path d="M17 20a9 9 0 1 1 4-8M5 19c0-6 10-6 10-1"/><circle cx="11" cy="9" r="3"/><path d="M18 15a2 2 0 1 1 3 1.7c-1 .5-1 1-1 1.3m0 3v.1"/>',
+    // Play and the weekly game (PlayLockedView, InviteFriendsView, NominationSearchView, EasterEggGameView).
+    // SF message.fill: a filled round speech bubble with its tail at the lower left.
+    'message-fill': '<path fill="currentColor" stroke="none" d="M12 3.2c5.4 0 9.8 3.6 9.8 8.1s-4.4 8.1-9.8 8.1c-1 0-2-.1-2.9-.4-1.4 1.1-3.3 1.8-5.5 1.8.9-.9 1.6-2 1.8-3.4C3.3 16 2.2 13.8 2.2 11.3c0-4.5 4.4-8.1 9.8-8.1Z"/>',
+    // SF person.2.fill: two filled people, the back one smaller.
+    'person-2-fill': '<g fill="currentColor" stroke="none"><circle cx="9" cy="7.5" r="3.6"/><path d="M2 19.5c0-3.6 3.1-6.2 7-6.2s7 2.6 7 6.2c0 .6-.4 1-1 1H3c-.6 0-1-.4-1-1Z"/><circle cx="17" cy="8.5" r="2.8"/><path d="M17.6 12.9c2.6.3 4.4 2.3 4.4 4.9 0 .5-.4.9-.9.9h-3.3c-.1-2.3-1.1-4.3-2.8-5.6.8-.2 1.7-.3 2.6-.2Z"/></g>',
+    'person-slash': '<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 13-6.2M3 3l18 18"/>',
+    'person-badge-plus': '<circle cx="10" cy="8" r="4"/><path d="M3 21v-1a7 7 0 0 1 11-5.7M19 14v6M16 17h6"/>',
+    gamecontroller: '<path d="M7.5 7h9a5 5 0 0 1 4.8 6.4l-1 3.4a2.6 2.6 0 0 1-4.4 1L14.4 16H9.6l-1.5 1.8a2.6 2.6 0 0 1-4.4-1l-1-3.4A5 5 0 0 1 7.5 7Z"/><path d="M8 10v3M6.5 11.5h3"/><circle cx="15.5" cy="10.5" r=".6" fill="currentColor"/><circle cx="17.2" cy="12.5" r=".6" fill="currentColor"/>',
+    sparkles: '<path fill="currentColor" stroke="none" d="M10 2.5c.6 3.9 2.6 5.9 6.5 6.5-3.9.6-5.9 2.6-6.5 6.5-.6-3.9-2.6-5.9-6.5-6.5 3.9-.6 5.9-2.6 6.5-6.5ZM18 13c.3 2 1.3 3 3.3 3.3-2 .3-3 1.3-3.3 3.3-.3-2-1.3-3-3.3-3.3 2-.3 3-1.3 3.3-3.3ZM5.5 15.5c.2 1.4.9 2.1 2.3 2.3-1.4.2-2.1.9-2.3 2.3-.2-1.4-.9-2.1-2.3-2.3 1.4-.2 2.1-.9 2.3-2.3Z"/>',
+    'arrow-right': '<path d="M4 12h15m-6-6 6 6-6 6"/>',
+    // SF pause.fill: two rounded filled bars.
+    'pause-fill': '<rect x="6" y="4.5" width="4" height="15" rx="1.2" fill="currentColor" stroke="none"/><rect x="14" y="4.5" width="4" height="15" rx="1.2" fill="currentColor" stroke="none"/>',
     // Original drawing in the spirit of SF Symbols flame.fill (StreakCounterView.swift).
     fire: '<path fill="currentColor" stroke="none" fill-rule="evenodd" d="M12.6 1.6C13.2 4.6 15.2 6.6 16.9 8.6C18.8 10.8 20 13 20 15.3C20 19.6 16.4 22.6 12 22.6C7.6 22.6 4 19.6 4 15.3C4 12.6 5.3 10.4 7 8.6C7.2 10.1 7.9 11.3 9 12C9 7.8 10.6 4.4 12.6 1.6ZM12 12.4C12.7 14.4 15.4 15.7 15.4 18.4C15.4 20.3 13.9 21.4 12 21.4C10.1 21.4 8.6 20.3 8.6 18.4C8.6 16.2 10.9 15 12 12.4Z"/>',
     group: '<circle cx="12" cy="7" r="3" fill="currentColor" stroke="none"/><circle cx="4.5" cy="9" r="2.5" fill="currentColor" stroke="none"/><circle cx="19.5" cy="9" r="2.5" fill="currentColor" stroke="none"/><path d="M6 21v-3a6 6 0 0 1 12 0v3ZM1 20v-3a4 4 0 0 1 4-4M23 20v-3a4 4 0 0 0-4-4"/>',

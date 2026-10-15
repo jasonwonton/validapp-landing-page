@@ -4,6 +4,8 @@ import { createCameraGame, CameraEvidence } from './scoring.js';
 import { WristTracker } from './tracker.js';
 import { cameraGameSupport } from './support.js';
 import { GameRecording, recordingType } from './recording.js';
+import { uiIcon } from '../ui-icons.js';
+import { shareResultFile, snapchatGlyph } from './share.js';
 
 const cssURL=new URL('./styles.css',import.meta.url).href;
 const text=(root,selector,value)=>{ root.querySelector(selector).textContent=String(value ?? ''); };
@@ -58,11 +60,11 @@ export function createCameraWeeklyGame({api,onClose=()=>{}}) {
         if (!document.querySelector('link[data-weekly-game-css]')) { const link=document.createElement('link');link.rel='stylesheet';link.href=cssURL;link.dataset.weeklyGameCss='';document.head.append(link); }
         const current=++generation;abort=new AbortController();phase='loading';
         dialog=document.createElement('dialog');dialog.className='weekly-game-dialog';dialog.setAttribute('aria-label','Weekly game');
-        dialog.innerHTML=`<header class="weekly-game-header"><button type="button" data-close aria-label="Close weekly game">‹ <span>Inbox</span></button><strong>Weekly game</strong><button type="button" data-leaderboard aria-label="School leaderboard">Leaderboard</button></header>
+        // The iOS camera game: Close returns to the game home, where the leaderboard lives.
+        dialog.innerHTML=`<header class="weekly-game-header"><button type="button" data-close aria-label="Close game">${uiIcon('close')}</button><strong data-header-title>Weekly game</strong><span class="weekly-game-header-spacer" aria-hidden="true"></span></header>
         <div class="weekly-game-content"><section data-intro class="weekly-game-intro"><span class="weekly-game-eyebrow">THIS WEEK’S CHALLENGE</span><h1 data-title>Loading game…</h1><img data-instruction hidden alt="How to play the hand challenge" decoding="async" width="220" height="220"><p data-instructions></p><p class="weekly-game-practice">Practice on web · leaderboard scores stay on iOS for now</p></section>
-        <div data-camera class="weekly-game-camera" hidden><video data-source class="weekly-game-source" muted playsinline></video><canvas data-canvas width="720" height="1280" aria-label="Live camera with game score"></canvas><div class="weekly-game-tracking" data-tracking role="status">Keep both hands in view</div></div>
-        <section data-result class="weekly-game-result" hidden><span class="weekly-game-eyebrow">YOUR SCORE · PRACTICE</span><h2 data-final-score></h2><p>How many can your friends get?</p><video data-replay controls playsinline aria-label="Your challenge video"></video><div class="weekly-game-actions"><button type="button" data-share>Share video</button><a data-download download>Download video</a><button type="button" data-again>Play again</button></div></section>
-        <section data-rankings class="weekly-game-rankings" hidden><h2>School leaderboard</h2><p data-ranking-note></p><ol data-ranking-list></ol><button type="button" data-back>Back to game</button></section>
+        <div data-camera class="weekly-game-camera" hidden><video data-source class="weekly-game-source" muted playsinline></video><canvas data-canvas width="720" height="1280" aria-label="Live camera with game score"></canvas><div class="weekly-game-tracking" data-tracking role="status">Looking for hands…</div></div>
+        <section data-result class="weekly-game-result" hidden><span class="weekly-game-eyebrow">PRACTICE</span><h2 data-final-score></h2><video data-replay controls playsinline aria-label="Your challenge video"></video><div class="weekly-game-share-row"><button type="button" class="weekly-game-snapchat" data-share-snapchat>${snapchatGlyph()}<span>Share on Snapchat</span></button></div><div class="weekly-game-share-row secondary"><a class="weekly-game-save" data-download download>Save video</a><button type="button" class="weekly-game-more" data-share>More…</button></div><div class="weekly-game-result-actions"><button type="button" data-leaderboard>Leaderboard</button><button type="button" data-again>Play again</button></div></section>
         <p data-status class="weekly-game-status" role="status" aria-live="polite">Loading this week’s game…</p>
         <div class="weekly-game-controls"><label data-audio-label><input data-audio type="checkbox" checked> Include my microphone</label><button type="button" data-enable disabled>Enable camera</button><button type="button" data-start hidden disabled>Start</button><small data-privacy>Your camera stays on this device. You choose whether to share your video.</small></div></div>`;
         document.body.append(dialog);dialog.showModal();
@@ -70,15 +72,15 @@ export function createCameraWeeklyGame({api,onClose=()=>{}}) {
         dialog.querySelector('[data-close]').onclick=()=>close();dialog.addEventListener('cancel',event=>{event.preventDefault();close();});
         dialog.querySelector('[data-enable]').onclick=enableCamera;dialog.querySelector('[data-start]').onclick=startRound;
         dialog.querySelector('[data-again]').onclick=()=>{revoke();show(dialog,'[data-result]',false);show(dialog,'[data-intro]',true);enableCamera();};
-        dialog.querySelector('[data-share]').onclick=shareVideo;
-        dialog.querySelector('[data-leaderboard]').onclick=leaderboard;
-        dialog.querySelector('[data-back]').onclick=()=>{show(dialog,'[data-rankings]',false);show(dialog,phase==='result'?'[data-result]':'[data-intro]',true);show(dialog,'.weekly-game-controls',phase!=='result');status('');};
+        dialog.querySelector('[data-share]').onclick=()=>shareVideo('more');
+        dialog.querySelector('[data-share-snapchat]').onclick=()=>shareVideo('snapchat');
+        dialog.querySelector('[data-leaderboard]').onclick=()=>close();
         document.addEventListener('visibilitychange',visibility);window.addEventListener('pagehide',pagehide);window.addEventListener('popstate',popstate);
         try {
             const featured=providedFeatured || await api.getWeeklyGame({signal:abort.signal});
             if(current!==generation)return;
             release=featured.release;
-            text(dialog,'[data-title]',release?.title || 'Weekly game');
+            text(dialog,'[data-title]',release?.title || 'Weekly game');text(dialog,'[data-header-title]',release?.title || 'Weekly game');
             pkg=await downloadPackage(release,AbortSignal.any([abort.signal,AbortSignal.timeout(30000)]));
             if(current!==generation)return;
             overlays=await Promise.all((pkg.presentation.overlays || []).slice(0,4).map(async style=>{
@@ -113,7 +115,7 @@ export function createCameraWeeklyGame({api,onClose=()=>{}}) {
         if (!dialog || ['preparing','countdown','playing','reaction','finishing'].includes(phase))return;
         if (document.querySelector('.call-overlay[open]')) { status('Finish your call before opening the camera game.'); return; }
         const current=++generation;phase='preparing';finishing=false;stopCapture();revoke();lastPair=null;lastPairTime=-Infinity;lastHandsTime=-Infinity;
-        show(dialog,'[data-rankings]',false);show(dialog,'.weekly-game-controls',true);show(dialog,'[data-enable]',true);show(dialog,'[data-start]',false);
+        show(dialog,'.weekly-game-controls',true);show(dialog,'[data-enable]',true);show(dialog,'[data-start]',false);
         const button=dialog.querySelector('[data-enable]');button.disabled=true;button.textContent='Preparing camera…';status('Allow camera access. Hand tracking may take a moment to download the first time.');
         const wantsAudio=dialog.querySelector('[data-audio]').checked;
         // Construct/resume in the user gesture for mobile audio policies.
@@ -176,7 +178,8 @@ export function createCameraWeeklyGame({api,onClose=()=>{}}) {
         if(phase==='reaction' && now-playStart>=(rules.duration_seconds+rules.reaction_seconds)*1000){void finishRound(current);return;}
         const visible=trackingVisible(now);
         const start=dialog.querySelector('[data-start]');start.disabled=!visible;
-        text(dialog,'[data-tracking]',visible?'Hands in view':pkg.presentation.copy?.tracking || 'Keep both hands in view');
+        // EasterEggCameraGameView: "Hand found · Ready" / "Looking for hands…" unless the package words it.
+        text(dialog,'[data-tracking]',visible?(handsNeeded()===1?'Hand found · Ready':'Hands in view'):pkg.presentation.copy?.tracking || 'Looking for hands…');
         dialog.querySelector('[data-tracking]').classList.toggle('ready',Boolean(visible));
         if(['ready','countdown','playing'].includes(phase))void tracker.capture(dialog.querySelector('[data-source]'),now,rules.camera_tracking?.sample_rate_hz || 30);
         draw(now);
@@ -239,28 +242,11 @@ export function createCameraWeeklyGame({api,onClose=()=>{}}) {
             show(dialog,'[data-camera]',false);show(dialog,'[data-result]',true);show(dialog,'.weekly-game-controls',false);status('Practice complete. Your video is ready to share.');
         } catch(error) {if(current===generation)interrupt(error.message);}
     }
-    async function shareVideo() {
+    async function shareVideo(target) {
         const file=dialog?.videoFile;if(!file)return;
-        const button=dialog.querySelector('[data-share]');button.disabled=true;
-        try {
-            if(navigator.canShare?.({files:[file]}))await navigator.share({files:[file],title:release.title,text:`I got ${game().score} on ${release.title}! Play on validapp.lol`});
-            else status('Download your video, then upload it to Snapchat, Instagram, or TikTok.');
-        } catch(error) {if(error.name!=='AbortError')status('Sharing could not open. Use Download video, then share it from your photos or files.');}
-        finally {if(dialog)button.disabled=false;}
-    }
-    async function leaderboard() {
-        if(!release || ['loading','preparing','countdown','playing','reaction','finishing'].includes(phase))return;
-        if(phase==='ready'){generation++;stopCapture();phase='intro';show(dialog,'[data-camera]',false);show(dialog,'[data-start]',false);show(dialog,'[data-enable]',true);dialog.querySelector('[data-enable]').disabled=false;dialog.querySelector('[data-enable]').textContent='Enable camera';}
-        const current=generation;show(dialog,'[data-intro]',false);show(dialog,'[data-result]',false);show(dialog,'.weekly-game-controls',false);show(dialog,'[data-rankings]',true);status('Loading leaderboard…');
-        try {
-            let result=await api.getWeeklyGameLeaderboard(release.id,{signal:abort.signal});if(current!==generation || !dialog)return;
-            // The native leaderboard requires its one-time discovery record,
-            // including when discovery is disabled. This never starts a run.
-            if(result.unlocked===false){await api.unlockWeeklyGame({signal:abort.signal});if(current!==generation || !dialog)return;result=await api.getWeeklyGameLeaderboard(release.id,{signal:abort.signal});if(current!==generation || !dialog)return;}
-            const list=dialog.querySelector('[data-ranking-list]');list.replaceChildren();
-            for(const entry of (result.entries||[]).slice(0,100)){const li=document.createElement('li'),name=document.createElement('span'),score=document.createElement('strong');name.textContent=`${entry.rank}. ${entry.name}`;score.textContent=String(entry.score);li.append(name,score);list.append(li);}
-            text(dialog,'[data-ranking-note]',result.entries?.length?'This week’s scores. Web practice rounds don’t affect rankings yet.':'No scores yet this week. Web rounds are practice for now.');status('');
-        } catch(error){if(current===generation)status(error.message || 'Could not load the leaderboard.');}
+        const buttons=[...dialog.querySelectorAll('[data-share],[data-share-snapchat]')];buttons.forEach(b=>{b.disabled=true;});
+        try {const message=await shareResultFile(file,{target,title:release.title,text:`I got ${game().score} on ${release.title}! Play on validapp.lol`});if(message)status(message);}
+        finally {if(dialog)buttons.forEach(b=>{b.disabled=false;});}
     }
     return {open,close};
 }
