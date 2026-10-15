@@ -48,5 +48,25 @@
     "width": 174,
     "height": 174,
     "conversion": "resize 174 174 (3x of 58pt share icon); cwebp"
+  },
+  {
+    "source": "ios/Six7/Six7/Assets.xcassets/memento_camera.imageset/memento_camera.png",
+    "sourceSHA256": "22aaa4d85c5cfed8e8cbc268f07f503a8391be03f88059172a3e1aac30754a9f",
+    "web": "assets/app/memento-camera.webp",
+    "webSHA256": "9e6a6a2ff13af98dbd0138fa41e51518f91f91a4db145fdaf57a536d421637c5",
+    "bytes": 6338,
+    "width": 144,
+    "height": 144,
+    "conversion": "cwebp -q 85 (native size)"
+  },
+  {
+    "source": "ios/Six7/Six7/Assets.xcassets/two_x.imageset/two_x.png",
+    "sourceSHA256": "959c34b2510ea5180a6eb66588e7b695616527d5d5c27244c616f010962625f5",
+    "web": "assets/app/two-x.webp",
+    "webSHA256": "f822c369c62e369dd9a60fc6d11861c5e31de5d83351a091da168cbba8ba72ba",
+    "bytes": 5412,
+    "width": 240,
+    "height": 240,
+    "conversion": "cwebp -q 85 (native size)"
   }
 ]
