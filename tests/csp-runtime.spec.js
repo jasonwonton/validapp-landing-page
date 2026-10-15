@@ -30,9 +30,8 @@ test("strict production CSP keeps dynamic app layout functional without inline s
     await expect.poll(() => page.evaluate(() => (
         getComputedStyle(document.documentElement).getPropertyValue("--visual-viewport-width").trim()
     ))).toMatch(/px$/);
-    await page.getByRole("button", { name: "Create an account" }).click();
-    await expect(page.getByRole("dialog", { name: "Create your Valid account" })).toBeVisible();
-    await page.keyboard.press("Escape");
+    // The age screen (sign-up) is the signed-out root, with sign-in over it.
+    await expect(page.locator("#signupDialog")).toBeVisible();
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     await page.getByRole("button", { name: /Weekend Crew/ }).click();

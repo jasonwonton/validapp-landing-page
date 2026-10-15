@@ -492,9 +492,11 @@ export class DemoAPI {
     }
 
     async resolveSchool(payload) {
-        const school = { id: 1000 + (this.resolvedSchools?.length || 0), name: payload.school_name, city: payload.city, state: payload.state, min_grade: 6, max_grade: 12 };
+        const existing = (this.nearbySchools || []).find((school) => school.name.toLowerCase() === String(payload.school_name || "").trim().toLowerCase());
+        if (existing) return { status: "duplicate", school: existing };
+        const school = { id: 1000 + (this.resolvedSchools?.length || 0), name: payload.school_name, city: payload.city || "Beverly Hills", state: payload.state || "CA", min_grade: payload.min_grade ?? 6, max_grade: payload.max_grade ?? 12 };
         this.resolvedSchools = [...(this.resolvedSchools || []), school];
-        return { school };
+        return { status: "created", school };
     }
 
     async getNearbySchools(zipCode, limit = 50) {
@@ -527,8 +529,21 @@ export class DemoAPI {
         return { available: /^[a-z0-9_]{3,30}$/.test(normalized) && !inappropriate && normalized !== "taken" };
     }
 
-    async checkPhoneRegistration() {
+    async checkPhoneRegistration(phoneNumber) {
+        // 4155550100 stands for a number that already has an account.
+        if (String(phoneNumber).endsWith("5550100")) return { exists: true, vote_count: 0, status: "existing_complete_account", has_profile: true };
         return { exists: false, vote_count: 3, status: "available", has_profile: false };
+    }
+
+    async requestLoginVerification(phoneNumber) {
+        // 4155550199 stands for a number that is not signed up.
+        if (String(phoneNumber).endsWith("5550199")) throw Object.assign(new Error("Account not found for this phone number."), { status: 404 });
+        return { resend_available_at: new Date(Date.now() + 30_000).toISOString(), attempts_remaining: 5, can_resend: false };
+    }
+
+    async confirmLoginVerification(_phoneNumber, code) {
+        if (code !== "123456") throw Object.assign(new Error("Invalid or expired verification code."), { status: 400 });
+        return this.demoLogin();
     }
 
     async demoSignup(payload) {
@@ -921,8 +936,8 @@ export class DemoAPI {
             enable_web_calls: this.demoCallsEnabled,
             enable_web_comments: new URLSearchParams(location.search).get("comments") !== "0",
             enable_vault: new URLSearchParams(location.search).get("vault") !== "0",
-            enable_invite_after_vote: new URLSearchParams(location.search).get("contacts") === "1",
-            enable_invite_suggestions: true,
+            enable_web_phone_login: query.get("phonelogin") !== "0",
+            enable_sms_opt_in_prompt: query.get("smsoptin") !== "0",
         };
     }
 

@@ -56,7 +56,8 @@ test("signed-out shell boots under the deployed response policy", async ({ page 
     await expect(page).toHaveTitle("Valid");
     await expect(page.getByRole("heading", { name: "Welcome Back" })).toBeVisible();
     await expect(page.getByRole("button", { name: /^sign in$/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Create an account" })).toBeVisible();
+    // The age screen (sign-up) sits under the sign-in sheet.
+    await expect(page.locator("#signupDialog")).toBeAttached();
     await expect(page.locator('meta[http-equiv="Content-Security-Policy"]')).toHaveCount(1);
     expect(pageErrors).toEqual([]);
 });

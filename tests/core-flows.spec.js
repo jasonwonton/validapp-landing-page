@@ -6,9 +6,18 @@ async function signInToDemo(page, query = "") {
     await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
 }
 
+async function openSignup(page) {
+    await page.goto("/app/?demo=1&signup=1");
+    const dialog = page.locator("#signupDialog");
+    await expect(dialog.getByRole("button", { name: "Get Started!" })).toBeVisible();
+    return dialog;
+}
+
 async function fillSignupThroughUsername(dialog, username = "taylor_j") {
     await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
     await dialog.locator('[data-signup-age="16"]').click();
+    await dialog.getByRole("button", { name: "Get Started!" }).click();
+    await dialog.getByRole("button", { name: "Choose Friends" }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("ZIP code").fill("90210");
     await expect(dialog.locator("[data-signup-school]")).toHaveCount(50);
@@ -26,23 +35,24 @@ async function fillSignupThroughUsername(dialog, username = "taylor_j") {
     await dialog.getByRole("button", { name: "Continue" }).click();
 }
 
-test("signed-out experience goes straight to the passkey actions", async ({ page }) => {
+test("signed-out experience offers the passkey sign-in sheet over the age screen", async ({ page }) => {
     await page.goto("/app/?demo=1");
     await expect(page.getByText("VALID, EVERYWHERE", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Your feed is ready.", { exact: true })).toHaveCount(0);
     await expect(page.getByText(/Use the same passkey as the Valid iPhone app/i)).toHaveCount(0);
     const signInButton = page.getByRole("button", { name: /^sign in$/i });
     await expect(signInButton).toBeVisible();
-    await expect(signInButton).toHaveText("Sign in with a passkey");
-    await expect(signInButton.locator("span")).toHaveCount(0);
+    await expect(signInButton).toHaveText(/^Sign in with (a passkey|Face ID)$/);
     await expect(page.getByText(/fingerprint or face stays on your device/i)).toHaveCount(0);
+    await expect(page.locator("#signupDialog")).toBeVisible();
 });
 
 test("authenticated users without a credential are prompted to enroll a passkey", async ({ page }) => {
     await signInToDemo(page, "&passkeys=0");
-    const enrollment = page.getByRole("dialog", { name: "Secure your Valid account" });
+    const enrollment = page.getByRole("dialog", { name: "Keep your account" });
     await expect(enrollment).toBeVisible();
-    await enrollment.getByRole("button", { name: "Create a passkey" }).click();
+    await expect(enrollment.getByText(/Create a passkey so you can always sign back in/)).toBeVisible();
+    await enrollment.getByRole("button", { name: "Create passkey" }).click();
     await expect(enrollment).toBeHidden();
     await page.getByRole("button", { name: "Profile", exact: true }).click();
     // SettingsView: the passkey CTA shows only while the account has no passkey.
@@ -50,56 +60,59 @@ test("authenticated users without a credential are prompted to enroll a passkey"
 });
 
 test("new users can complete passkey-only school onboarding", async ({ page }) => {
-    await page.goto("/app/?demo=1");
-    await page.getByRole("button", { name: "Create an account" }).click();
-    const dialog = page.getByRole("dialog");
+    const dialog = await openSignup(page);
     await fillSignupThroughUsername(dialog);
     await dialog.getByRole("radio", { name: "Non-binary" }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(dialog.getByRole("heading", { name: "Add a profile photo" })).toBeVisible();
-    await expect(dialog.getByText(/receive 2-3x more votes/i)).toBeVisible();
+    await expect(dialog.getByText(/Profiles with a photo get 2–3x more votes/i)).toBeVisible();
     await expect(dialog.getByText("No password. No phone number.", { exact: true })).toHaveCount(0);
     await expect(dialog.getByText("Choose from Library", { exact: true })).toBeVisible();
     await dialog.getByLabel(/Profile photo/).setInputFiles("assets/valid_logo.png");
     // Profile photos go through the iOS circle crop before they are used.
-    await page.locator(".avatar-crop-dialog").getByRole("button", { name: "Use photo" }).click();
+    const crop = page.locator(".avatar-crop-dialog");
+    await expect(crop.getByText("Choose your profile photo")).toBeVisible();
+    await crop.getByRole("button", { name: "Use photo" }).click();
     await expect(dialog.locator("#signupPhotoPreview img")).toHaveAttribute("src", /^blob:/);
     await dialog.getByRole("button", { name: "Continue" }).click();
+    await dialog.getByRole("button", { name: "Create passkey" }).click();
+    await dialog.getByRole("button", { name: "Let's Go!" }).click();
     await expect(page.locator("#appView")).toBeVisible();
-    const contacts = page.locator("#classmatesDialog");
-    if (await contacts.isVisible()) await contacts.getByRole("button", { name: "Close" }).click();
+    const friends = page.locator("#friendsClassmatesDialog");
+    await friends.getByRole("button", { name: "Continue" }).click();
+    await friends.getByRole("button", { name: "Done" }).click();
     await expect(page.getByRole("button", { name: "Profile", exact: true })).toBeVisible();
 });
 
 test("signup rejects unavailable profile language before creating a passkey", async ({ page }) => {
-    await page.goto("/app/?demo=1");
-    await page.getByRole("button", { name: "Create an account" }).click();
-    const dialog = page.getByRole("dialog");
+    const dialog = await openSignup(page);
     await fillSignupThroughUsername(dialog, "f4gg0t_sn1gger");
-    await expect(dialog.locator("#signupStatus")).toHaveText("That username is not available. Try another one.");
-    await expect(dialog.getByText("Pick a username")).toBeVisible();
+    await expect(dialog.locator("#signupUsernameStatus")).toHaveText("Username 'f4gg0t_sn1gger' is already taken");
+    await expect(dialog.getByText("Choose a username")).toBeVisible();
 });
 
 test("onboarding keeps every action reachable on compact phones", async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 640 });
-    await page.goto("/app/?demo=1");
-    await page.getByRole("button", { name: "Create an account" }).click();
-    const dialog = page.getByRole("dialog");
+    const dialog = await openSignup(page);
     await expect(dialog.locator(".signup-step .eyebrow")).toHaveCount(0);
-    await expect(dialog.getByText("How old are you?")).toBeInViewport();
+    await expect(dialog.getByText(/By entering your age/)).toBeInViewport();
     await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
     await expect(dialog.getByRole("listbox", { name: "Age" })).toBeVisible();
     await expect(dialog.locator('[data-signup-age="13"]')).toHaveCSS("font-family", /Jua/);
-    await expect(dialog.getByRole("button", { name: "Continue" })).toBeInViewport();
+    await expect(dialog.getByRole("button", { name: "Get Started!" })).toBeInViewport();
+    await dialog.getByRole("button", { name: "Get Started!" }).click();
+    await expect(dialog.getByRole("button", { name: "Choose Friends" })).toBeInViewport();
+    await dialog.getByRole("button", { name: "Choose Friends" }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
-    await expect(dialog.getByText("What school do you go to?")).toBeInViewport();
+    await expect(dialog.getByText("Pick your school")).toBeInViewport();
     await expect(dialog.getByLabel("ZIP code")).toBeInViewport();
     await dialog.getByLabel("ZIP code").fill("90210");
     const schoolResults = dialog.locator("#signupSchoolResults");
+    await expect(dialog.locator("[data-signup-school]")).toHaveCount(50);
     const schoolScroll = await schoolResults.evaluate((element) => ({ clientHeight: element.clientHeight, scrollHeight: element.scrollHeight }));
     expect(schoolScroll.scrollHeight).toBeGreaterThan(schoolScroll.clientHeight);
-    await expect(dialog.locator("#signupSchoolContinue")).toBeInViewport();
     await dialog.getByRole("option", { name: /Westview High School/ }).click();
+    await expect(dialog.locator("#signupSchoolContinue")).toBeInViewport();
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(dialog.getByText("What grade are you in?")).toBeInViewport();
     const seniorGrade = dialog.getByRole("radio", { name: /Senior/ });
@@ -125,23 +138,28 @@ test("onboarding keeps every action reachable on compact phones", async ({ page 
     await expect(dialog.getByText("Add a profile photo")).toBeInViewport();
     await expect(dialog.getByRole("button", { name: "Continue" })).toBeInViewport();
     await expect(dialog.getByRole("button", { name: "Skip for now" })).toBeInViewport();
+    await dialog.getByRole("button", { name: "Skip for now" }).click();
+    await expect(dialog.getByRole("button", { name: "Create passkey" })).toBeInViewport();
+    await dialog.getByRole("button", { name: "Create passkey" }).click();
+    await expect(dialog.getByRole("button", { name: "Let's Go!" })).toBeInViewport();
 });
 
-test("signup ZIP picker lists, filters, and falls back from 50 nearby schools", async ({ page }) => {
-    await page.goto("/app/?demo=1");
-    await page.getByRole("button", { name: "Create an account" }).click();
-    const dialog = page.getByRole("dialog");
+test("signup school search lists, filters, and falls back from 50 nearby schools", async ({ page }) => {
+    const dialog = await openSignup(page);
+    await dialog.getByRole("button", { name: "Get Started!" }).click();
+    await dialog.getByRole("button", { name: "Choose Friends" }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
-    await dialog.getByLabel("ZIP code").fill("90210");
+    await dialog.getByPlaceholder("School, city, or ZIP").fill("90210");
     await expect(dialog.locator("[data-signup-school]")).toHaveCount(50);
-    await dialog.getByLabel("Search nearby schools").fill("Central High School 2 Beverly Hills");
+    await dialog.getByPlaceholder("School, city, or ZIP").fill("Central High School 2 Beverly Hills");
     await expect(dialog.locator("[data-signup-school]")).toHaveCount(1);
-    await dialog.getByRole("button", { name: "Can't find your school?" }).click();
-    await expect(dialog.getByLabel("School name")).toBeVisible();
-    await expect(dialog.getByLabel("School name")).toBeEnabled();
-    await dialog.getByRole("button", { name: "Back to nearby schools" }).click();
-    await expect(dialog.getByLabel("School name")).toBeHidden();
-    await expect(dialog.getByLabel("Search nearby schools")).toBeVisible();
+    await dialog.getByRole("button", { name: /Can't find your school\?/ }).click();
+    await expect(dialog.getByText("One more way to find it")).toBeVisible();
+    await dialog.getByLabel("ZIP code").fill("90211");
+    await expect(dialog.locator("[data-signup-school]")).toHaveCount(50);
+    // After a second ZIP the list ends with "Add a school".
+    await dialog.getByRole("button", { name: /Add a school/ }).click();
+    await expect(page.getByRole("dialog", { name: "Add Your School" }).getByLabel("School Name")).toBeVisible();
 });
 
 test("mobile shell stays within interaction performance budgets", async ({ page }) => {

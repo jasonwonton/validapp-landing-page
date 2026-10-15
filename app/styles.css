@@ -366,7 +366,7 @@ h3 { font-size: 1.45rem; }
 .feed-lock-alerts-icon svg { width: 22px; height: 22px; }
 .feed-lock-alerts-copy { display: grid; gap: 3px; min-width: 0; }
 .feed-lock-alerts-copy strong { font-size: 16px; font-weight: 400; }
-.feed-lock-alerts-copy span { color: rgba(0,0,0,.75); font-size: 13px; line-height: 1.3; }
+.feed-lock-alerts-copy small { display: block; color: rgba(0,0,0,.75); font-size: 13px; line-height: 1.3; }
 .feed-lock-alerts-chevron { color: rgba(0,0,0,.6); }
 .feed-lock-alerts-chevron svg { width: 16px; height: 16px; stroke-width: 3; }
 :root[data-theme="dark"] .feed-gate-votes-cast { background: rgba(255,255,255,.08); }

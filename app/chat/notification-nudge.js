@@ -18,17 +18,19 @@ export const NUDGE_SOURCES = Object.freeze({
 });
 const BODY = "Get notified about new messages and view-once photos. You can mute any chat.";
 const BLOCKED_BODY = "Allow notifications for Valid in your browser settings to get new messages and view-once photos.";
+const INSTALL_BODY = "Add Valid to your Home Screen to get notified about new messages and view-once photos.";
 
 const declinedKey = (userId) => `valid:chat-notification-nudge:declined:${userId}`;
 
 /**
  * Which card a placement shows, or null.
- * permission: "default" | "denied" | "granted" | "unsupported".
+ * permission: "default" | "denied" | "granted" | "unsupported" | "install".
  * declined: { at, blocked } from the last room "Not now", or null.
  */
 export function nudgeKind({ permission, placement, declined = null, now = Date.now() }) {
-    if (permission !== "default" && permission !== "denied") return null;
-    const kind = permission === "denied" ? "blocked" : "ask";
+    if (!["default", "denied", "install"].includes(permission)) return null;
+    // "install": iPhone Safari, where notifications need the Home Screen app.
+    const kind = permission === "denied" ? "blocked" : permission === "install" ? "install" : "ask";
     if (placement !== "conversation" || !declined) return kind;
     const elapsed = now - Number(declined.at || 0);
     const snooze = declined.blocked ? BLOCKED_NUDGE_SNOOZE_MS : NUDGE_SNOOZE_MS;
@@ -60,7 +62,8 @@ export function nudgeCardMarkup({ placement, kind }) {
     const title = blocked
         ? "Notifications are blocked"
         : placement === "inbox" ? "Don’t miss new messages" : "Don’t miss their reply";
-    const primary = blocked ? "How to turn on" : "Notify me";
+    const install = kind === "install";
+    const primary = blocked ? "How to turn on" : install ? "Add to Home Screen" : "Notify me";
     // iOS: the inbox card can't be dismissed.
     const dismiss = placement === "conversation"
         ? '<button class="chat-notification-nudge-dismiss" type="button" data-nudge-not-now data-testid="chat.notificationNudge.notNow">Not now</button>'
@@ -68,7 +71,7 @@ export function nudgeCardMarkup({ placement, kind }) {
     return `<section class="chat-notification-nudge" data-testid="chat.notificationNudge" data-placement="${placement}" data-kind="${kind}" aria-labelledby="chatNotificationNudgeTitle-${placement}">
         <div class="chat-notification-nudge-row">
             <span class="chat-notification-nudge-icon" aria-hidden="true">${uiIcon("bell-badge")}</span>
-            <span class="chat-notification-nudge-copy"><strong id="chatNotificationNudgeTitle-${placement}">${title}</strong><small>${blocked ? BLOCKED_BODY : BODY}</small></span>
+            <span class="chat-notification-nudge-copy"><strong id="chatNotificationNudgeTitle-${placement}">${title}</strong><small>${blocked ? BLOCKED_BODY : install ? INSTALL_BODY : BODY}</small></span>
         </div>
         <div class="chat-notification-nudge-actions">
             <button class="chat-notification-nudge-primary" type="button" data-nudge-primary data-testid="chat.notificationNudge.primary">${primary}</button>${dismiss}
@@ -115,7 +118,8 @@ export function openNotificationHelpSheet({ onClose } = {}) {
 
 /**
  * Owns the two card slots. `notifications` comes from app.js:
- *   permission() -> "default" | "denied" | "granted" | "unsupported"
+ *   permission() -> "default" | "denied" | "granted" | "unsupported" | "install"
+ *   install() -> opens the Add to Home Screen steps (iPhone Safari).
  *   enable() -> Promise<{ permission, prompted, subscribed, error }>; must be
  *     called synchronously from the tap (it asks the browser first).
  *   ensureSubscribed(source) -> quiet re-subscribe when already granted.
@@ -162,6 +166,10 @@ export function createNotificationNudge({ notifications, getUserId, slots, showT
         record("soft_accepted", placement);
         if (visible[placement] === "blocked") {
             openNotificationHelpSheet();
+            return;
+        }
+        if (visible[placement] === "install") {
+            try { notifications?.install?.(); } catch (_) { /* The Profile row still offers the steps. */ }
             return;
         }
         if (enabling) return;

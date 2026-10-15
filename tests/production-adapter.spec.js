@@ -37,10 +37,19 @@ async function attachAndCropQuestionArtwork(page, questionDialog) {
     await expect(questionDialog.getByRole("button", { name: "Adjust crop" })).toBeVisible();
 }
 
+// The age screen is the signed-out root; ?signin=1 opens the sign-in sheet over it.
+async function startProductionSignup(page) {
+    await page.goto("/app/?signin=1");
+    await page.getByRole("dialog", { name: "Welcome Back" }).getByRole("button", { name: "Cancel" }).click();
+    return page.locator("#signupDialog");
+}
+
 async function fillProductionSignupThroughGrade(dialog) {
     await expect(dialog.getByLabel("Birthday")).toHaveCount(0);
     await dialog.locator('[data-signup-age="16"]').click();
     await expect(dialog.locator("#signupAge")).toHaveValue("16");
+    await dialog.getByRole("button", { name: "Get Started!" }).click();
+    // No contact picker in this browser: the friends card offers an invite, then Continue.
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(dialog.getByLabel("ZIP code")).toBeVisible();
     await expect(dialog.locator("#signupAge")).toHaveValue("16");
@@ -56,7 +65,7 @@ async function fillProductionSignup(dialog) {
     await dialog.getByLabel("Phone number").fill("4155550123");
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("Verification code").fill("123456");
-    await dialog.getByRole("button", { name: "Continue" }).click();
+    await dialog.getByRole("button", { name: "Verify Code" }).click();
     await dialog.getByLabel("First name").fill("Taylor");
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("Last name").fill("Jordan");
@@ -959,8 +968,10 @@ test("locked Feed shows received votes, vote-to-unlock, and notification activat
     // FeedVoteLockedView: the title follows the unread count; vote alerts sit below the card.
     await expect(gate.getByRole("heading", { name: /^(You got voted for|Feed is locked)$/ })).toBeVisible();
     await expect(gate.getByRole("button", { name: "Vote now to unlock Feed" })).toBeVisible();
+    // FeedVoteLockedView "Turn on vote alerts".
     const notificationButton = gate.getByRole("button", { name: "Turn on alerts for votes" });
     await expect(notificationButton).toBeVisible();
+    await expect(notificationButton).toContainText("Know right away when someone picks you.");
     await notificationButton.click();
 
     await expect(notificationButton).toBeHidden();
@@ -1024,14 +1035,14 @@ test("real adapter links signup only after Turnstile-backed SMS verification", a
     await installTurnstileStub(page);
     const requests = await interceptProductionAPI(page, { signup: true });
 
-    await page.goto("/app/?signin=1");
-    await page.getByRole("button", { name: "Create an account" }).click();
-    const dialog = page.getByRole("dialog");
+    const dialog = await startProductionSignup(page);
     await fillProductionSignup(dialog);
     await dialog.getByLabel(/Profile photo/).setInputFiles("assets/valid_logo.png");
     await page.locator(".avatar-crop-dialog").getByRole("button", { name: "Use photo" }).click();
     await expect(dialog.locator("#signupPhotoPreview img")).toBeVisible();
     await dialog.getByRole("button", { name: "Continue" }).click();
+    await dialog.getByRole("button", { name: "Create passkey" }).click();
+    await dialog.getByRole("button", { name: "Let's Go!" }).click();
     await expect(page.getByRole("button", { name: "Feed", exact: true })).toBeVisible();
 
     const challenge = requests.find((request) => request.path === "/api/v1/auth/passkey/signup/challenge");
@@ -1080,11 +1091,11 @@ test('signup detects Android embedded browsers before requesting SMS', async ({ 
     await installCredentialStub(page, 'create');
     await page.addInitScript(() => Object.defineProperty(navigator, 'userAgent', { value: 'Android; wv) Chrome/110 Instagram' }));
     const requests = await interceptProductionAPI(page, { signup: true });
-    await page.goto('/app/?signin=1');
-    await page.getByRole('button', { name: 'Create an account' }).click();
-    await expect(page.locator('#authStatus')).toContainText('Open Valid in Chrome');
-    await expect(page.locator('#authBrowserHelp')).toHaveAttribute('href', /intent:.*signup=1/);
-    await expect(page.locator('#signupDialog')).not.toBeVisible();
+    const dialog = await startProductionSignup(page);
+    await dialog.getByRole('button', { name: 'Get Started!' }).click();
+    await expect(page.locator('#signupStatus')).toContainText('Open Valid in Chrome');
+    await expect(page.locator('#signupBrowserHelp')).toHaveAttribute('href', /intent:.*signup=1/);
+    await expect(dialog.getByRole('button', { name: 'Get Started!' })).toBeVisible();
     expect(requests.some(request => /phone\/request|signup\/challenge/.test(request.path))).toBe(false);
 });
 
@@ -1099,19 +1110,19 @@ for (const sessionAvailable of [true, false]) test(`signup connection loss resto
         headers: { "WWW-Authenticate": "Bearer", "Access-Control-Expose-Headers": "WWW-Authenticate" },
         json: completions && sessionAvailable ? { user: { id: USER_ID, subscribed_user: false } } : { detail: 'Authentication required' },
     }));
-    await page.goto('/app/?signin=1');
-    await page.getByRole('button', { name: 'Create an account' }).click();
-    const dialog = page.locator('#signupDialog');
+    const dialog = await startProductionSignup(page);
     await fillProductionSignup(dialog);
     await dialog.getByRole('button', { name: 'Continue', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Create passkey', exact: true }).click();
     if (sessionAvailable) {
+        await dialog.getByRole('button', { name: "Let's Go!" }).click();
         await expect(page.getByRole('button', { name: 'Feed', exact: true })).toBeVisible();
     } else {
         await expect(page.locator('#signupRecoverAccount')).toBeVisible();
         await expect(page.locator('#signupStatus')).toContainText('account may already exist');
-        await expect(dialog.getByRole('button', { name: 'Continue', exact: true })).toBeDisabled();
+        await expect(dialog.getByRole('button', { name: 'Create passkey', exact: true })).toBeDisabled();
         await page.locator('#signupRecoverAccount').click();
-        await expect(dialog).not.toBeVisible();
+        await expect(page.getByRole('dialog', { name: 'Welcome Back' })).toBeVisible();
     }
     expect(completions).toBe(1);
 });
@@ -1119,16 +1130,15 @@ for (const sessionAvailable of [true, false]) test(`signup connection loss resto
 test("signup sends existing phone identities back to sign in", async ({ page }) => {
     await installCredentialStub(page, "get");
     const requests = await interceptProductionAPI(page, { signup: true, phoneExists: true });
-    await page.goto("/app/?signin=1");
-    await page.getByRole("button", { name: "Create an account" }).click();
-    const dialog = page.getByRole("dialog");
+    const dialog = await startProductionSignup(page);
     await fillProductionSignupThroughGrade(dialog);
     await dialog.getByLabel("Phone number").fill("4155550123");
     await dialog.getByRole("button", { name: "Continue" }).click();
 
-    await expect(dialog).toBeHidden();
+    // LoginView opens over the flow (OnboardingFlowView keeps sign-up beneath).
+    await expect(page.getByRole("dialog", { name: "Welcome Back" })).toBeVisible();
     await expect(page.locator("#authStatus")).toHaveText(
-        "An account already exists for this phone number. Sign in.",
+        "An account already exists for this phone number. Please log in.",
     );
     await expect(page.getByRole("button", { name: /^sign in$/i })).toBeFocused();
     expect(requests.some((request) => request.path === "/api/v1/auth/passkey/signup/challenge")).toBe(false);
@@ -1450,12 +1460,11 @@ test('expired verification returns to phone step without losing profile or resen
     await page.route(`${API_ORIGIN}/api/v1/auth/passkey/signup/complete`, route => {
         completions++; return route.fulfill({status:400,json:{detail:'Phone verification has expired. Request a new code.'}});
     });
-    await page.goto('/app/?signin=1');
-    await page.getByRole('button', {name:'Create an account'}).click();
-    const dialog = page.locator('#signupDialog');
+    const dialog = await startProductionSignup(page);
     await fillProductionSignup(dialog);
     const sendsBefore = requests.filter(r => r.path === '/api/v1/auth/phone/request/web').length;
     await dialog.getByRole('button', {name:'Continue',exact:true}).click();
+    await dialog.getByRole('button', {name:'Create passkey',exact:true}).click();
     await expect(dialog.getByLabel('Phone number')).toBeVisible();
     await expect(page.locator('#signupStatus')).toContainText('verification expired');
     await expect(dialog.locator('#signupFirstName')).toHaveValue('Taylor');

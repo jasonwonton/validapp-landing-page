@@ -133,8 +133,10 @@ test("signup exchanges a browser challenge token before sending SMS", async ({ p
     });
 
     await page.goto("/app/?signin=1");
-    await page.getByRole("button", { name: "Create an account" }).click();
+    await page.getByRole("dialog", { name: "Welcome Back" }).getByRole("button", { name: "Cancel" }).click();
     const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Get Started!" }).click();
+    // No contact picker in this browser: the friends card offers an invite, then Continue.
     await dialog.getByRole("button", { name: "Continue" }).click();
     await dialog.getByLabel("ZIP code").fill("90210");
     await dialog.getByRole("option", { name: /Westview High School/ }).click();

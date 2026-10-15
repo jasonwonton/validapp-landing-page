@@ -495,11 +495,12 @@ function mountUIRoot(root) {
 
 function initializeParkedUI() {
     document.querySelectorAll("#anonymousAnswerDetailDialog").forEach(parkUIRoot);
-    document.querySelectorAll("dialog:not(#deleteAccountDialog)").forEach((dialog) => {
+    document.querySelectorAll("dialog:not(#deleteAccountDialog):not(#signInDialog)").forEach((dialog) => {
         dialog.addEventListener("close", () => requestAnimationFrame(() => {
             if (!dialog.open) parkUIRoot(dialog);
         }));
-        parkUIRoot(dialog);
+        // The signed-out root (the age screen) can already be open.
+        if (!dialog.open) parkUIRoot(dialog);
     });
 }
 
@@ -639,7 +640,8 @@ function initializeAppNavigation() {
     if (state.navigationInitialized) return;
     state.navigationInitialized = true;
     const requested = new URLSearchParams(location.search).get("tab");
-    const panel = ["feed", "play", "chats", "profile"].includes(requested) ? requested : "feed";
+    // A new account or a fresh sign-in starts on Play, as on iOS.
+    const panel = ["feed", "play", "chats", "profile"].includes(requested) ? requested : (state.postAuthLanding || "feed");
     switchPanel(panel, { historyMode: "replace", restoreScroll: false });
 }
 
@@ -1031,7 +1033,8 @@ function showSignedOut(message = "") {
     state.personalInboxVisible = false;
     state.personalInboxCutoff = null;
     void commentsViewPromise?.then((view) => view.clear()).catch(() => null);
-    $("#authStatus").textContent = friendlyErrorMessage(message, "");
+    const text = friendlyErrorMessage(message, "");
+    showSignedOutRoot({ signIn: Boolean(text), message: text });
 }
 
 const PRIOR_SESSION_KEY = "valid:signed-in-before";
@@ -1046,18 +1049,9 @@ function showAuthView() {
     $("#authView").classList.remove("hidden");
 }
 
-function isFirstVisit() {
-    try {
-        return localStorage.getItem(PRIOR_SESSION_KEY) !== "1" && !localStorage.getItem("valid.web.installation-id");
-    } catch (_) {
-        return true;
-    }
-}
-
 async function showSignedIn() {
     sessionRestorePending = false;
-    $("#retrySessionButton").classList.add("hidden");
-    $("#createAccountButton").classList.remove("hidden");
+    hideSessionRecovery();
     $("#authView").classList.add("hidden");
     hideLaunchSplash();
     try { localStorage.setItem(PRIOR_SESSION_KEY, "1"); } catch (_) { /* First-visit detection falls back to the installation id. */ }
@@ -1222,11 +1216,22 @@ async function handleNotificationRoute() {
                 target.focus({ preventScroll: true });
             }
         }
-    } else if (isFeedVoteLocked() && notification !== "question_submission") {
-        return;
     } else if (notification === "question_submission") {
-        switchPanel("feed");
+        // question_approved: iOS opens the school-question history from Profile.
+        switchPanel("profile");
         openQuestionDialog({ section: "history", submissionId: params.get("submission_id") });
+    } else if (notification === "comment_moderation_notice") {
+        switchPanel("feed");
+        await showCommentModerationNotice();
+    } else if (isFeedVoteLocked()) {
+        // A locked Feed still opens: its gate is what the push leads to.
+        switchPanel("feed");
+    } else if (notification === "feed") {
+        switchPanel("feed");
+    } else if (notification === "inbox") {
+        // anonymous_question_received / _answered: the Ask Me inbox, or the
+        // question or answer itself when the link names one.
+        await openAskInboxFromPush(params);
     } else if (notification === "tbh_request") {
         switchPanel("feed");
         await loadTbhContent();
@@ -1279,7 +1284,40 @@ async function handleNotificationRoute() {
     params.delete("comment_id");
     params.delete("boost_type");
     params.delete("target_user_id");
+    params.delete("anonymous_question_id");
+    params.delete("anonymous_answer_id");
+    params.delete("notice_id");
     history.replaceState(history.state, "", `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`);
+}
+
+async function openAskInboxFromPush(params) {
+    switchPanel("feed");
+    if (state.feedType !== "personal") $('.segment[data-feed="personal"]')?.click();
+    const askFilter = $('[data-inbox-filter="ask_me"]');
+    if (askFilter && state.personalInboxFilter !== "ask_me") askFilter.click();
+    const questionId = params.get("anonymous_question_id");
+    const answerId = params.get("anonymous_answer_id");
+    if (!questionId && !answerId) return;
+    if (!state.anonymousInbox) await loadAnonymousInbox();
+    if (answerId) openAnonymousAnswerDialog(answerId);
+    else if (state.anonymousInbox?.questions?.some((question) => String(question.id) === String(questionId))) {
+        await openAnonymousQuestionDialog(questionId);
+    }
+}
+
+// comment_moderation_notice: iOS shows the notice overlay at once.
+async function showCommentModerationNotice() {
+    const userId = api.user?.id;
+    const moderation = await api.getCommentModerationState?.(userId).catch(() => null);
+    const notice = moderation?.notice;
+    if (!notice || api.user?.id !== userId) return;
+    const acknowledged = await confirmSheet({
+        title: notice.title || "Comment update",
+        message: notice.message || "Your comment access was updated.",
+        confirmLabel: "Got it",
+        cancelLabel: "Close",
+    });
+    if (acknowledged && notice.id) await api.acknowledgeCommentModerationNotice(userId, notice.id).catch(() => null);
 }
 
 // Notification taps route inside the running app (no reload). The URL contract
@@ -1331,7 +1369,49 @@ function handleServiceWorkerMessage(event) {
     } else if (message.type === "VALID_PUSH_IN_ACTIVE_CHAT") {
         // The open room already shows the message through realtime.
         dispatchEvent(new CustomEvent("valid:push-in-active-chat", { detail: message }));
+    } else if (message.type === "VALID_PUSH_FOREGROUND") {
+        showInAppPushBanner(message.payload || {});
     }
+}
+
+// iOS shows chat pushes as an in-app banner while the app is open; the worker
+// hands them here instead of showing a second, system notification.
+function showInAppPushBanner({ title = "Valid", body = "", url = "" } = {}) {
+    if (!document.body.classList.contains("authenticated")) return;
+    let banner = $("#inAppPushBanner");
+    if (!banner) {
+        banner = document.createElement("button");
+        banner.id = "inAppPushBanner";
+        banner.type = "button";
+        banner.className = "in-app-push-banner";
+        // In the top layer, like the toast, so it shows over an open sheet.
+        if ("popover" in HTMLElement.prototype) banner.setAttribute("popover", "manual");
+        banner.innerHTML = `<img src="../assets/pwa/icon-192.png" alt="" width="36" height="36" decoding="async"><span><strong></strong><small></small></span>`;
+        banner.addEventListener("click", () => {
+            const target = banner.dataset.url;
+            hideInAppPushBanner();
+            if (target) void routeToAppURL(target);
+        });
+        document.body.append(banner);
+    }
+    banner.querySelector("strong").textContent = String(title).slice(0, 120);
+    banner.querySelector("small").textContent = String(body).slice(0, 240);
+    banner.dataset.url = url;
+    banner.setAttribute("aria-label", `${title}. ${body}`.trim());
+    banner.classList.add("visible");
+    try { banner.showPopover?.(); } catch (_) { /* The fixed banner still shows. */ }
+    clearTimeout(state.inAppPushTimer);
+    state.inAppPushTimer = setTimeout(hideInAppPushBanner, 4_000);
+}
+
+function hideInAppPushBanner() {
+    clearTimeout(state.inAppPushTimer);
+    const banner = $("#inAppPushBanner");
+    if (!banner) return;
+    banner.classList.remove("visible");
+    state.inAppPushTimer = setTimeout(() => {
+        try { if (!banner.classList.contains("visible") && banner.matches(":popover-open")) banner.hidePopover(); } catch (_) { /* Already hidden. */ }
+    }, 220);
 }
 
 // Lets the worker skip the system notification for the chat on screen.
@@ -2911,21 +2991,281 @@ async function addBackupPasskey(trigger = null) {
     }
 }
 
+// LoginView.swift: the Face ID sign-in. The browser needs a tap before it shows
+// the passkey prompt, so "Log in" on the age screen starts it in that tap.
 async function handlePasskeySignIn() {
     const button = $("#passkeyButton");
+    if (state.passkeySignInRunning) return;
+    state.passkeySignInRunning = true;
     $("#authStatus").textContent = "";
-    setButtonLoading(button, true, "Checking your passkey...");
+    $("#authBrowserHelp").classList.add("hidden");
+    button.disabled = true;
+    $("#passkeyButtonLabel").textContent = "Signing in...";
     try {
         const login = demoMode ? await api.demoLogin() : await signInWithPasskey(api);
         api.saveSession(login);
-        await showSignedIn();
+        await finishSignIn();
     } catch (error) {
         reportAuthFailure(error);
         showAuthBrowserHelp(error, false);
-        $("#authStatus").textContent = friendlyErrorMessage(error, "Passkey sign-in failed. Please try again.");
+        $("#authStatus").textContent = passkeySignInErrorMessage(error);
+    } finally {
+        state.passkeySignInRunning = false;
+        button.disabled = !passkeysSupported() && !demoMode;
+        $("#passkeyButtonLabel").textContent = deviceAuthCopy()["sign-in"];
+    }
+}
+
+// LoginView.swift errors point to phone sign-in when the web offers it.
+function passkeySignInErrorMessage(error) {
+    const fallback = "Passkey sign-in failed. Please try again.";
+    if (!phoneSignInEnabled()) return friendlyErrorMessage(error, fallback);
+    if (error?.code === "passkey_not_completed" || error?.name === "NotAllowedError") return "No passkey found. Please sign in with your phone number.";
+    if (error?.status === 408 || error?.code === "request_timeout") return "The server took too long to respond. Try again or use your phone number.";
+    if (["embedded_browser", "passkeys_unavailable", "related_origins_unavailable", "unsupported_origin", "secure_context"].includes(error?.code)) {
+        return `${friendlyErrorMessage(error, fallback)} You can also sign in with your phone number.`;
+    }
+    if (error?.status === 429) return friendlyErrorMessage(error, fallback);
+    return "Sign in failed. Please try again or use your phone number.";
+}
+
+// Face ID is what iPhone owners know the passkey by; elsewhere it is the
+// phone's screen lock, so the iOS copy names that instead.
+function deviceAuthCopy() {
+    return isAppleTouchDevice() ? {
+        "sign-in": "Sign in with Face ID",
+        back: "Back to Face ID sign in",
+        private: "Face ID stays on your iPhone. Valid never sees it.",
+        required: "Required to finish setup · Secured by Apple",
+        secured: "Secured by Apple · Valid never sees your Face ID",
+        signed: "You can sign back into Valid with Face ID.",
+    } : {
+        "sign-in": "Sign in with a passkey",
+        back: "Back to passkey sign in",
+        private: "Your screen lock stays on your phone. Valid never sees it.",
+        required: "Required to finish setup · Secured by your phone",
+        secured: "Secured by your phone · Valid never sees your screen lock",
+        signed: "You can sign back into Valid with your passkey.",
+    };
+}
+
+function applyDeviceAuthCopy() {
+    const copy = deviceAuthCopy();
+    $$("[data-device-copy]").forEach((element) => {
+        const text = copy[element.dataset.deviceCopy];
+        if (text) element.textContent = text;
+    });
+}
+
+// Signed out, the age screen is the root for everyone (GettingStartedView).
+// Sign-in is a sheet over it; session trouble gets its own recovery card.
+function showSignedOutRoot({ signIn = false, message = "" } = {}) {
+    showAuthView();
+    hideSessionRecovery();
+    if (!$("#signupDialog").open) openSignupDialog();
+    if (signIn) openSignInSheet({ message });
+}
+
+function closeSignedOutRoot() {
+    for (const id of ["#signInDialog", "#addSchoolDialog", "#signupDialog"]) {
+        if ($(id).open) $(id).close();
+    }
+    clearInterval(state.signInResendTimer);
+    clearInterval(state.signupResendTimer);
+}
+
+// SessionRecoveryView (RootScreens.swift).
+function showSessionRecovery(message, { checking = false } = {}) {
+    showAuthView();
+    for (const id of ["#signInDialog", "#addSchoolDialog", "#signupDialog"]) {
+        if ($(id).open) $(id).close();
+    }
+    $("#sessionRecoveryCard").classList.remove("hidden");
+    $("#sessionRecoveryStatus").textContent = message;
+    $("#retrySessionButton").disabled = checking;
+    $("#retrySessionButton").textContent = checking ? "Loading account…" : "Try again";
+}
+
+function hideSessionRecovery() {
+    $("#sessionRecoveryCard").classList.add("hidden");
+}
+
+async function useAnotherAccount() {
+    const button = $("#useAnotherAccountButton");
+    button.disabled = true;
+    try {
+        await api.logout?.().catch(() => null);
+        api.clearSession();
+    } finally {
+        button.disabled = false;
+    }
+    sessionRestorePending = false;
+    showSignedOutRoot();
+}
+
+function openSignInSheet({ startPasskey = false, message = "" } = {}) {
+    const dialog = $("#signInDialog");
+    showSignInSection("passkey");
+    $("#authStatus").textContent = message;
+    if (!passkeysSupported() && !demoMode) {
+        $("#passkeyButton").disabled = true;
+        $("#authStatus").textContent ||= "This browser does not support passkeys. Try current Chrome, Safari, or Edge.";
+        showAuthBrowserHelp({ code: "passkeys_unavailable" }, false);
+    }
+    if (!dialog.open) {
+        dialog.showModal();
+        // Not the Cancel button: the sheet opens without a focus ring, as on iOS.
+        if (document.activeElement?.matches?.("[data-sign-in-cancel]")) document.activeElement.blur();
+    }
+    renderSignInPhoneOption();
+    void loadSignedOutConfig().then(renderSignInPhoneOption);
+    if (startPasskey && !$("#passkeyButton").disabled) void handlePasskeySignIn();
+    else if (message) requestAnimationFrame(() => $("#passkeyButton").focus());
+}
+
+function closeSignInSheet() {
+    clearInterval(state.signInResendTimer);
+    if ($("#signInDialog").open) $("#signInDialog").close();
+}
+
+// The config read is public; signed out it tells the sign-up and sign-in
+// screens which optional steps the server has turned on.
+async function loadSignedOutConfig() {
+    if (state.config) return state.config;
+    state.signedOutConfigLoad ||= api.getConfig().then((config) => {
+        if (!state.config && config) state.config = config;
+        return state.config;
+    }).catch(() => null).finally(() => { state.signedOutConfigLoad = null; });
+    return state.signedOutConfigLoad;
+}
+
+// Text-code sign-in needs browser-safe login routes (Turnstile on the send,
+// an HttpOnly cookie on the confirm). The server turns it on in config.
+function phoneSignInEnabled() {
+    return state.config?.enable_web_phone_login === true && typeof api?.requestLoginVerification === "function";
+}
+
+function renderSignInPhoneOption() {
+    $("#signInPhoneOption").classList.toggle("hidden", !phoneSignInEnabled());
+}
+
+function showSignInSection(section) {
+    $("#signInPasskeySection").classList.toggle("hidden", section !== "passkey");
+    $("#signInPhoneSection").classList.toggle("hidden", section !== "phone");
+    $("#signInCodeSection").classList.toggle("hidden", section !== "code");
+    if (section === "phone") {
+        $("#signInPhoneStatus").textContent = "";
+        $("#signInSendCode").disabled = signupPhoneDigits($("#signInPhone").value).length !== 10;
+        setTimeout(() => $("#signInPhone").focus({ preventScroll: true }), 400);
+    }
+    if (section === "code") {
+        $("#signInCodeStatus").textContent = "";
+        $("#signInCode").value = "";
+        $("#signInVerify").disabled = true;
+        setTimeout(() => $("#signInCode").focus({ preventScroll: true }), 300);
+    }
+}
+
+async function sendSignInCode(button = $("#signInSendCode")) {
+    const phoneNumber = signupPhoneDigits($("#signInPhone").value);
+    const status = state.signInPhone && !$("#signInCodeSection").classList.contains("hidden") ? $("#signInCodeStatus") : $("#signInPhoneStatus");
+    if (phoneNumber.length !== 10) {
+        status.textContent = "Enter a valid 10-digit phone number.";
+        return;
+    }
+    if (state.signInSending) return;
+    state.signInSending = true;
+    setButtonLoading(button, true, "Sending...");
+    status.textContent = "";
+    try {
+        const turnstileToken = await getSignupTurnstileToken("#signInTurnstile");
+        const session = await api.requestLoginVerification(phoneNumber, turnstileToken);
+        resetSignupTurnstile();
+        state.signInPhone = phoneNumber;
+        if ($("#signInCodeSection").classList.contains("hidden")) showSignInSection("code");
+        else $("#signInCodeStatus").textContent = "A verification code was sent. Enter the newest code below.";
+        startResendCountdown($("#signInResend"), session?.resend_available_at, "signInResendTimer");
+    } catch (error) {
+        if (error.status === 404) {
+            await showNumberNotSignedUp(phoneNumber);
+            return;
+        }
+        status.textContent = userMessage(error, "Unable to send a verification code. Please try again.");
+    } finally {
+        state.signInSending = false;
+        setButtonLoading(button, false);
+        if (button === $("#signInSendCode")) button.disabled = signupPhoneDigits($("#signInPhone").value).length !== 10;
+    }
+}
+
+async function verifySignInCode() {
+    const button = $("#signInVerify");
+    const code = $("#signInCode").value.replace(/\D/g, "");
+    if (code.length !== 6 || !state.signInPhone) return;
+    setButtonLoading(button, true, "Signing in...");
+    $("#signInCodeStatus").textContent = "";
+    try {
+        const login = await api.confirmLoginVerification(state.signInPhone, code);
+        api.saveSession(login);
+        state.signInPhone = null;
+        await finishSignIn();
+    } catch (error) {
+        if (error.status === 404) {
+            await showNumberNotSignedUp(state.signInPhone);
+            return;
+        }
+        $("#signInCodeStatus").textContent = userMessage(error, "Unable to verify the code. Please try again.");
     } finally {
         setButtonLoading(button, false);
+        button.disabled = $("#signInCode").value.replace(/\D/g, "").length !== 6;
     }
+}
+
+// LoginView.swift "Number Not Signed Up": the number goes to sign-up instead.
+async function showNumberNotSignedUp(phoneNumber) {
+    const proceed = await confirmSheet({
+        title: "Number Not Signed Up",
+        message: "This phone number isn't signed up yet. We'll help you create a new account.",
+        confirmLabel: "Continue",
+        cancelLabel: "Cancel",
+    });
+    if (!proceed) return;
+    closeSignInSheet();
+    if (phoneNumber) $("#signupPhone").value = formatSignupPhone(phoneNumber);
+    if (!$("#signupDialog").open) openSignupDialog();
+    setSignupStep(SIGNUP_STEP.age);
+}
+
+// Resend Code / Resend in Ns, from the server's resend time (30 s by default).
+function startResendCountdown(button, availableAt, timerKey) {
+    clearInterval(state[timerKey]);
+    const parsed = Date.parse(availableAt || "");
+    const readyAt = Number.isFinite(parsed) ? parsed : Date.now() + 30_000;
+    const tick = () => {
+        const seconds = Math.max(0, Math.ceil((readyAt - Date.now()) / 1000));
+        button.disabled = seconds > 0;
+        button.textContent = seconds > 0 ? `Resend in ${seconds}s` : "Resend Code";
+        if (!seconds) clearInterval(state[timerKey]);
+    };
+    tick();
+    state[timerKey] = setInterval(tick, 1000);
+}
+
+// Sign-in (passkey or text code) from the age screen lands on Play after the
+// same sheets as a new account. A link keeps its own destination: a push tap
+// or chat link, and ?signin=1 links (which keep the Feed landing they always
+// had). ?postauth=1 asks for the iOS landing explicitly (also in the demo).
+async function finishSignIn() {
+    const params = new URLSearchParams(location.search);
+    const routed = ["tab", "notification", "chat", "manage", "story", "call"].some((key) => params.has(key));
+    const explicit = params.get("postauth") === "1";
+    const landsOnPlay = !routed && (explicit || (!demoMode && params.get("signin") !== "1"));
+    closeSignedOutRoot();
+    state.postAuthLanding = landsOnPlay ? "play" : null;
+    await showSignedIn();
+    if (state.postAuthLanding !== "play") return;
+    if (state.activePanel !== "play") switchPanel("play", { historyMode: "replace", restoreScroll: false });
+    void runPostAuthSheets({ reason: "signin" });
 }
 
 function deviceInstallationId() {
@@ -2940,7 +3280,7 @@ function deviceInstallationId() {
 
 function dateOfBirthFromAge(value) {
     const age = Number(value);
-    if (!Number.isInteger(age) || age < 13 || age > 27) return null;
+    if (!Number.isInteger(age) || age < SIGNUP_MIN_AGE || age > SIGNUP_MAX_AGE) return null;
     return `${new Date().getFullYear() - age}-01-01T00:00:00Z`;
 }
 
@@ -2967,8 +3307,17 @@ const signupGradeCatalog = [
     { name: "Senior", gradeNumber: 12 },
 ];
 
+// AgeWheelPicker.ages: 13...35.
+const SIGNUP_MIN_AGE = 13;
+const SIGNUP_MAX_AGE = 35;
+// OnboardingFlowView order.
+const SIGNUP_STEP = Object.freeze({
+    age: 0, contacts: 1, school: 2, grade: 3, phone: 4, code: 5, firstName: 6,
+    lastName: 7, username: 8, gender: 9, photo: 10, passkey: 11, welcome: 12,
+});
+
 function selectSignupAge(value, { scroll = true, smooth = false } = {}) {
-    const age = Math.max(13, Math.min(27, Number(value) || 13));
+    const age = Math.max(SIGNUP_MIN_AGE, Math.min(SIGNUP_MAX_AGE, Number(value) || SIGNUP_MIN_AGE));
     $("#signupAge").value = String(age);
     $("#signupAgeValue").textContent = String(age);
     $$('[data-signup-age]').forEach((option) => {
@@ -3039,22 +3388,16 @@ function showAuthBrowserHelp(error, signup) {
     }
 }
 
-async function openSignupDialog() {
-    if (!demoMode) {
-        try {
-            await checkPasskeyEnvironment();
-            if (!await enablePreviewSignup()) return;
-        }
-        catch (error) {
-            $('#authStatus').textContent = userMessage(error, "Passkeys aren’t available in this browser right now.");
-            showAuthBrowserHelp(error, false);
-            const help = $('#authBrowserHelp');
-            if (!help.classList.contains('hidden')) help.href = authBrowserURL({ signup: true });
-            reportAuthFailure(error);
-            return;
-        }
-    }
+// Opens the age screen, the signed-out root. The passkey environment is checked
+// when "Get Started!" is tapped, so the root always shows.
+function openSignupDialog() {
     state.signupCompletionUncertain = false;
+    state.signupAccountCreated = false;
+    state.signupPickedContacts = [];
+    state.signupVoteCount = 0;
+    state.signupUsernameChecked = null;
+    readInviteToken();
+    void loadSignedOutConfig().then(renderSignupConfigOptions);
     $('#signupForm').querySelectorAll('button[type="submit"]').forEach(button => { button.disabled = false; });
     $('#signupRecoverAccount').classList.add('hidden');
     $('#signupBrowserHelp').classList.add('hidden');
@@ -3066,11 +3409,49 @@ async function openSignupDialog() {
     state.signupVerifiedPhone = null;
     resetSignupTurnstile({ remove: true });
     $("#signupPhoneCode").value = "";
-    selectSignupAge($("#signupAge").value || 13, { scroll: false });
+    $("#signupSmsOptInBox").checked = false;
+    $("#signupUsernameStatus").replaceChildren();
+    $("#signupPasskeyExplainer").classList.remove("hidden");
+    $("#signupPasskeyDone").classList.add("hidden");
+    selectSignupAge($("#signupAge").value || SIGNUP_MIN_AGE, { scroll: false });
     renderSignupGradeOptions();
-    setSignupStep(0);
+    setSignupStep(SIGNUP_STEP.age);
     $("#signupDialog").showModal();
+    // The dialog focuses its first link (Terms); iOS shows no focus here.
+    if ($("#signupDialog").contains(document.activeElement) && document.activeElement.matches("a")) document.activeElement.blur();
     requestAnimationFrame(() => selectSignupAge($("#signupAge").value));
+}
+
+// PhoneNumberEntryView shows the SMS opt-in only when the server turns it on;
+// ContactsPermissionView's note comes from contacts_upload_disclosure_text.
+function renderSignupConfigOptions() {
+    $("#signupSmsOptIn").classList.toggle("hidden", state.config?.enable_sms_opt_in_prompt !== true);
+    const note = String(state.config?.contacts_upload_disclosure_text || "").trim();
+    const privacy = $("#signupContactsPrivacy");
+    if (note) privacy.innerHTML = `${escapeHTML(note)} <a href="../privacy-policy.html" target="_blank">Privacy Policy</a>`;
+    else privacy.textContent = "Valid really cares about your privacy. We will never spam your contacts.";
+}
+
+// Invite credit: a link that reaches the web app with ?invite=<token> keeps
+// the token for this tab and sends it with signup (backend inviteToken).
+const INVITE_TOKEN_KEY = "valid:invite-token";
+
+function readInviteToken() {
+    const url = new URL(location.href);
+    const token = url.searchParams.get("invite") || url.searchParams.get("inviteToken");
+    if (token !== null) {
+        url.searchParams.delete("invite");
+        url.searchParams.delete("inviteToken");
+        history.replaceState(history.state, "", `${url.pathname}${url.search}${url.hash}`);
+        if (/^[A-Za-z0-9_-]{8,128}$/.test(token)) {
+            state.inviteToken = token;
+            try { sessionStorage.setItem(INVITE_TOKEN_KEY, token); } catch (_) { /* Kept in memory for this page. */ }
+        }
+    }
+    if (!state.inviteToken) {
+        try { state.inviteToken = sessionStorage.getItem(INVITE_TOKEN_KEY) || null; } catch (_) { /* No stored invite. */ }
+    }
+    return state.inviteToken;
 }
 
 async function turnstileSiteKey() {
@@ -3106,10 +3487,13 @@ function resetSignupTurnstile({ remove = false } = {}) {
     window.turnstile.reset(state.turnstileWidgetId);
 }
 
-async function getSignupTurnstileToken() {
+async function getSignupTurnstileToken(container = "#signupTurnstile") {
     if (demoMode) return "demo";
     const [sitekey, turnstile] = await Promise.all([turnstileSiteKey(), waitForTurnstileAPI()]);
     if (!sitekey) throw new Error("Security verification is not configured yet.");
+    // One widget at a time: sign-up and the sign-in sheet each have a slot.
+    if (state.turnstileWidgetId !== null && state.turnstileContainer !== container) resetSignupTurnstile({ remove: true });
+    state.turnstileContainer = container;
 
     state.turnstileToken = null;
     const tokenPromise = new Promise((resolve, reject) => {
@@ -3132,7 +3516,7 @@ async function getSignupTurnstileToken() {
     });
 
     if (state.turnstileWidgetId === null) {
-        state.turnstileWidgetId = turnstile.render("#signupTurnstile", {
+        state.turnstileWidgetId = turnstile.render(container, {
             sitekey,
             action: TURNSTILE_ACTION,
             appearance: "interaction-only",
@@ -3161,76 +3545,123 @@ async function getSignupTurnstileToken() {
 function resetSignupSchoolPicker() {
     state.signupNearbySchools = [];
     state.signupSelectedSchool = null;
-    state.signupSchoolFallback = false;
+    state.signupSchoolLoading = false;
+    state.signupZipLookups = 0;
+    state.signupZipMode = null;
+    state.signupLastZip = "";
+    state.signupAddedSchool = null;
     state.signupSchoolLookupGeneration += 1;
-    $("#signupSchoolPicker").classList.add("hidden");
-    $("#signupSchoolFallback").classList.add("hidden");
     $("#signupSchoolResults").replaceChildren();
+    $("#signupSchoolFooter").replaceChildren();
     $("#signupSchoolSearch").value = "";
-    $("#signupSchoolContinue").disabled = true;
-    for (const input of [$("#signupSchool"), $("#signupCity"), $("#signupState")]) {
-        input.disabled = true;
-        input.required = false;
-    }
+    $("#signupZip").value = "";
+    renderSignupSchoolStep();
 }
 
 function schoolLocationLabel(school) {
     return [school.city, school.state].filter(Boolean).join(", ");
 }
 
+// SchoolSelectionView: search first ("School, city, or ZIP"). The web has no
+// bundled school list, so the ZIP card fills the list, and typing a ZIP in
+// the search box does the same.
+function renderSignupSchoolStep() {
+    const hasList = state.signupNearbySchools.length > 0;
+    const beforeAdding = state.signupZipMode === "before-adding";
+    const showZipCard = !hasList || beforeAdding;
+    $("#signupZipCard").classList.toggle("hidden", !showZipCard);
+    $("#signupSchoolPicker").classList.toggle("hidden", showZipCard);
+    $("#signupZipTitle").textContent = beforeAdding ? "One more way to find it" : "Find schools nearby";
+    $("#signupZipCopy").textContent = beforeAdding
+        ? "Your school may be listed under a different name. Enter your ZIP code to check nearby schools before adding a new one."
+        : "Enter your ZIP code so we can show schools around you.";
+    $("#signupZipAlt").classList.toggle("hidden", !beforeAdding);
+    const findButton = $("#signupFindSchools");
+    findButton.disabled = state.signupSchoolLoading || $("#signupZip").value.length !== 5;
+    findButton.textContent = state.signupSchoolLoading ? "Finding..." : "Find schools";
+    $("#signupZipAlt").disabled = state.signupSchoolLoading;
+    $("#signupSchoolContinue").classList.toggle("hidden", !state.signupSelectedSchool);
+    $("#signupSchoolContinue").disabled = !state.signupSelectedSchool;
+    if (!showZipCard) renderSignupSchoolResults();
+}
+
 function renderSignupSchoolResults() {
-    const query = $("#signupSchoolSearch").value.trim().toLowerCase();
+    const rawQuery = $("#signupSchoolSearch").value.trim();
+    const query = rawQuery.toLowerCase();
+    const zipQuery = /^\d{5}$/.test(query);
     const schools = state.signupNearbySchools.filter((school) => {
-        if (!query) return true;
+        if (!query || zipQuery) return true;
         return `${school.name} ${school.city || ""} ${school.state || ""}`.toLowerCase().includes(query);
     });
     const container = $("#signupSchoolResults");
+    const footer = $("#signupSchoolFooter");
+    // After a second ZIP the next step is adding the school (iOS: "Add a school").
+    const canAddSchool = state.signupZipLookups >= 2;
+    footer.innerHTML = canAddSchool
+        ? `<button class="signup-school-more" type="button" data-signup-add-school><span class="signup-school-more-icon" aria-hidden="true">+</span><span><strong>Add a school</strong><small>Can't find your school? Add it here.</small></span><span aria-hidden="true">›</span></button>`
+        : `<button class="signup-school-more" type="button" data-signup-zip-again><span class="signup-school-more-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 18s-5.5-4.6-5.5-9a5.5 5.5 0 0 1 11 0c0 4.4-5.5 9-5.5 9Z"/><circle cx="12" cy="9" r="2"/></svg></span><span><strong>Can't find your school?</strong><small>Search by ZIP before adding a new school.</small></span><span aria-hidden="true">›</span></button>`;
     if (!schools.length) {
-        container.innerHTML = `<p class="signup-school-empty">No nearby schools match that search.</p>`;
+        container.innerHTML = `<div class="signup-school-empty">
+            <span class="signup-school-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg></span>
+            <strong>No results for "${escapeHTML(rawQuery)}"</strong>
+            <p>${canAddSchool ? "Still can't find your school? You can add it below." : "Your school may be listed under a different name. Try your ZIP code before adding a new school."}</p>
+            <button class="primary-button" type="button" ${canAddSchool ? "data-signup-add-school" : "data-signup-zip-again"}>${canAddSchool ? "Add a school" : "Search by ZIP code"}</button>
+        </div>`;
         return;
     }
     container.innerHTML = schools.map((school) => {
         const selected = String(state.signupSelectedSchool?.id) === String(school.id);
         const logoURL = school.logo_url ? api.assetURL(school.logo_url) : "";
         const initials = String(school.name || "S").split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase();
+        const members = Math.max(0, Number(school.member_count || 0));
+        const trailing = selected
+            ? `<span class="signup-school-check" aria-hidden="true">✓</span>`
+            : members ? `<span class="signup-school-members"><strong>${members.toLocaleString()}</strong><small>on Valid</small></span>` : `<span class="signup-school-check" aria-hidden="true">›</span>`;
         return `<button class="signup-school-result ${selected ? "selected" : ""}" type="button" role="option" aria-selected="${selected}" data-signup-school="${escapeHTML(school.id)}">
             <span class="signup-school-logo">${logoURL ? mediaImageMarkup(logoURL, { initials }) : escapeHTML(initials)}</span>
-            <span><strong>${escapeHTML(school.name)}</strong><small>${escapeHTML(schoolLocationLabel(school))}${Number.isFinite(Number(school.distance_miles)) ? ` · ${Number(school.distance_miles).toFixed(1)} mi` : ""}</small></span>
-            <span class="signup-school-check" aria-hidden="true">${selected ? "✓" : "›"}</span>
+            <span><strong>${escapeHTML(school.name)}</strong><small>${escapeHTML(schoolLocationLabel(school))}${Number.isFinite(Number(school.distance_miles)) && school.distance_miles !== null ? ` · ${Number(school.distance_miles).toFixed(1)} mi` : ""}</small></span>
+            ${trailing}
         </button>`;
     }).join("");
 }
 
-async function lookupSignupSchools() {
-    const zipCode = $("#signupZip").value.replace(/\D/g, "").slice(0, 5);
-    $("#signupZip").value = zipCode;
+async function lookupSignupSchools(zipValue = $("#signupZip").value) {
+    const zipCode = String(zipValue || "").replace(/\D/g, "").slice(0, 5);
     if (!/^\d{5}$/.test(zipCode)) {
         $("#signupStatus").textContent = "Enter a 5-digit ZIP code.";
         return;
     }
+    $("#signupZip").value = zipCode;
     const generation = ++state.signupSchoolLookupGeneration;
-    $("#signupStatus").textContent = "Finding the 50 closest schools...";
+    state.signupSchoolLoading = true;
+    $("#signupStatus").textContent = "";
+    renderSignupSchoolStep();
     try {
         const response = await api.getNearbySchools(zipCode, 50);
         if (generation !== state.signupSchoolLookupGeneration) return;
-        state.signupNearbySchools = response.schools || [];
-        state.signupSelectedSchool = null;
-        state.signupSchoolFallback = false;
-        $("#signupSchoolSearch").value = "";
-        $("#signupSchoolPicker").classList.remove("hidden");
-        $("#signupSchoolFallback").classList.add("hidden");
-        $("#signupSchoolContinue").disabled = true;
-        renderSignupSchoolResults();
-        $("#signupStatus").textContent = state.signupNearbySchools.length
-            ? `Showing ${state.signupNearbySchools.length} schools near ${zipCode}.`
-            : "No schools were found near that ZIP code.";
+        const schools = response.schools || [];
+        state.signupLastZip = zipCode;
+        state.signupZipLookups += 1;
+        if (!schools.length) {
+            $("#signupStatus").textContent = "No schools were found near that ZIP code.";
+            return;
+        }
+        const added = state.signupAddedSchool;
+        state.signupNearbySchools = added ? [added, ...schools.filter((school) => String(school.id) !== String(added.id))] : schools;
+        if (state.signupSelectedSchool && !state.signupNearbySchools.some((school) => String(school.id) === String(state.signupSelectedSchool.id))) {
+            state.signupSelectedSchool = null;
+        }
+        state.signupZipMode = null;
+        if (!/^\d{5}$/.test($("#signupSchoolSearch").value.trim())) $("#signupSchoolSearch").value = "";
+        $("#signupSchoolResults").scrollTop = 0;
     } catch (error) {
         if (generation !== state.signupSchoolLookupGeneration) return;
-        state.signupNearbySchools = [];
-        state.signupSelectedSchool = null;
-        $("#signupSchoolPicker").classList.add("hidden");
-        showSignupSchoolFallback(true);
-        $("#signupStatus").textContent = userMessage(error, "Couldn't load nearby schools. Enter your school manually.");
+        $("#signupStatus").textContent = userMessage(error, "Couldn't load nearby schools. Try again.");
+    } finally {
+        if (generation === state.signupSchoolLookupGeneration) {
+            state.signupSchoolLoading = false;
+            renderSignupSchoolStep();
+        }
     }
 }
 
@@ -3238,40 +3669,189 @@ function selectSignupSchool(schoolId) {
     const school = state.signupNearbySchools.find((candidate) => String(candidate.id) === String(schoolId));
     if (!school) return;
     state.signupSelectedSchool = school;
-    state.signupSchoolFallback = false;
-    $("#signupSchoolContinue").disabled = false;
     $("#signupStatus").textContent = "";
     renderSignupGradeOptions();
-    renderSignupSchoolResults();
+    renderSignupSchoolStep();
 }
 
-function showSignupSchoolFallback(show) {
-    state.signupSchoolFallback = show;
-    state.signupSelectedSchool = show ? null : state.signupSelectedSchool;
-    $("#signupSchoolFallback").classList.toggle("hidden", !show);
-    $("#signupSchoolPicker").classList.toggle("hidden", show || !state.signupNearbySchools.length);
-    for (const input of [$("#signupSchool"), $("#signupCity"), $("#signupState")]) {
-        input.disabled = !show;
-        input.required = show;
+function showSignupZipCard(mode = "before-adding") {
+    state.signupZipMode = mode;
+    $("#signupZip").value = "";
+    $("#signupStatus").textContent = "";
+    renderSignupSchoolStep();
+    requestAnimationFrame(() => $("#signupZip").focus({ preventScroll: true }));
+}
+
+// SchoolRequestView: name, city, state, the school's ZIP and its grade range.
+// The school is resolved (found or created) here, before sign-up continues.
+function openAddSchoolSheet() {
+    const query = $("#signupSchoolSearch").value.trim();
+    $("#addSchoolForm").reset();
+    $("#addSchoolName").value = /^\d{5}$/.test(query) ? "" : query;
+    $("#addSchoolZip").value = state.signupLastZip || "";
+    $("#addSchoolMinGrade").value = "9";
+    $("#addSchoolMaxGrade").value = "12";
+    $("#addSchoolStatus").textContent = "";
+    $("#addSchoolFields").classList.remove("hidden");
+    $("#addSchoolDone").classList.add("hidden");
+    state.signupAddedSchool = null;
+    $("#addSchoolDialog").showModal();
+    requestAnimationFrame(() => $(query && !/^\d{5}$/.test(query) ? "#addSchoolCity" : "#addSchoolName").focus({ preventScroll: true }));
+}
+
+function syncAddSchoolGrades(changed) {
+    const min = $("#addSchoolMinGrade");
+    const max = $("#addSchoolMaxGrade");
+    if (Number(max.value) >= Number(min.value)) return;
+    if (changed === min) max.value = min.value;
+    else min.value = max.value;
+}
+
+async function submitAddSchool(event) {
+    event.preventDefault();
+    const name = $("#addSchoolName").value.trim();
+    const city = $("#addSchoolCity").value.trim();
+    const stateCode = $("#addSchoolState").value.trim().toUpperCase();
+    const zip = $("#addSchoolZip").value.replace(/\D/g, "").slice(0, 5);
+    const minGrade = Number($("#addSchoolMinGrade").value);
+    const maxGrade = Number($("#addSchoolMaxGrade").value);
+    const status = $("#addSchoolStatus");
+    if (!name) {
+        status.textContent = "Enter your school's name.";
+        $("#addSchoolName").focus();
+        return;
     }
-    $("#signupSchoolContinue").disabled = show ? false : !state.signupSelectedSchool;
-    $("#signupStatus").textContent = show ? "Enter the school exactly as it should appear." : "Choose a nearby school.";
-    if (show) $("#signupSchool").focus();
+    if (zip.length !== 5) {
+        status.textContent = "Enter the school's 5-digit ZIP code.";
+        $("#addSchoolZip").focus();
+        return;
+    }
+    if (stateCode && !/^[A-Z]{2}$/.test(stateCode)) {
+        status.textContent = "Use the two-letter state code, like CA.";
+        $("#addSchoolState").focus();
+        return;
+    }
+    const button = $("#addSchoolSubmit");
+    setButtonLoading(button, true, "Adding...");
+    status.textContent = "";
+    try {
+        const result = await api.resolveSchool({
+            school_name: name,
+            ...(city ? { city } : {}),
+            ...(stateCode ? { state: stateCode } : {}),
+            zip,
+            grades: `${minGrade}-${maxGrade}`,
+            min_grade: minGrade,
+            max_grade: maxGrade,
+        });
+        const school = result?.school;
+        if (!school?.id) throw new Error("We couldn't set up that school. Check its name and location.");
+        const found = result.status === "duplicate";
+        state.signupAddedSchool = {
+            ...school,
+            min_grade: school.min_grade ?? minGrade,
+            max_grade: school.max_grade ?? maxGrade,
+        };
+        $("#addSchoolDoneTitle").textContent = found ? "School Found!" : "School Added!";
+        $("#addSchoolDoneCopy").textContent = found
+            ? `We found ${school.name} nearby. It's ready for you to select.`
+            : `${school.name} has been added and is ready for you to select.`;
+        $("#addSchoolSelect").textContent = `Select ${school.name}`;
+        $("#addSchoolFields").classList.add("hidden");
+        $("#addSchoolDone").classList.remove("hidden");
+        successHaptic();
+    } catch (error) {
+        status.textContent = userMessage(error, "Could not add that school. Please try again.");
+    } finally {
+        setButtonLoading(button, false);
+    }
+}
+
+function selectAddedSchool() {
+    const school = state.signupAddedSchool;
+    if (!school) return;
+    state.signupNearbySchools = [school, ...state.signupNearbySchools.filter((candidate) => String(candidate.id) !== String(school.id))];
+    state.signupZipMode = null;
+    $("#signupSchoolSearch").value = "";
+    $("#addSchoolDialog").close();
+    selectSignupSchool(school.id);
+}
+
+// ContactsPermissionView: picked before school. The Contact Picker exists only
+// in Chrome on Android; elsewhere the same card offers the invite share.
+function renderSignupContactsStep() {
+    const picked = state.signupPickedContacts.length > 0;
+    const supported = contactsPickerSupported();
+    $("#signupContactsDone").classList.toggle("hidden", !picked);
+    $("#signupContactsChoose").classList.toggle("hidden", picked || !supported);
+    $("#signupContactsInvite").classList.toggle("hidden", picked || supported);
+}
+
+async function chooseSignupContacts(button) {
+    setButtonLoading(button, true, "Opening...");
+    $("#signupStatus").textContent = "";
+    try {
+        const selected = demoMode
+            ? (window.__demoPickedContacts || [{ name: ["Riley Demo"], tel: ["4155550111"] }, { name: ["Casey Demo"], tel: ["4155550112"] }])
+            : await navigator.contacts.select(["name", "tel"], { multiple: true });
+        const payload = contactUploadPayload(selected, state.config?.contact_filter_rules);
+        if (!payload.contacts.length) {
+            $("#signupStatus").textContent = selected?.length ? "Choose friends with a name and a US phone number." : "";
+            return;
+        }
+        state.signupPickedContacts = payload.contacts;
+        successHaptic();
+        renderSignupContactsStep();
+    } catch (error) {
+        if (error.name !== "AbortError") $("#signupStatus").textContent = userMessage(error, "Could not open your contacts.");
+    } finally {
+        setButtonLoading(button, false);
+    }
+}
+
+async function shareSignupInvite(button) {
+    const url = "https://validapp.lol/";
+    try {
+        if (navigator.share) await navigator.share({ title: "Join me on Valid", text: "Join my school on Valid so we can play", url });
+        else {
+            await navigator.clipboard.writeText(url);
+            showToast("Invite link copied");
+        }
+        button.textContent = "Invite more friends";
+    } catch (error) {
+        if (error.name !== "AbortError") $("#signupStatus").textContent = userMessage(error, "Could not share the invite.");
+    }
+}
+
+// Uploads the friends picked before the account existed; their matches fill
+// the Friends & Classmates sheet.
+function startSignupContactUpload() {
+    const contacts = state.signupPickedContacts;
+    const userId = api.user?.id;
+    if (!contacts.length || !userId) return Promise.resolve(null);
+    return uploadContactChunks(userId, contacts).then(({ accepted }) => {
+        state.signupContactHashes = new Map(accepted
+            .filter((row) => row?.hashed_phone_number)
+            .map((row) => [String(row.phone_number), String(row.hashed_phone_number).toLowerCase()]));
+        return accepted;
+    }).catch(() => null);
 }
 
 function setSignupStep(index) {
     const focused = document.activeElement;
     if (focused && $("#signupDialog").contains(focused) && focused.matches("input, select, textarea")) focused.blur();
-    state.signupStep = Math.max(0, Math.min(9, index));
+    state.signupStep = Math.max(SIGNUP_STEP.age, Math.min(SIGNUP_STEP.welcome, index));
     $$('[data-signup-step]').forEach((step) => step.classList.toggle("hidden", Number(step.dataset.signupStep) !== state.signupStep));
     $("#signupStatus").textContent = "";
+    $("#signupBrowserHelp").classList.add("hidden");
     const autofocusByStep = {
-        3: "#signupPhone",
-        4: "#signupPhoneCode",
-        5: "#signupFirstName",
-        6: "#signupLastName",
-        7: "#signupUsername",
+        [SIGNUP_STEP.phone]: "#signupPhone",
+        [SIGNUP_STEP.code]: "#signupPhoneCode",
+        [SIGNUP_STEP.firstName]: "#signupFirstName",
+        [SIGNUP_STEP.lastName]: "#signupLastName",
+        [SIGNUP_STEP.username]: "#signupUsername",
     };
+    if (state.signupStep === SIGNUP_STEP.username) prefillSignupUsername();
     const autofocusInput = $(autofocusByStep[state.signupStep]);
     if (autofocusInput) {
         autofocusInput.focus({ preventScroll: true });
@@ -3283,28 +3863,150 @@ function setSignupStep(index) {
         $(`[data-signup-step="${state.signupStep}"]`).scrollTop = 0;
         if (autofocusInput) keepFocusedControlVisible();
     });
-    $(".signup-back-button").classList.toggle("hidden", state.signupStep === 0);
-    if (state.signupStep === 2) renderSignupGradeOptions();
-    if (state.signupStep === 9) {
-        resetSignupPhotoPreview();
-        $("#signupPicture").value = "";
+    // iOS has no Back on the school step, after the account exists, or on welcome.
+    const noBack = [SIGNUP_STEP.age, SIGNUP_STEP.school, SIGNUP_STEP.welcome].includes(state.signupStep)
+        || (state.signupStep === SIGNUP_STEP.passkey && state.signupAccountCreated);
+    $(".signup-back-button").classList.toggle("hidden", noBack);
+    if (state.signupStep === SIGNUP_STEP.contacts) renderSignupContactsStep();
+    if (state.signupStep === SIGNUP_STEP.school) renderSignupSchoolStep();
+    if (state.signupStep === SIGNUP_STEP.grade) renderSignupGradeOptions();
+    if (state.signupStep === SIGNUP_STEP.firstName) renderSignupVoteBanner();
+    if (state.signupStep === SIGNUP_STEP.welcome) void preloadNotificationSoftPrompt();
+}
+
+function signupStepBack() {
+    let previous = state.signupStep - 1;
+    // A verified number skips its code step on the way back.
+    if (previous === SIGNUP_STEP.code && (state.signupPhoneVerified || demoMode)) previous = SIGNUP_STEP.phone;
+    if (state.signupStep === SIGNUP_STEP.code) clearInterval(state.signupResendTimer);
+    setSignupStep(previous);
+}
+
+// FirstNameEntryView: "You've been voted for N times already!" (and a party emoji) from the
+// phone check's vote_count.
+function renderSignupVoteBanner() {
+    const count = Math.max(0, Number(state.signupVoteCount || 0));
+    const banner = $("#signupVoteBanner");
+    banner.classList.toggle("hidden", count < 1);
+    banner.innerHTML = count > 0
+        ? `You've been voted for <strong>${count.toLocaleString()}</strong> ${count === 1 ? "time" : "times"} already! \u{1F389}`
+        : "";
+}
+
+function renderSignupCodeSession(verification, phoneNumber) {
+    $("#signupCodeHint").textContent = `Sent to ${formatSignupPhone(phoneNumber)}`;
+    const attempts = Number(verification?.attempts_remaining);
+    $("#signupCodeAttempts").classList.toggle("hidden", !Number.isFinite(attempts));
+    $("#signupCodeAttempts").textContent = Number.isFinite(attempts) ? `Attempts remaining: ${attempts}` : "";
+    startResendCountdown($("[data-signup-resend-code]"), verification?.resend_available_at, "signupResendTimer");
+}
+
+const ACCOUNT_EXISTS_MESSAGE = "An account already exists for this phone number. Please log in.";
+
+// UsernameEntryView: pre-filled from first + last name, checked as you type,
+// and a taken name offers "Try this instead: @name1" with "Use".
+function prefillSignupUsername() {
+    const input = $("#signupUsername");
+    if (input.value) return;
+    const suggestion = `${$("#signupFirstName").value}${$("#signupLastName").value}`.toLowerCase().replace(/[^a-z]/g, "").slice(0, 15);
+    input.value = suggestion;
+    if (suggestion) scheduleSignupUsernameCheck(0);
+}
+
+function scheduleSignupUsernameCheck(delay = 450) {
+    clearTimeout(state.signupUsernameTimer);
+    const username = $("#signupUsername").value;
+    state.signupUsernameGeneration = (state.signupUsernameGeneration || 0) + 1;
+    if (!username) {
+        renderSignupUsernameStatus(null);
+        return;
+    }
+    if (username.length < 3) {
+        renderSignupUsernameStatus({ kind: "short" });
+        return;
+    }
+    state.signupUsernameTimer = setTimeout(() => void checkSignupUsername(username), delay);
+}
+
+function renderSignupUsernameStatus(status) {
+    const container = $("#signupUsernameStatus");
+    state.signupUsernameState = status;
+    if (!status) {
+        container.replaceChildren();
+        return;
+    }
+    if (status.kind === "checking") container.innerHTML = `<p class="signup-username-checking">Checking availability...</p>`;
+    else if (status.kind === "short") container.innerHTML = `<p class="signup-username-warning">Username must be at least 3 characters</p>`;
+    else if (status.kind === "taken") {
+        container.innerHTML = status.suggestion
+            ? `<div class="signup-username-suggestion"><p>Username '${escapeHTML(status.username)}' is already taken</p><small>Try this instead:</small><div><strong>@${escapeHTML(status.suggestion)}</strong><button type="button" data-signup-use-username="${escapeHTML(status.suggestion)}">Use</button></div></div>`
+            : `<p class="signup-username-warning">Username '${escapeHTML(status.username)}' is already taken</p>`;
+    } else container.replaceChildren();
+}
+
+// Resolves true when `username` is free. A taken name looks for a numbered
+// variant (OnboardingFlowModel.suggestAvailableUsername, bounded on the web).
+async function checkSignupUsername(username) {
+    const generation = state.signupUsernameGeneration;
+    renderSignupUsernameStatus({ kind: "checking" });
+    try {
+        const result = await api.checkUsernameAvailability(username);
+        if (generation !== state.signupUsernameGeneration) return null;
+        if (result.available) {
+            state.signupUsernameChecked = username;
+            renderSignupUsernameStatus({ kind: "available" });
+            return true;
+        }
+        let suggestion = null;
+        for (let attempt = 1; attempt <= 9 && !suggestion; attempt += 1) {
+            const candidate = `${username}${attempt}`;
+            if (candidate.length > 30) break;
+            const variant = await api.checkUsernameAvailability(candidate).catch(() => null);
+            if (generation !== state.signupUsernameGeneration) return null;
+            if (variant?.available) suggestion = candidate;
+        }
+        renderSignupUsernameStatus({ kind: "taken", username, suggestion });
+        return false;
+    } catch (error) {
+        if (generation !== state.signupUsernameGeneration) return null;
+        renderSignupUsernameStatus(null);
+        $("#signupStatus").textContent = userMessage(error, "Could not check that username.");
+        return false;
     }
 }
 
 async function advanceSignup(button) {
-    const step = $(`[data-signup-step="${state.signupStep}"]`);
-    const fields = [...step.querySelectorAll("input, select")];
-    const invalid = fields.find((field) => !field.checkValidity());
-    if (invalid) return invalid.reportValidity();
-    if (state.signupStep === 1 && !state.signupSelectedSchool && !state.signupSchoolFallback) {
+    const stepIndex = state.signupStep;
+    const step = $(`[data-signup-step="${stepIndex}"]`);
+    if (stepIndex !== SIGNUP_STEP.school) {
+        const fields = [...step.querySelectorAll("input, select")];
+        const invalid = fields.find((field) => !field.checkValidity());
+        if (invalid) return invalid.reportValidity();
+    }
+    if (stepIndex === SIGNUP_STEP.age) {
+        if (!demoMode) {
+            try {
+                await checkPasskeyEnvironment();
+                if (!await enablePreviewSignup()) return;
+            } catch (error) {
+                $("#signupStatus").textContent = userMessage(error, "Passkeys aren’t available in this browser right now.");
+                showAuthBrowserHelp(error, true);
+                reportAuthFailure(error);
+                return;
+            }
+        }
+        setSignupStep(SIGNUP_STEP.contacts);
+        return;
+    }
+    if (stepIndex === SIGNUP_STEP.school && !state.signupSelectedSchool) {
         $("#signupStatus").textContent = "Choose your school before continuing.";
         return;
     }
-    if (state.signupStep === 2 && !$("#signupGrade").value) {
+    if (stepIndex === SIGNUP_STEP.grade && !$("#signupGrade").value) {
         $("#signupStatus").textContent = "Choose your grade before continuing.";
         return;
     }
-    if (state.signupStep === 3) {
+    if (stepIndex === SIGNUP_STEP.phone) {
         const phoneNumber = signupPhoneDigits($("#signupPhone").value);
         if (phoneNumber.length !== 10) {
             $("#signupStatus").textContent = "Enter a valid 10-digit phone number.";
@@ -3316,40 +4018,39 @@ async function advanceSignup(button) {
         $("#signupPhoneCode").value = "";
         // Keep this transition inside the tap gesture so mobile Safari and
         // Chrome can open the numeric code keyboard without requiring a second tap.
-        setSignupStep(demoMode ? 5 : 4);
+        setSignupStep(demoMode ? SIGNUP_STEP.firstName : SIGNUP_STEP.code);
+        $("#signupCodeHint").textContent = `Sent to ${formatSignupPhone(phoneNumber)}`;
         setButtonLoading(button, true, "Checking...");
         try {
             const result = await api.checkPhoneRegistration(phoneNumber, deviceInstallationId());
             if (result.exists) {
-                $("#signupDialog").close();
-                $("#authStatus").textContent = "An account already exists for this phone number. Sign in.";
-                requestAnimationFrame(() => $("#passkeyButton").focus());
+                setSignupStep(SIGNUP_STEP.phone);
+                openSignInSheet({ message: ACCOUNT_EXISTS_MESSAGE });
                 return;
             }
+            state.signupVoteCount = Math.max(0, Number(result.vote_count || 0));
+            if (state.signupStep === SIGNUP_STEP.firstName) renderSignupVoteBanner();
             if (!demoMode) {
                 $("#signupStatus").textContent = "Completing a quick security check…";
                 const turnstileToken = await getSignupTurnstileToken();
                 const verification = await api.requestPhoneVerification(phoneNumber, turnstileToken);
                 resetSignupTurnstile();
-                $("#signupCodeHint").textContent = `We sent a verification code to ${formatSignupPhone(phoneNumber)}.`;
-                $("#signupStatus").textContent = verification.can_resend
-                    ? "Enter the code from your text message."
-                    : "Enter the code from your text message.";
+                renderSignupCodeSession(verification, phoneNumber);
+                $("#signupStatus").textContent = "";
             }
         } catch (error) {
             if (error.status === 409) {
-                $("#signupDialog").close();
-                $("#authStatus").textContent = "An account already exists for this phone number. Sign in.";
-                requestAnimationFrame(() => $("#passkeyButton").focus());
+                setSignupStep(SIGNUP_STEP.phone);
+                openSignInSheet({ message: ACCOUNT_EXISTS_MESSAGE });
                 return;
             }
-            setSignupStep(3);
+            setSignupStep(SIGNUP_STEP.phone);
             $("#signupStatus").textContent = userMessage(error, "Could not check that phone number.");
             return;
         } finally { setButtonLoading(button, false); }
         return;
     }
-    if (state.signupStep === 4) {
+    if (stepIndex === SIGNUP_STEP.code) {
         const phoneNumber = signupPhoneDigits($("#signupPhone").value);
         const code = $("#signupPhoneCode").value.replace(/\D/g, "");
         if (!/^\d{4,10}$/.test(code)) {
@@ -3360,104 +4061,119 @@ async function advanceSignup(button) {
         try {
             const verification = await api.confirmPhoneVerification(phoneNumber, code);
             if (!verification.is_approved) {
+                const attempts = Number(verification.attempts_remaining);
+                if (Number.isFinite(attempts)) $("#signupCodeAttempts").textContent = `Attempts remaining: ${attempts}`;
                 $("#signupStatus").textContent = "That code was not approved. Try again.";
                 return;
             }
             state.signupPhoneVerified = true;
             state.signupVerifiedPhone = phoneNumber;
-            setSignupStep(5);
+            clearInterval(state.signupResendTimer);
+            setSignupStep(SIGNUP_STEP.firstName);
         } catch (error) {
             $("#signupStatus").textContent = userMessage(error, "Could not verify that code.");
         } finally { setButtonLoading(button, false); }
         return;
     }
-    if (state.signupStep === 8 && !$("#signupGender").value) {
+    if (stepIndex === SIGNUP_STEP.username) {
+        const username = $("#signupUsername").value.trim().toLowerCase();
+        if (username.length < 3) {
+            renderSignupUsernameStatus({ kind: "short" });
+            return;
+        }
+        if (state.signupUsernameChecked !== username) {
+            clearTimeout(state.signupUsernameTimer);
+            state.signupUsernameGeneration = (state.signupUsernameGeneration || 0) + 1;
+            setButtonLoading(button, true, "Continue");
+            const available = await checkSignupUsername(username).finally(() => setButtonLoading(button, false));
+            if (!available || $("#signupUsername").value.trim().toLowerCase() !== username) return;
+        }
+    }
+    if (stepIndex === SIGNUP_STEP.gender && !$("#signupGender").value) {
         $("#signupStatus").textContent = "Choose a gender before continuing.";
         return;
     }
-    if (state.signupStep === 7) {
-        setButtonLoading(button, true, "Checking username...");
-        try {
-            const result = await api.checkUsernameAvailability($("#signupUsername").value.trim().toLowerCase());
-            if (!result.available) {
-                $("#signupStatus").textContent = "That username is not available. Try another one.";
-                return;
-            }
-        } catch (error) {
-            $("#signupStatus").textContent = userMessage(error, "Could not check that username.");
-            return;
-        } finally { setButtonLoading(button, false); }
-    }
-    setSignupStep(state.signupStep + 1);
+    if (stepIndex === SIGNUP_STEP.passkey && !state.signupAccountCreated) return;
+    setSignupStep(stepIndex + 1);
 }
 
 async function resendSignupPhoneCode(button) {
     const phoneNumber = signupPhoneDigits($("#signupPhone").value);
     if (phoneNumber.length !== 10) {
-        setSignupStep(3);
+        setSignupStep(SIGNUP_STEP.phone);
         $("#signupStatus").textContent = "Enter a valid 10-digit phone number.";
         return;
     }
     setButtonLoading(button, true, "Sending...");
     $("#signupStatus").textContent = "";
+    let verification = null;
     try {
         $("#signupStatus").textContent = "Completing a quick security check…";
         const turnstileToken = await getSignupTurnstileToken();
-        await api.requestPhoneVerification(phoneNumber, turnstileToken);
+        verification = await api.requestPhoneVerification(phoneNumber, turnstileToken);
         resetSignupTurnstile();
-        $("#signupCodeHint").textContent = `We sent a new verification code to ${formatSignupPhone(phoneNumber)}.`;
+        $("#signupStatus").textContent = "A verification code was sent. Enter the newest code below.";
         $("#signupPhoneCode").value = "";
         $("#signupPhoneCode").focus({ preventScroll: true });
     } catch (error) {
         if (error.status === 409) {
-            $("#signupDialog").close();
-            $("#authStatus").textContent = "An account already exists for this phone number. Sign in.";
-            requestAnimationFrame(() => $("#passkeyButton").focus());
+            setSignupStep(SIGNUP_STEP.phone);
+            openSignInSheet({ message: ACCOUNT_EXISTS_MESSAGE });
             return;
         }
         $("#signupStatus").textContent = userMessage(error, "Could not send another code.");
     } finally {
         setButtonLoading(button, false);
+        if (verification) renderSignupCodeSession(verification, phoneNumber);
+        else startResendCountdown(button, null, "signupResendTimer");
     }
 }
 
+function changeSignupPhone() {
+    clearInterval(state.signupResendTimer);
+    $("#signupPhoneCode").value = "";
+    resetSignupTurnstile();
+    setSignupStep(SIGNUP_STEP.phone);
+}
+
+// PasskeySetupView: "Create passkey" makes the passkey and the account in one
+// step (the web account is created with its passkey), then "Your account is
+// secured" moves on by itself after 1.5 s.
 async function createAccount(event) {
     event.preventDefault();
-    if (state.signupCompletionUncertain) return;
+    if (state.signupStep !== SIGNUP_STEP.passkey) {
+        // Enter in a field submits the form: treat it as that step's Continue.
+        const next = $(`[data-signup-step="${state.signupStep}"] [data-signup-next]:not(.hidden)`);
+        if (next && !next.disabled) advanceSignup(next);
+        return;
+    }
+    if (state.signupCompletionUncertain || state.signupAccountCreated) return;
     const form = event.currentTarget;
-    const button = event.submitter || form.querySelector("button[type=submit]");
+    const button = $("#signupCreatePasskey");
     const dateOfBirth = dateOfBirthFromAge($("#signupAge").value);
     if (!dateOfBirth) {
-        $("#signupStatus").textContent = "Choose an age between 13 and 27.";
+        $("#signupStatus").textContent = `Choose an age between ${SIGNUP_MIN_AGE} and ${SIGNUP_MAX_AGE}.`;
         return;
     }
     const username = $("#signupUsername").value.trim().toLowerCase();
     const signupPhone = signupPhoneDigits($("#signupPhone").value);
     if (!demoMode && (!state.signupPhoneVerified || state.signupVerifiedPhone !== signupPhone)) {
-        setSignupStep(3);
+        setSignupStep(SIGNUP_STEP.phone);
         $("#signupStatus").textContent = "Verify your phone number before creating your account.";
+        return;
+    }
+    const school = state.signupSelectedSchool;
+    if (!school?.id) {
+        setSignupStep(SIGNUP_STEP.school);
+        $("#signupStatus").textContent = "Choose your school before continuing.";
         return;
     }
     const profilePicture = state.signupPhotoFile;
     const submitButtons = [...form.querySelectorAll("button[type=submit]")];
     submitButtons.forEach((candidate) => { candidate.disabled = true; });
-    setButtonLoading(button, true, "Creating your account...");
-    $("#signupStatus").textContent = "Creating your account...";
+    setButtonLoading(button, true, "Creating passkey...");
+    $("#signupStatus").textContent = "";
     try {
-        let school = state.signupSelectedSchool;
-        if (!school) {
-            $("#signupStatus").textContent = "Checking your school...";
-            const schoolResult = await api.resolveSchool({
-                school_name: $("#signupSchool").value.trim(),
-                city: $("#signupCity").value.trim(),
-                state: $("#signupState").value.trim().toUpperCase(),
-                grades: "6-12",
-                min_grade: 6,
-                max_grade: 12,
-            });
-            school = schoolResult.school;
-        }
-        if (!school?.id) throw new Error("We couldn't set up that school. Check its name and location.");
         const profile = {
             first_name: $("#signupFirstName").value.trim(),
             last_name: $("#signupLastName").value.trim(),
@@ -3468,45 +4184,46 @@ async function createAccount(event) {
             username,
             profile_picture_filename: null,
         };
-        $("#signupStatus").textContent = "Finish the setup prompt on your device.";
         let login;
         if (demoMode) {
             login = await api.demoSignup({ profile, school_name: school.name });
         } else {
             const credential = await createSignupPasskey(api, username);
+            const smsOptIn = state.config?.enable_sms_opt_in_prompt === true
+                ? { smsOptedIn: $("#signupSmsOptInBox").checked, smsOptInRespondedAt: new Date().toISOString() }
+                : {};
             login = await completeSignupSafely(api, {
                 ...credential,
                 phoneNumber: signupPhone,
                 deviceInstallationId: deviceInstallationId(),
                 idempotencyKey: crypto.randomUUID(),
                 profile,
+                ...(state.inviteToken ? { inviteToken: state.inviteToken } : {}),
+                ...smsOptIn,
             });
         }
         api.saveSession(login);
-        let photoUploadFailed = false;
-        if (profilePicture) {
-            try { await api.uploadProfilePicture(api.user.id, profilePicture); }
-            catch (_) { photoUploadFailed = true; }
-        }
-        form.reset();
-        selectSignupAge(13, { scroll: false });
-        selectSignupGrade("");
-        selectSignupGender("");
-        state.signupPhoneVerified = false;
-        state.signupVerifiedPhone = null;
-        resetSignupSchoolPicker();
-        resetSignupPhotoPreview();
-        $("#signupDialog").close();
-        await showSignedIn();
-        showToast(photoUploadFailed ? "Welcome! Add your photo from Profile when you're ready." : "Welcome to Valid");
-        setTimeout(() => { if (api.hasSession()) openClassmatesDialog({ onboarding: true }); }, 700);
+        state.signupAccountCreated = true;
+        state.inviteToken = null;
+        try { sessionStorage.removeItem(INVITE_TOKEN_KEY); } catch (_) { /* Nothing stored. */ }
+        state.signupPhotoUpload = profilePicture
+            ? api.uploadProfilePicture(api.user.id, profilePicture).then(() => true, () => false)
+            : Promise.resolve(true);
+        state.signupContactUpload = startSignupContactUpload();
+        $("#signupPasskeyExplainer").classList.add("hidden");
+        $("#signupPasskeyDone").classList.remove("hidden");
+        $(".signup-back-button").classList.add("hidden");
+        successHaptic();
+        setTimeout(() => {
+            if (state.signupAccountCreated && state.signupStep === SIGNUP_STEP.passkey) setSignupStep(SIGNUP_STEP.welcome);
+        }, 1500);
     } catch (error) {
         reportAuthFailure(error);
         if (needsPhoneReverification(error)) {
             state.signupPhoneVerified = false;
             state.signupVerifiedPhone = null;
             $("#signupPhoneCode").value = "";
-            setSignupStep(3);
+            setSignupStep(SIGNUP_STEP.phone);
             $("#signupStatus").textContent = "Your phone verification expired. Request a new code to finish signup. Your other details are still here.";
             return;
         }
@@ -3517,6 +4234,266 @@ async function createAccount(event) {
     } finally {
         setButtonLoading(button, false);
         submitButtons.forEach((candidate) => { candidate.disabled = state.signupCompletionUncertain; });
+    }
+}
+
+// OnboardingCompletionView "Let's Go!": into the app on Play, then the
+// notifications ask, Friends & Classmates and Invite.
+async function finishSignupOnboarding(button) {
+    if (!state.signupAccountCreated || state.signupFinishing) return;
+    state.signupFinishing = true;
+    button.disabled = true;
+    void preloadNotificationSoftPrompt();
+    const photoSaved = await (state.signupPhotoUpload || Promise.resolve(true));
+    resetSignupForm();
+    closeSignedOutRoot();
+    state.postAuthLanding = "play";
+    try {
+        await showSignedIn();
+    } finally {
+        state.signupFinishing = false;
+        button.disabled = false;
+    }
+    if (!api.user?.id) return;
+    if (state.activePanel !== "play") switchPanel("play", { historyMode: "replace", restoreScroll: false });
+    if (!photoSaved) showToast("Welcome! Add your photo from Profile when you're ready.");
+    void runPostAuthSheets({ reason: "signup" });
+}
+
+function resetSignupForm() {
+    $("#signupForm").reset();
+    selectSignupAge(SIGNUP_MIN_AGE, { scroll: false });
+    selectSignupGrade("");
+    selectSignupGender("");
+    state.signupPhoneVerified = false;
+    state.signupVerifiedPhone = null;
+    state.signupAccountCreated = false;
+    state.signupUsernameChecked = null;
+    clearInterval(state.signupResendTimer);
+    resetSignupSchoolPicker();
+    resetSignupPhotoPreview();
+}
+
+// The notification soft prompt (NotificationSoftPromptView) is built by the
+// Play flow as ./notification-soft-prompt.js. Until it ships, fall back to
+// asking the browser directly.
+let notificationSoftPrompt = null;
+let notificationSoftPromptLoad = null;
+
+function preloadNotificationSoftPrompt() {
+    if (notificationSoftPrompt !== null) return Promise.resolve(notificationSoftPrompt);
+    notificationSoftPromptLoad ||= import("./notification-soft-prompt.js")
+        .then((module) => { notificationSoftPrompt = typeof module?.askForNotifications === "function" ? module : false; })
+        .catch(() => { notificationSoftPrompt = false; })
+        .then(() => notificationSoftPrompt);
+    return notificationSoftPromptLoad;
+}
+
+async function askForNotificationsAfterAuth(reason) {
+    // iPhone Safari has no Web Push outside the Home Screen app: show the
+    // install steps once, after sign-up.
+    if (!webPushSupported() && iosInstallAvailable()) {
+        if (reason === "signup") await openIOSInstallAfterSignup();
+        return;
+    }
+    await refreshWebPushStatus().catch(() => null);
+    if (state.webPushSubscription && state.webPushRegistrationState === "on") return;
+    const softPrompt = await preloadNotificationSoftPrompt();
+    if (softPrompt) {
+        try {
+            await softPrompt.askForNotifications({ reason });
+            return;
+        } catch (_) { /* Fall back to the browser prompt below. */ }
+    }
+    if (webPushSupported() && Notification.permission === "default") await enableWebPushFromPrompt();
+}
+
+const IOS_INSTALL_AFTER_SIGNUP_KEY = "valid:ios-install-after-signup";
+
+async function openIOSInstallAfterSignup() {
+    try {
+        if (localStorage.getItem(IOS_INSTALL_AFTER_SIGNUP_KEY) === "1") return;
+        localStorage.setItem(IOS_INSTALL_AFTER_SIGNUP_KEY, "1");
+    } catch (_) { /* Shown once in this page. */ }
+    try {
+        const { openIOSInstallSheet } = await import("./ios-install.js");
+        await new Promise((resolve) => openIOSInstallSheet({ onClose: () => {
+            try { localStorage.setItem(IOS_INSTALL_SHOWN_KEY, String(Date.now())); } catch (_) { /* Shown again next time. */ }
+            renderFeedNotificationPrompt();
+            resolve();
+        } }));
+    } catch (_) { /* The Feed card still offers the steps. */ }
+}
+
+// Waits for other sheets (passkey offer, deletion notice) before the next.
+async function waitForNoOpenDialog(timeoutMs = 20_000) {
+    const startedAt = Date.now();
+    while ($("dialog[open]") && Date.now() - startedAt < timeoutMs) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+}
+
+// After sign-up and sign-in, as on iOS: notifications ask, then Friends &
+// Classmates, then Invite Friends when contacts were picked.
+async function runPostAuthSheets({ reason }) {
+    if (state.postAuthSheetsRunning) return;
+    state.postAuthSheetsRunning = true;
+    const userId = api.user?.id;
+    try {
+        await waitForNoOpenDialog();
+        await askForNotificationsAfterAuth(reason);
+        if (!userId || api.user?.id !== userId) return;
+        await waitForNoOpenDialog();
+        if (api.user?.id !== userId) return;
+        await openFriendsClassmatesSheet();
+    } finally {
+        state.postAuthSheetsRunning = false;
+        state.signupPickedContacts = [];
+    }
+}
+
+function friendsSectionHeader(title) {
+    return `<h3 class="friends-classmates-header">${escapeHTML(title)}</h3>`;
+}
+
+function inviteViaMessagesLabel() {
+    return isAppleTouchDevice() ? "Invite via iMessage" : "Invite via text";
+}
+
+function friendsInviteCard(title, subtitle) {
+    return `<div class="friends-classmates-card friends-classmates-empty">
+        <strong>${escapeHTML(title)}</strong>
+        <small>${escapeHTML(subtitle)}</small>
+        <button class="primary-button" type="button" data-onboarding-invite>${inviteViaMessagesLabel()}</button>
+    </div>`;
+}
+
+// FriendsAndClassmatesView.
+async function openFriendsClassmatesSheet() {
+    const userId = api.user?.id;
+    if (!userId) return;
+    const dialog = $("#friendsClassmatesDialog");
+    $("#friendsClassmatesPanel").classList.remove("hidden");
+    $("#inviteFriendsPanel").classList.add("hidden");
+    $("#friendsClassmatesTitle").textContent = "Friends & Classmates";
+    $("#friendsClassmatesTitle").classList.add("hidden");
+    $("#friendsClassmatesStatus").textContent = "Finding friends and classmates...";
+    $("#friendsClassmatesList").replaceChildren();
+    $("#friendsClassmatesContinue").classList.add("hidden");
+    const closed = new Promise((resolve) => dialog.addEventListener("close", resolve, { once: true }));
+    dialog.showModal();
+    await (state.signupContactUpload || Promise.resolve());
+    // The upload is processed in the background; matches show up on GET.
+    if (state.signupContactUpload) await new Promise((resolve) => setTimeout(resolve, demoMode ? 0 : 1200));
+    const [contacts, classmatesResult] = await Promise.all([
+        api.getAllContacts(userId).catch(() => null),
+        api.getClassmatesWithMetadata(userId, "", 500).catch(() => null),
+    ]);
+    state.signupContactUpload = null;
+    if (api.user?.id !== userId || !dialog.open) return closed;
+    if (Array.isArray(contacts)) {
+        state.playContacts = contacts;
+        rememberContactAccounts(contacts);
+    }
+    if (classmatesResult?.classmates) {
+        state.classmateDirectory = classmatesResult.classmates;
+        state.classmates = classmatesResult.classmates;
+    }
+    const contactRows = Array.isArray(contacts) ? contacts : [];
+    const friends = contactRows.filter((contact) => contact?.is_six7_user && contact.user_id && String(contact.user_id) !== String(userId));
+    const classmates = (classmatesResult?.classmates || []).filter((classmate) => String(classmate.user_id) !== String(userId));
+    const hasContactAccess = contactRows.length > 0 || state.signupPickedContacts.length > 0;
+    state.onboardingFriendsOnValid = new Set(friends.map((friend) => String(friend.phone_number || "").toLowerCase()));
+    const schoolName = state.profile?.school_name || "";
+    $("#friendsClassmatesTitle").textContent = hasContactAccess ? "Friends & Classmates" : "Classmates";
+    $("#friendsClassmatesTitle").classList.remove("hidden");
+    $("#friendsClassmatesStatus").textContent = "";
+    const parts = [];
+    if (friends.length) {
+        parts.push(friendsSectionHeader(`Friends on Valid (${friends.length})`));
+        parts.push(...friends.map((friend) => {
+            const votes = Math.max(0, Number(friend.vote_count || 0));
+            const mutuals = Math.max(0, Number(friend.recommendation_strength || 0));
+            const details = [mutuals ? `${mutuals} mutual${mutuals === 1 ? "" : "s"}` : "", votes ? `${votes} vote${votes === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ") || "Friend on Valid";
+            return `<div class="friends-classmates-row"><span class="friends-classmates-avatar" aria-hidden="true">${escapeHTML(initials({ first_name: String(friend.name || "").split(/\s+/)[0], last_name: String(friend.name || "").split(/\s+/)[1] || "" }))}</span><span class="friends-classmates-copy"><strong>${escapeHTML(friend.name || "Friend")}</strong><small>${escapeHTML(details)}</small></span><span class="friends-classmates-pill">On Valid</span></div>`;
+        }));
+    }
+    if (classmates.length) {
+        parts.push(friendsSectionHeader(`Classmates on Valid (${classmates.length})`));
+        parts.push(...classmates.map((classmate) => `<div class="friends-classmates-row">${avatarMarkup(classmate, "friends-classmates-avatar")}<span class="friends-classmates-copy"><strong>${escapeHTML(displayName(classmate))}</strong><small>${escapeHTML(classmate.username || "")}</small>${schoolName ? `<em>${escapeHTML(schoolName)}</em>` : ""}</span></div>`));
+    } else if (friends.length) {
+        parts.push(friendsSectionHeader("Classmates on Valid"));
+        parts.push(friendsInviteCard("No classmates yet", "Invite your classmates to join!"));
+    }
+    if (!friends.length && !classmates.length) {
+        parts.push(friendsInviteCard(hasContactAccess ? "No friends or classmates found yet" : "No classmates found yet", "Invite your friends to join!"));
+    }
+    $("#friendsClassmatesList").innerHTML = parts.join("");
+    $("#friendsClassmatesContinue").classList.remove("hidden");
+    return closed;
+}
+
+// InviteFriendsView, after Friends & Classmates when contacts were picked.
+function showInviteFriendsPanel() {
+    const picked = state.signupPickedContacts.filter((contact) => {
+        const hash = state.signupContactHashes?.get(String(contact.phone_number));
+        return !hash || !state.onboardingFriendsOnValid?.has(hash);
+    });
+    if (!picked.length) {
+        $("#friendsClassmatesDialog").close();
+        return;
+    }
+    $("#friendsClassmatesPanel").classList.add("hidden");
+    $("#inviteFriendsPanel").classList.remove("hidden");
+    $("#inviteFriendsList").innerHTML = picked.map((contact) => `<div class="friends-classmates-row"><span class="friends-classmates-avatar" aria-hidden="true">${escapeHTML(initials({ first_name: String(contact.name || "").split(/\s+/)[0], last_name: String(contact.name || "").split(/\s+/)[1] || "" }))}</span><span class="friends-classmates-copy"><strong>${escapeHTML(contact.name || formatSignupPhone(contact.phone_number))}</strong></span><button class="friends-classmates-invite" type="button" data-onboarding-invite="${escapeHTML(contact.phone_number)}">Invite</button></div>`).join("");
+}
+
+// iOS opens the Messages composer with the invite link; the web opens the
+// phone's texting app the same way, and shares the link on a computer.
+async function inviteFromOnboarding(button) {
+    const phone = button.dataset.onboardingInvite || "";
+    const label = button.textContent;
+    setButtonLoading(button, true, "Opening…");
+    try {
+        const invite = await api.createInvite(api.user.id, isAppleTouchDevice() ? "imessage" : "other");
+        const link = invite?.share_url;
+        if (!link) throw new Error("Couldn't create your invite link. Please try again.");
+        if (isAppleTouchDevice() || isAndroidDevice()) {
+            const recipient = phone ? `+1${signupPhoneDigits(phone)}` : "";
+            location.href = `sms:${recipient}${isAppleTouchDevice() ? "&" : "?"}body=${encodeURIComponent(link)}`;
+        } else if (navigator.share) {
+            await navigator.share({ title: "Join me on Valid", url: link });
+        } else {
+            await navigator.clipboard.writeText(link);
+            showToast("Invite link copied");
+        }
+        if (phone) {
+            button.replaceWith(Object.assign(document.createElement("span"), { className: "friends-classmates-invited", textContent: "Invited" }));
+            return;
+        }
+    } catch (error) {
+        if (error.name !== "AbortError") showToast(userMessage(error, "Couldn't create your invite link. Please try again."));
+    } finally {
+        if (button.isConnected) {
+            setButtonLoading(button, false);
+            button.textContent = label;
+        }
+    }
+}
+
+async function shareOnboardingInvite(button) {
+    setButtonLoading(button, true, "Making your invite...");
+    try {
+        const invite = await api.createInvite(api.user.id, "other");
+        if (navigator.share) await navigator.share({ title: "Join me on Valid", text: "Join my school on Valid so we can play", url: invite.share_url });
+        else {
+            await navigator.clipboard.writeText(invite.share_url);
+            showToast("Invite link copied");
+        }
+    } catch (error) {
+        if (error.name !== "AbortError") showToast(userMessage(error, "Could not create an invite."));
+    } finally {
+        setButtonLoading(button, false);
     }
 }
 
@@ -4208,7 +5185,7 @@ function renderFeedGate() {
         </article>
         <button class="feed-gate-notification feed-lock-alerts" type="button" data-enable-feed-notifications aria-label="Turn on alerts for votes">
             <span class="feed-lock-alerts-icon" aria-hidden="true">${uiIcon("bell-badge")}</span>
-            <span class="feed-lock-alerts-copy"><strong>Turn on vote alerts</strong><span>Know right away when someone picks you.</span></span>
+            <span class="feed-lock-alerts-copy"><strong>Turn on vote alerts</strong><small>Know right away when someone picks you.</small></span>
             <span class="feed-lock-alerts-chevron" aria-hidden="true">${uiIcon("next")}</span>
         </button>
     </div>`;
@@ -4238,31 +5215,72 @@ async function refreshLockedUnreadVoteCount() {
     try { await lockedUnreadRefresh; } finally { lockedUnreadRefresh = null; }
 }
 
-function renderFeedNotificationPrompt() {
+// FeedVoteLockedView "Turn on vote alerts" and the unlocked Feed card. A
+// browser that blocked notifications keeps a card with the "How to turn on"
+// steps; iPhone Safari gets the Home Screen steps.
+function feedNotificationCardState() {
     const supported = webPushSupported();
-    const enabled = supported && state.webPushSubscription && state.webPushRegistrationState === "on";
-    const syncing = supported && state.webPushRegistrationState === "syncing";
-    const failed = supported && state.webPushRegistrationState === "error";
-    const blocked = supported && Notification.permission === "denied";
-    const label = blocked
-        ? "Fix notification settings"
-        : failed
-        ? "Retry notifications"
-        : syncing
-        ? "Finishing setup…"
-        : "Enable notifications";
-    // iPhone Safari has no Web Push outside the installed app: offer the
-    // Home Screen steps instead (hidden for a week after they were shown).
-    const iosInstall = !supported && iosInstallAvailable() && !iosInstallRecentlyShown();
-    const prompts = [$("#feedNotificationPrompt"), ...$$(".feed-gate-notification")].filter(Boolean);
-    prompts.forEach((prompt) => {
-        prompt.classList.toggle("hidden", !iosInstall && (!supported || Boolean(enabled) || blocked));
-        const detail = prompt.querySelector("small");
-        if (detail) detail.textContent = iosInstall ? "Add Valid to your Home Screen to know when someone picks you." : "Enable notifications to know when someone picks you.";
-        const button = prompt.querySelector("button");
-        if (!button) return;
-        button.textContent = iosInstall ? "Add to Home Screen" : label;
-        button.disabled = !iosInstall && (state.webPushBusy || syncing);
+    if (!supported) return iosInstallAvailable() && !iosInstallRecentlyShown() ? "install" : null;
+    if (Notification.permission === "denied") return "blocked";
+    if (state.webPushSubscription && state.webPushRegistrationState === "on") return null;
+    if (state.webPushRegistrationState === "syncing") return "syncing";
+    if (state.webPushRegistrationState === "error") return "error";
+    return "ask";
+}
+
+function renderFeedNotificationPrompt() {
+    const cardState = feedNotificationCardState();
+    const copy = {
+        install: ["Turn on vote alerts", "Add Valid to your Home Screen to know when someone picks you.", "Add to Home Screen"],
+        blocked: ["Notifications are blocked", "Allow notifications for Valid in your browser settings to know when someone picks you.", "How to turn on"],
+        error: ["Turn on vote alerts", "Know right away when someone picks you.", "Retry notifications"],
+        syncing: ["Turn on vote alerts", "Know right away when someone picks you.", "Finishing setup…"],
+        ask: ["Turn on vote alerts", "Know right away when someone picks you.", "Turn on"],
+    }[cardState] || null;
+    if (cardState === "ask") void preloadNotificationSoftPrompt();
+    // iOS has no card on the unlocked Feed; only the vote lock carries one.
+    const banner = $("#feedNotificationPrompt");
+    if (banner) banner.classList.toggle("hidden", !copy);
+    if (banner) banner.dataset.state = cardState || "";
+    if (copy && banner) {
+        banner.querySelector("strong").textContent = copy[0];
+        banner.querySelector("small").textContent = copy[1];
+        const button = banner.querySelector("button");
+        button.textContent = copy[2];
+        button.disabled = state.webPushBusy || cardState === "syncing";
+    }
+    for (const card of $$(".feed-gate-notification")) {
+        card.classList.toggle("hidden", !copy);
+        card.dataset.state = cardState || "";
+        card.disabled = Boolean(copy) && (state.webPushBusy || cardState === "syncing");
+        if (!copy) continue;
+        card.querySelector("strong").textContent = copy[0];
+        card.querySelector("small").textContent = copy[1];
+        card.setAttribute("aria-label", cardState === "ask" || cardState === "error" ? "Turn on alerts for votes" : `${copy[0]}. ${copy[2]}`);
+    }
+}
+
+// The card is a tap: the soft prompt (or the browser, as a fallback) is
+// asked from inside it.
+function handleFeedNotificationCard() {
+    const cardState = feedNotificationCardState();
+    if (cardState === "install") return openIOSInstall();
+    if (cardState === "blocked") {
+        void import("./chat/notification-nudge.js")
+            .then(({ openNotificationHelpSheet }) => openNotificationHelpSheet())
+            .catch(() => showToast("Allow notifications for Valid in your browser settings."));
+        return;
+    }
+    if (cardState === "error" || state.webPushBusy) return toggleWebPush();
+    if (notificationSoftPrompt) {
+        void Promise.resolve(notificationSoftPrompt.askForNotifications({ reason: "feed" }))
+            .catch(() => enableWebPushFromPrompt())
+            .finally(renderWebPushStatus);
+        return;
+    }
+    void enableWebPushFromPrompt().then((result) => {
+        if (result?.subscribed) showToast("Notifications are on");
+        else if (result?.permission === "denied") showToast("Notifications were not enabled.");
     });
 }
 
@@ -7307,7 +8325,8 @@ async function previewSignupPhoto() {
     const file = input.files[0];
     input.value = "";
     if (!file) return;
-    const cropped = await cropProfilePhoto(file);
+    // ProfilePhotoSelectionView's cropper copy.
+    const cropped = await cropProfilePhoto(file, { title: "Choose your profile photo", instructions: "Pinch to zoom and drag to frame your photo." });
     if (!cropped) return;
     if (state.signupPhotoURL) URL.revokeObjectURL(state.signupPhotoURL);
     state.signupPhotoFile = cropped;
@@ -8694,10 +9713,13 @@ async function finishWebPushFromPrompt(prompted, permissionPromise) {
 // What the chat notification cards need. iPhone Safari outside the Home
 // Screen app has no Web Push; it keeps the Add to Home Screen sheet instead.
 const chatNotificationBridge = {
+    // iPhone Safari outside the Home Screen app cannot get Web Push: the chat
+    // card still shows there, offering "Add to Home Screen".
     permission() {
-        if (!webPushSupported() || iosInstallAvailable()) return "unsupported";
+        if (!webPushSupported()) return iosInstallAvailable() ? "install" : "unsupported";
         return Notification.permission;
     },
+    install: () => openIOSInstall(),
     enable: enableWebPushFromPrompt,
     ensureSubscribed: (source) => resubscribeWebPushQuietly(source),
     record: (action, source) => api.recordNotificationPreferencesAction(action, source),
@@ -8725,15 +9747,47 @@ configureNotificationSoftPrompt((demoMode && demoNotificationBridge()) || chatNo
 
 function bindEvents() {
     $("#passkeyButton").addEventListener("click", handlePasskeySignIn);
-    $("#createAccountButton").addEventListener("click", openSignupDialog);
-    $('#signupRecoverAccount').addEventListener('click', async () => {
-        $('#signupDialog').close();
-        await handlePasskeySignIn();
+    $('#signupRecoverAccount').addEventListener('click', () => openSignInSheet({ startPasskey: true }));
+    // "Already have an account? Log in" opens the sheet and, in the same tap,
+    // the passkey prompt (iOS starts Face ID as the sheet appears).
+    $("[data-signup-login]").addEventListener("click", () => openSignInSheet({ startPasskey: true }));
+    $("#signInDialog").addEventListener("click", (event) => {
+        if (event.target.closest("[data-sign-in-cancel]")) closeSignInSheet();
+        if (event.target.closest("[data-sign-in-phone]")) showSignInSection("phone");
+        if (event.target.closest("[data-sign-in-passkey]")) showSignInSection("passkey");
+        if (event.target.closest("[data-sign-in-change-phone]")) {
+            clearInterval(state.signInResendTimer);
+            state.signInPhone = null;
+            showSignInSection("phone");
+        }
     });
-    $("[data-signup-login]").addEventListener("click", () => {
-        $("#signupDialog").close();
-        handlePasskeySignIn();
+    $("#signInDialog").addEventListener("close", () => clearInterval(state.signInResendTimer));
+    $("#signInPhone").addEventListener("input", (event) => {
+        event.currentTarget.value = formatSignupPhone(event.currentTarget.value);
+        $("#signInSendCode").disabled = signupPhoneDigits(event.currentTarget.value).length !== 10;
+        $("#signInPhoneStatus").textContent = "";
     });
+    $("#signInPhone").addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !$("#signInSendCode").disabled) {
+            event.preventDefault();
+            sendSignInCode();
+        }
+    });
+    $("#signInSendCode").addEventListener("click", () => sendSignInCode());
+    $("#signInResend").addEventListener("click", (event) => sendSignInCode(event.currentTarget));
+    $("#signInCode").addEventListener("input", (event) => {
+        event.currentTarget.value = event.currentTarget.value.replace(/\D/g, "").slice(0, 6);
+        $("#signInVerify").disabled = event.currentTarget.value.length !== 6;
+        $("#signInCodeStatus").textContent = "";
+    });
+    $("#signInCode").addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !$("#signInVerify").disabled) {
+            event.preventDefault();
+            verifySignInCode();
+        }
+    });
+    $("#signInVerify").addEventListener("click", verifySignInCode);
+    $("#useAnotherAccountButton").addEventListener("click", useAnotherAccount);
     $("#signupForm").addEventListener("submit", createAccount);
     $("#signupPicture").addEventListener("change", previewSignupPhoto);
     $("#signupPhone").addEventListener("input", (event) => {
@@ -8753,20 +9807,23 @@ function bindEvents() {
     $("#signupUsername").addEventListener("input", (event) => {
         const input = event.currentTarget;
         const cursor = input.selectionStart;
-        input.value = input.value.toLowerCase();
-        if (cursor !== null) input.setSelectionRange(cursor, cursor);
+        input.value = input.value.toLowerCase().replace(/[^a-z0-9_]/g, "");
+        if (cursor !== null) input.setSelectionRange(Math.min(cursor, input.value.length), Math.min(cursor, input.value.length));
+        state.signupUsernameChecked = null;
         $("#signupStatus").textContent = "";
+        scheduleSignupUsernameCheck();
+    });
+    $("#signupUsernameStatus").addEventListener("click", (event) => {
+        const use = event.target.closest("[data-signup-use-username]");
+        if (!use) return;
+        $("#signupUsername").value = use.dataset.signupUseUsername;
+        state.signupUsernameChecked = null;
+        advanceSignup($("#signupUsernameContinue"));
     });
     $("#signupZip").addEventListener("input", (event) => {
         event.currentTarget.value = event.currentTarget.value.replace(/\D/g, "").slice(0, 5);
-        state.signupSchoolLookupGeneration += 1;
-        state.signupNearbySchools = [];
-        state.signupSelectedSchool = null;
-        state.signupSchoolFallback = false;
-        $("#signupSchoolPicker").classList.add("hidden");
-        $("#signupSchoolFallback").classList.add("hidden");
-        $("#signupSchoolContinue").disabled = true;
         $("#signupStatus").textContent = "";
+        renderSignupSchoolStep();
         if (event.currentTarget.value.length === 5) lookupSignupSchools();
     });
     $("#signupZip").addEventListener("keydown", (event) => {
@@ -8775,13 +9832,41 @@ function bindEvents() {
             lookupSignupSchools();
         }
     });
-    $("#signupSchoolSearch").addEventListener("input", renderSignupSchoolResults);
-    $("#signupSchoolResults").addEventListener("click", (event) => {
+    $("#signupFindSchools").addEventListener("click", () => lookupSignupSchools());
+    $("#signupZipAlt").addEventListener("click", openAddSchoolSheet);
+    $("#signupSchoolSearch").addEventListener("input", (event) => {
+        const query = event.currentTarget.value.trim();
+        $("#signupStatus").textContent = "";
+        // A ZIP typed in the search box finds the schools around it.
+        if (/^\d{5}$/.test(query) && query !== state.signupLastZip) void lookupSignupSchools(query);
+        else renderSignupSchoolStep();
+    });
+    $("#signupSchoolSearch").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") event.preventDefault();
+    });
+    $(".signup-school-step").addEventListener("click", (event) => {
         const school = event.target.closest("[data-signup-school]");
         if (school) selectSignupSchool(school.dataset.signupSchool);
+        if (event.target.closest("[data-signup-zip-again]")) showSignupZipCard("before-adding");
+        if (event.target.closest("[data-signup-add-school]")) openAddSchoolSheet();
     });
-    $("#signupShowSchoolFallback").addEventListener("click", () => showSignupSchoolFallback(true));
-    $("#signupBackToNearby").addEventListener("click", () => showSignupSchoolFallback(false));
+    $("#addSchoolForm").addEventListener("submit", submitAddSchool);
+    $("#addSchoolMinGrade").addEventListener("change", (event) => syncAddSchoolGrades(event.currentTarget));
+    $("#addSchoolMaxGrade").addEventListener("change", (event) => syncAddSchoolGrades(event.currentTarget));
+    $("#addSchoolZip").addEventListener("input", (event) => { event.currentTarget.value = event.currentTarget.value.replace(/\D/g, "").slice(0, 5); });
+    $("#addSchoolState").addEventListener("input", (event) => { event.currentTarget.value = event.currentTarget.value.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase(); });
+    $("#addSchoolSelect").addEventListener("click", selectAddedSchool);
+    $("#signupChooseFriends").addEventListener("click", (event) => chooseSignupContacts(event.currentTarget));
+    $("#signupInviteFriends").addEventListener("click", (event) => shareSignupInvite(event.currentTarget));
+    $("#signupLetsGo").addEventListener("click", (event) => finishSignupOnboarding(event.currentTarget));
+    $("#friendsClassmatesDialog").addEventListener("cancel", (event) => event.preventDefault());
+    $("#friendsClassmatesDialog").addEventListener("click", (event) => {
+        const invite = event.target.closest("[data-onboarding-invite]");
+        if (invite) inviteFromOnboarding(invite);
+    });
+    $("#friendsClassmatesContinue").addEventListener("click", showInviteFriendsPanel);
+    $("#inviteFriendsShare").addEventListener("click", (event) => shareOnboardingInvite(event.currentTarget));
+    $("#inviteFriendsDone").addEventListener("click", () => $("#friendsClassmatesDialog").close());
     let signupAgeScrollFrame = null;
     $("#signupAgeWheel").addEventListener("scroll", (event) => {
         const wheel = event.currentTarget;
@@ -8789,11 +9874,11 @@ function bindEvents() {
         signupAgeScrollFrame = requestAnimationFrame(() => {
             // Hiding the age step can reset the scroller and emit a late event.
             // Never let that overwrite the age the user already committed.
-            if (state.signupStep !== 0) {
+            if (state.signupStep !== SIGNUP_STEP.age) {
                 signupAgeScrollFrame = null;
                 return;
             }
-            const age = 13 + Math.round(wheel.scrollTop / 40);
+            const age = SIGNUP_MIN_AGE + Math.round(wheel.scrollTop / 40);
             selectSignupAge(age, { scroll: false });
             signupAgeScrollFrame = null;
         });
@@ -8803,6 +9888,11 @@ function bindEvents() {
         event.preventDefault();
         const direction = event.key === 'ArrowDown' ? 1 : -1;
         selectSignupAge(Number($("#signupAge").value) + direction);
+    });
+    $("#signupDialog").addEventListener("cancel", (event) => {
+        // The age screen is the signed-out root: Escape never closes it.
+        event.preventDefault();
+        if (state.signupStep > SIGNUP_STEP.age && !$(".signup-back-button").classList.contains("hidden")) signupStepBack();
     });
     $("#signupDialog").addEventListener("click", (event) => {
         const age = event.target.closest("[data-signup-age]");
@@ -8815,9 +9905,14 @@ function bindEvents() {
         if (gender) selectSignupGender(gender.dataset.signupGender);
         const next = event.target.closest("[data-signup-next]");
         if (next) advanceSignup(next);
+        if (event.target.closest("[data-signup-skip-photo]")) {
+            resetSignupPhotoPreview();
+            setSignupStep(SIGNUP_STEP.passkey);
+        }
         const resendCode = event.target.closest("[data-signup-resend-code]");
         if (resendCode) resendSignupPhoneCode(resendCode);
-        if (event.target.closest("[data-signup-back]")) setSignupStep(state.signupStep - 1);
+        if (event.target.closest("[data-signup-change-phone]")) changeSignupPhone();
+        if (event.target.closest("[data-signup-back]")) signupStepBack();
     });
     $("#logoutButton").addEventListener("click", logoutAndReset);
     $$(".segment").forEach((button) => button.addEventListener("click", () => {
@@ -8940,7 +10035,7 @@ function bindEvents() {
     });
     $("#feedGateLock").addEventListener("click", (event) => {
         if (event.target.closest("[data-vote-to-unlock]")) switchPanel("play");
-        if (event.target.closest("[data-enable-feed-notifications]")) toggleWebPush();
+        if (event.target.closest("[data-enable-feed-notifications]")) handleFeedNotificationCard();
     });
     $("#anonymousAnswerForm").addEventListener("submit", answerAnonymousQuestion);
     $("#anonymousAnswerText").addEventListener("input", updateAnonymousAnswerButton);
@@ -9429,6 +10524,7 @@ function startApp() {
     // Start the session check before wiring the UI so a returning user's
     // request is on the network as early as possible; its result lands after
     // this synchronous setup.
+    applyDeviceAuthCopy();
     if (!passkeysSupported() && !demoMode) {
         $("#passkeyButton").disabled = true;
         $("#authStatus").textContent = "This browser does not support passkeys. Try current Chrome, Safari, or Edge.";
@@ -9484,49 +10580,45 @@ async function restoreOrStartAuthFlow() {
     if (!demoMode) {
         sessionRestoreInFlight = true;
         // Keep the launch splash while the session is unknown; a very slow check
-        // falls back to the sign-in card with its "Checking your session" status.
+        // falls back to the recovery card with its "Checking your session" status.
         clearTimeout(state.launchSplashTimer);
-        state.launchSplashTimer = setTimeout(showAuthView, 6_000);
+        state.launchSplashTimer = setTimeout(() => showSessionRecovery("Checking your session…", { checking: true }), 6_000);
         const revision = api.sessionRevision;
         $("#retrySessionButton").disabled = true;
-        $("#createAccountButton").classList.add("hidden");
-        $("#authStatus").textContent = "Checking your session…";
+        $("#retrySessionButton").textContent = "Loading account…";
+        if (!$("#sessionRecoveryCard").classList.contains("hidden")) $("#sessionRecoveryStatus").textContent = "Checking your session…";
         try {
             const session = await api.restoreSession();
             // An explicit sign-in completed while this older read was in flight.
             if (api.sessionRevision !== revision) return;
             if (!session?.user?.id) throw new Error("Incomplete session response");
             api.saveSession(session);
-            $("#authStatus").textContent = "";
             await showSignedIn();
             return;
         } catch (error) {
             if (api.hasSession()) return;
-            showAuthView();
             if (!error.confirmedSessionInvalid) {
                 sessionRestorePending = true;
-                $("#retrySessionButton").classList.remove("hidden");
-                $("#authStatus").textContent = navigator.onLine === false
+                showSessionRecovery(navigator.onLine === false
                     ? "You’re offline. Reconnect to restore your session."
-                    : "We couldn’t check your session. Reconnect and try again; you don’t need to create another account.";
+                    : "We couldn’t check your session. Reconnect and try again; you don’t need to create another account.");
                 return;
             }
             sessionRestorePending = false;
-            $("#retrySessionButton").classList.add("hidden");
-            $("#createAccountButton").classList.remove("hidden");
-            $("#authStatus").textContent = "";
+            hideSessionRecovery();
         } finally {
             sessionRestoreInFlight = false;
             $("#retrySessionButton").disabled = false;
+            $("#retrySessionButton").textContent = "Try again";
         }
     }
-    showAuthView();
-    // Returning users whose cookie expired land on "Welcome Back"; only an
-    // explicit ?signup=1 or a first-ever visit opens account creation.
+    // GettingStartedView is the root for new and returning visitors alike;
+    // ?signin=1 (sign-out, push links) opens the sign-in sheet over it.
+    // The localhost demo also opens it by default (its fixtures sign in with
+    // one tap); ?signup=1 shows the bare age screen there.
     const authParams = new URLSearchParams(window.location.search);
-    if (authParams.get("signup") === "1" || (!demoMode && authParams.get("signin") !== "1" && isFirstVisit())) {
-        requestAnimationFrame(openSignupDialog);
-    }
+    const signIn = authParams.get("signup") !== "1" && (authParams.get("signin") === "1" || demoMode);
+    showSignedOutRoot({ signIn });
 }
 
 if (demoMode) {

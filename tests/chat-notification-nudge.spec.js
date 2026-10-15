@@ -7,6 +7,8 @@ import { expect, test } from "@playwright/test";
 async function mountNudge(page, { permission = "default", storage = true } = {}) {
     await page.goto("/app/?demo=1&signin=1");
     await page.evaluate(async ({ permission, storage }) => {
+        // The signed-out root (age screen and sign-in sheet) is modal.
+        document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
         if (!storage) {
             Object.defineProperty(window, "localStorage", { configurable: true, get() { throw new Error("blocked"); } });
         }
@@ -136,9 +138,19 @@ test("storage failures never break the card (the decline just isn't remembered)"
     await expect(room(page)).toBeVisible();
 });
 
-test("unsupported browsers (iPhone Safari outside the Home Screen app) show no card", async ({ page }) => {
+test("unsupported browsers without a Home Screen install show no card", async ({ page }) => {
     await mountNudge(page, { permission: "unsupported" });
     await page.evaluate(() => { window.__view.setInboxVisible(true); window.__view.roomShown(); });
     await expect(page.getByTestId("chat.notificationNudge")).toHaveCount(0);
     expect(await recorded(page)).toEqual([]);
+});
+
+test("iPhone Safari outside the Home Screen app gets the card with Add to Home Screen", async ({ page }) => {
+    await mountNudge(page, { permission: "install" });
+    await page.evaluate(() => { window.__view.setInboxVisible(true); window.__view.roomShown(); });
+    await expect(inbox(page).getByText("Don’t miss new messages")).toBeVisible();
+    await expect(room(page).getByText("Add Valid to your Home Screen to get notified about new messages and view-once photos.")).toBeVisible();
+    await expect(room(page).getByTestId("chat.notificationNudge.primary")).toHaveText("Add to Home Screen");
+    await expect(room(page).getByTestId("chat.notificationNudge.notNow")).toBeVisible();
+    expect(await page.evaluate(() => window.__nudge.enables)).toBe(0);
 });

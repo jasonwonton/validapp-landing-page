@@ -65,5 +65,5 @@ test("the PWA supports the signup flow", async ({ page }) => {
     await expect(page.getByRole("dialog", { name: "Create your Valid account" })).toBeVisible();
     await expect(page.getByRole("listbox", { name: "Age" })).toBeVisible();
     await expect(page.getByText("GET STARTED", { exact: true })).toHaveCount(0);
-    await expect(page.getByRole("dialog").getByRole("button", { name: "Continue" })).toBeVisible();
+    await expect(page.getByRole("dialog").getByRole("button", { name: "Get Started!" })).toBeVisible();
 });

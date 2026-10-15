@@ -22,6 +22,7 @@
     <link rel="stylesheet" href="stories/styles.css">
     <link rel="stylesheet" href="calls/styles.css">
     <link rel="stylesheet" href="comments/styles.css">
+    <link rel="stylesheet" href="onboarding.css">
 </head>
 <body>
     <header class="topbar">
@@ -37,14 +38,11 @@
     </div>
     <main>
         <section id="authView" class="auth-view hidden">
-            <div class="passkey-card">
-                <span class="passkey-face-icon" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M18 28v-5a5 5 0 0 1 5-5h5M36 18h5a5 5 0 0 1 5 5v5M46 36v5a5 5 0 0 1-5 5h-5M28 46h-5a5 5 0 0 1-5-5v-5M25 28v5M39 28v5M25 39c4 3 10 3 14 0"/></svg></span>
-                <div class="passkey-copy"><h1>Welcome Back</h1><p>Sign in securely with the passkey saved on this device.</p></div>
-                <button id="passkeyButton" class="primary-button" type="button" aria-label="Sign in">Sign in with a passkey</button>
-                <button id="createAccountButton" class="secondary-button" type="button">Create an account</button>
-                <button id="retrySessionButton" class="secondary-button hidden" type="button">Reconnect to your session</button>
-                <p id="authStatus" class="status-message" role="status"></p>
-                <a id="authBrowserHelp" class="secondary-button hidden" href="https://validapp.lol/app/?signin=1">Open in Chrome</a>
+            <div id="sessionRecoveryCard" class="passkey-card session-recovery-card hidden">
+                <span class="session-recovery-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="8.5"/><circle cx="10" cy="8.2" r="2.8"/><path d="M4.6 15.4c1.3-2 3.1-3 5.4-3 .9 0 1.7.1 2.4.4"/><circle class="session-recovery-badge" cx="17.5" cy="17.5" r="5"/><path class="session-recovery-hands" d="M17.5 15v2.7l1.7 1.1"/></svg></span>
+                <div class="passkey-copy"><h1>Reconnecting to your account</h1><p id="sessionRecoveryStatus" role="status"></p></div>
+                <button id="retrySessionButton" class="primary-button" type="button">Try again</button>
+                <button id="useAnotherAccountButton" class="text-button session-recovery-switch" type="button">Sign out and use another account</button>
             </div>
         </section>
 
@@ -231,14 +229,109 @@
         </div>
     </dialog>
 
-    <dialog id="passkeyEnrollmentDialog" class="modal passkey-enrollment-dialog" aria-label="Secure your Valid account">
+    <dialog id="passkeyEnrollmentDialog" class="modal passkey-enrollment-dialog" aria-label="Keep your account">
         <div class="passkey-enrollment-content">
             <span class="passkey-enrollment-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="7.7" cy="12" r="4.3"/><path d="m11.1 9.4 8-6.2 1.7 1.7-2 2 1.5 1.5-2.2 2.2-1.5-1.5-5.5 4.2"/></svg></span>
-            <h2>Secure your account</h2>
-            <p>Save a passkey on this phone for fast, private sign-in with your screen lock.</p>
-            <button id="enrollPasskeyButton" class="primary-button" type="button">Create a passkey</button>
+            <h2>Keep your account</h2>
+            <p>Create a passkey so you can always sign back in—even if you delete the app or change phones.</p>
+            <div class="onboarding-privacy-card"><span aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8V5.5A2.5 2.5 0 0 1 5.5 3H8M16 3h2.5A2.5 2.5 0 0 1 21 5.5V8M21 16v2.5a2.5 2.5 0 0 1-2.5 2.5H16M8 21H5.5A2.5 2.5 0 0 1 3 18.5V16M8.5 9v1.5M15.5 9v1.5M12 9v4.5h-1M8.5 16c2 1.6 5 1.6 7 0"/></svg></span><span><strong>Your face stays private</strong><small data-device-copy="private">Face ID stays on your iPhone. Valid never sees it.</small></span></div>
+            <button id="enrollPasskeyButton" class="primary-button" type="button">Create passkey</button>
+            <p class="passkey-enrollment-fine" data-device-copy="secured">Secured by Apple · Valid never sees your Face ID</p>
             <button class="text-button" type="button" data-close-dialog>Not now</button>
             <p id="passkeyEnrollmentStatus" class="status-message" role="status"></p>
+        </div>
+    </dialog>
+
+    <dialog id="signInDialog" class="modal sign-in-sheet" aria-labelledby="signInTitle">
+        <div class="sheet-heading sign-in-heading">
+            <button class="sheet-heading-control" type="button" data-sign-in-cancel>Cancel</button>
+            <span aria-hidden="true"></span>
+            <span aria-hidden="true"></span>
+        </div>
+        <div class="sign-in-content">
+            <section id="signInPasskeySection" class="sign-in-section">
+                <h2 id="signInTitle">Welcome Back</h2>
+                <p class="sign-in-subtitle" data-device-copy="sign-in">Sign in with Face ID</p>
+                <span class="sign-in-face-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8V5.5A2.5 2.5 0 0 1 5.5 3H8M16 3h2.5A2.5 2.5 0 0 1 21 5.5V8M21 16v2.5a2.5 2.5 0 0 1-2.5 2.5H16M8 21H5.5A2.5 2.5 0 0 1 3 18.5V16M8.5 9v1.5M15.5 9v1.5M12 9v4.5h-1M8.5 16c2 1.6 5 1.6 7 0"/></svg></span>
+                <p id="authStatus" class="status-message sign-in-error" role="status"></p>
+                <button id="passkeyButton" class="primary-button sign-in-passkey-button" type="button" aria-label="Sign in"><span class="sign-in-button-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8V5.5A2.5 2.5 0 0 1 5.5 3H8M16 3h2.5A2.5 2.5 0 0 1 21 5.5V8M21 16v2.5a2.5 2.5 0 0 1-2.5 2.5H16M8 21H5.5A2.5 2.5 0 0 1 3 18.5V16M8.5 9v1.5M15.5 9v1.5M12 9v4.5h-1M8.5 16c2 1.6 5 1.6 7 0"/></svg></span><span id="passkeyButtonLabel" data-device-copy="sign-in">Sign in with Face ID</span></button>
+                <a id="authBrowserHelp" class="secondary-button hidden" href="https://validapp.lol/app/?signin=1">Open in Chrome</a>
+                <div id="signInPhoneOption" class="sign-in-or hidden">
+                    <span>or</span>
+                    <button class="text-button" type="button" data-sign-in-phone>Sign in with phone number</button>
+                </div>
+            </section>
+            <section id="signInPhoneSection" class="sign-in-section hidden">
+                <h2 id="signInPhoneTitle">Sign in with Phone</h2>
+                <p class="sign-in-subtitle">Enter your phone number to receive a verification code.</p>
+                <input id="signInPhone" class="sign-in-field" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" placeholder="(555) 123-4567" aria-label="Phone number">
+                <div id="signInTurnstile" class="signup-turnstile" aria-label="Security verification"></div>
+                <button id="signInSendCode" class="primary-button" type="button" disabled>Send Code</button>
+                <p class="sign-in-disclosure">By tapping Send Code, you agree to receive a one-time authentication text from Valid. Message and data rates may apply. Reply STOP to opt out or HELP for help. <a href="../privacy-policy.html" target="_blank">Privacy Policy</a> · <a href="../terms.html" target="_blank">Terms</a>.</p>
+                <p id="signInPhoneStatus" class="status-message" role="status"></p>
+                <button class="text-button sign-in-secondary" type="button" data-sign-in-passkey data-device-copy="back">Back to Face ID sign in</button>
+            </section>
+            <section id="signInCodeSection" class="sign-in-section hidden">
+                <h2 id="signInCodeTitle">Enter Verification Code</h2>
+                <p class="sign-in-subtitle">We sent a code to your phone.</p>
+                <input id="signInCode" class="sign-in-field sign-in-code-field" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" aria-label="Verification code">
+                <button id="signInVerify" class="primary-button" type="button" disabled>Verify</button>
+                <button id="signInResend" class="text-button sign-in-secondary" type="button" disabled>Resend Code</button>
+                <button class="text-button sign-in-secondary" type="button" data-sign-in-change-phone>Change phone number</button>
+                <p id="signInCodeStatus" class="status-message" role="status"></p>
+            </section>
+        </div>
+    </dialog>
+
+    <dialog id="addSchoolDialog" class="modal add-school-sheet" aria-labelledby="addSchoolTitle">
+        <form id="addSchoolForm" novalidate>
+            <div class="sheet-heading add-school-heading">
+                <button class="sheet-heading-control" type="button" data-close-dialog>Cancel</button>
+                <span aria-hidden="true"></span>
+                <span aria-hidden="true"></span>
+            </div>
+            <div id="addSchoolFields" class="add-school-content">
+                <h2 id="addSchoolTitle">Add Your School</h2>
+                <label>School Name<input id="addSchoolName" autocomplete="organization" maxlength="200" placeholder="Enter school name" required></label>
+                <div class="two-field-row"><label>City<input id="addSchoolCity" autocomplete="address-level2" maxlength="100" placeholder="City"></label><label>State<input id="addSchoolState" autocomplete="address-level1" maxlength="2" placeholder="CA"></label></div>
+                <label>School's ZIP Code<input id="addSchoolZip" inputmode="numeric" autocomplete="off" maxlength="5" placeholder="ZIP code" required></label>
+                <p class="form-hint">The ZIP where the school is, so classmates nearby can find it.</p>
+                <fieldset class="add-school-grades">
+                    <legend>Grade Range</legend>
+                    <p class="form-hint">What grades does this school have?</p>
+                    <div class="two-field-row">
+                        <label>From<select id="addSchoolMinGrade"><option value="6">6th</option><option value="7">7th</option><option value="8">8th</option><option value="9" selected>9th (Freshman)</option><option value="10">10th (Sophomore)</option><option value="11">11th (Junior)</option><option value="12">12th (Senior)</option></select></label>
+                        <label>To<select id="addSchoolMaxGrade"><option value="6">6th</option><option value="7">7th</option><option value="8">8th</option><option value="9">9th (Freshman)</option><option value="10">10th (Sophomore)</option><option value="11">11th (Junior)</option><option value="12" selected>12th (Senior)</option></select></label>
+                    </div>
+                </fieldset>
+                <p id="addSchoolStatus" class="status-message" role="status"></p>
+                <button id="addSchoolSubmit" class="primary-button" type="submit">Add School</button>
+            </div>
+            <div id="addSchoolDone" class="add-school-done hidden">
+                <span class="onboarding-check-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m7.5 12.4 3 3 6-6.4"/></svg></span>
+                <h2 id="addSchoolDoneTitle">School Added!</h2>
+                <p id="addSchoolDoneCopy"></p>
+                <button id="addSchoolSelect" class="primary-button" type="button">Select</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="friendsClassmatesDialog" class="friends-classmates-sheet" aria-labelledby="friendsClassmatesTitle">
+        <div class="friends-classmates-content">
+            <img class="friends-classmates-logo" src="../assets/valid_logo.png" alt="Valid" width="964" height="372" loading="lazy" decoding="async">
+            <section id="friendsClassmatesPanel" class="friends-classmates-panel">
+                <h2 id="friendsClassmatesTitle">Friends &amp; Classmates</h2>
+                <p id="friendsClassmatesStatus" class="friends-classmates-loading" role="status"></p>
+                <div id="friendsClassmatesList" class="friends-classmates-list"></div>
+                <button id="friendsClassmatesContinue" class="primary-button" type="button">Continue</button>
+            </section>
+            <section id="inviteFriendsPanel" class="friends-classmates-panel hidden" aria-labelledby="inviteFriendsTitle">
+                <h2 id="inviteFriendsTitle">Invite Friends</h2>
+                <p class="friends-classmates-subtitle">Valid is more fun when there are more classmates</p>
+                <div id="inviteFriendsList" class="friends-classmates-list"></div>
+                <button id="inviteFriendsShare" class="secondary-button" type="button">Share</button>
+                <button id="inviteFriendsDone" class="primary-button" type="button">Done</button>
+            </section>
         </div>
     </dialog>
 
@@ -350,8 +443,7 @@
             </div>
             <fieldset class="signup-step signup-age-step" data-signup-step="0">
                 <img class="signup-age-logo" src="../assets/valid_logo.png" alt="Valid" width="964" height="372" loading="lazy" decoding="async">
-                <h2>How old are you?</h2>
-                <p class="form-hint signup-terms">By entering your age, you agree to our <a href="../terms.html" target="_blank">Terms</a> and <a href="../privacy-policy.html" target="_blank">Privacy Policy</a>.</p>
+                <p class="form-hint signup-terms">By entering your age, you agree to our <a href="../terms.html" target="_blank">Terms</a> and <a href="../privacy-policy.html" target="_blank">Privacy Policy</a></p>
                 <div class="signup-age-picker">
                     <strong id="signupAgeValue" aria-live="polite">13</strong>
                     <div id="signupAgeWheel" class="signup-age-wheel" role="listbox" aria-label="Age" tabindex="0">
@@ -370,79 +462,125 @@
                         <button type="button" role="option" aria-selected="false" data-signup-age="25">25</button>
                         <button type="button" role="option" aria-selected="false" data-signup-age="26">26</button>
                         <button type="button" role="option" aria-selected="false" data-signup-age="27">27</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="28">28</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="29">29</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="30">30</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="31">31</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="32">32</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="33">33</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="34">34</button>
+                        <button type="button" role="option" aria-selected="false" data-signup-age="35">35</button>
                     </div>
                     <input id="signupAge" type="hidden" value="13">
                 </div>
-                <button class="primary-button" type="button" data-signup-next aria-label="Continue">Get Started!</button>
+                <button class="primary-button" type="button" data-signup-next>Get Started!</button>
                 <button class="text-button signup-login-button" type="button" data-signup-login>Already have an account? <span>Log in</span></button>
             </fieldset>
-            <fieldset class="signup-step signup-school-step hidden" data-signup-step="1">
-                <h2>What school do you go to?</h2>
-                <div class="signup-zip-row">
-                    <label>ZIP code<input id="signupZip" inputmode="numeric" autocomplete="postal-code" maxlength="5" pattern="[0-9]{5}" placeholder="90210" required></label>
+            <fieldset class="signup-step signup-contacts-step hidden" data-signup-step="1">
+                <img class="signup-step-logo" src="../assets/valid_logo.png" alt="Valid" width="964" height="372" loading="lazy" decoding="async">
+                <h2>Pick a Couple Friends</h2>
+                <div id="signupContactsChoose" class="signup-contacts-panel">
+                    <p class="signup-contacts-copy">Choose a couple friends to find people you know. You can add more anytime.</p>
+                    <button id="signupChooseFriends" class="primary-button" type="button">Choose Friends</button>
+                    <p id="signupContactsPrivacy" class="signup-contacts-privacy">Valid really cares about your privacy. We will never spam your contacts.</p>
                 </div>
-                <div id="signupSchoolPicker" class="signup-school-picker hidden">
-                    <label>Search nearby schools<input id="signupSchoolSearch" type="search" autocomplete="off" placeholder="Search these 50 schools..."></label>
-                    <div id="signupSchoolResults" class="signup-school-results" role="listbox" aria-label="Nearby schools"></div>
-                    <button id="signupShowSchoolFallback" class="text-button signup-school-fallback-link" type="button">Can't find your school?</button>
+                <div id="signupContactsInvite" class="signup-contacts-panel hidden">
+                    <p class="signup-contacts-copy">Choose a couple friends to find people you know. You can add more anytime.</p>
+                    <button id="signupInviteFriends" class="primary-button" type="button">Invite Friends</button>
+                    <p class="signup-contacts-privacy">This browser can't open your contacts, so send your friends a link to Valid instead.</p>
+                    <button class="text-button signup-contacts-continue" type="button" data-signup-next>Continue</button>
                 </div>
-                <div id="signupSchoolFallback" class="signup-school-fallback hidden">
-                    <p class="form-hint">Add the school only if it isn't in the nearby list.</p>
-                    <label>School name<input id="signupSchool" autocomplete="organization" maxlength="200" placeholder="Westview High School" disabled></label>
-                    <div class="two-field-row"><label>City<input id="signupCity" autocomplete="address-level2" maxlength="100" disabled></label><label>State<input id="signupState" autocomplete="address-level1" maxlength="2" pattern="[A-Za-z]{2}" placeholder="CA" disabled></label></div>
-                    <button id="signupBackToNearby" class="text-button" type="button">Back to nearby schools</button>
+                <div id="signupContactsDone" class="signup-contacts-panel hidden">
+                    <span class="onboarding-check-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m7.5 12.4 3 3 6-6.4"/></svg></span>
+                    <strong class="signup-contacts-done-title">Friends Selected!</strong>
+                    <button class="primary-button" type="button" data-signup-next>Continue</button>
                 </div>
-                <button id="signupSchoolContinue" class="primary-button" type="button" data-signup-next disabled>Continue</button>
             </fieldset>
-            <fieldset class="signup-step signup-grade-step hidden" data-signup-step="2">
+            <fieldset class="signup-step signup-school-step hidden" data-signup-step="2">
+                <h2>Pick your school</h2>
+                <label class="signup-school-search"><span class="signup-school-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg></span><input id="signupSchoolSearch" type="search" inputmode="search" autocomplete="off" placeholder="School, city, or ZIP" aria-label="School, city, or ZIP"></label>
+                <p id="signupSchoolMessage" class="signup-school-message hidden"></p>
+                <div class="signup-school-body">
+                    <div id="signupZipCard" class="signup-zip-card">
+                        <span class="signup-zip-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 18s-5.5-4.6-5.5-9a5.5 5.5 0 0 1 11 0c0 4.4-5.5 9-5.5 9Z"/><circle cx="12" cy="9" r="2"/><path d="M7.5 17.3C4.8 17.8 3 18.6 3 19.5c0 1.4 4 2.5 9 2.5s9-1.1 9-2.5c0-.9-1.8-1.7-4.5-2.2"/></svg></span>
+                        <strong id="signupZipTitle">Find schools nearby</strong>
+                        <p id="signupZipCopy">Enter your ZIP code so we can show schools around you.</p>
+                        <input id="signupZip" inputmode="numeric" autocomplete="postal-code" maxlength="5" pattern="[0-9]{5}" placeholder="ZIP code" aria-label="ZIP code">
+                        <button id="signupFindSchools" class="primary-button" type="button" disabled>Find schools</button>
+                        <button id="signupZipAlt" class="text-button hidden" type="button">Skip for now</button>
+                    </div>
+                    <div id="signupSchoolPicker" class="signup-school-picker hidden">
+                        <div id="signupSchoolResults" class="signup-school-results" role="listbox" aria-label="Schools"></div>
+                        <div id="signupSchoolFooter" class="signup-school-footer"></div>
+                    </div>
+                </div>
+                <button id="signupSchoolContinue" class="primary-button hidden" type="button" data-signup-next>Continue</button>
+            </fieldset>
+            <fieldset class="signup-step signup-grade-step hidden" data-signup-step="3">
                 <h2>What grade are you in?</h2>
                 <p class="form-hint">This will affect who shows up in your polls!</p>
                 <div id="signupGradeOptions" class="signup-grade-options" role="radiogroup" aria-label="Grade"></div>
                 <input id="signupGrade" type="hidden" value="">
                 <button id="signupGradeContinue" class="primary-button" type="button" data-signup-next disabled>Continue</button>
             </fieldset>
-            <fieldset class="signup-step signup-entry-step signup-phone-step hidden" data-signup-step="3">
+            <fieldset class="signup-step signup-entry-step signup-phone-step hidden" data-signup-step="4">
+                <img class="signup-step-logo" src="../assets/valid_logo.png" alt="Valid" width="964" height="372" loading="lazy" decoding="async">
                 <h2>What's your phone number?</h2>
-                <p class="form-hint signup-phone-hint">This will identify your account and find polls where classmates picked you.</p>
+                <p class="form-hint signup-phone-hint">This will be used to identify your account</p>
                 <label>Phone number<input id="signupPhone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" placeholder="(555) 123-4567" required></label>
+                <div id="signupSmsOptIn" class="signup-sms-opt-in hidden">
+                    <label class="signup-sms-check"><input id="signupSmsOptInBox" type="checkbox"><span>Opt in to SMS messages from Valid for when a classmate votes for you. We will never spam you.</span></label>
+                    <p class="signup-sms-fine">Message and data rates may apply. <a href="../privacy-policy.html" target="_blank">Privacy Policy</a> &amp; <a href="../terms.html" target="_blank">Terms</a>. Reply STOP to opt out.</p>
+                </div>
                 <button class="primary-button" type="button" data-signup-next>Continue</button>
             </fieldset>
-            <fieldset class="signup-step signup-entry-step signup-code-step hidden" data-signup-step="4">
-                <h2>Enter your code</h2>
-                <p id="signupCodeHint" class="form-hint">We sent a verification code to your phone.</p>
+            <fieldset class="signup-step signup-entry-step signup-code-step hidden" data-signup-step="5">
+                <h2>Enter the code we sent you</h2>
+                <p id="signupCodeHint" class="form-hint">Sent to your phone</p>
                 <div id="signupTurnstile" class="signup-turnstile" aria-label="Security verification"></div>
                 <label>Verification code<input id="signupPhoneCode" type="text" inputmode="numeric" autocomplete="one-time-code" minlength="4" maxlength="10" pattern="[0-9]{4,10}" placeholder="123456" required></label>
-                <button class="primary-button" type="button" data-signup-next>Continue</button>
-                <button class="text-button signup-resend-code" type="button" data-signup-resend-code>Send another code</button>
-            </fieldset>
-            <fieldset class="signup-step signup-entry-step signup-name-step hidden" data-signup-step="5">
-                <h2>What's your first name?</h2>
-                <label>First name<input id="signupFirstName" autocomplete="given-name" maxlength="50" placeholder="First name" required></label>
-                <button class="primary-button" type="button" data-signup-next>Continue</button>
+                <button class="primary-button" type="button" data-signup-next>Verify Code</button>
+                <p id="signupCodeAttempts" class="form-hint signup-code-attempts hidden"></p>
+                <button class="text-button signup-resend-code" type="button" data-signup-resend-code>Resend Code</button>
+                <button class="text-button signup-change-phone" type="button" data-signup-change-phone>Change phone number</button>
             </fieldset>
             <fieldset class="signup-step signup-entry-step signup-name-step hidden" data-signup-step="6">
+                <img class="signup-step-logo" src="../assets/valid_logo.png" alt="Valid" width="964" height="372" loading="lazy" decoding="async">
+                <h2>What's your first name?</h2>
+                <p class="form-hint signup-name-warning">Fake names ruin the experience for everyone. &#x1F622; Accounts will be deleted.</p>
+                <p id="signupVoteBanner" class="signup-vote-banner hidden"></p>
+                <label>First name<input id="signupFirstName" autocomplete="given-name" maxlength="50" placeholder="First Name" required></label>
+                <button class="primary-button" type="button" data-signup-next>Continue</button>
+            </fieldset>
+            <fieldset class="signup-step signup-entry-step signup-name-step hidden" data-signup-step="7">
+                <img class="signup-step-logo" src="../assets/valid_logo.png" alt="Valid" width="964" height="372" loading="lazy" decoding="async">
                 <h2>What's your last name?</h2>
-                <label>Last name<input id="signupLastName" autocomplete="family-name" maxlength="50" placeholder="Last name" required></label>
+                <p class="form-hint signup-name-warning">Fake names ruin the experience for everyone. &#x1F622; Accounts will be deleted.</p>
+                <label>Last name<input id="signupLastName" autocomplete="family-name" maxlength="50" placeholder="Last Name" required></label>
                 <button class="primary-button" type="button" data-signup-next>Continue</button>
             </fieldset>
-            <fieldset class="signup-step signup-entry-step signup-username-step hidden" data-signup-step="7">
-                <h2>Pick a username</h2>
-                <label>Username<input id="signupUsername" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="3" maxlength="30" pattern="[a-z0-9_]+" placeholder="your_username" required></label>
-                <button class="primary-button" type="button" data-signup-next>Continue</button>
+            <fieldset class="signup-step signup-entry-step signup-username-step hidden" data-signup-step="8">
+                <img class="signup-step-logo" src="../assets/valid_logo.png" alt="Valid" width="964" height="372" loading="lazy" decoding="async">
+                <h2>Choose a username</h2>
+                <p class="form-hint signup-username-hint">Pick something unique that your friends will recognize</p>
+                <label class="signup-username-field"><span class="visually-hidden">Username</span><span class="signup-username-at" aria-hidden="true">@</span><input id="signupUsername" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="3" maxlength="30" pattern="[a-z0-9_]+" placeholder="username" required></label>
+                <div id="signupUsernameStatus" class="signup-username-status" aria-live="polite"></div>
+                <button id="signupUsernameContinue" class="primary-button" type="button" data-signup-next>Continue</button>
             </fieldset>
-            <fieldset class="signup-step signup-gender-step hidden" data-signup-step="8">
+            <fieldset class="signup-step signup-gender-step hidden" data-signup-step="9">
+                <img class="signup-step-logo" src="../assets/valid_logo.png" alt="Valid" width="964" height="372" loading="lazy" decoding="async">
                 <h2>What's your gender?</h2>
                 <div class="signup-gender-options" role="radiogroup" aria-label="Gender">
-                    <button class="signup-gender-option boy" type="button" role="radio" aria-checked="false" data-signup-gender="male"><span aria-hidden="true"><svg class="ui-icon" data-ui-icon="person" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg></span><strong>Boy</strong></button>
-                    <button class="signup-gender-option girl" type="button" role="radio" aria-checked="false" data-signup-gender="female"><span aria-hidden="true"><svg class="ui-icon" data-ui-icon="person" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg></span><strong>Girl</strong></button>
-                    <button class="signup-gender-option non-binary" type="button" role="radio" aria-checked="false" data-signup-gender="non-binary"><span aria-hidden="true"><svg class="ui-icon" data-ui-icon="person" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg></span><strong>Non-binary</strong></button>
+                    <button class="signup-gender-option boy" type="button" role="radio" aria-checked="false" data-signup-gender="male"><span class="signup-gender-emoji" aria-hidden="true">&#x1F466;</span><strong>Boy</strong></button>
+                    <button class="signup-gender-option girl" type="button" role="radio" aria-checked="false" data-signup-gender="female"><span class="signup-gender-emoji" aria-hidden="true">&#x1F467;</span><strong>Girl</strong></button>
+                    <button class="signup-gender-option non-binary" type="button" role="radio" aria-checked="false" data-signup-gender="non-binary"><span class="signup-gender-emoji" aria-hidden="true">&#x1F9D1;</span><strong>Non-binary</strong></button>
                 </div>
                 <input id="signupGender" type="hidden" value="">
                 <button id="signupGenderContinue" class="primary-button" type="button" data-signup-next disabled>Continue</button>
             </fieldset>
-            <fieldset class="signup-step signup-photo-step hidden" data-signup-step="9">
+            <fieldset class="signup-step signup-photo-step hidden" data-signup-step="10">
                 <h2>Add a profile photo</h2>
-                <p class="signup-photo-benefit"><svg class="ui-icon" data-ui-icon="camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="4"/></svg> Users with profile pictures<br>receive 2-3x more votes</p>
+                <p class="signup-photo-benefit">Friends see your face on their home screen.<br>Profiles with a photo get 2–3x more votes.</p>
                 <div class="signup-photo-picker">
                     <label class="signup-photo-circle" for="signupPicture">
                         <span id="signupPhotoPreview" class="signup-photo-preview" aria-hidden="true"><span class="signup-photo-placeholder"><span class="signup-photo-person-icon"></span><small>Tap to add photo</small></span></span>
@@ -450,8 +588,31 @@
                     <input id="signupPicture" class="signup-photo-input" type="file" accept="image/jpeg,image/png,image/webp" aria-label="Profile photo">
                     <label class="signup-library-button" for="signupPicture">Choose from Library</label>
                 </div>
-                <button class="primary-button" type="submit">Continue</button>
-                <button class="text-button signup-photo-skip" type="submit">Skip for now</button>
+                <button class="primary-button" type="button" data-signup-next>Continue</button>
+                <button class="text-button signup-photo-skip" type="button" data-signup-skip-photo>Skip for now</button>
+            </fieldset>
+            <fieldset class="signup-step signup-passkey-step hidden" data-signup-step="11">
+                <div id="signupPasskeyExplainer" class="signup-passkey-panel">
+                    <img class="signup-passkey-logo" src="../assets/valid_logo.png" alt="Valid" width="964" height="372" loading="lazy" decoding="async">
+                    <span class="signup-passkey-key" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="7.7" cy="12" r="4.3"/><path d="m11.1 9.4 8-6.2 1.7 1.7-2 2 1.5 1.5-2.2 2.2-1.5-1.5-5.5 4.2"/></svg></span>
+                    <h2>Keep your account</h2>
+                    <p class="signup-passkey-copy">Create a passkey so you can always sign back in—even if you delete the app or change phones.</p>
+                    <div class="onboarding-privacy-card"><span aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8V5.5A2.5 2.5 0 0 1 5.5 3H8M16 3h2.5A2.5 2.5 0 0 1 21 5.5V8M21 16v2.5a2.5 2.5 0 0 1-2.5 2.5H16M8 21H5.5A2.5 2.5 0 0 1 3 18.5V16M8.5 9v1.5M15.5 9v1.5M12 9v4.5h-1M8.5 16c2 1.6 5 1.6 7 0"/></svg></span><span><strong>Your face stays private</strong><small data-device-copy="private">Face ID stays on your iPhone. Valid never sees it.</small></span></div>
+                    <button id="signupCreatePasskey" class="primary-button" type="submit">Create passkey</button>
+                    <p class="signup-passkey-fine" data-device-copy="required">Required to finish setup · Secured by Apple</p>
+                </div>
+                <div id="signupPasskeyDone" class="signup-passkey-panel hidden">
+                    <span class="onboarding-check-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m7.5 12.4 3 3 6-6.4"/></svg></span>
+                    <h2>Your account is secured</h2>
+                    <p class="signup-passkey-copy" data-device-copy="signed">You can sign back into Valid with Face ID.</p>
+                    <button class="primary-button" type="button" data-signup-next>Continue</button>
+                </div>
+            </fieldset>
+            <fieldset class="signup-step signup-welcome-step hidden" data-signup-step="12">
+                <img class="signup-welcome-logo" src="../assets/valid_logo.png" alt="Valid" width="964" height="372" loading="lazy" decoding="async">
+                <h2>Welcome to Valid!</h2>
+                <p class="signup-welcome-copy">You're all set! Let's start playing.</p>
+                <button id="signupLetsGo" class="primary-button" type="button">Let's Go!</button>
             </fieldset>
             <p id="signupStatus" class="status-message" role="status"></p>
             <a id="signupBrowserHelp" class="secondary-button hidden" href="https://validapp.lol/app/?signup=1">Open in Chrome</a>

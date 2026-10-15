@@ -24,6 +24,7 @@ const NETWORK_ONLY_DYNAMIC_IMPORTS = new Map([
     ["vault/index.js", "Memories and Vault read signed media from the API"],
     ["share-cards.js", "share images are drawn only when sharing, which needs the network"],
     ["avatar-crop.js", "the crop step precedes an upload"],
+    ["notification-soft-prompt.js", "the notification ask ends in a Web Push subscription, which needs the network"],
     ["media-delivery.js", "delivers queued media; runs only online"],
     ["stories/photo-filter.js", "optional Story photo looks; offline, the original photo still posts"],
     ["chat/room-tools.js", "reporting and voice playback in an open chat need the network"],
