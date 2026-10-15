@@ -1362,8 +1362,19 @@ function renderSchoolCard() {
     const container = $("#schoolCard");
     const classmates = [...(state.classmateDirectory?.length ? state.classmateDirectory : (state.classmates || []))];
     const activeClassmates = Number(state.activeClassmatesThisWeek);
-    const activeClassmatesLabel = Number.isFinite(activeClassmates) && activeClassmates > 5
-        ? `<small>• ${activeClassmates.toLocaleString()} classmates active this week</small>`
+    // SettingsView+Sections.communityHeader: shown from 5 active classmates.
+    const activeClassmatesLabel = Number.isFinite(activeClassmates) && activeClassmates >= 5
+        ? `<small>• ${activeClassmates.toLocaleString()} classmate${activeClassmates === 1 ? "" : "s"} active this week</small>`
+        : "";
+    // Locked until the account votes (then until enough classmates join): the
+    // strip blurs under "Vote to unlock" / "More classmates needed".
+    const unlock = state.classmatesStatus;
+    const locked = unlock?.is_unlocked === false;
+    const voteLocked = Boolean(unlock?.lock_reasons?.includes("votes") && Number(unlock.votes_cast || 0) < Number(unlock.required_votes || 0));
+    const joinLocked = Boolean(unlock?.lock_reasons?.includes("joined_users") && Number(unlock.joined_users || 0) < Number(unlock.required_joined_users || 0));
+    const inviteStep = !voteLocked && joinLocked;
+    const lockOverlay = locked
+        ? `<button class="school-lock-button ${inviteStep ? "invite" : ""}" type="button" data-school-unlock="${inviteStep ? "invite" : "vote"}"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7.5 10V7.5a4.5 4.5 0 0 1 9 0V10h.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Zm2.2 0h4.6V7.5a2.3 2.3 0 0 0-4.6 0Z"/></svg><span>${inviteStep ? "More classmates needed" : "Vote to unlock"}</span></button>`
         : "";
     if (state.profile && !classmates.some((classmate) => String(classmate.user_id) === String(state.profile.user_id))) {
         classmates.push(state.profile);
@@ -1382,7 +1393,7 @@ function renderSchoolCard() {
         <div class="school-card-heading"><strong>School</strong>${activeClassmatesLabel}</div>
         ${currentProfileSchoolName() ? `<div class="school-card-name">${escapeHTML(currentProfileSchoolName())}</div>` : ""}
         <p>Spotlight on classmates with the most votes this week.</p>
-        ${ranked.length ? `<div class="school-leaderboard" role="list" aria-label="Classmates ranked by weekly votes">${ranked.map((classmate, index) => {
+        ${ranked.length ? `<div class="school-leaderboard-wrap ${locked ? "locked" : ""}"><div class="school-leaderboard" role="list" aria-label="Classmates ranked by weekly votes" ${locked ? 'inert aria-hidden="true"' : ""}>${ranked.map((classmate, index) => {
             const isCurrentUser = String(classmate.user_id) === String(state.profile?.user_id);
             return `<button class="school-rank-card" type="button" role="listitem" ${isCurrentUser ? `disabled aria-current="true"` : `data-school-classmate="${escapeHTML(classmate.user_id)}"`} aria-label="#${index + 1} ${escapeHTML(displayName(classmate))}, ${Number(classmate.weekly_vote_count || 0).toLocaleString()} votes this week">
                 <span class="school-rank-number">#${index + 1}</span>
@@ -1390,21 +1401,26 @@ function renderSchoolCard() {
                 <strong>${escapeHTML(isCurrentUser ? `${displayName(classmate)} (You)` : displayName(classmate))}</strong>
                 <small><span aria-hidden="true">${uiIcon("heart")}</span> ${Number(classmate.weekly_vote_count || 0).toLocaleString()} this week</small>
             </button>`;
-        }).join("")}</div>` : `<p>No classmates on Valid yet.</p>`}
+        }).join("")}</div>${lockOverlay}</div>` : locked
+            ? `<div class="school-leaderboard-wrap locked"><div class="school-placeholder-strip" aria-hidden="true">${"<span><i></i><b></b><em></em></span>".repeat(3)}</div>${lockOverlay}</div>`
+            : `<p>No classmates on Valid yet. Invite a friend to unlock this feed!</p>`}
         <div class="school-card-actions"><button id="findContactsButton" class="secondary-button" type="button">Contacts</button><button id="viewClassmatesButton" class="secondary-button" type="button">Classmates</button></div>
     </article>`;
 }
 
+// SettingsView+InviteAndPurchases.inviteFriendsSection.
 function renderProfileInviteCard() {
     const container = $("#profileInviteCard");
-    const status = state.inviteStatus;
-    const goal = Math.max(1, Number(status?.aura_reward_goal || 3));
-    const progress = Math.max(0, Math.min(goal, Number(status?.aura_reward_progress || 0)));
-    const remaining = Math.max(0, goal - progress);
+    const invites = godModeInviteProgress();
+    const creator = state.config?.enable_god_mode_ugc_program === true;
+    const reward = invites
+        ? `<p class="profile-invite-reward">${invites.reached ? "God Mode invite goal reached " : `Get ${invites.goal} verified friends to join for `}<strong>\u{1F451} GOD MODE</strong></p>
+        <div class="profile-invite-progress"><progress max="${invites.goal}" value="${invites.progress}" aria-label="${invites.progress} of ${invites.goal} qualifying invites"></progress><small>Qualifying invites: ${invites.progress} / ${invites.goal}</small></div>`
+        : `<p class="profile-invite-reward">Bring your friends in to unlock more polls and see more classmates</p>`;
     container.innerHTML = `<article class="profile-invite-card">
-        <div><strong>${remaining ? `Invite ${remaining} more ${remaining === 1 ? "friend" : "friends"}` : "Invite reward complete"}</strong><p>Bring friends to Valid and earn bonus aura when they join.</p></div>
-        <div class="profile-invite-progress"><span><strong>${progress} / ${goal}</strong><small>qualifying invites</small></span><progress max="${goal}" value="${progress}" aria-label="${progress} of ${goal} qualifying invites"></progress></div>
-        <div class="profile-invite-actions"><button class="profile-share-button snapchat" type="button" data-profile-invite="snapchat"><img loading="lazy" decoding="async" src="../assets/app/snapchat-logo.webp" alt=""><span>Snapchat</span></button><button class="profile-share-button messages" type="button" data-profile-invite="imessage">${appSymbolMarkup("message", "messages-symbol")}<span>Messages</span></button></div>
+        ${reward}
+        <div class="profile-invite-actions"><button class="profile-share-button snapchat" type="button" data-profile-invite="snapchat"><img loading="lazy" decoding="async" src="../assets/app/snapchat-logo.webp" alt=""><span>Invite via Snapchat</span></button><button class="profile-share-button messages" type="button" data-profile-invite="imessage"><svg class="profile-imessage-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#fff"/><path d="M13.25 23.1c0-6.15 4.72-10.35 10.75-10.35s10.75 4.2 10.75 10.35S30.03 33.45 24 33.45c-1.45 0-2.82-.24-4.06-.7-1.95 1.18-4.32 1.8-7.1 1.84 1.23-1.25 2.14-2.68 2.73-4.27-1.47-1.82-2.32-4.3-2.32-7.22Z" fill="#00e02d"/></svg><span>Invite via iMessage</span></button></div>
+        ${creator ? `<button class="profile-creator-link" type="button" data-open-creator-program><span>Or earn God Mode through our Creator program</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6"/></svg></button>` : ""}
         <p id="profileInviteStatus" class="status-message" role="status"></p>
     </article>`;
 }
@@ -2097,10 +2113,11 @@ function renderAuraPurchases() {
             : label;
         return `<button class="aura-price-button ${insufficient ? "insufficient" : ""}" type="button" data-buy-aura="${kind}" aria-label="${escapeHTML(ariaLabel)}" ${active || insufficient ? "disabled" : ""}>${active ? "Active" : `<span>${cost.toLocaleString()}</span><img loading="lazy" decoding="async" src="../assets/app/aura.webp" alt="aura">`}</button>`;
     };
-    container.innerHTML = `<article class="purchase-row"><span><strong>Get boosted</strong><small>Jump to the top of classmates' polls for 5 days or until you get voted 10 times.</small></span>${purchaseButton("global", globalCost, globalBoost ? "Global boost active" : `Get boosted for ${globalCost.toLocaleString()} aura`, Boolean(globalBoost))}</article>
-        <article class="purchase-row"><span><strong>See what your crush thinks about you</strong><small>Your crush stays top secret. You appear more often in their polls.</small></span>${purchaseButton("targeted", targetedCost, `Choose a crush for ${targetedCost.toLocaleString()} aura`)}</article>
+    // SettingsView+InviteAndPurchases.perksSection's titles and subtitles.
+    container.innerHTML = `<article class="purchase-row"><span><strong>Get boosted</strong><small>Guaranteed to find out what your classmates think of you \u{1F4AC}</small></span>${purchaseButton("global", globalCost, globalBoost ? "Global boost active" : `Get boosted for ${globalCost.toLocaleString()} aura`, Boolean(globalBoost))}</article>
+        <article class="purchase-row"><span><strong>Target a classmate</strong><small>They won't know who targeted them \u{1F92B}</small></span>${purchaseButton("targeted", targetedCost, `Target a classmate for ${targetedCost.toLocaleString()} aura`)}</article>
         ${tbhRequestsEnabled() ? `<article class="purchase-row"><span><strong>Request a TBH</strong><small>Ask a classmate for their honest take on you.</small></span>${purchaseButton("tbh", tbhCost, `Request a TBH for ${tbhCost.toLocaleString()} aura`)}</article>` : ""}
-        <article class="purchase-row"><span><strong>Submit a school question</strong><small>Create a poll for your school and choose whether to show your name.</small></span>${purchaseButton("question", questionCost, `Submit a school question for ${questionCost.toLocaleString()} aura`)}</article>`;
+        <article class="purchase-row"><span><strong>Submit a school question</strong><small>Anonymously create a poll that your school will answer.</small></span>${purchaseButton("question", questionCost, `Submit a school question for ${questionCost.toLocaleString()} aura`)}</article>`;
 }
 
 function newIdempotencyKey() {
@@ -8211,6 +8228,10 @@ function bindEvents() {
         if (event.target.closest("#profileSignOutButton")) void confirmSignOut();
         const invite = event.target.closest("[data-profile-invite]");
         if (invite) shareProfileInvite(invite, invite.dataset.profileInvite);
+        if (event.target.closest("[data-open-creator-program]")) openCreatorProgram();
+        const schoolUnlock = event.target.closest("[data-school-unlock]");
+        if (schoolUnlock?.dataset.schoolUnlock === "vote") switchPanel("play");
+        if (schoolUnlock?.dataset.schoolUnlock === "invite") shareProfileInvite(schoolUnlock, "imessage");
         const rankedClassmate = event.target.closest("[data-school-classmate]");
         if (rankedClassmate) openClassmateProfile(rankedClassmate.dataset.schoolClassmate);
         const poll = event.target.closest("[data-top-poll]");
