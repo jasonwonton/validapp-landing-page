@@ -60,7 +60,8 @@ let sheetSequence = 0;
  * @param {object} options
  * @param {"capture"|"memento"} options.mode capture: My Story + chats + people; memento: chats only, today's rules.
  * @param {object|null} options.keptChat the chat camera's own chat: pre-ticked, cannot be unticked.
- * @param {boolean} options.chatsViewOnce caption under the bar when keptChat is set.
+ * @param {boolean} options.chatsViewOnce the caption under the bar: "Chats open once" or "Stays in the chats".
+ * @param {boolean} options.showsChatsCaption shows that caption once a chat is chosen (keptChat always shows it).
  * @param {boolean} options.startsWithStory My Story starts ticked (the Story rail's +).
  * @param {boolean} options.allowsStory /config allows Stories.
  * @param {boolean} options.allowsChats /config allows chats.
@@ -69,7 +70,7 @@ let sheetSequence = 0;
  */
 export function openSendTo({
     api, userId, config = null, mode = "capture", keptChat = null, chatsViewOnce = true, startsWithStory = false,
-    allowsStory = false, allowsChats = true, postedChatIds = new Set(), haptic = null,
+    allowsStory = false, allowsChats = true, postedChatIds = new Set(), haptic = null, showsChatsCaption = false,
 } = {}) {
     const memento = mode === "memento";
     const id = `send-to-${++sheetSequence}`;
@@ -243,7 +244,7 @@ export function openSendTo({
         $(".send-to-summary").textContent = summary;
         $(".send-to-summary").hidden = !summary;
         const caption = $(".send-to-caption");
-        caption.hidden = !kept || memento;
+        caption.hidden = memento || !(kept || (showsChatsCaption && count > 0));
         caption.textContent = chatsViewOnce ? "Chats open once" : "Stays in the chats";
         $("[data-send-to-cancel]").disabled = state.working;
     }

@@ -154,7 +154,9 @@
 .send-to-send { width: 100%; min-height: 56px; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 0 10px 0 22px; border: 2px solid #000; border-radius: 28px; background: var(--peach); color: var(--on-peach); box-shadow: 0 4px 0 #000; font: inherit; font-size: 19px; cursor: pointer; }
 .send-to-send:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 #000; }
 .send-to-send:disabled { border-color: rgba(0,0,0,.25); background: #c9d3d3; color: rgba(0,0,0,.5); box-shadow: none; cursor: default; }
-.send-to-send-title { flex: 1; overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+/* The title centres on the pill: a spacer as wide as the arrow disc on its left. */
+.send-to-send-title { flex: 1; overflow: hidden; padding-left: 48px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.send-to-send { padding: 0 10px; }
 .send-to-send-disc { width: 36px; height: 36px; flex: 0 0 36px; display: grid; place-items: center; border-radius: 50%; background: #000; color: #fff; }
 .send-to-send:disabled .send-to-send-disc { background: rgba(0,0,0,.35); }
 .send-to-send-disc .ui-icon { width: 18px; height: 18px; stroke-width: 3; }
