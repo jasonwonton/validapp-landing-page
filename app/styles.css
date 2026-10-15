@@ -83,8 +83,6 @@ button, a { touch-action: manipulation; }
 button:not(:disabled), a, [role="button"] { -webkit-tap-highlight-color: transparent; }
 [role="button"]:active { transform: scale(.985); }
 button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid rgba(0, 63, 66, .42); outline-offset: 3px; }
-.media-overlay-positioner { position: absolute; z-index: 4; max-width: 82%; min-height: 44px; padding: 7px 11px; border: 1px dashed rgba(255,255,255,.82); border-radius: 10px; background: rgba(5,9,20,.46); color: #fff; font-size: clamp(.9rem, 4vw, 1.35rem); font-weight: 800; line-height: 1.15; overflow-wrap: anywhere; text-align: center; text-shadow: 0 1px 3px rgba(0,0,0,.85); touch-action: none; cursor: move; transform: translate(-50%, -50%); }
-.media-overlay-positioner:disabled { opacity: .72; cursor: default; }
 .hidden { display: none !important; }
 /* media-url.js: a public image whose every route failed keeps its box as a neutral tile. */
 img.media-placeholder { background: var(--mint); object-fit: cover; }
@@ -1104,6 +1102,11 @@ body.play-active .play-actions { margin: 0; }
 /* The system badge: red, white Jua 13pt, no ring, "99" at most (TabBarBadgeStyle). */
 .tab-badge { position: absolute; z-index: 1; top: -5px; left: calc(50% + 6px); min-width: 18px; height: 18px; display: grid; place-items: center; padding: 0 5px; border: 0; border-radius: 999px; background: #ff3b30; color: #fff; font-family: var(--app-font); font-size: 13px !important; font-weight: 400; line-height: 1; }
 .nav-item.active { background: transparent; color: var(--ink); box-shadow: none; }
+/* CameraTabIcon: the memento_camera art in its own colours, never tinted,
+   with a plain 8pt system-red dot while a Memento is due. */
+.camera-tab-icon { position: relative; width: 40px; height: 38px; display: block; }
+.camera-tab-icon img { position: absolute; left: 1px; top: 1px; width: 37px; height: 37px; object-fit: contain; }
+.camera-tab-dot { position: absolute; left: 31px; top: 1px; width: 8px; height: 8px; border-radius: 50%; background: #ff3b30; }
 
 .modal { width: min(560px, calc(var(--visual-viewport-width, 100%) - 28px)); max-height: calc(var(--visual-viewport-height, 100vh) - 40px); overflow: auto; overscroll-behavior: contain; padding: 0; border: 0; border-radius: 32px; background: var(--aqua); box-shadow: 0 12px 30px rgba(0,0,0,.15); transform: translate(calc(var(--visual-viewport-center, 50vw) - 50vw), calc(var(--visual-viewport-middle, 50vh) - 50vh)); }
 .modal[open] { animation: modal-enter .2s cubic-bezier(.2,.8,.2,1); }
@@ -1127,6 +1130,8 @@ body.play-active .play-actions { margin: 0; }
 .ui-sheet-actions button { width: 100%; min-height: var(--button-height-small); margin: 0; padding: 8px 12px; border-radius: 25px; font-size: 16px; line-height: 1.2; overflow-wrap: anywhere; }
 .ui-sheet-actions .ui-sheet-cancel { border: 2px solid var(--outline); background: var(--white); color: var(--ink); }
 .ui-sheet-actions .danger-button { border: 0; cursor: pointer; }
+.ui-sheet-alert .ui-sheet-actions { grid-template-columns: minmax(0, 1fr); }
+.ui-sheet-alert .ui-sheet-cancel { display: none; }
 .ui-sheet-actions button:disabled { opacity: var(--button-disabled-opacity); cursor: default; }
 .ui-sheet-reason-field { width: 100%; height: 60px; resize: none; padding: 12px; border: 1px solid rgba(0,0,0,.15); border-radius: 18px; background: var(--white); color: var(--ink); font-size: 16px; }
 :root[data-theme="dark"] .ui-sheet-reason-field { border-color: rgba(255,255,255,.2); }

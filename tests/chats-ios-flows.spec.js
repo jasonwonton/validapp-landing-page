@@ -244,7 +244,8 @@ test("Call back and View N work from the inbox without opening the room", async 
         const getChats = DemoAPI.prototype.getChats;
         DemoAPI.prototype.getChats = async function (...args) {
             const response = await getChats.apply(this, args);
-            if (!window.missedServed) {
+            // The first list Chats reads (the Camera tab's dot reads one earlier).
+            if (window.serveMissed && !window.missedServed) {
                 window.missedServed = true;
                 Object.assign(response.items.find(chat => chat.id === "chat-mateo"), { unacknowledged_missed_call_id: "missed-1", unacknowledged_missed_call_media_type: "audio", unacknowledged_missed_call_at: new Date().toISOString() });
                 Object.assign(response.items.find(chat => chat.id === "chat-noah"), { unopened_view_once_count: 1, next_view_once_room_sequence: 4, next_view_once_kind: "photo" });
@@ -257,6 +258,7 @@ test("Call back and View N work from the inbox without opening the room", async 
         DemoAPI.prototype.acknowledgeMissedCall = async function (...args) { window.callLog.push(["ack", args[1]]); return acknowledge.apply(this, args); };
     });
     await page.getByRole("button", { name: /^sign in$/i }).click();
+    await page.evaluate(() => { window.serveMissed = true; });
     await page.getByRole("button", { name: "Chats", exact: true }).click();
     const mateo = page.locator(".chat-list .chat-row").filter({ hasText: "Mateo Lee" });
     await expect(mateo.locator(".chat-status-visual")).toContainText("Missed call");

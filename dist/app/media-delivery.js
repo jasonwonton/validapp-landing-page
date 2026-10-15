@@ -200,6 +200,7 @@ export async function deliverStory(api, userId, record, { onProgress, onStatus, 
             caption: record.caption,
             overlay: record.overlay,
             clientRequestId: record.publish_request_id,
+            taggedUserIds: record.tagged_user_ids || null,
         });
     }
     const status = await readyIngest(api, userId, record, save, { purpose: "story", onProgress, onStatus, signal });
@@ -216,6 +217,7 @@ export async function deliverStory(api, userId, record, { onProgress, onStatus, 
             overlay: index === 0 ? record.overlay : null,
             clientRequestId: requestIds[index],
             captureId: captureIds[index],
+            taggedUserIds: index === 0 ? record.tagged_user_ids || null : null,
         }));
         await save({ sent_segments: index + 1 });
         onProgress?.(0.8 + 0.2 * (index + 1) / segments.length);

@@ -132,21 +132,6 @@ test("sequential rear and front photos produce swappable 1080 by 1440 Memento co
 
 });
 
-test("Stories preserve photo previews without exposing filters", async ({ page }) => {
-    await signInToDemo(page, "&stories=1");
-    await page.getByRole("button", { name: "Add Story" }).click();
-    const dialog = page.getByRole("dialog", { name: "Create Story" });
-    await dialog.locator(".story-file-input").setInputFiles("assets/AppIconV2.png");
-    const preview = dialog.getByRole("img", { name: "Story photo preview" });
-    const original = await previewDigest(preview);
-    const effects = dialog.getByRole("group", { name: "Photo effect" });
-    await expect(effects).toHaveCount(0);
-    await expect(dialog.getByText("Photo ready to post", { exact: true })).toBeVisible();
-    expect(await previewDigest(preview)).toEqual(original);
-    await dialog.getByRole("button", { name: "Post Story" }).click();
-    await expect(page.getByText("Story posted", { exact: true })).toBeVisible();
-});
-
 test("camera Effect recipes and server catalog growth remain strictly bounded", async ({ page }) => {
     await page.goto("/app/");
     const result = await page.evaluate(async () => {

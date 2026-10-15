@@ -20,7 +20,7 @@ export function createFeedView(context) {
     let storiesView = null;
     const ensureStoriesView = () => {
         if (!storiesView && state.config?.enable_stories === true && state.config?.enable_web_stories === true) {
-            storiesView = createStoriesView({ root: $("#storiesRoot"), api, getUser: () => api.user, getProfile: () => state.profile, getConfig: () => state.config, escapeHTML, showToast });
+            storiesView = createStoriesView({ root: $("#storiesRoot"), api, getUser: () => api.user, getProfile: () => state.profile, getConfig: () => state.config, escapeHTML, showToast, onCreate: context.openStoryCamera });
         }
         return storiesView;
     };

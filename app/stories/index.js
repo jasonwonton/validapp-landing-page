@@ -1,17 +1,9 @@
 import { uiIcon } from "../ui-icons.js";
 import { mediaImageMarkup } from "../media-url.js";
-import { ingestEnabled, ingestSegmentCount, prepareChatMedia } from "../chat/media.js";
-import {
-    MAX_MEDIA_AUTOMATIC_ATTEMPTS,
-    chatTextSendIsRetryable,
-    listChatMediaOutbox,
-    markChatMediaOutboxAttempt,
-    putChatMediaOutbox,
-    removeChatMediaOutbox,
-} from "../chat/outbox.js";
-import { setRuntimeStyles } from "../runtime-style.js";
-import { createMediaOverlayPositioner } from "../media-overlay-positioner.js";
 import { userMessage } from "../user-message.js";
+// The Story queue (StoryPostQueue) is shared with the camera's Send to.
+const loadQueue = () => import("../camera/capture-queue.js");
+const STORY_QUEUE_EVENT = "valid:story-queue";
 
 const REFRESH_MS = 30_000;
 
@@ -29,52 +21,40 @@ function displayName(author = {}) {
     return [author.first_name, author.last_name].filter(Boolean).join(" ").trim() || author.username || "Student";
 }
 
-export function createStoriesView({ root, api, getUser, getProfile = getUser, getConfig = () => null, escapeHTML, showToast }) {
+// The Story rail's + opens the live camera with My Story ticked in Send to
+// (FeedView onCreate → CameraFirstFlowView(startsWithStory: true)).
+export function createStoriesView({ root, api, getUser, getProfile = getUser, getConfig = () => null, escapeHTML, showToast, onCreate = null }) {
     let authors = [];
     let loading = false;
     let lastLoaded = 0;
     let viewerPromise = null;
-    let selectedStoryMedia = null;
-    let selectedStoryPreview = null;
-    let storyPreparationGeneration = 0;
-    let storyUploadRequestId = null;
-    let storyPublishRequestId = null;
-    let storyRetrying = false;
-    let storyRetryTimer = null;
-    let storyPhotoFilter = null;
+    // The own label: "Posting…", "Tap to retry", or "Your Story" (StoryStrip).
+    let postStatus = null;
+    let postStatusGeneration = 0;
 
     root.innerHTML = `
         <section class="stories-shell" aria-label="Stories">
             <p class="stories-status" role="status"></p>
             <div class="stories-rail"></div>
         </section>
-        <dialog class="story-composer" aria-label="Create Story">
-            <form>
-                <header><button type="button" data-close-story-composer>Cancel</button><strong>New Story</strong><span></span></header>
-                <div class="story-composer-preview"><span aria-hidden="true">${uiIcon("plus")}</span><p>Choose a photo or an MP4 video.</p></div>
-                <div class="story-source-buttons">
-                    <label class="story-source-button">${uiIcon("camera")}<span>Camera</span><input class="story-camera-input" type="file" accept="image/*,video/mp4" capture="environment"></label>
-                    <label class="story-source-button">${uiIcon("photo")}<span>Library</span><input class="story-file-input" type="file" accept="image/*,video/mp4"></label>
+        <dialog class="story-failed-sheet ui-sheet" aria-labelledby="storyFailedTitle">
+            <div class="ui-sheet-content">
+                <span class="ui-sheet-grabber" aria-hidden="true"></span>
+                <h2 id="storyFailedTitle">Your Story didn't post</h2>
+                <div class="story-failed-actions">
+                    <button type="button" class="primary-button" data-story-retry>Try again</button>
+                    <button type="button" class="danger-button" data-story-discard>Discard</button>
+                    <button type="button" class="secondary-button" data-story-failed-cancel>Cancel</button>
                 </div>
-                <label>Caption <input class="story-caption" type="text" maxlength="120" placeholder="Optional caption"></label>
-                <label>Text overlay <input class="story-overlay" type="text" maxlength="160" placeholder="Optional text — drag it in the preview"></label>
-                <div class="story-upload-progress hidden"><span></span></div>
-                <p class="story-composer-status" role="status"></p>
-                <button class="primary-button story-publish" type="submit" disabled>Post Story</button>
-            </form>
+            </div>
         </dialog>`;
 
     const $ = (selector) => root.querySelector(selector);
-    const storyOverlay = createMediaOverlayPositioner({
-        preview: $(".story-composer-preview"),
-        input: $(".story-overlay"),
-    });
     root.addEventListener("click", handleClick);
-    $(".story-file-input").addEventListener("change", selectStoryMedia);
-    $(".story-camera-input").addEventListener("change", selectStoryMedia);
-    $(".story-composer form").addEventListener("submit", publishSelectedStory);
-    $(".story-composer").addEventListener("close", resetStoryComposer);
-    window.addEventListener("online", () => void retryPendingStories());
+    $(".story-failed-sheet").addEventListener("click", (event) => { if (event.target === event.currentTarget) event.currentTarget.close(); });
+    window.addEventListener("online", () => void resumeStories());
+    window.addEventListener(STORY_QUEUE_EVENT, () => void refreshPostStatus());
+    window.addEventListener("valid:capture-sent", (event) => { if (event.detail?.kind === "story") void activate({ force: true }); });
 
     // The viewer, its sheets, and their gestures load on first use.
     function loadViewer() {
@@ -113,11 +93,13 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, ge
             return `<span class="story-avatar">${avatar ? mediaImageMarkup(avatar, { initials: name.slice(0, 1).toUpperCase() }) : `<span>${escapeHTML(name.slice(0, 1).toUpperCase())}</span>`}</span>`;
         };
         const addBadge = `<span class="story-add-badge" aria-hidden="true">${uiIcon("plus")}</span>`;
+        const label = postStatus === "posting" ? "Posting…" : postStatus === "failed" ? "Tap to retry" : "Your Story";
+        const pending = label !== "Your Story";
         // Always reserve the first position for the viewer, even on an empty or
         // unavailable feed. The additional-story action is a sibling, not a nested button.
         const ownStory = owner
-            ? `<div class="own-story"><button type="button" data-story-author="${authors.indexOf(owner)}" class="story-author-button unviewed" aria-label="Your Story">${avatarMarkup("Your Story", owner.profile_picture_url || profile.profile_picture_url)}<small>Your Story</small></button><button class="story-add-another" type="button" data-create-story aria-label="Add Story" title="Add another Story">${addBadge}</button></div>`
-            : `<div class="own-story"><button class="story-author-button" type="button" data-create-story aria-label="Add Story"><span class="story-avatar-wrap">${avatarMarkup(displayName(profile), profile.profile_picture_url)}${addBadge}</span><small>Your Story</small></button></div>`;
+            ? `<div class="own-story"><button type="button" data-story-author="${authors.indexOf(owner)}" class="story-author-button unviewed ${pending ? `story-${postStatus}` : ""}" aria-label="${pending ? `Your Story, ${label}` : "Open Your Story"}">${avatarMarkup("Your Story", owner.profile_picture_url || profile.profile_picture_url)}<small>${label}</small></button><button class="story-add-another" type="button" data-create-story aria-label="Add another Story">${addBadge}</button></div>`
+            : `<div class="own-story"><button class="story-author-button ${pending ? `story-${postStatus}` : ""}" type="button" data-create-story aria-label="${pending ? `Your Story, ${label}` : "Add to Your Story"}"><span class="story-avatar-wrap">${avatarMarkup(displayName(profile), profile.profile_picture_url)}${addBadge}</span><small>${label}</small></button></div>`;
         $(".stories-rail").innerHTML = ownStory + visibleAuthors.filter(author => !author.is_owner).map((author) => {
             const name = displayName(author);
             const label = `${name}'s Story${author.has_unviewed ? ", new" : ""}`;
@@ -125,6 +107,21 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, ge
         }).join("");
     }
     renderRail();
+
+    async function refreshPostStatus() {
+        const generation = ++postStatusGeneration;
+        const { storyPostStatus } = await loadQueue();
+        const status = await storyPostStatus(getUser()?.id);
+        if (generation !== postStatusGeneration || status === postStatus) return;
+        postStatus = status;
+        renderRail();
+    }
+
+    async function resumeStories() {
+        if (!getUser()?.id) return;
+        const { resumeQueue } = await loadQueue();
+        await resumeQueue(api, getUser().id, { showToast });
+    }
 
     async function activate({ force = false } = {}) {
         if (!loading && (force || !lastLoaded || Date.now() - lastLoaded >= REFRESH_MS)) await load();
@@ -141,7 +138,8 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, ge
             renderRail();
             $(".stories-status").textContent = "";
             if (authors.length) void loadViewer().catch(() => null);
-            void retryPendingStories();
+            void refreshPostStatus();
+            void resumeStories().catch(() => null);
         } catch (error) {
             $(".stories-status").textContent = userMessage(error, "Stories unavailable");
         } finally {
@@ -176,209 +174,17 @@ export function createStoriesView({ root, api, getUser, getProfile = getUser, ge
         await openViewer(index, itemIndex, { viewers });
     }
 
-    function openStoryComposer() {
-        resetStoryComposer();
-        // Longer, larger or non-MP4 clips go through the server ingest when it is on.
-        $(".story-file-input").accept = ingestEnabled(api.config) ? "image/*,video/*" : "image/*,video/mp4";
-        $(".story-composer").showModal();
-    }
-
-    async function selectStoryMedia(event) {
-        const file = event.target.files?.[0];
-        if (!file) return;
-        storyOverlay.reset();
-        await prepareSelectedStoryMedia(file, {
-            preserveOverlay: false,
-        });
-    }
-
-    async function prepareSelectedStoryMedia(file, { preserveOverlay = false } = {}) {
-        const generation = ++storyPreparationGeneration;
-        storyPhotoFilter?.destroy();
-        storyPhotoFilter = null;
-        $(".story-composer-status").textContent = "Preparing media…";
-        $(".story-publish").disabled = true;
-        $(".story-overlay").disabled = true;
-        storyOverlay.setDisabled(true);
-        storyUploadRequestId = null;
-        storyPublishRequestId = null;
-        try {
-            const prepared = await prepareChatMedia(file, { config: api.config });
-            if (generation !== storyPreparationGeneration) return;
-            if (prepared.kind === "audio") throw new Error("Choose a photo or MP4 video for your Story.");
-            selectedStoryMedia = prepared;
-            if (selectedStoryPreview) URL.revokeObjectURL(selectedStoryPreview);
-            selectedStoryPreview = URL.createObjectURL(selectedStoryMedia.file);
-            $(".story-composer-preview").innerHTML = selectedStoryMedia.kind === "video"
-                ? `<video src="${escapeHTML(selectedStoryPreview)}" muted playsinline controls aria-label="Story video preview"></video>`
-                : `<img src="${escapeHTML(selectedStoryPreview)}" alt="Story photo preview" decoding="async">`;
-            if (!preserveOverlay) storyOverlay.reset();
-            storyOverlay.mount();
-            if (selectedStoryMedia.kind === "photo") void attachStoryPhotoFilter(file, generation);
-            const parts = selectedStoryMedia.ingest ? ingestSegmentCount(selectedStoryMedia.durationMs) : 1;
-            $(".story-composer-status").textContent = parts > 1 ? `Posts as ${parts} Stories` : `${selectedStoryMedia.kind === "video" ? "Video" : "Photo"} ready to post`;
-            $(".story-publish").disabled = false;
-        } catch (error) {
-            if (generation !== storyPreparationGeneration) return;
-            selectedStoryMedia = null;
-            $(".story-composer-status").textContent = userMessage(error, "Could not prepare that Story.");
-        } finally {
-            if (generation === storyPreparationGeneration) {
-                $(".story-overlay").disabled = false;
-                storyOverlay.setDisabled(false);
-            }
-        }
-    }
-
-    // iOS Stories get the chat review's swipe colour looks (ChatMediaCaptureView
-    // purpose .story). A look changes the pixels, so it resets the request ids;
-    // once a post has been attempted the look is locked, like iOS didSubmit.
-    async function attachStoryPhotoFilter(source, generation) {
-        try {
-            const { createStoryPhotoFilter } = await import("./photo-filter.js");
-            if (generation !== storyPreparationGeneration) return;
-            const filter = await createStoryPhotoFilter({
-                preview: $(".story-composer-preview"), source, api, config: api.config,
-                canSwipe: () => !storyUploadRequestId && !$(".story-publish").hasAttribute("aria-busy"),
-                onChange: () => { storyUploadRequestId = null; storyPublishRequestId = null; },
-            });
-            if (generation !== storyPreparationGeneration) return filter?.destroy();
-            storyPhotoFilter = filter;
-        } catch (_) {
-            // Offline or undecodable here: the original photo still posts.
-        }
-    }
-
-    async function deliverStoryRecord(record, { onProgress, onStatus } = {}) {
-        // Resumes from the last finished step; long clips post one Story per segment.
-        const { deliverStory } = await import("../media-delivery.js");
-        return deliverStory(api, record.user_id, record, { onProgress, onStatus });
-    }
-
-    async function publishSelectedStory(event) {
-        event.preventDefault();
-        if (!selectedStoryMedia) return;
-        const button = $(".story-publish");
-        button.disabled = true;
-        button.setAttribute("aria-busy", "true");
-        let file = selectedStoryMedia.file;
-        try { file = await storyPhotoFilter?.compose(file) || file; } catch (_) { /* post the original */ }
-        if (!selectedStoryMedia) return button.removeAttribute("aria-busy");
-        storyUploadRequestId ||= crypto.randomUUID();
-        storyPublishRequestId ||= crypto.randomUUID();
-        const overlayPosition = storyOverlay.value();
-        const record = {
-            id: `${getUser().id}:story:${storyUploadRequestId}`,
-            user_id: getUser().id,
-            kind: "story",
-            file,
-            thumbnail: selectedStoryMedia.thumbnail || null,
-            content_type: selectedStoryMedia.ingest ? selectedStoryMedia.contentType : file.type,
-            ingest: Boolean(selectedStoryMedia.ingest),
-            duration_ms: selectedStoryMedia.durationMs,
-            caption: $(".story-caption").value.trim() || null,
-            overlay: $(".story-overlay").value.trim() ? { text: $(".story-overlay").value.trim(), ...overlayPosition } : null,
-            upload_request_id: storyUploadRequestId,
-            publish_request_id: storyPublishRequestId,
-        };
-        button.disabled = true;
-        button.textContent = "Posting…";
-        storyOverlay.setDisabled(true);
-        $(".story-upload-progress").classList.remove("hidden");
-        let saved = false;
-        try {
-            await putChatMediaOutbox(record);
-            saved = true;
-            await deliverStoryRecord(record, {
-                onStatus: (text) => { $(".story-composer-status").textContent = text; },
-                onProgress: (progress) => { setRuntimeStyles($(".story-upload-progress span"), { width: `${Math.round(progress * 100)}%` }); },
-            });
-            await removeChatMediaOutbox(record.id);
-            $(".story-composer").close();
-            showToast?.("Story posted");
-            await activate({ force: true });
-        } catch (error) {
-            if (saved && chatTextSendIsRetryable(error)) {
-                await markChatMediaOutboxAttempt(record.id).catch(() => null);
-                $(".story-composer-status").textContent = `${userMessage(error, "Could not post your Story.")} It is saved on this device and will retry while Valid is open.`;
-                scheduleStoryRetry(await listChatMediaOutbox(getUser().id).catch(() => []));
-            } else {
-                await removeChatMediaOutbox(record.id).catch(() => null);
-                $(".story-composer-status").textContent = saved
-                    ? (userMessage(error, "Could not post your Story."))
-                    : "This Story could not be saved for a safe retry. Free some device storage and try again.";
-            }
-        } finally {
-            button.textContent = "Post Story";
-            button.removeAttribute("aria-busy");
-            button.disabled = !selectedStoryMedia;
-        }
-    }
-
-    function scheduleStoryRetry(records) {
-        clearTimeout(storyRetryTimer);
-        storyRetryTimer = null;
-        const next = records.filter((record) => record.kind === "story" && Number(record.attempts || 0) < MAX_MEDIA_AUTOMATIC_ATTEMPTS)
-            .reduce((earliest, record) => Math.min(earliest, Number(record.next_attempt_at || 0)), Infinity);
-        if (!Number.isFinite(next)) return;
-        storyRetryTimer = setTimeout(() => void retryPendingStories(), Math.max(2_000, Math.min(5 * 60_000, next - Date.now())));
-    }
-
-    async function retryPendingStories() {
-        if (storyRetrying || navigator.onLine === false || !getUser()?.id) return;
-        storyRetrying = true;
-        let completed = 0;
-        try {
-            const records = await listChatMediaOutbox(getUser().id).catch(() => []);
-            const due = records.filter((record) => record.kind === "story"
-                && Number(record.attempts || 0) < MAX_MEDIA_AUTOMATIC_ATTEMPTS
-                && Number(record.next_attempt_at || 0) <= Date.now()).slice(0, 2);
-            for (const record of due) {
-                try {
-                    await deliverStoryRecord(record);
-                    await removeChatMediaOutbox(record.id);
-                    completed += 1;
-                } catch (error) {
-                    if (chatTextSendIsRetryable(error)) await markChatMediaOutboxAttempt(record.id);
-                    else await removeChatMediaOutbox(record.id);
-                }
-            }
-            const remaining = await listChatMediaOutbox(getUser().id).catch(() => []);
-            scheduleStoryRetry(remaining);
-            if (completed) {
-                showToast?.(`${completed} saved ${completed === 1 ? "Story" : "Stories"} posted`);
-                await activate({ force: true });
-            }
-        } finally { storyRetrying = false; }
-    }
-
-    function resetStoryComposer() {
-        storyPreparationGeneration += 1;
-        storyPhotoFilter?.destroy();
-        storyPhotoFilter = null;
-        selectedStoryMedia = null;
-        if (selectedStoryPreview) URL.revokeObjectURL(selectedStoryPreview);
-        selectedStoryPreview = null;
-        storyOverlay.reset();
-        storyUploadRequestId = null;
-        storyPublishRequestId = null;
-        $(".story-file-input").value = "";
-        $(".story-camera-input").value = "";
-        $(".story-caption").value = "";
-        $(".story-overlay").value = "";
-        $(".story-composer-preview").innerHTML = `<span aria-hidden="true">${uiIcon("plus")}</span><p>Choose a photo or an MP4 video.</p>`;
-        $(".story-composer-status").textContent = "";
-        $(".story-upload-progress").classList.add("hidden");
-        setRuntimeStyles($(".story-upload-progress span"), { width: "0" });
-        $(".story-publish").textContent = "Post Story";
-        $(".story-publish").disabled = true;
-    }
-
+    // Tap: a failed post asks first ("Your Story didn't post"); otherwise
+    // your Story opens, or the camera when there is none (StoryStrip).
     function handleClick(event) {
         const target = event.target.closest("button");
         if (!target) return;
-        if (target.matches("[data-create-story]")) return openStoryComposer();
-        if (target.matches("[data-close-story-composer]")) return $(".story-composer").close();
+        if (target.matches("[data-story-retry]")) { $(".story-failed-sheet").close(); return void loadQueue().then(({ retryFailedStories }) => retryFailedStories(api, getUser().id, { showToast })); }
+        if (target.matches("[data-story-discard]")) { $(".story-failed-sheet").close(); return void loadQueue().then(({ discardFailedStories }) => discardFailedStories(getUser().id)); }
+        if (target.matches("[data-story-failed-cancel]")) return $(".story-failed-sheet").close();
+        const own = target.closest(".own-story");
+        if (own && postStatus === "failed" && !target.matches(".story-add-another")) return $(".story-failed-sheet").showModal();
+        if (target.matches("[data-create-story]")) return onCreate?.();
         if (target.dataset.storyAuthor !== undefined) return void openViewer(Number(target.dataset.storyAuthor));
     }
 

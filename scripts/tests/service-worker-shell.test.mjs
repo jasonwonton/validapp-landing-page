@@ -26,7 +26,6 @@ const NETWORK_ONLY_DYNAMIC_IMPORTS = new Map([
     ["avatar-crop.js", "the crop step precedes an upload"],
     ["notification-soft-prompt.js", "the notification ask ends in a Web Push subscription, which needs the network"],
     ["media-delivery.js", "delivers queued media; runs only online"],
-    ["stories/photo-filter.js", "optional Story photo looks; offline, the original photo still posts"],
     ["chat/room-tools.js", "reporting and voice playback in an open chat need the network"],
     ["chat/viewer-gestures.js", "the media viewer shows network media"],
     ["stories/viewer.js", "Stories are network media"],

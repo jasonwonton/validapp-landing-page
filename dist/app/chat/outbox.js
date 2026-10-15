@@ -7,6 +7,9 @@ const MAX_RECORDS_GLOBAL = 200;
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 export const MAX_AUTOMATIC_ATTEMPTS = 8;
 export const MAX_MEDIA_AUTOMATIC_ATTEMPTS = 4;
+// Saved media uploads this tab is delivering right now (chat room, Camera tab
+// and Story queue alike), so no retry loop starts the same record twice.
+export const deliveringMediaRecords = new Set();
 const MAX_MEDIA_RECORDS_PER_USER = 3;
 const MAX_MEDIA_RECORDS_GLOBAL = 10;
 const MAX_MEDIA_AGE_MS = 24 * 60 * 60 * 1000;

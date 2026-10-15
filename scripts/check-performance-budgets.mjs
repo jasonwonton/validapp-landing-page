@@ -90,7 +90,9 @@ for (const entry of shellEntries) {
 // this release (web-v108..v115 growth); the chat notification card adds ~6 KB.
 // 900 KB (web-v117): iOS flow parity across Feed, Play, Chats, Profile and
 // sign-up (~67 KB, mostly app.js and chat/index.js). Precache only.
-assert.ok(shellTransferEstimate <= 900_000, `Estimated app-shell transfer exceeds 900 KB (${shellTransferEstimate} bytes)`);
+// 915 KB (web-v118): the Camera tab, Send to and the capture queue (~13 KB);
+// precached so a capture can still be queued offline. Precache only.
+assert.ok(shellTransferEstimate <= 915_000, `Estimated app-shell transfer exceeds 915 KB (${shellTransferEstimate} bytes)`);
 
 console.log(JSON.stringify({
     fontBytes,
