@@ -8,7 +8,7 @@ import { createRealtimeList } from "./realtime-list.js";
 import { activateRoute, preloadRoute } from "./routes/route-loader.js";
 import { clearRuntimeStyles, setRuntimeStyles } from "./runtime-style.js";
 import { configureMediaFallback, imageCandidates, installMediaImageFallback, mediaImageMarkup, setMediaImageSource } from "./media-url.js";
-import { choiceSheet, confirmSheet } from "./ui-dialogs.js";
+import { choiceSheet, confirmReasonSheet, confirmSheet } from "./ui-dialogs.js";
 import { showToast } from "./toast.js";
 import { userMessage } from "./user-message.js";
 import { answerPayload, buildChoicePool, canStartPlay, contactUploadPayload, selectPlayChoices, summarizeContactSync } from "./play-choices.js";
@@ -3468,9 +3468,9 @@ async function revealQuestionSubmitter(button) {
     const cost = Number(state.config?.full_reveal_aura_cost ?? DEFAULT_FULL_REVEAL_AURA_COST);
     if (remaining <= 0 && Number(state.profile?.aura_points || 0) < cost) return showToast('You need another reveal or more aura to do that.');
     if (!await confirmSheet({
-        title: "Reveal who submitted this question?",
-        message: remaining > 0 ? "This uses 1 of your reveals." : `This spends ${cost.toLocaleString()} aura.`,
-        confirmLabel: remaining > 0 ? "Use 1 reveal" : `Spend ${cost.toLocaleString()} aura`,
+        title: "Reveal who made this question?",
+        message: remaining > 0 ? freeRevealConfirmationMessage(remaining) : `Spend ${cost.toLocaleString()} aura to reveal the classmate who submitted it.`,
+        confirmLabel: remaining > 0 ? "Use 1 Reveal" : `Spend ${cost.toLocaleString()} aura`,
     })) return;
     button.disabled = true;
     try {
@@ -3494,10 +3494,8 @@ function renderFeedDetail() {
         || (item.item_type === "received_vote" ? displayName(state.profile) : "Someone");
     const options = Array.isArray(item.presented_options) ? item.presented_options : [];
     const artworkURL = api.assetURL(item.image_url);
-    const revealed = item.voter_name ? `<div class="revealed-sender-row">${avatarMarkup({ first_name: item.voter_name, profile_picture_url: item.voter_profile_picture_url }, "row-avatar")}<strong>Sent by ${escapeHTML(item.voter_name)}</strong></div>` : "";
-    const firstLetter = item.voter_name ? "" : voterFirstLetterHint(item);
-    const firstLetterHint = firstLetter ? `<p class="feed-detail-first-letter-hint">Hint: starts with ${escapeHTML(firstLetter)}</p>` : "";
-    $("#feedDetailDialog .detail-screen-header > strong").textContent = formatVoterStatement(item);
+    // QuestionDetailToolbar: the voter line is the title, and there is none without a gender.
+    $("#feedDetailDialog .detail-screen-header > strong").textContent = item.voter_gender ? formatVoterStatement(item) : "";
     $("#feedDetailBody").innerHTML = `<article class="feed-detail-card">
         <div class="feed-detail-prompt"><h3>${escapeHTML(item.question_text)}</h3>
         ${item.is_nomination ? "" : questionSubmitterMarkup(item)}</div>
@@ -3508,24 +3506,47 @@ function renderFeedDetail() {
             const selected = index === (explicit >= 0 ? explicit : options.findIndex(candidate => (candidate.name || candidate.contact_name) === selectedName));
             return `<div class="feed-detail-option ${selected ? "selected" : ""}"><strong>${escapeHTML(name)}</strong>${selected ? `<span class="feed-detail-selection-indicator" aria-label="Picked">👆</span>` : ""}</div>`;
         }).join("")}</div>` : `<div class="feed-detail-legacy-selection"><strong>Selected: ${escapeHTML(selectedName)}</strong><small>Options not available for this older vote</small></div>`}
-        ${firstLetterHint}
-        ${revealed}
-    </article><div class="detail-engagement-row">${feedView?.reactionControlMarkup(item, "poll", item.question_answer_id) || ""}${commentDetailButtonMarkup(item, "poll", item.question_answer_id, "feed-detail-comment-button")}${detailSendButton("poll", item.question_answer_id)}</div>`;
+    </article>`;
+    $("#feedDetailEngagement").innerHTML = `<div class="detail-engagement-row">${feedView?.reactionControlMarkup(item, "poll", item.question_answer_id) || ""}${commentDetailButtonMarkup(item, "poll", item.question_answer_id, "feed-detail-comment-button")}${detailSendButton("poll", item.question_answer_id)}</div>`;
+    renderFeedDetailShareRow();
     $("#blockFeedSubmitterButton").classList.toggle("hidden", !item.question_submitted_by_user_id || item.question_is_anonymous === true);
+    // QuestionDetailRevealSenderButton: "Sent by …" takes the button's place once revealed.
     const revealButton = $("#revealFeedSenderButton");
-    const canRevealThisVote = item.item_type === "received_vote" && !item.voter_name;
+    const personalVote = item.item_type === "received_vote";
+    const canRevealThisVote = personalVote && !item.voter_name;
     revealButton.classList.toggle("hidden", !canRevealThisVote);
+    const revealedSender = $("#feedDetailRevealedSender");
+    revealedSender.classList.toggle("hidden", !(personalVote && item.voter_name));
+    revealedSender.innerHTML = personalVote && item.voter_name ? `${avatarMarkup({ first_name: item.voter_name, profile_picture_url: item.voter_profile_picture_url }, "row-avatar")}<strong>Sent by ${escapeHTML(item.voter_name)}</strong>` : "";
     if (canRevealThisVote) {
         const remaining = Math.max(0, Number(state.profile?.remaining_reveals || 0));
         const auraCost = Math.max(0, Number(state.config?.full_reveal_aura_cost ?? DEFAULT_FULL_REVEAL_AURA_COST));
         const subscribed = api.user?.subscribed_user === true;
+        const action = item.is_nomination ? "who nominated you" : "who sent this";
         const label = subscribed
-            ? (remaining > 0 ? `Reveal who sent this (${remaining} remaining)` : `Reveal who sent this (${auraCost.toLocaleString()} aura)`)
-            : "Get God Mode to Reveal who sent this";
+            ? (remaining > 0 ? `Reveal ${action} (${remaining} remaining)` : `Reveal ${action} (${auraCost} aura)`)
+            : `Get God Mode to Reveal ${action}`;
         revealButton.innerHTML = `<span>${escapeHTML(label)}</span>`;
         revealButton.disabled = subscribed && remaining === 0 && Number(state.profile?.aura_points || 0) < auraCost;
     }
     $("#feedDetailStatus").textContent = "";
+}
+
+// QuestionDetailShareRow: a wide "Share on Snapchat" with Instagram (and
+// TikTok when enabled) beside it; without Snapchat both expand with labels.
+function renderFeedDetailShareRow() {
+    const showsSnapchat = state.config?.enable_share_on_snapchat !== false;
+    const showsTikTok = state.config?.enable_share_on_tiktok === true;
+    const labels = { snapchat: "Snapchat", instagram: "Instagram", tiktok: "TikTok" };
+    $$("#feedDetailDialog [data-share-feed-platform]").forEach((button) => {
+        const platform = button.dataset.shareFeedPlatform;
+        const visible = platform === "snapchat" ? showsSnapchat : platform === "tiktok" ? showsTikTok : true;
+        const expanded = platform === "snapchat" || !showsSnapchat;
+        button.classList.toggle("hidden", !visible);
+        if (button.classList.contains("expanded") === expanded && button.childElementCount) return;
+        button.classList.toggle("expanded", expanded);
+        button.innerHTML = `${shareIconMarkup(platform)}${expanded ? `<span>Share on ${labels[platform]}</span>` : ""}`;
+    });
 }
 
 async function openFeedDetail(answerId) {
@@ -3637,6 +3658,11 @@ async function shareFeedItem(platform = "other") {
     }
 }
 
+function freeRevealConfirmationMessage(remaining) {
+    const left = Math.max(0, Number(remaining || 0) - 1);
+    return `This uses 1 of your weekly reveals. You will have ${left} ${left === 1 ? "reveal" : "reveals"} left.`;
+}
+
 async function revealFeedSender() {
     const item = selectedFeedItem();
     if (!item || item.voter_name) return;
@@ -3655,6 +3681,13 @@ async function revealFeedSender() {
         openAuraSpend("reveal", item);
         return;
     }
+    // QuestionDetailRevealConfirmations: a free reveal is spent only after "Use 1 Reveal".
+    if (!await confirmSheet({
+        title: "Reveal who sent this?",
+        message: freeRevealConfirmationMessage(remaining),
+        confirmLabel: "Use 1 Reveal",
+    })) return;
+    if (selectedFeedItem() !== item || item.voter_name) return;
     setButtonLoading(button, true, "Revealing...");
     $("#feedDetailStatus").textContent = "";
     try {
@@ -3683,17 +3716,24 @@ function applyFeedSenderReveal(item, result) {
 async function moderateFeedItem(action) {
     const item = selectedFeedItem();
     if (!item) return;
+    // QuestionDetailModerationConfirmations.
     const sheets = {
-        block: { title: "Block this question submitter?", message: "Their submitted questions will be hidden from you.", confirmLabel: "Block" },
-        dismiss: { title: "Delete this question?", message: "This question and its votes will be deleted from your Inbox and School Feed. It won't be reported or affect anyone else.", confirmLabel: "Delete" },
-        report: { title: "Report this question?", message: "Valid's moderation team will review it.", confirmLabel: "Report" },
+        block: { title: "Block User", message: "You will no longer see questions submitted by this user.", confirmLabel: "Block", destructive: true },
+        dismiss: { title: "Delete This Question?", message: "This question and its votes will be deleted from your Inbox and School Feed. It won't be reported or affect anyone else.", confirmLabel: "Delete" },
+        report: { title: "Report a Safety Issue", message: "Report only if this shared question is unsafe or breaks the rules. Reporting hides the question across your feeds and sends it for review.", confirmLabel: "Report for Review", destructive: true, reasonPlaceholder: "Explain why you're reporting this question..." },
     };
     const sheet = sheets[action];
     if (!sheet) return;
-    if (!await confirmSheet({ ...sheet, destructive: true })) return;
+    let reason = null;
+    if (action === "report") {
+        const answer = await confirmReasonSheet(sheet);
+        if (!answer) return;
+        reason = answer.reason;
+    } else if (!await confirmSheet(sheet)) return;
     try {
         if (action === "block") await api.blockQuestionSubmitter(api.user.id, item.question_id);
         else if (action === "dismiss") await api.dismissFeedQuestion(api.user.id, item.question_id);
+        else if (reason) await api.reportQuestion(api.user.id, item.question_id, reason);
         else await api.reportQuestion(api.user.id, item.question_id);
         state.feedItems = state.feedItems.filter((candidate) => candidate.question_id !== item.question_id);
         state.selectedFeedItemId = null;

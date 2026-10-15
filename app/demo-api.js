@@ -858,6 +858,9 @@ export class DemoAPI {
             global_visibility_boost_cost: 400,
             targeted_visibility_boost_cost: 200,
             enable_tbh_requests: true,
+            // QuestionDetailShareRow reads these (?snapchatshare=0 shows the expanded Instagram/TikTok row).
+            enable_share_on_snapchat: new URLSearchParams(location.search).get("snapchatshare") !== "0",
+            enable_share_on_tiktok: true,
             enable_delete_account: true,
             enable_chats: true,
             enable_web_chats: true,

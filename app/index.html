@@ -112,20 +112,20 @@
                     <div id="feedList" class="card-list"></div>
                     <section id="feedDetailDialog" class="detail-screen hidden" role="dialog" aria-modal="true" aria-label="Poll details">
                         <div class="detail-screen-header">
-                            <button class="detail-back-button" aria-label="Close" type="button" data-close-feed-detail>‹ <span>Feed</span></button>
+                            <button class="detail-back-button feed-detail-back" aria-label="Back" type="button" data-close-feed-detail><svg class="ui-icon" data-ui-icon="back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m15 4-8 8 8 8"/></svg></button>
                             <strong></strong>
                             <div class="detail-overflow">
-                                <button class="detail-overflow-button" type="button" data-toggle-feed-menu aria-label="More poll actions" aria-expanded="false">•••</button>
+                                <button class="detail-overflow-button feed-detail-menu-button" type="button" data-toggle-feed-menu aria-label="More poll actions" aria-expanded="false"><svg class="ui-icon" data-ui-icon="ellipsis-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9.5"/><circle cx="7.6" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="16.4" cy="12" r="1.2" fill="currentColor" stroke="none"/></svg></button>
                                 <div class="detail-overflow-menu hidden" role="menu" aria-label="Poll actions">
                                     <button type="button" role="menuitem" data-dismiss-feed-item>Delete This Question</button>
-                                    <button type="button" role="menuitem" data-report-feed-item>Report question</button>
-                                    <button id="blockFeedSubmitterButton" class="hidden" type="button" role="menuitem" data-block-feed-submitter>Block submitter</button>
+                                    <button class="danger-menu-item" type="button" role="menuitem" data-report-feed-item>Report a Safety Issue</button>
+                                    <button id="blockFeedSubmitterButton" class="danger-menu-item hidden" type="button" role="menuitem" data-block-feed-submitter>Block User</button>
                                 </div>
                             </div>
                         </div>
+                        <!-- QuestionDetailView: the card, the share row, Reveal, then reactions / comments / Send. -->
                         <div class="feed-detail-content">
                             <div id="feedDetailBody"></div>
-                            <p id="feedDetailStatus" class="status-message" role="status"></p>
                             <div class="feed-detail-actions">
                                 <div class="feed-detail-share">
                                     <div class="share-platform-row detail-share-row">
@@ -135,7 +135,10 @@
                                     </div>
                                 </div>
                                 <button id="revealFeedSenderButton" class="secondary-button reveal-sender-button hidden" type="button"><span>Reveal sender</span></button>
+                                <div id="feedDetailRevealedSender" class="revealed-sender-row hidden"></div>
                             </div>
+                            <div id="feedDetailEngagement"></div>
+                            <p id="feedDetailStatus" class="status-message" role="status"></p>
                         </div>
                     </section>
                     <button id="loadMoreFeed" class="secondary-button hidden" type="button">Load more</button>
