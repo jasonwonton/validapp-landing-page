@@ -76,7 +76,7 @@ test('last-active labels do not show green dots, and errors never fabricate offl
 test('activity privacy persists via PUT and reconciles a lost save response', async ({page}) => {
     const state=await setup(page,{ambiguous:true});
     await page.getByRole('button',{name:'Profile',exact:true}).click();
-    await page.getByRole('button',{name:'Activity status',exact:true}).click();
+    await page.getByRole('button',{name:'Activity Status',exact:true}).click();
     const dialog=page.getByRole('dialog',{name:'Activity status',exact:true});
     const toggle=dialog.getByRole('switch',{name:'Show activity status'});
     await expect(toggle).toBeChecked();

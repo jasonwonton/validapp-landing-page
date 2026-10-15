@@ -238,7 +238,7 @@ test("classmate browsing, targeted boost, and TBH use the same iOS-style rows", 
     await classmateProfile.getByRole("button", { name: "Back to classmates" }).click();
     await directory.getByRole("button", { name: "Close" }).click();
 
-    await page.getByRole("button", { name: /Choose a crush/ }).click();
+    await page.getByRole("button", { name: /Target a classmate/ }).click();
     const targeted = page.locator("#targetedBoostDialog .classmate-picker-row").first();
     const targetedStyles = await pickerStyles(targeted);
     const targetedSearchStyles = await searchStyles(page.locator("#targetedBoostDialog .classmate-picker-search"));
@@ -326,9 +326,10 @@ test("profile and account actions use consistent app icons instead of platform e
     await expect(profileMeta.locator("img")).toHaveCount(2);
     await expect(profileMeta).not.toContainText("🏫");
     await expect(profileMeta).not.toContainText("🎓");
-    await expect(page.locator("#addPasskeyButton .passkey-settings-icon svg")).toBeVisible();
-    await expect(page.locator("#feedbackButton .feedback-settings-icon svg")).toBeVisible();
-    await expect(page.locator("#profileInviteCard .messages-symbol")).toBeVisible();
+    await expect(page.locator("#notificationButton .settings-icon svg")).toBeVisible();
+    await expect(page.locator("#profileInviteCard .profile-imessage-icon")).toBeVisible();
+    // The passkey CTA (only without a passkey) draws its key.
+    await expect(page.locator("#addPasskeyButton .profile-passkey-key svg")).toBeAttached();
     await expect(page.locator("#addPasskeyButton")).not.toContainText("🔑");
 });
 
@@ -355,7 +356,7 @@ test("school filter chips scroll selected content into view and sheets animate i
     }
 
     await page.getByRole("button", { name: "Profile", exact: true }).click();
-    await page.getByRole("button", { name: /Choose a crush/ }).click();
+    await page.getByRole("button", { name: /Target a classmate/ }).click();
     await expect(page.locator("#targetedBoostDialog")).toHaveCSS("animation-name", "modal-enter");
 });
 

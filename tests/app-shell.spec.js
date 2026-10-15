@@ -212,14 +212,14 @@ test.describe("history and Back", () => {
     test("Back closes an open sheet before leaving the screen", async ({ page }) => {
         await signInToDemo(page);
         await page.locator("#bottomNav").getByRole("button", { name: "Profile", exact: true }).click();
-        await page.getByRole("button", { name: /Choose a crush/ }).click();
+        await page.getByRole("button", { name: /Target a classmate/ }).click();
         const sheet = page.locator("#targetedBoostDialog");
         await expect(sheet).toBeVisible();
         await page.goBack();
         await expect(sheet).toBeHidden();
         await expect(page.locator("#profilePanel")).toBeVisible();
         // Closing the sheet from its own button leaves no stale history entry.
-        await page.getByRole("button", { name: /Choose a crush/ }).click();
+        await page.getByRole("button", { name: /Target a classmate/ }).click();
         await expect(sheet).toBeVisible();
         await page.keyboard.press("Escape");
         await expect(sheet).toBeHidden();

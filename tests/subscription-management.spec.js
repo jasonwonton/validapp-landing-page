@@ -9,15 +9,25 @@ test('management link survives sign-in and requires confirmation to cancel', asy
     await expect(page.locator('#godModeUnsubscribeButton')).toBeVisible();
     await expect(page.locator('#godModeUnsubscribeButton')).toBeEnabled();
     await expect(page).not.toHaveURL(/manage=god-mode/);
+    await expect(page.locator('#godModeUnsubscribeButton')).toHaveText('Manage God Mode');
+    // GodModePlanSheet: the plan first; only "Unsubscribe" goes on to cancel.
+    const plan = page.getByRole('dialog', { name: 'God Mode', exact: true });
     await page.locator('#godModeUnsubscribeButton').click();
+    await expect(plan).toContainText(/Renews \w{3} \d{1,2} · on the web/);
+    await plan.getByRole('button', { name: 'Done', exact: true }).click();
+    await expect(plan).toBeHidden();
+    await page.locator('#godModeUnsubscribeButton').click();
+    await plan.getByRole('button', { name: 'Unsubscribe', exact: true }).click();
     const confirmation = page.getByRole('dialog', { name: 'Unsubscribe from God Mode?', exact: true });
     await expect(confirmation).toBeVisible();
     await confirmation.getByRole('button', { name: 'Keep God Mode', exact: true }).click();
     await expect(page.locator('#godModeUnsubscribeButton')).toBeEnabled();
     await page.locator('#godModeUnsubscribeButton').click();
+    await plan.getByRole('button', { name: 'Unsubscribe', exact: true }).click();
     await confirmation.getByRole('button', { name: 'Unsubscribe', exact: true }).click();
     await expect(page.locator('#profileGodModeStatus')).toContainText('Unsubscribed');
     await expect(page.locator('#godModeUnsubscribeButton')).toBeDisabled();
+    await expect(page.locator('#godModeUnsubscribeButton')).toHaveText(/^God Mode ends \w{3} \d{1,2}$/);
 });
 
 test('App Store access does not offer Stripe cancellation', async ({ page }) => {

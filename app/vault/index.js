@@ -19,6 +19,9 @@ import { vaultClient } from "./api.js";
 const cssURL = new URL("./styles.css", import.meta.url).href;
 const PAGE_SIZE = 36;
 const MAX_PAGE_SIZE = 100;
+// A browser video still being converted (GET /vault's video_state, browsers
+// only): the poster with "Processing video…", re-read like the Story viewer.
+const PROCESSING_POLL_MS = [3_000, 6_000, 12_000, 24_000, 30_000];
 const PIN_LENGTH = 4;
 const MAX_ATTEMPTS = 5;
 const UNLOCK_MS = 15 * 60_000;
@@ -32,7 +35,6 @@ const ICONS = {
     lockOpen: svg('<rect x="4.5" y="10.5" width="15" height="10.5" rx="2.5" fill="currentColor" stroke="none"/><path d="M7.5 10.5V7.5a4.5 4.5 0 0 1 8.7-1.6"/>'),
     lockOutline: svg('<rect x="4.5" y="10.5" width="15" height="10.5" rx="2.5"/><path d="M7.5 10.5V7.5a4.5 4.5 0 0 1 8.7-1.6"/>'),
     stack: svg('<rect x="3" y="7" width="14" height="14" rx="2.5"/><path d="M7 3.5h11.5A2.5 2.5 0 0 1 21 6v11.5"/><path d="m3 17 4-4 3 3 2-2 5 5"/>'),
-    refresh: svg('<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>'),
     download: svg('<path d="M12 3v12m-5-5 5 5 5-5M5 21h14"/>'),
     backspace: svg('<path d="M21 5H9l-6 7 6 7h12Z"/><path d="m12 9 6 6m0-6-6 6"/>'),
     story: svg('<circle cx="12" cy="12" r="9" stroke-dasharray="3.2 2.4"/><circle cx="12" cy="12" r="5" fill="currentColor" stroke="none"/>'),
@@ -426,7 +428,6 @@ export function createVault(context) {
                 </div>
                 <strong id="vaultTitle">Memories</strong>
                 <div class="vault-header-side vault-header-trailing">
-                    <button class="vault-icon-button" type="button" data-vault-refresh aria-label="Refresh">${ICONS.refresh}</button>
                     <button class="vault-icon-button" type="button" data-vault-close aria-label="Close">${uiIcon("close")}</button>
                 </div>
             </div>
@@ -500,18 +501,6 @@ export function createVault(context) {
                 if (ui.tab === "vault") void loadPage(stores.private, { reset: true });
             });
         }
-    }
-
-    function refreshCurrent() {
-        const button = $("[data-vault-refresh]");
-        button?.classList.add("is-spinning");
-        const work = ui.tab === "vault"
-            ? refreshStatus().then(() => loadPage(stores.private, { reset: true }))
-            : loadPage(stores.memories, { reset: true });
-        void Promise.resolve(work).finally(() => {
-            button?.classList.remove("is-spinning");
-            render();
-        });
     }
 
     // MARK: Rendering
@@ -852,7 +841,7 @@ export function createVault(context) {
         const layer = showLayer(`<div class="vault-layer-content vault-forgot">
             <button class="vault-icon-button vault-layer-close" type="button" data-vault-layer-close aria-label="Close">${uiIcon("close")}</button>
             <h2 id="vaultForgotTitle">Forgot your PIN?</h2>
-            <p data-vault-forgot-message>To reset it, sign out and sign back in, then come back here within 15 minutes. Your saved photos and videos stay in your Vault.</p>
+            <p data-vault-forgot-message>To reset it, sign out and sign back in with your phone number, then come back here within 15 minutes. Your saved photos and videos stay in your Vault.</p>
             <button class="primary-button vault-cta" type="button" data-vault-reset-pin>Reset PIN</button>
         </div>`, "vaultForgotTitle");
         return layer;
@@ -946,6 +935,7 @@ export function createVault(context) {
         if (!ui.viewer || !viewer) return;
         const returnId = ui.viewer.id || ui.viewer.returnId;
         viewer.querySelectorAll("video").forEach((video) => video.pause());
+        clearTimeout(ui.processingTimer);
         viewer.classList.add("hidden");
         viewer.innerHTML = "";
         ui.viewer = null;
@@ -966,8 +956,54 @@ export function createVault(context) {
         return `<div class="vault-page" data-vault-page="${escapeHTML(item.id)}" role="group" aria-roledescription="slide" aria-label="${item.media_type === "video" ? "Video" : "Photo"}, ${escapeHTML(dayFormatter.format(capturedDate(item)))}"></div>`;
     }
 
+    function processingStateMarkup(title, detail, spinner) {
+        return `<div class="vault-media-state${spinner ? " spinning" : ""}" role="status"><span class="vault-media-spinner" aria-hidden="true"></span><strong>${escapeHTML(title)}</strong><small>${escapeHTML(detail)}</small></div>`;
+    }
+
+    // Re-reads the item's page until its video is no longer processing, then
+    // swaps in the playable rendition (only while the viewer still shows it).
+    function pollProcessingItem(item, attempt = 0) {
+        clearTimeout(ui.processingTimer);
+        ui.processingTimer = setTimeout(async () => {
+            if (ui.viewer?.id !== item.id) return;
+            const store = currentStore();
+            const id = userId();
+            let fresh = null;
+            try {
+                const page = await api.getVault(id, {
+                    scope: store.scope,
+                    cursor: null,
+                    limit: MAX_PAGE_SIZE,
+                    unlockToken: store.scope === "private" ? unlockToken() : null,
+                });
+                fresh = (page?.items || []).find((candidate) => candidate?.id === item.id) || null;
+            } catch { fresh = null; }
+            if (ui.viewer?.id !== item.id) return;
+            if (fresh && fresh.video_state !== "processing") {
+                const index = store.items.findIndex((candidate) => candidate.id === item.id);
+                if (index >= 0) store.items[index] = { ...store.items[index], ...fresh };
+                const node = $(`[data-vault-page="${CSS.escape(item.id)}"]`);
+                if (node) fillPage(node, store.items[index] || fresh, true);
+                return;
+            }
+            pollProcessingItem(item, attempt + 1);
+        }, PROCESSING_POLL_MS[Math.min(attempt, PROCESSING_POLL_MS.length - 1)]);
+    }
+
     function fillPage(page, item, active) {
-        const source = `${item.media_url}|${item.thumbnail_url || ""}`;
+        const videoState = item.media_type === "video" ? item.video_state || "ready" : null;
+        const source = `${item.media_url}|${item.thumbnail_url || ""}|${videoState || ""}`;
+        if (videoState === "processing" || videoState === "unavailable") {
+            if (page.dataset.source !== source) {
+                page.dataset.source = source;
+                page.innerHTML = `${item.thumbnail_url ? mediaImageMarkup(item.thumbnail_url, { className: "vault-page-media", loading: "eager", alt: "" }) : ""}
+                    ${videoState === "processing"
+                        ? processingStateMarkup("Processing video…", "It will play here as soon as it's ready.", true)
+                        : processingStateMarkup("This video can't play on the web yet.", "Open it in the Valid app to watch.", false)}`;
+            }
+            if (active && videoState === "processing") pollProcessingItem(item);
+            return;
+        }
         if (page.dataset.source !== source) {
             page.dataset.source = source;
             const overlays = (item.text_overlays || []).filter((overlay) => overlay?.text);
@@ -1043,7 +1079,7 @@ export function createVault(context) {
             : saved ? `${uiIcon("check")}<span>Saved</span>` : `${ICONS.download}<span>Save</span>`;
         save.disabled = ui.saving || saved;
         const mute = viewer.querySelector("[data-vault-mute]");
-        mute.classList.toggle("hidden", item.media_type !== "video");
+        mute.classList.toggle("hidden", item.media_type !== "video" || ["processing", "unavailable"].includes(item.video_state));
         mute.innerHTML = ui.muted ? ICONS.muted : uiIcon("speaker");
         mute.setAttribute("aria-label", ui.muted ? "Unmute" : "Mute");
         const move = viewer.querySelector("[data-vault-move]");
@@ -1233,7 +1269,6 @@ export function createVault(context) {
         if (!target || target.disabled) return;
         if (target.matches("[data-pin-key]")) return pressKey(padFor(target), target.dataset.pinKey);
         if (target.matches("[data-vault-close]")) return close();
-        if (target.matches("[data-vault-refresh]")) return refreshCurrent();
         if (target.matches("[data-vault-tab]")) return selectTab(target.dataset.vaultTab);
         if (target.matches("[data-vault-retry]")) return void loadPage(ui.tab === "vault" ? stores.private : stores.memories, { reset: true });
         if (target.matches("[data-vault-retry-status]")) { lock.statusError = ""; render(); return void refreshStatus().then(render); }

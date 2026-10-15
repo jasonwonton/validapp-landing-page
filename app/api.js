@@ -607,6 +607,21 @@ export class ValidAPI {
         });
     }
 
+    // Settings → Notifications: the four switches iOS shows
+    // (NotificationCategoriesStore). GET returns `categories`; a missing one
+    // (older server) means everything is on.
+    getNotificationPreferences() {
+        return this.request("/notification-preferences");
+    }
+
+    // Sends only the switches that changed; the answer has all four as saved.
+    updateNotificationCategories(changes, source = "web_settings") {
+        return this.request("/notification-preferences/categories", {
+            method: "PUT",
+            body: JSON.stringify({ ...changes, source }),
+        });
+    }
+
     recordStreakWarningOpen(streakWarningId) {
         return this.request("/notification-preferences/streak-warning-open", {
             method: "POST",
@@ -797,6 +812,11 @@ export class ValidAPI {
 
     declineGodModeRetentionOffer(userId) {
         return this.request(`/users/${userId}/god-mode/retention-offer/decline`, { method: "POST" });
+    }
+
+    // Stripe's Customer Portal (a failed payment's card update).
+    createGodModeBillingPortal(userId) {
+        return this.request(`/users/${userId}/god-mode/billing-portal`, { method: "POST" });
     }
 
     unsubscribeFromGodMode(userId) {
@@ -1373,8 +1393,13 @@ export class ValidAPI {
         return url.href;
     }
 
-    requestAccountDeletion(userId) {
-        return this.request(`/users/${userId}/delete`, { method: "POST" });
+    // `hideFromPolls` also hides the number from polls in the same request
+    // (DeleteAccountModal on iOS); older servers ignore the body.
+    requestAccountDeletion(userId, { hideFromPolls = false } = {}) {
+        return this.request(`/users/${userId}/delete`, {
+            method: "POST",
+            body: JSON.stringify({ hide_from_polls: hideFromPolls === true }),
+        });
     }
 
     cancelAccountDeletion(userId) {

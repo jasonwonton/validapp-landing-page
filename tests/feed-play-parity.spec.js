@@ -293,8 +293,8 @@ test('account deletion is reachable from Profile information like iOS', async ({
     await expect(information).toBeHidden();
     const confirm = page.locator('#deleteAccountDialog');
     await expect(confirm.getByRole('heading', { name: 'Delete Account?' })).toBeVisible();
-    await expect(confirm).toContainText('permanently delete your account in 5 days');
-    await confirm.getByRole('button', { name: 'Keep my account' }).click();
+    await expect(confirm).toContainText("We'll delete your account in 5 days.");
+    await confirm.getByRole('button', { name: 'Cancel', exact: true }).click();
     await expect(confirm).toBeHidden();
 });
 
@@ -349,7 +349,7 @@ test('profile photos over 5 MB are circle-cropped and resized to a 1024px JPEG b
     expect(size).toBeGreaterThan(5 * 1024 * 1024);
     const crop = page.locator('.avatar-crop-dialog');
     await expect(crop).toBeVisible();
-    await expect(crop.getByRole('heading', { name: 'Adjust photo' })).toBeVisible();
+    await expect(crop.getByRole('heading', { name: 'Choose your profile photo' })).toBeVisible();
     const ring = await crop.locator('.avatar-crop-ring').boundingBox();
     expect(Math.round(ring.width)).toBe(Math.round(ring.height));
     // Drag far past the edge: the photo stays clamped over the circle.

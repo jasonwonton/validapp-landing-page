@@ -884,7 +884,7 @@ test("real adapter signs in, authenticates API calls, and revokes logout", async
     expect(profileRequest.authorization).toBe("Bearer session-token");
 
     await page.getByRole("button", { name: "Profile", exact: true }).click();
-    await page.getByRole("button", { name: "Sign Out", exact: true }).click();
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
     await expect.poll(() => requests.some((request) => request.path === "/api/v1/auth/logout")).toBe(true);
     const logout = requests.find((request) => request.path === "/api/v1/auth/logout");
     expect(logout.authorization).toBe("Bearer session-token");
@@ -931,10 +931,14 @@ test("incomplete Web Push setup stays retryable until the backend confirms regis
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await page.getByRole("button", { name: "Profile", exact: true }).click();
 
-    const notificationButton = page.locator("#notificationButton");
-    await expect(notificationButton).toContainText("Setup incomplete · tap to retry");
-    await notificationButton.click();
-    await expect(notificationButton).toContainText("On · tap to turn off");
+    // Settings → Notifications: until the backend confirms, the sheet's
+    // banner stays up and its button retries.
+    await page.locator("#notificationButton").click();
+    const sheet = page.getByRole("dialog", { name: "Notifications" });
+    const banner = sheet.locator("#notificationPermissionBanner");
+    await expect(banner).toContainText("Notifications aren't on yet");
+    await banner.getByRole("button", { name: "Turn on notifications" }).click();
+    await expect(banner).toBeHidden();
     expect(requests.filter((request) => request.path.endsWith("/web-push-subscriptions"))).toHaveLength(2);
 });
 
@@ -963,7 +967,7 @@ test("locked Feed shows received votes, vote-to-unlock, and notification activat
     expect(requests.filter((request) => request.path.endsWith("/web-push-subscriptions"))).toHaveLength(1);
 });
 
-test("allowed but unsubscribed browsers re-subscribe quietly once, and an explicit off sticks", async ({ page }) => {
+test("allowed but unsubscribed browsers re-subscribe quietly once", async ({ page }) => {
     await page.addInitScript((apiOrigin) => {
         window.VALID_API_BASE_URL = `${apiOrigin}/api/v1`;
     }, API_ORIGIN);
@@ -977,17 +981,14 @@ test("allowed but unsubscribed browsers re-subscribe quietly once, and an explic
     await page.goto("/app/?signin=1");
     await page.getByRole("button", { name: /^sign in$/i }).click();
     await page.getByRole("button", { name: "Profile", exact: true }).click();
-    const notificationButton = page.locator("#notificationButton");
-    await expect(notificationButton).toHaveAttribute("aria-checked", "true");
+    await expect.poll(() => subscriptionWrites().length).toBe(1);
+    // Subscribed again: the Notifications sheet has no permission banner.
+    await page.locator("#notificationButton").click();
+    const sheet = page.getByRole("dialog", { name: "Notifications" });
+    await expect(sheet.getByRole("switch", { name: "Votes" })).toBeVisible();
+    await expect(sheet.locator("#notificationPermissionBanner")).toBeHidden();
     // Focus and visibility events while subscribed do not subscribe again.
     await page.evaluate(() => { dispatchEvent(new Event("focus")); dispatchEvent(new Event("focus")); });
-    await page.waitForTimeout(300);
-    expect(subscriptionWrites()).toHaveLength(1);
-    expect(resubscribeEvents()).toHaveLength(1);
-
-    await notificationButton.click();
-    await expect(notificationButton).toHaveAttribute("aria-checked", "false");
-    await page.evaluate(() => dispatchEvent(new Event("focus")));
     await page.waitForTimeout(300);
     expect(subscriptionWrites()).toHaveLength(1);
     expect(resubscribeEvents()).toHaveLength(1);

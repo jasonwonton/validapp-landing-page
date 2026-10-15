@@ -1113,10 +1113,10 @@ async function showSignedIn() {
             presenceLifecycle = bindPresenceLifecycle(chatPresence);
             const button = document.createElement('button');
             button.id = 'activityStatusButton';
-            button.setAttribute('aria-label', 'Activity status');
+            button.setAttribute('aria-label', 'Activity Status');
             button.type = 'button';
             button.className = 'settings-row';
-            button.innerHTML = `<span class="settings-icon" aria-hidden="true">${uiIcon('activity')}</span><span><strong>Activity status</strong><small>Choose whether people see when you’re active</small></span><span aria-hidden="true">›</span>`;
+            button.innerHTML = `<span class="settings-icon" aria-hidden="true">${uiIcon('activity')}</span><span><strong>Activity Status</strong><small>Choose whether people see when you’re active</small></span><span aria-hidden="true">›</span>`;
             button.addEventListener('click', async () => {
                 try {
                     const { openActivitySettings } = await import('./chat/activity-settings.js');
@@ -1436,12 +1436,6 @@ function renderProfilePanel() {
     const schoolName = currentProfileSchoolName();
     const grade = formatGrade(profile.grade || "").replace(/^Grade\s+/i, "");
     const canChangeInformation = profile.can_change_information !== false;
-    const nextChangeDate = profile.next_information_change_at ? new Date(profile.next_information_change_at) : null;
-    const informationStatus = !canChangeInformation
-        ? (nextChangeDate && !Number.isNaN(nextChangeDate.getTime())
-            ? `Available again ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(nextChangeDate)}`
-            : "Profile change currently unavailable")
-        : "";
     const streak = Math.max(0, Number(profile.current_streak || 0));
     const pendingPhoto = state.pendingProfilePhoto;
     const hasProfilePhoto = Boolean(pendingPhoto || (imageURL && !String(profile.profile_picture_url || "").includes("default.png")));
@@ -1452,14 +1446,14 @@ function renderProfilePanel() {
             <span class="photo-edit-badge" aria-hidden="true">${pendingPhoto?.status === "failed" ? "!" : uiIcon("edit")}</span>
         </button>
         ${pendingPhoto?.status === "failed" ? '<p class="profile-photo-warning" role="status">Upload failed. Tap your photo to try again.</p>' : ""}
-        ${hasProfilePhoto ? "" : '<p class="profile-photo-warning">Users without profile pictures receive fewer votes.</p>'}
+        ${hasProfilePhoto ? "" : '<p class="profile-photo-warning">\u26a0\ufe0f Users without profile pictures receive less votes.</p>'}
         <h3>${escapeHTML(displayName(profile))}</h3>
         <div class="profile-identity-line"><span class="profile-handle">@${escapeHTML(profile.username || "valid")}</span>${streak ? `<span class="profile-streak ${profile.streak_needs_activity ? "needs-activity" : ""}" aria-label="${streak} day streak">${uiIcon("fire")} ${streak}</span>` : ""}</div>
         <button class="profile-bio-button ${profile.bio ? "" : "empty"}" type="button" data-edit-bio>${profile.bio ? escapeHTML(profile.bio) : '<span>Add bio</span><span class="profile-add-bio-icon" aria-hidden="true">+</span>'}</button>
         ${(schoolName || grade) ? `<div class="profile-school-meta">${schoolName ? `<span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-school.svg" alt=""><span>${escapeHTML(schoolName)}</span></span>` : ""}${grade ? `<span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-graduation-cap.svg" alt=""><span>${escapeHTML(grade)}</span></span>` : ""}</div>` : ""}
         <button class="profile-information-inline" type="button" data-edit-profile>
             <span class="profile-information-icon">${profileInformationIcon(canChangeInformation)}</span>
-            <span class="profile-information-copy"><strong>Profile information</strong>${informationStatus ? `<small>${escapeHTML(informationStatus)}</small>` : ""}</span>
+            <span class="profile-information-copy"><strong>Profile information</strong></span>
             <span class="profile-information-chevron" aria-hidden="true">›</span>
         </button>
         <div class="profile-stats-grid">
@@ -1474,6 +1468,7 @@ function renderProfilePanel() {
     renderPasskeyStatus();
     renderTabBadges();
     renderMemoriesEntry();
+    void loadNotificationCategories();
 }
 
 // Memories + Vault live in a lazily loaded module (app/vault/).
@@ -1495,8 +1490,19 @@ function renderSchoolCard() {
     const container = $("#schoolCard");
     const classmates = [...(state.classmateDirectory?.length ? state.classmateDirectory : (state.classmates || []))];
     const activeClassmates = Number(state.activeClassmatesThisWeek);
-    const activeClassmatesLabel = Number.isFinite(activeClassmates) && activeClassmates > 5
-        ? `<small>• ${activeClassmates.toLocaleString()} classmates active this week</small>`
+    // SettingsView+Sections.communityHeader: shown from 5 active classmates.
+    const activeClassmatesLabel = Number.isFinite(activeClassmates) && activeClassmates >= 5
+        ? `<small>• ${activeClassmates.toLocaleString()} classmate${activeClassmates === 1 ? "" : "s"} active this week</small>`
+        : "";
+    // Locked until the account votes (then until enough classmates join): the
+    // strip blurs under "Vote to unlock" / "More classmates needed".
+    const unlock = state.classmatesStatus;
+    const locked = unlock?.is_unlocked === false;
+    const voteLocked = Boolean(unlock?.lock_reasons?.includes("votes") && Number(unlock.votes_cast || 0) < Number(unlock.required_votes || 0));
+    const joinLocked = Boolean(unlock?.lock_reasons?.includes("joined_users") && Number(unlock.joined_users || 0) < Number(unlock.required_joined_users || 0));
+    const inviteStep = !voteLocked && joinLocked;
+    const lockOverlay = locked
+        ? `<button class="school-lock-button ${inviteStep ? "invite" : ""}" type="button" data-school-unlock="${inviteStep ? "invite" : "vote"}"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7.5 10V7.5a4.5 4.5 0 0 1 9 0V10h.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Zm2.2 0h4.6V7.5a2.3 2.3 0 0 0-4.6 0Z"/></svg><span>${inviteStep ? "More classmates needed" : "Vote to unlock"}</span></button>`
         : "";
     if (state.profile && !classmates.some((classmate) => String(classmate.user_id) === String(state.profile.user_id))) {
         classmates.push(state.profile);
@@ -1515,7 +1521,7 @@ function renderSchoolCard() {
         <div class="school-card-heading"><strong>School</strong>${activeClassmatesLabel}</div>
         ${currentProfileSchoolName() ? `<div class="school-card-name">${escapeHTML(currentProfileSchoolName())}</div>` : ""}
         <p>Spotlight on classmates with the most votes this week.</p>
-        ${ranked.length ? `<div class="school-leaderboard" role="list" aria-label="Classmates ranked by weekly votes">${ranked.map((classmate, index) => {
+        ${ranked.length ? `<div class="school-leaderboard-wrap ${locked ? "locked" : ""}"><div class="school-leaderboard" role="list" aria-label="Classmates ranked by weekly votes" ${locked ? 'inert aria-hidden="true"' : ""}>${ranked.map((classmate, index) => {
             const isCurrentUser = String(classmate.user_id) === String(state.profile?.user_id);
             return `<button class="school-rank-card" type="button" role="listitem" ${isCurrentUser ? `disabled aria-current="true"` : `data-school-classmate="${escapeHTML(classmate.user_id)}"`} aria-label="#${index + 1} ${escapeHTML(displayName(classmate))}, ${Number(classmate.weekly_vote_count || 0).toLocaleString()} votes this week">
                 <span class="school-rank-number">#${index + 1}</span>
@@ -1523,21 +1529,26 @@ function renderSchoolCard() {
                 <strong>${escapeHTML(isCurrentUser ? `${displayName(classmate)} (You)` : displayName(classmate))}</strong>
                 <small><span aria-hidden="true">${uiIcon("heart")}</span> ${Number(classmate.weekly_vote_count || 0).toLocaleString()} this week</small>
             </button>`;
-        }).join("")}</div>` : `<p>No classmates on Valid yet.</p>`}
+        }).join("")}</div>${lockOverlay}</div>` : locked
+            ? `<div class="school-leaderboard-wrap locked"><div class="school-placeholder-strip" aria-hidden="true">${"<span><i></i><b></b><em></em></span>".repeat(3)}</div>${lockOverlay}</div>`
+            : `<p>No classmates on Valid yet. Invite a friend to unlock this feed!</p>`}
         <div class="school-card-actions"><button id="findContactsButton" class="secondary-button" type="button">Contacts</button><button id="viewClassmatesButton" class="secondary-button" type="button">Classmates</button></div>
     </article>`;
 }
 
+// SettingsView+InviteAndPurchases.inviteFriendsSection.
 function renderProfileInviteCard() {
     const container = $("#profileInviteCard");
-    const status = state.inviteStatus;
-    const goal = Math.max(1, Number(status?.aura_reward_goal || 3));
-    const progress = Math.max(0, Math.min(goal, Number(status?.aura_reward_progress || 0)));
-    const remaining = Math.max(0, goal - progress);
+    const invites = godModeInviteProgress();
+    const creator = state.config?.enable_god_mode_ugc_program === true;
+    const reward = invites
+        ? `<p class="profile-invite-reward">${invites.reached ? "God Mode invite goal reached " : `Get ${invites.goal} verified friends to join for `}<strong>\u{1F451} GOD MODE</strong></p>
+        <div class="profile-invite-progress"><progress max="${invites.goal}" value="${invites.progress}" aria-label="${invites.progress} of ${invites.goal} qualifying invites"></progress><small>Qualifying invites: ${invites.progress} / ${invites.goal}</small></div>`
+        : `<p class="profile-invite-reward">Bring your friends in to unlock more polls and see more classmates</p>`;
     container.innerHTML = `<article class="profile-invite-card">
-        <div><strong>${remaining ? `Invite ${remaining} more ${remaining === 1 ? "friend" : "friends"}` : "Invite reward complete"}</strong><p>Bring friends to Valid and earn bonus aura when they join.</p></div>
-        <div class="profile-invite-progress"><span><strong>${progress} / ${goal}</strong><small>qualifying invites</small></span><progress max="${goal}" value="${progress}" aria-label="${progress} of ${goal} qualifying invites"></progress></div>
-        <div class="profile-invite-actions"><button class="profile-share-button snapchat" type="button" data-profile-invite="snapchat"><img loading="lazy" decoding="async" src="../assets/app/snapchat-logo.webp" alt=""><span>Snapchat</span></button><button class="profile-share-button messages" type="button" data-profile-invite="imessage">${appSymbolMarkup("message", "messages-symbol")}<span>Messages</span></button></div>
+        ${reward}
+        <div class="profile-invite-actions"><button class="profile-share-button snapchat" type="button" data-profile-invite="snapchat"><img loading="lazy" decoding="async" src="../assets/app/snapchat-logo.webp" alt=""><span>Invite via Snapchat</span></button><button class="profile-share-button messages" type="button" data-profile-invite="imessage"><svg class="profile-imessage-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#fff"/><path d="M13.25 23.1c0-6.15 4.72-10.35 10.75-10.35s10.75 4.2 10.75 10.35S30.03 33.45 24 33.45c-1.45 0-2.82-.24-4.06-.7-1.95 1.18-4.32 1.8-7.1 1.84 1.23-1.25 2.14-2.68 2.73-4.27-1.47-1.82-2.32-4.3-2.32-7.22Z" fill="#00e02d"/></svg><span>Invite via iMessage</span></button></div>
+        ${creator ? `<button class="profile-creator-link" type="button" data-open-creator-program><span>Or earn God Mode through our Creator program</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6"/></svg></button>` : ""}
         <p id="profileInviteStatus" class="status-message" role="status"></p>
     </article>`;
 }
@@ -1670,37 +1681,241 @@ function renderChatUnreadBadge(count) {
     renderTabBadges();
 }
 
-function renderPasskeyStatus() {
+// SettingsView+Presentations.swift: "Don't lose your account! Set up a
+// passkey" shows only while the account has no passkey, just above Sign out.
+function accountHasPasskey() {
     const count = Math.max(0, Number(state.passkeyStatus?.credentialCount || 0));
-    const registered = state.passkeyStatus?.registered === true || count > 0;
-    const button = $("#addPasskeyButton");
-    button.classList.toggle("hidden", !state.passkeyStatus);
-    renderProfileActionsVisibility();
-    if (!state.passkeyStatus) return;
-    button.querySelector("strong").textContent = registered ? "Add another passkey" : "Register a passkey";
-    $("#passkeyStatusText").textContent = registered
-        ? `${count} ${count === 1 ? "passkey" : "passkeys"} registered`
-        : "Add a secure way to sign in";
+    return state.passkeyStatus?.registered === true || count > 0;
 }
 
-function renderProfileActionsVisibility() {
-    const section = $("#addPasskeyButton").closest(".profile-actions");
-    section.classList.toggle("hidden", [...section.querySelectorAll(".settings-row")].every((row) => row.classList.contains("hidden")));
+function accountNeedsPasskey() {
+    return Boolean(state.passkeyStatus) && !accountHasPasskey();
+}
+
+function renderPasskeyStatus() {
+    $("#addPasskeyButton").classList.toggle("hidden", !accountNeedsPasskey());
+    $("#passkeyStatusText").textContent = "";
+    renderProfileActionsVisibility();
+}
+
+// The Settings card always has Blocked Users; nothing to hide here now.
+function renderProfileActionsVisibility() {}
+
+// Settings → Notifications (NotificationSettingsSheet.swift and
+// NotificationCategoriesStore.swift): four server-side switches. A flip shows
+// at once and saves in the background; saves of one switch run in order and
+// only the last flip is sent; a failed save puts back only its own switch and
+// says so at the bottom of the sheet. Browser permission is separate: while
+// push isn't on here, a banner offers to turn it on and the switches dim.
+const NOTIFICATION_CATEGORIES = [
+    { key: "votes", title: "Votes", subtitle: "When someone picks you or reveals you", icon: '<path fill="currentColor" d="M9.6 2.5a2 2 0 0 1 2 2v5.6l.6-.1c.4-.6 1-.9 1.7-.9.6 0 1.1.3 1.5.7.4-.4 1-.6 1.5-.6.7 0 1.3.3 1.7.9l.3-.1c1.2 0 2.1 1 2.1 2.2v3.1c0 3.6-2.4 6.3-6.2 6.3h-1.2c-2 0-3.4-.7-4.6-2.3l-3.3-4.5a1.8 1.8 0 0 1 2.7-2.3l1.2 1.2V4.5a2 2 0 0 1 2-2Z"/>' },
+    { key: "chats", title: "Chats", subtitle: "Messages, Mementos and chat invites", icon: '<path fill="currentColor" d="M3.5 3.5h9.5A3.5 3.5 0 0 1 16.5 7v4.2a3.5 3.5 0 0 1-3.5 3.5H8.2L4.6 17.4v-2.8A3.4 3.4 0 0 1 0 11.2V7a3.5 3.5 0 0 1 3.5-3.5Z" transform="translate(1.5 .5)"/><path fill="currentColor" d="M19.2 9.2h.3a3 3 0 0 1 3 3v3.6a3 3 0 0 1-2.4 3v2.6l-3.3-2.6h-4.2a3 3 0 0 1-2.6-1.5h3.8a5.4 5.4 0 0 0 5.4-5.4Z"/>' },
+    { key: "activity", title: "Activity", subtitle: "Reactions, comments, Story tags, TBHs and news from Valid", icon: '<path fill="currentColor" d="M10 3.5c.5 3.7 2.3 5.6 6 6-3.7.5-5.5 2.3-6 6-.5-3.7-2.3-5.5-6-6 3.7-.4 5.5-2.3 6-6ZM18 13c.3 2 1.2 3 3.2 3.3-2 .3-2.9 1.2-3.2 3.2-.3-2-1.2-2.9-3.2-3.2 2-.3 2.9-1.3 3.2-3.3ZM18.5 2c.2 1.2.8 1.8 2 2-1.2.2-1.8.8-2 2-.2-1.2-.8-1.8-2-2 1.2-.2 1.8-.8 2-2Z"/>' },
+    { key: "reminders", title: "Reminders", subtitle: "Vote again, streaks and daily nudges", icon: '<path fill="currentColor" fill-rule="evenodd" d="M12 4.5a8.3 8.3 0 1 1 0 16.6 8.3 8.3 0 0 1 0-16.6Zm-.9 3.6v5.6l4 2.4.9-1.5-3.1-1.9V8.1ZM2.6 6.6 6.4 3.4l1.3 1.5-3.8 3.2ZM21.4 6.6l-3.8-3.2-1.3 1.5 3.8 3.2Z"/>' },
+];
+const NOTIFICATION_CATEGORY_REFRESH_MS = 5 * 60_000;
+const ALL_NOTIFICATION_CATEGORIES_ON = Object.freeze({ votes: true, chats: true, activity: true, reminders: true });
+const notificationCategoryStore = {
+    userId: null,
+    values: { ...ALL_NOTIFICATION_CATEGORIES_ON },
+    confirmed: { ...ALL_NOTIFICATION_CATEGORIES_ON },
+    generation: {},
+    pending: new Set(),
+    chains: {},
+    flips: 0,
+    fetchedAt: 0,
+    loading: null,
+    failureTimer: null,
+};
+
+function notificationCategoriesFrom(response) {
+    const categories = response?.categories || {};
+    return Object.fromEntries(NOTIFICATION_CATEGORIES.map(({ key }) => [key, categories[key] !== false]));
+}
+
+function notificationCategoryCacheKey(userId) {
+    return `valid:notification-categories:${userId}`;
+}
+
+function notificationCategoryStoreFor(userId) {
+    const store = notificationCategoryStore;
+    if (store.userId === userId) return store;
+    Object.assign(store, { userId, generation: {}, pending: new Set(), chains: {}, fetchedAt: 0, loading: null });
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(notificationCategoryCacheKey(userId)) || "null"); } catch { saved = null; }
+    store.values = notificationCategoriesFrom({ categories: saved });
+    store.confirmed = { ...store.values };
+    return store;
+}
+
+function applyNotificationCategories(next) {
+    const store = notificationCategoryStore;
+    store.values = { ...next };
+    try { localStorage.setItem(notificationCategoryCacheKey(store.userId), JSON.stringify(store.values)); } catch { /* Shown from the server next time. */ }
+    renderNotificationSettings();
+}
+
+// The server's values for every switch with no save of its own waiting.
+function adoptNotificationCategories(server, except = null) {
+    const store = notificationCategoryStore;
+    const next = { ...store.values };
+    for (const { key } of NOTIFICATION_CATEGORIES) {
+        if (key !== except && !store.pending.has(key)) next[key] = server[key];
+    }
+    applyNotificationCategories(next);
+}
+
+function notificationCategorySummary(values = notificationCategoryStore.values) {
+    const on = NOTIFICATION_CATEGORIES.filter(({ key }) => values[key]);
+    if (on.length === NOTIFICATION_CATEGORIES.length) return "All on";
+    if (!on.length) return "All off";
+    return on.map(({ title }) => title).join(", ");
+}
+
+async function loadNotificationCategories({ force = false } = {}) {
+    const userId = api.user?.id;
+    if (!userId || typeof api.getNotificationPreferences !== "function") return;
+    const store = notificationCategoryStoreFor(userId);
+    renderNotificationSettings();
+    if (!force && (store.loading || Date.now() - store.fetchedAt < NOTIFICATION_CATEGORY_REFRESH_MS)) return store.loading;
+    // A flip made while this read runs may reach the server after it read.
+    const flipsAtStart = store.pending.size ? null : store.flips;
+    const load = api.getNotificationPreferences().then((response) => {
+        if (store.userId !== userId || flipsAtStart === null || store.flips !== flipsAtStart) return;
+        store.fetchedAt = Date.now();
+        store.confirmed = notificationCategoriesFrom(response);
+        adoptNotificationCategories(store.confirmed);
+    }).catch(() => null).finally(() => {
+        if (store.loading === load) store.loading = null;
+    });
+    store.loading = load;
+    return load;
+}
+
+function setNotificationCategory(key, enabled) {
+    const store = notificationCategoryStore;
+    const userId = api.user?.id;
+    const category = NOTIFICATION_CATEGORIES.find((item) => item.key === key);
+    if (!category || !userId || store.userId !== userId || store.values[key] === enabled) return null;
+    if ($("#notificationSaveFailure").dataset.category === key) hideNotificationSaveFailure();
+    store.flips += 1;
+    applyNotificationCategories({ ...store.values, [key]: enabled });
+    const generation = (store.generation[key] || 0) + 1;
+    store.generation[key] = generation;
+    store.pending.add(key);
+    const task = (store.chains[key] || Promise.resolve()).then(async () => {
+        // A newer flip of this switch sends the final value.
+        if (store.userId !== userId || store.generation[key] !== generation) return;
+        try {
+            const saved = notificationCategoriesFrom(await api.updateNotificationCategories({ [key]: enabled }));
+            if (store.userId !== userId) return;
+            store.confirmed = saved;
+            if (store.generation[key] === generation) {
+                store.pending.delete(key);
+                adoptNotificationCategories(saved);
+            } else {
+                adoptNotificationCategories(saved, key);
+            }
+        } catch {
+            if (store.userId !== userId || store.generation[key] !== generation) return;
+            store.pending.delete(key);
+            applyNotificationCategories({ ...store.values, [key]: store.confirmed[key] });
+            showNotificationSaveFailure(key, `Couldn't save ${category.title}. Check your connection and try again.`);
+        }
+    });
+    store.chains[key] = task;
+    return task;
+}
+
+function showNotificationSaveFailure(key, message) {
+    const line = $("#notificationSaveFailure");
+    clearTimeout(notificationCategoryStore.failureTimer);
+    line.dataset.category = key;
+    line.textContent = message;
+    line.classList.remove("hidden");
+    haptic("error");
+    notificationCategoryStore.failureTimer = setTimeout(hideNotificationSaveFailure, 3000);
+}
+
+function hideNotificationSaveFailure() {
+    const line = $("#notificationSaveFailure");
+    clearTimeout(notificationCategoryStore.failureTimer);
+    delete line.dataset.category;
+    line.textContent = "";
+    line.classList.add("hidden");
+}
+
+// "allowed", "denied" (blocked in the browser) or "notAsked" (not on here yet).
+function notificationPermissionState() {
+    if (!webPushSupported()) return "notAsked";
+    if (Notification.permission === "denied") return "denied";
+    return state.webPushSubscription && state.webPushRegistrationState === "on" ? "allowed" : "notAsked";
+}
+
+function renderNotificationSettings() {
+    const summary = $("#notificationStatusText");
+    if (summary) summary.textContent = notificationCategoryStore.userId && notificationCategoryStore.userId === api.user?.id
+        ? notificationCategorySummary()
+        : notificationCategorySummary(ALL_NOTIFICATION_CATEGORIES_ON);
+    const dialog = $("#notificationSettingsDialog");
+    if (!dialog?.open) return;
+    const permission = notificationPermissionState();
+    const off = permission !== "allowed";
+    $("#notificationPermissionBanner").classList.toggle("hidden", !off);
+    $("#notificationPermissionTitle").textContent = permission === "denied" ? "Notifications are off for Valid" : "Notifications aren't on yet";
+    const bannerButton = $("#notificationPermissionButton");
+    bannerButton.disabled = Boolean(state.webPushBusy);
+    bannerButton.setAttribute("aria-busy", String(Boolean(state.webPushBusy)));
+    bannerButton.textContent = state.webPushBusy ? "Turning on…" : "Turn on notifications";
+    const card = $("#notificationCategoryCard");
+    card.classList.toggle("dimmed", off);
+    if (!card.childElementCount) {
+        card.innerHTML = NOTIFICATION_CATEGORIES.map(({ key, title, subtitle, icon }) => `<button class="notification-category-row" type="button" role="switch" aria-checked="true" data-notification-category="${key}" aria-label="${title}" aria-describedby="notificationCategory-${key}">
+            <span class="notification-category-icon" aria-hidden="true"><svg viewBox="0 0 24 24">${icon}</svg></span>
+            <span><strong>${title}</strong><small id="notificationCategory-${key}">${subtitle}</small></span>
+            <span class="settings-switch" aria-hidden="true"><span></span></span>
+        </button>`).join("");
+    }
+    for (const row of card.querySelectorAll("[data-notification-category]")) {
+        const on = notificationCategoryStore.values[row.dataset.notificationCategory] !== false;
+        row.setAttribute("aria-checked", String(on));
+        row.classList.toggle("on", on);
+    }
+}
+
+function openNotificationSettings() {
+    const dialog = $("#notificationSettingsDialog");
+    hideNotificationSaveFailure();
+    if (!dialog.open) dialog.showModal();
+    renderNotificationSettings();
+    // Opening the sheet always reads the server, and the browser permission.
+    void loadNotificationCategories({ force: true });
+    void refreshWebPushStatus();
+}
+
+// GodModeCard.swift: a yellow crown, "$6.99/week", the four value props and
+// "Start God Mode"; subscribers see "God Mode Active" and "\u2728 Active".
+const GOD_MODE_CROWN_ICON = '<svg class="god-mode-crown-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3.2 7.6a1.3 1.3 0 0 1 2-1.3l3.7 3 2.1-4.6a1.1 1.1 0 0 1 2 0l2.1 4.6 3.7-3a1.3 1.3 0 0 1 2 1.3l-1.7 9.2H4.9ZM5.2 18.3h13.6v1.2a1.2 1.2 0 0 1-1.2 1.2H6.4a1.2 1.2 0 0 1-1.2-1.2Z"/></svg>';
+
+function godModeConfigPrice() {
+    return Math.max(0, Number(state.config?.god_mode_price || 6.99));
 }
 
 function renderGodModeCard() {
     const active = api.user?.subscribed_user === true;
     const multiplier = Math.max(1, Number(state.profile?.god_mode_aura_multiplier || 2));
-    const remainingReveals = Math.max(0, Number(state.profile?.remaining_reveals || 0));
     const weeklyReveals = Math.max(1, Number(state.config?.max_full_reveals_per_week || 2));
-    const weeklyPrice = Math.max(0, Number(state.config?.god_mode_price || 6.99));
+    const valueProps = [
+        `${weeklyReveals} weekly reveals for voters or anonymous question authors.`,
+        "First-letter hints on every poll.",
+        `${multiplier}\u00d7 aura on every answer you give.`,
+        "Get boosted to the top of classmates' polls.",
+    ];
     $("#godModeCard").innerHTML = `<article class="god-mode-card ${active ? "active" : ""}">
-        <div class="god-mode-title"><span class="god-mode-crown">${uiIcon("crown-filled")}</span><div><strong>${active ? "God Mode Active" : "God Mode"}</strong><small>${active ? "Everything unlocked" : `$${weeklyPrice.toFixed(2)} / week`}</small></div>${active ? `<span class="god-mode-active">\u2728 Active</span>` : ""}</div>
-        <p class="god-mode-benefits-heading">${active ? "You're enjoying:" : "Go legendary with:"}</p>
-        <ul><li>${weeklyReveals} weekly reveals to see exactly who voted.</li><li>First-letter hints on every poll.</li><li>${multiplier}× aura on every answer you give.</li><li>Get boosted to the top of classmates' polls.</li></ul>
-        ${active
-        ? `<p>Your subscription is recognized on web · ${remainingReveals} weekly ${remainingReveals === 1 ? "reveal" : "reveals"} left. Billing stays with the store where you subscribed.</p>`
-        : `<button class="god-mode-start-button" type="button" data-open-god-mode><span><strong>Start God Mode</strong><small>$${weeklyPrice.toFixed(2)} per week</small></span></button>`}
+        <div class="god-mode-title"><span>${GOD_MODE_CROWN_ICON}</span><div><strong>${active ? "God Mode Active" : "God Mode"}</strong><small>${active ? "Everything unlocked" : `$${godModeConfigPrice().toFixed(2)}/week`}</small></div>${active ? `<span class="god-mode-active">\u2728 Active</span>` : ""}</div>
+        <p class="god-mode-benefits-heading">${active ? "You\u2019re enjoying:" : "Go legendary with:"}</p>
+        <ul>${valueProps.map((prop) => `<li>${escapeHTML(prop)}</li>`).join("")}</ul>
+        ${active ? "" : `<button class="god-mode-start-button" type="button" data-open-god-mode><span><strong>Start God Mode</strong></span></button>`}
     </article>`;
 }
 
@@ -1717,27 +1932,54 @@ function hasStripeGodMode() {
 
 async function refreshGodModeBilling() {
     const userId = api.user?.id;
-    if (!userId || !hasActiveGodMode() || typeof api.getGodModeBilling !== "function") return;
+    if (!userId || typeof api.getGodModeBilling !== "function") return;
     try {
         const billing = await api.getGodModeBilling(userId);
         if (api.user?.id !== userId) return;
-        state.godModeBilling = { userId, provider: billing?.provider || null };
+        state.godModeBilling = {
+            userId,
+            provider: billing?.provider || null,
+            subscribed: billing?.subscribed === true,
+            stripeStatus: billing?.stripe_status || null,
+            cancelAtPeriodEnd: billing?.cancel_at_period_end === true,
+            expiresAt: billing?.expires_at || null,
+            manage: billing?.manage || null,
+            webPriceLabel: billing?.web_checkout?.price_label || null,
+        };
         if (billing?.cancel_at_period_end === true) state.godModeCancellation = billing;
     } catch {
         return;
     }
-    if (state.profileEditor === "hub") renderProfileEditorHub();
+    if (state.profileEditor === "hub" && $("#profileDialog").open) renderProfileEditorHub();
+}
+
+// GodModeBillingStatus.needsPaymentUpdate: the web payment failed and Stripe
+// still holds the subscription; the fix is the card.
+function godModeNeedsPaymentUpdate() {
+    const billing = state.godModeBilling;
+    if (!billing || billing.userId !== api.user?.id) return false;
+    return ["past_due", "unpaid", "incomplete"].includes(billing.stripeStatus || "");
+}
+
+// The Earn button's line (GodModePitchView.earnGodModeSubtitle), from the
+// God Mode invite goal; older servers only send the aura reward fields.
+function godModeInviteProgress() {
+    const status = state.inviteStatus;
+    if (!status) return null;
+    const progress = Number(status.god_mode_invite_progress ?? status.aura_reward_progress);
+    const goal = Number(status.god_mode_invite_goal ?? status.aura_reward_goal);
+    if (!Number.isFinite(progress) || !Number.isFinite(goal)) return null;
+    const safeGoal = Math.max(1, goal);
+    const reached = (status.god_mode_invite_goal_reached ?? status.aura_reward_max_reached) === true || progress >= safeGoal;
+    return { progress: Math.max(0, Math.min(progress, safeGoal)), goal: safeGoal, reached };
 }
 
 function godModeInviteProgressLabel() {
-    const status = state.inviteStatus;
-    if (!status) return "Loading invite progress...";
-    const goal = Math.max(1, Number(status.aura_reward_goal || 1));
-    const maxReached = status.aura_reward_max_reached === true;
-    const progress = maxReached
-        ? goal
-        : Math.max(0, Math.min(goal, Number(status.aura_reward_progress || 0)));
-    return `${progress} / ${goal} qualifying invites`;
+    if (state.config?.enable_god_mode_ugc_program === true) return "Invite friends or join our Creator program";
+    const invites = godModeInviteProgress();
+    if (!invites) return "Invite friends to unlock God Mode";
+    if (invites.reached) return "God Mode invite goal reached";
+    return `${invites.progress} / ${invites.goal} qualifying invites`;
 }
 
 function syncGodModeCarouselDots() {
@@ -1749,9 +1991,22 @@ function syncGodModeCarouselDots() {
     $$(".god-mode-page-dots span").forEach((dot, index) => dot.classList.toggle("active", index === activeIndex));
 }
 
+// The web price: Stripe's own label from the billing status when the server
+// sends it ("$6.99/week"), else the configured display price.
+function godModeWebPriceLine() {
+    const label = state.godModeBilling?.userId === api.user?.id ? state.godModeBilling?.webPriceLabel : null;
+    if (label) return label.replace(/\/(\w+)$/, " per $1");
+    return `$${godModeConfigPrice().toFixed(2)} per week`;
+}
+
 function renderGodModePitch() {
     const weeklyReveals = Math.max(1, Number(state.config?.max_full_reveals_per_week || 2));
-    const weeklyPrice = Math.max(0, Number(state.config?.god_mode_price || 6.99));
+    if (!state.godModeBilling?.webPriceLabel) {
+        void refreshGodModeBilling().then(() => {
+            const price = $("#godModeCheckoutPrice");
+            if (price) price.textContent = godModeWebPriceLine();
+        });
+    }
     const multiplier = Math.max(1, Number(state.profile?.god_mode_aura_multiplier || 2));
     const revealNames = ["Sydney Sweeney", "LaMelo Ball", "Jordan Lee", "Taylor Swift"];
     // GodModePitchView: a sheet with a grabber and no close button; drag down or "Maybe later".
@@ -1778,10 +2033,10 @@ function renderGodModePitch() {
         <div class="god-mode-page-dots" aria-hidden="true"><span class="active"></span><span></span><span></span><span></span></div>
         <div class="god-mode-pitch-actions">
             <button class="god-mode-earn-button" type="button" data-earn-god-mode><strong>Earn God Mode</strong><small id="godModeInviteProgress">${escapeHTML(earnSubtitle)}</small></button>
-            <button class="god-mode-checkout-button" type="button" data-start-god-mode><span><strong>Start God Mode</strong><small>$${weeklyPrice.toFixed(2)} per week</small></span></button>
+            <button class="god-mode-checkout-button" type="button" data-start-god-mode><span><strong>Start God Mode</strong><small id="godModeCheckoutPrice">${escapeHTML(godModeWebPriceLine())}</small></span></button>
             <button class="god-mode-maybe-button" type="button" data-close-dialog>Maybe later</button>
             <p id="godModeCheckoutStatus" class="status-message" role="status"></p>
-            <p class="god-mode-legal"><a href="/terms.html">Terms</a><a href="/privacy-policy.html">Privacy Policy</a></p>
+            <p class="god-mode-legal"><a href="/terms.html">Terms</a><span>·</span><a href="/privacy-policy.html">Privacy Policy</a></p>
         </div>
         <p class="god-mode-terms">Payment is charged by Stripe at checkout and renews every week until you cancel. Cancel anytime from Edit information; God Mode stays on until the end of the paid week.</p>`;
     $(".god-mode-benefit-carousel")?.addEventListener("scroll", syncGodModeCarouselDots, { passive: true });
@@ -1877,22 +2132,43 @@ async function startGodModeCheckout(button) {
 
 function renderEarnGodModeProgress() {
     const container = $("#earnGodModeProgress");
-    const status = state.inviteStatus;
-    if (!status) {
-        container.innerHTML = `<div class="earn-invite-progress"><span><strong>Qualifying invites</strong><small>Loading…</small></span><progress max="1" value="0" aria-label="Loading invite progress"></progress></div>`;
+    const invites = godModeInviteProgress();
+    if (!invites) {
+        container.innerHTML = state.inviteStatus ? "" : `<div class="earn-invite-progress"><span><strong>Qualifying invites</strong><small>Loading…</small></span><progress max="1" value="0" aria-label="Loading invite progress"></progress></div>`;
         return;
     }
-    const goal = Math.max(1, Number(status.aura_reward_goal || 1));
-    const maxReached = status.aura_reward_max_reached === true;
-    const progress = maxReached ? goal : Math.max(0, Math.min(goal, Number(status.aura_reward_progress || 0)));
-    const remaining = Math.max(0, goal - progress);
+    const remaining = Math.max(0, invites.goal - invites.progress);
     container.innerHTML = `<div class="earn-invite-progress">
-        <span><strong>Qualifying invites: ${progress} / ${goal}</strong><small>${maxReached ? "Reward earned" : `${remaining} to go`}</small></span>
-        <progress max="${goal}" value="${progress}" aria-label="${progress} of ${goal} qualifying invites"></progress>
+        <span><strong>Qualifying invites: ${invites.progress} / ${invites.goal}</strong><small>${invites.reached ? "Reward earned" : `${remaining} to go`}</small></span>
+        <progress max="${invites.goal}" value="${invites.progress}" aria-label="${invites.progress} of ${invites.goal} qualifying invites"></progress>
     </div>`;
 }
 
+// GodModeEarnView.swift: "Invite N friends" or, with the Creator program on,
+// "Join our Creator program".
+function renderGodModeEarnChooser() {
+    const creator = state.config?.enable_god_mode_ugc_program === true;
+    const invites = godModeInviteProgress();
+    const goal = invites?.goal || Math.max(1, Number(state.config?.god_mode_invite_friend_goal || 5));
+    $("#godModeEarnChooserSubtitle").textContent = creator ? "Choose how you want to unlock reveals." : "Invite friends to unlock reveals.";
+    $("#godModeEarnInviteTitle").textContent = `Invite ${goal} friends`;
+    $("#godModeEarnInviteSubtitle").textContent = invites
+        ? `${invites.progress} / ${invites.goal} qualifying invites`
+        : `Earn God Mode when ${goal} qualifying friends join.`;
+    $("#godModeEarnCreator").classList.toggle("hidden", !creator);
+}
+
 async function openEarnGodModeDialog() {
+    const dialog = $("#godModeEarnChooserDialog");
+    renderGodModeEarnChooser();
+    if (!dialog.open) dialog.showModal();
+    try {
+        state.inviteStatus = await api.getInviteStatus(api.user.id);
+        renderGodModeEarnChooser();
+    } catch (_) { /* The chooser still works without fresh progress. */ }
+}
+
+async function openInviteFriendsDialog() {
     const dialog = $("#earnGodModeDialog");
     $("#earnGodModeStatus").textContent = "";
     renderEarnGodModeProgress();
@@ -1901,6 +2177,11 @@ async function openEarnGodModeDialog() {
         state.inviteStatus = await api.getInviteStatus(api.user.id);
         renderEarnGodModeProgress();
     } catch (_) { /* Sharing still works when progress is temporarily unavailable. */ }
+}
+
+// The Creator program lives on the website (CreatorProgramView.swift on iOS).
+function openCreatorProgram() {
+    window.open("/creatorprogram.html", "_blank", "noopener");
 }
 
 async function shareGodModeInvite(button, channel) {
@@ -1971,10 +2252,11 @@ function renderAuraPurchases() {
             : label;
         return `<button class="aura-price-button ${insufficient ? "insufficient" : ""}" type="button" data-buy-aura="${kind}" aria-label="${escapeHTML(ariaLabel)}" ${active || insufficient ? "disabled" : ""}>${active ? "Active" : `<span>${cost.toLocaleString()}</span><img loading="lazy" decoding="async" src="../assets/app/aura.webp" alt="aura">`}</button>`;
     };
-    container.innerHTML = `<article class="purchase-row"><span><strong>Get boosted</strong><small>Jump to the top of classmates' polls for 5 days or until you get voted 10 times.</small></span>${purchaseButton("global", globalCost, globalBoost ? "Global boost active" : `Get boosted for ${globalCost.toLocaleString()} aura`, Boolean(globalBoost))}</article>
-        <article class="purchase-row"><span><strong>See what your crush thinks about you</strong><small>Your crush stays top secret. You appear more often in their polls.</small></span>${purchaseButton("targeted", targetedCost, `Choose a crush for ${targetedCost.toLocaleString()} aura`)}</article>
+    // SettingsView+InviteAndPurchases.perksSection's titles and subtitles.
+    container.innerHTML = `<article class="purchase-row"><span><strong>Get boosted</strong><small>Guaranteed to find out what your classmates think of you \u{1F4AC}</small></span>${purchaseButton("global", globalCost, globalBoost ? "Global boost active" : `Get boosted for ${globalCost.toLocaleString()} aura`, Boolean(globalBoost))}</article>
+        <article class="purchase-row"><span><strong>Target a classmate</strong><small>They won't know who targeted them \u{1F92B}</small></span>${purchaseButton("targeted", targetedCost, `Target a classmate for ${targetedCost.toLocaleString()} aura`)}</article>
         ${tbhRequestsEnabled() ? `<article class="purchase-row"><span><strong>Request a TBH</strong><small>Ask a classmate for their honest take on you.</small></span>${purchaseButton("tbh", tbhCost, `Request a TBH for ${tbhCost.toLocaleString()} aura`)}</article>` : ""}
-        <article class="purchase-row"><span><strong>Submit a school question</strong><small>Create a poll for your school and choose whether to show your name.</small></span>${purchaseButton("question", questionCost, `Submit a school question for ${questionCost.toLocaleString()} aura`)}</article>`;
+        <article class="purchase-row"><span><strong>Submit a school question</strong><small>Anonymously create a poll that your school will answer.</small></span>${purchaseButton("question", questionCost, `Submit a school question for ${questionCost.toLocaleString()} aura`)}</article>`;
 }
 
 function newIdempotencyKey() {
@@ -5797,7 +6079,41 @@ function profileOriginalInformation() {
         school_id: state.profile?.school_id ?? null,
         school_name: currentProfileSchoolName(),
         grade: String(state.profile?.grade || "").trim(),
+        gender: normalizedProfileGender(state.profile?.gender),
     };
+}
+
+// InformationEditSheet.swift: Boy / Girl / Non-binary, sent as male / female / non-binary.
+const PROFILE_GENDER_OPTIONS = [
+    { value: "male", label: "Boy" },
+    { value: "female", label: "Girl" },
+    { value: "non-binary", label: "Non-binary" },
+];
+
+function normalizedProfileGender(value) {
+    const gender = String(value || "").trim().toLowerCase();
+    if (gender === "boy" || gender === "male") return "male";
+    if (gender === "girl" || gender === "female") return "female";
+    if (["non-binary", "nonbinary", "nb"].includes(gender)) return "non-binary";
+    return "";
+}
+
+function profileGenderLabel(value) {
+    return PROFILE_GENDER_OPTIONS.find((option) => option.value === normalizedProfileGender(value))?.label || "Choose your gender";
+}
+
+function profileGenderIsValid(draft = state.profileDraft) {
+    return PROFILE_GENDER_OPTIONS.some((option) => option.value === draft?.gender);
+}
+
+function renderProfileGenderOptions() {
+    const selected = state.profileDraft?.gender || "";
+    $$("[data-profile-gender]").forEach((option) => {
+        const isSelected = option.dataset.profileGender === selected;
+        option.classList.toggle("selected", isSelected);
+        option.setAttribute("aria-checked", String(isSelected));
+    });
+    $('[data-profile-done="gender"]').disabled = !profileGenderIsValid();
 }
 
 function profileNameIsValid(draft = state.profileDraft) {
@@ -5829,6 +6145,7 @@ function profileChangeFlags() {
         name: draft.first_name !== original.first_name || draft.last_name !== original.last_name,
         school: String(draft.school_id ?? "") !== String(original.school_id ?? ""),
         grade: draft.grade !== original.grade,
+        gender: draft.gender !== original.gender,
     };
 }
 
@@ -5847,6 +6164,7 @@ function profileDraftIsValid() {
         && usernameChecked
         && draft?.school_id != null
         && profileGradeIsValid()
+        && profileGenderIsValid(draft)
     );
 }
 
@@ -5871,25 +6189,89 @@ function renderProfileEditorHub() {
     $("#profileNameValue").textContent = `${draft.first_name} ${draft.last_name}`.trim() || "Add your name";
     $("#profileSchoolValue").textContent = draft.school_name || "Choose your school";
     $("#profileGradeValue").textContent = draft.grade || "Choose your grade";
+    $("#profileGenderValue").textContent = profileGenderLabel(draft.gender);
     setProfileBadge($("#profileUsernameBadge"), flags.username, !profileUsernameIsValid(draft) || (flags.username && state.profileCheckedUsername !== draft.username));
     setProfileBadge($("#profileNameBadge"), flags.name, !profileNameIsValid(draft));
     setProfileBadge($("#profileSchoolBadge"), flags.school, draft.school_id == null);
     setProfileBadge($("#profileGradeBadge"), flags.grade, !profileGradeIsValid());
+    setProfileBadge($("#profileGenderBadge"), flags.gender, !profileGenderIsValid(draft));
     $$('[data-profile-editor]').forEach((button) => { button.disabled = informationLocked; });
     const changeCount = profileChangedFieldCount();
     $("#profileReviewButton").textContent = changeCount === 1 ? "Review 1 change" : `Review ${changeCount} changes`;
     $("#profileReviewButton").disabled = !profileDraftIsValid();
     $("#deleteAccountButton").classList.toggle("hidden", state.config?.enable_delete_account === false);
-    const unsubscribeButton = $("#godModeUnsubscribeButton");
-    const cancellationScheduled = state.godModeCancellation?.cancel_at_period_end === true;
-    unsubscribeButton.classList.toggle("hidden", !hasStripeGodMode());
-    unsubscribeButton.disabled = cancellationScheduled;
-    $("#godModeUnsubscribeLabel").textContent = cancellationScheduled
-        ? "God Mode cancellation scheduled"
-        : "Unsubscribe from God Mode";
+    renderGodModeManageEntry();
+    // "Oct 20, 2026", as InformationEditSheet's .abbreviated date.
+    const nextChange = new Date(state.profile?.next_information_change_at || "");
+    const lockedMessage = Number.isNaN(nextChange.getTime())
+        ? "Username, name, school, grade, and gender are currently unavailable."
+        : `Username, name, school, grade, and gender will be available again ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(nextChange)}.`;
     $("#profileEditHint").innerHTML = informationLocked
-        ? `<strong>Profile changes are temporarily locked</strong><span>Username, name, school, and grade will be available again ${escapeHTML(relativeTime(state.profile.next_information_change_at))}.</span>`
+        ? `<strong>Profile changes are temporarily locked</strong><span>${escapeHTML(lockedMessage)}</span>`
         : "<strong>Profile changes are available every 14 days</strong><span>Change any combination below. Nothing is saved until you review and confirm everything.</span>";
+}
+
+// GodModeSubscriptionRow.swift, for web (Stripe) billing: a failed payment
+// shows the full "Payment failed — update your card" row; a healthy
+// subscription a quiet "Manage God Mode" (the plan sheet); one set to cancel
+// "God Mode ends Oct 8".
+function godModeEndsAt() {
+    if (state.godModeCancellation?.cancel_at_period_end !== true) return null;
+    return state.godModeCancellation.subscription_expires_at || state.godModeCancellation.expires_at || null;
+}
+
+function renderGodModeManageEntry() {
+    const needsPayment = godModeNeedsPaymentUpdate();
+    $("#godModeBillingRow").classList.toggle("hidden", !needsPayment);
+    const button = $("#godModeUnsubscribeButton");
+    const cancelling = state.godModeCancellation?.cancel_at_period_end === true;
+    button.classList.toggle("hidden", needsPayment || !hasStripeGodMode());
+    button.disabled = cancelling;
+    const endsAt = formatBillingShortDate(godModeEndsAt());
+    $("#godModeUnsubscribeLabel").textContent = cancelling
+        ? (endsAt ? `God Mode ends ${endsAt}` : "Won\u2019t renew")
+        : "Manage God Mode";
+}
+
+// GodModePlan.statusLine: "Renews Oct 15 · on the web" while Stripe says it
+// renews, "Active through Oct 15 · on the web" otherwise.
+function godModePlanStatusLine() {
+    const billing = state.godModeBilling;
+    const date = formatBillingShortDate(billing?.expiresAt || api.user?.subscription_expires_at);
+    const renews = ["active", "trialing"].includes(billing?.stripeStatus || "") && billing?.cancelAtPeriodEnd !== true;
+    const stateLine = date ? (renews ? `Renews ${date}` : `Active through ${date}`) : "Active";
+    return `${stateLine} \u00b7 on the web`;
+}
+
+function openGodModePlan() {
+    if (!hasStripeGodMode() || state.godModeCancellation?.cancel_at_period_end === true) return;
+    $("#godModePlanStatus").textContent = godModePlanStatusLine();
+    const unsubscribe = $("#godModePlanUnsubscribe");
+    unsubscribe.disabled = false;
+    unsubscribe.removeAttribute("aria-busy");
+    $("#godModePlanDialog").showModal();
+}
+
+async function openGodModeBillingPortal() {
+    const row = $("#godModeBillingRow");
+    const status = $("#profileGodModeStatus");
+    if (row.disabled) return;
+    row.disabled = true;
+    row.setAttribute("aria-busy", "true");
+    status.classList.remove("is-neutral");
+    status.textContent = "";
+    const portalWindow = window.open("about:blank", "_blank");
+    try {
+        const { url } = await api.createGodModeBillingPortal(api.user.id);
+        if (portalWindow) portalWindow.location.href = url;
+        else window.location.href = url;
+    } catch (error) {
+        portalWindow?.close();
+        status.textContent = friendlyErrorMessage(error, "Could not open billing. Try again.");
+    } finally {
+        row.disabled = false;
+        row.removeAttribute("aria-busy");
+    }
 }
 
 async function godModeRetentionOffer() {
@@ -5923,14 +6305,15 @@ async function offerGodModeFreeWeek(offer) {
     const second = formatBillingShortDate(offer.second_reveal_at);
     // The free week gets no weekly refill: two reveals (day 2, day 5), each
     // only while still subscribed (granted by the server).
-    const terms = [];
-    if (first && second) terms.push(`Reveals on ${first} and ${second} while you’re still subscribed.`);
-    if (to) terms.push(`Then ${offer.price_label || "your regular price"} starting ${to}.`);
-    if (from && to) terms.push(`Cancel before ${to} and it ends ${from}.`);
+    // GodModeRetentionOffer.offerTerms: "Then $9.99/week. Cancel before Oct 15
+    // and you'll lose your free week (God Mode ends Oct 8)."
+    const terms = from && to
+        ? `${offer.price_label ? `Then ${offer.price_label}. ` : ""}Cancel before ${to} and you'll lose your free week (God Mode ends ${from}).`
+        : "";
     const choice = await choiceSheet({
         title: "Stay for a free week?",
         message: first && second ? "Your next week is on us, with 2 reveals." : "Your next week is on us.",
-        finePrint: terms.join(" "),
+        finePrint: terms,
         confirmLabel: "Get my free week",
         secondaryLabel: "Unsubscribe anyway",
     });
@@ -5974,13 +6357,13 @@ async function unsubscribeFromGodMode() {
         if (await offerGodModeFreeWeek(offer)) return;
     } else {
         // Cancelling during the free week takes it back (server-enforced).
-        const paidThrough = offer?.reason === "in_free_week" ? formatBillingShortDate(offer.paid_through) : "";
+        const inFreeWeek = offer?.reason === "in_free_week";
         // Keeping is the primary action; unsubscribing stays a full,
         // clearly labeled button right below it.
         const choice = await choiceSheet({
             title: "Unsubscribe from God Mode?",
-            message: paidThrough
-                ? `Your free week ends and God Mode stays active through ${paidThrough}, then it won’t renew.`
+            message: inFreeWeek
+                ? "You'll lose your free week."
                 : "You’ll keep God Mode through the end of your current billing period, and then it won’t renew.",
             confirmLabel: "Keep God Mode",
             secondaryLabel: "Unsubscribe",
@@ -5998,7 +6381,7 @@ async function unsubscribeFromGodMode() {
         state.godModeCancellation = result;
         const ending = formatBillingShortDate(result.subscription_expires_at);
         status.textContent = ending
-            ? `Unsubscribed. God Mode stays active through ${ending}.`
+            ? `Unsubscribed. God Mode ends ${ending}.`
             : "Unsubscribed. God Mode stays active through the current billing period.";
         showToast("God Mode renewal canceled");
         renderProfileEditorHub();
@@ -6110,6 +6493,7 @@ function renderProfileReview() {
     if (flags.username) addRow("Username", `@${original.username}`, `@${draft.username}`);
     if (flags.school) addRow("School", original.school_name, draft.school_name);
     if (flags.grade) addRow("Grade", original.grade, draft.grade);
+    if (flags.gender) addRow("Gender", profileGenderLabel(original.gender), profileGenderLabel(draft.gender));
     $("#profileReviewRows").innerHTML = rows.join("");
     $("#profileSchoolChangeNote").classList.toggle("hidden", !flags.school);
     $("#profileInformationConfirmStatus").textContent = "";
@@ -6120,12 +6504,13 @@ function setProfileEditor(editor) {
     syncProfileDraftFromInputs();
     state.profileEditor = editor;
     $$('[data-profile-panel]').forEach((panel) => panel.classList.toggle("hidden", panel.dataset.profilePanel !== editor));
-    const titles = { hub: "Correct profile information", username: "Username", name: "Name", school: "School", grade: "Grade", review: "Review changes" };
+    const titles = { hub: "Correct profile information", username: "Username", name: "Name", school: "School", grade: "Grade", gender: "Gender", review: "Review changes" };
     $("#profileEditorTitle").textContent = titles[editor] || titles.hub;
     $("#profileEditorBack").classList.toggle("hidden", editor === "hub");
     $("#profileEditorCancel").classList.toggle("hidden", editor !== "hub");
     if (editor === "hub") renderProfileEditorHub();
     if (editor === "grade") renderProfileGradeOptions();
+    if (editor === "gender") renderProfileGenderOptions();
     if (editor === "review") renderProfileReview();
     const focusByEditor = { username: "#profileUsername", name: "#profileFirstName", school: "#profileSchoolZip" };
     requestAnimationFrame(() => $(focusByEditor[editor])?.focus({ preventScroll: true }));
@@ -6146,6 +6531,7 @@ function openProfileDialog() {
     $("#profileSchoolPicker").classList.add("hidden");
     $("#profileSchoolFallback").classList.add("hidden");
     $("#profileEditStatus").textContent = "";
+    $(".profile-name-hint").classList.remove("invalid");
     $("#profileGodModeStatus").textContent = "";
     $("#profileGodModeStatus").classList.remove("is-neutral");
     setProfileEditor("hub");
@@ -6156,7 +6542,7 @@ function openProfileDialog() {
 async function cancelProfileEditor() {
     if (profileChangedFieldCount() && !await confirmSheet({
         title: "Discard your changes?",
-        message: "Your profile information changes won't be saved.",
+        message: "Your profile has not been changed yet.",
         confirmLabel: "Discard",
         cancelLabel: "Keep editing",
         destructive: true,
@@ -6210,6 +6596,7 @@ async function saveProfile(event) {
         username: draft.username,
         grade: draft.grade,
         school_id: draft.school_id,
+        gender: draft.gender,
     };
     state.pendingProfileInformation = { payload: nextInfo, schoolName: draft.school_name, schoolChanged: flags.school };
     const button = $("#confirmProfileInformationSave");
@@ -6237,8 +6624,15 @@ async function saveProfile(event) {
     } finally { setButtonLoading(button, false); }
 }
 
+function renderBioCount() {
+    const bio = $("#profileBio");
+    if (bio.value.length > 160) bio.value = bio.value.slice(0, 160);
+    $("#profileBioCount").textContent = `${bio.value.length}/160`;
+}
+
 function openBioDialog() {
     $("#profileBio").value = state.profile?.bio || "";
+    renderBioCount();
     $("#bioEditStatus").textContent = "";
     $("#bioDialog").showModal();
 }
@@ -6353,10 +6747,10 @@ async function submitFeedback(event) {
 // Profile photos go through the iOS circle crop and upload format (≤1024 px JPEG
 // 0.82), so large camera photos no longer hit a 5 MB wall. The new photo shows
 // at once with an uploading state, and a failed upload stays retryable.
-async function cropProfilePhoto(file) {
+async function cropProfilePhoto(file, options = {}) {
     try {
         const { cropAvatar } = await import("./avatar-crop.js");
-        return await cropAvatar(file);
+        return await cropAvatar(file, options);
     } catch (error) {
         showToast(userMessage(error, "That photo could not be opened. Choose a JPEG or PNG."));
         return null;
@@ -6390,7 +6784,8 @@ async function changeProfilePicture(event) {
     const file = input.files[0];
     input.value = "";
     if (!file) return;
-    const cropped = await cropProfilePhoto(file);
+    // SettingsView's circle cropper strings.
+    const cropped = await cropProfilePhoto(file, { title: "Choose your profile photo", instructions: "Pinch to zoom and drag to frame your photo." });
     if (cropped) await uploadProfilePhoto(cropped);
 }
 
@@ -7083,8 +7478,8 @@ async function shareClassmateInvite() {
 // edits first, warn accounts without a passkey, then confirm the 5-day deletion.
 async function beginAccountDeletion() {
     if (profileChangedFieldCount() && !await confirmSheet({
-        title: "Discard your changes?",
-        message: "Your profile information changes won't be saved.",
+        title: "Discard edits and continue?",
+        message: "Your username, name, school, grade, and gender edits will not be saved.",
         confirmLabel: "Discard",
         cancelLabel: "Keep editing",
         destructive: true,
@@ -7092,82 +7487,188 @@ async function beginAccountDeletion() {
     state.profileDraft = null;
     state.pendingProfileInformation = null;
     if ($("#profileDialog").open) $("#profileDialog").close();
-    const passkeys = state.passkeyStatus;
-    const missingPasskey = passkeys && passkeys.registered !== true && Number(passkeys.credentialCount || 0) < 1;
-    if (missingPasskey) {
-        let setUpPasskey = false;
-        const noteChoice = (event) => { if (event.target.closest?.(".ui-sheet-cancel")) setUpPasskey = true; };
-        document.addEventListener("click", noteChoice, true);
-        const deleteAnyway = await confirmSheet({
+    // SettingsView.passkeyWarningMessage(.deleteAccount): "Set Up Passkey" is the main button.
+    if (accountNeedsPasskey()) {
+        const choice = await choiceSheet({
             title: "Don't Lose Your Account",
-            message: "You don't have a passkey. If you lose access to this phone number during the 5-day countdown, you won't be able to recover your account. Set up a passkey first.",
-            confirmLabel: "Delete Anyway",
-            cancelLabel: "Set Up Passkey",
-            destructive: true,
+            message: "You don't have a passkey. If you delete the app and lose access to this phone number during the 5-day countdown, you won't be able to recover your account. Set up a passkey first.",
+            confirmLabel: "Set Up Passkey",
+            secondaryLabel: "Delete Anyway",
         });
-        document.removeEventListener("click", noteChoice, true);
-        if (!deleteAnyway) {
-            if (setUpPasskey) void addBackupPasskey();
-            return;
-        }
+        if (choice === "confirm") return void addBackupPasskey();
+        if (choice !== "secondary") return;
     }
     openDeleteAccountDialog();
 }
 
-function openDeleteAccountDialog() {
-    $("#deleteAccountForm").reset();
-    $("#deleteAccountStatus").textContent = "";
-    $("#deleteAccountDialog").showModal();
+const ACCOUNT_DELETION_GRACE_DAYS = 5;
+const accountDeletionHidesKey = (userId) => `valid:account-deletion-hides-from-polls:${userId}`;
+
+// GodModeDeletionNotice.lines: deleting never cancels a subscription.
+function accountDeletionBillingNotices() {
+    const billing = state.godModeBilling?.userId === api.user?.id ? state.godModeBilling : null;
+    const lines = [];
+    if (billing?.provider === "apple" || billing?.manage === "app_store") {
+        lines.push("Deleting your account doesn't cancel your App Store subscription. Manage it in Settings > Apple Account > Subscriptions.");
+    }
+    const webBilling = billing?.provider === "stripe" || billing?.manage === "stripe_portal"
+        || ["active", "trialing", "past_due", "unpaid", "paused", "incomplete"].includes(billing?.stripeStatus || "");
+    if (webBilling) lines.push("Deleting your account doesn't cancel your web subscription.");
+    return lines;
 }
 
+function renderDeleteAccountDialog() {
+    const hide = $("#deleteAccountHideFromPolls").getAttribute("aria-checked") === "true";
+    const voting = $("#deleteAccountVotingLine");
+    voting.textContent = hide
+        ? "No one will be able to vote for you in polls, even friends who have your number saved."
+        : "Once it's gone, friends who have your number saved can still vote for you in polls.";
+    voting.classList.toggle("emphasis", hide);
+    $("#deleteAccountHideFromPolls").classList.toggle("on", hide);
+    $("#deleteAccountBillingNotices").innerHTML = accountDeletionBillingNotices().map((line) => `<p>${escapeHTML(line)}</p>`).join("");
+}
+
+function openDeleteAccountDialog() {
+    $("#deleteAccountForm").reset();
+    // Off by default: hiding is opt-in (DeleteAccountModal.hideFromPollsByDefault).
+    $("#deleteAccountHideFromPolls").setAttribute("aria-checked", "false");
+    $("#deleteAccountStatus").textContent = "";
+    renderDeleteAccountDialog();
+    $("#deleteAccountDialog").showModal();
+    // The billing lines arrive with the billing status.
+    void refreshGodModeBilling().then(() => {
+        if ($("#deleteAccountDialog").open) renderDeleteAccountDialog();
+    });
+}
+
+// SettingsViewModel.requestAccountDeletion: the account stays signed in and
+// the countdown screen takes over.
 async function requestAccountDeletion(event) {
     event.preventDefault();
     const button = event.currentTarget.querySelector("button[type=submit]");
+    const hideFromPolls = $("#deleteAccountHideFromPolls").getAttribute("aria-checked") === "true";
     setButtonLoading(button, true, "Scheduling...");
     $("#deleteAccountStatus").textContent = "";
+    let result;
     try {
-        await preloadRoute("chats").then((route) => route?.beforeSessionEnd?.()).catch(() => null);
-        await stopCallListener();
-        const result = await api.requestAccountDeletion(api.user.id);
-        await presenceLifecycle?.stop();
-        const scheduled = new Intl.DateTimeFormat(undefined, { dateStyle: "long", timeStyle: "short" }).format(new Date(result.scheduled_for));
-        $("#deleteAccountDialog").close();
-        await import("./chat/outbox.js")
-            .then(({ clearChatOutboxes }) => clearChatOutboxes(api.user.id))
-            .catch(() => null);
-        clearQuestionSubmissionState();
-        api.clearSession();
-        showSignedOut(`Account deletion is scheduled for ${scheduled}. Sign in with your passkey before then if you want to keep it.`);
+        result = await api.requestAccountDeletion(api.user.id, { hideFromPolls });
     } catch (error) {
-        $("#deleteAccountStatus").textContent = userMessage(error, "Could not schedule account deletion.");
+        setButtonLoading(button, false);
+        $("#deleteAccountStatus").textContent = hideFromPolls
+            ? "We couldn't delete your account or hide your number. Nothing changed. Please try again."
+            : "We couldn't schedule deletion. Please try again.";
+        return;
+    }
+    setButtonLoading(button, false);
+    const hidden = result?.hidden_from_polls === true;
+    try { localStorage.setItem(accountDeletionHidesKey(api.user.id), hidden ? "1" : "0"); } catch { /* The note falls back to the default wording. */ }
+    api.user.deletion_requested_at = result?.requested_at || new Date().toISOString();
+    state.accountDeletionScheduledFor = result?.scheduled_for || null;
+    $("#deleteAccountDialog").close();
+    if (hideFromPolls && !hidden) {
+        // An older server, or one that skipped the hide: the account is still deleted.
+        await confirmSheet({ title: "Couldn't hide your number", message: `Your account will still be deleted in ${ACCOUNT_DELETION_GRACE_DAYS} days.`, confirmLabel: "OK", cancelLabel: "Close" });
+    }
+    showPendingDeletion();
+}
+
+function accountDeletionScheduledFor() {
+    const scheduled = new Date(state.accountDeletionScheduledFor || "");
+    if (!Number.isNaN(scheduled.getTime())) return scheduled;
+    const requestedAt = new Date(api.user?.deletion_requested_at || "");
+    return new Date(requestedAt.getTime() + ACCOUNT_DELETION_GRACE_DAYS * 86_400_000);
+}
+
+function renderPendingDeletionCountdown() {
+    const scheduled = accountDeletionScheduledFor();
+    if (Number.isNaN(scheduled.getTime())) return;
+    const total = Math.max(0, Math.ceil((scheduled.getTime() - Date.now()) / 1000));
+    const parts = { days: Math.floor(total / 86_400), hours: Math.floor((total % 86_400) / 3_600), minutes: Math.floor((total % 3_600) / 60), seconds: total % 60 };
+    const units = { days: "d", hours: "h", minutes: "m", seconds: "s" };
+    for (const [key, value] of Object.entries(parts)) {
+        $(`[data-countdown-unit="${key}"]`).textContent = `${String(value).padStart(2, "0")} ${units[key]}`;
+    }
+    $("#pendingDeletionCountdown").setAttribute("aria-label", `${parts.days} days, ${parts.hours} hours, ${parts.minutes} minutes, ${parts.seconds} seconds remaining`);
+    if (total <= 0) {
+        // AuthService.finishExpiredAccountDeletion: time's up, sign out here.
+        clearInterval(state.pendingDeletionTimer);
+        state.pendingDeletionTimer = null;
+        $("#pendingDeletionDialog").close();
+        api.clearSession();
+        showSignedOut("Your account has been deleted.");
+    }
+}
+
+function showPendingDeletion() {
+    let hides = false;
+    try { hides = localStorage.getItem(accountDeletionHidesKey(api.user?.id)) === "1"; } catch { hides = false; }
+    $("#pendingDeletionCopy").textContent = hides
+        ? "After deletion, you won't receive any more compliments in Valid. No one can vote for you in polls, even friends who have your number saved, until you come back."
+        : "After deletion, you won't receive any more compliments in Valid, but friends who have your number saved can still vote for you in polls.";
+    $("#pendingDeletionStatus").textContent = "";
+    clearInterval(state.pendingDeletionTimer);
+    renderPendingDeletionCountdown();
+    state.pendingDeletionTimer = setInterval(renderPendingDeletionCountdown, 1000);
+    const dialog = $("#pendingDeletionDialog");
+    if (!dialog.open) dialog.showModal();
+}
+
+async function cancelAccountDeletion() {
+    const button = $("#cancelDeletionButton");
+    setButtonLoading(button, true, "Keeping account…");
+    $("#pendingDeletionStatus").textContent = "";
+    try {
+        await api.cancelAccountDeletion(api.user.id);
+        api.user.deletion_requested_at = null;
+        state.accountDeletionScheduledFor = null;
+        clearInterval(state.pendingDeletionTimer);
+        state.pendingDeletionTimer = null;
+        try { localStorage.removeItem(accountDeletionHidesKey(api.user.id)); } catch { /* Nothing saved. */ }
+        $("#pendingDeletionDialog").close();
+        showToast("Your account is staying on Valid");
+    } catch (error) {
+        $("#pendingDeletionStatus").textContent = "We couldn't keep your account. Check your connection and try again.";
     } finally {
         setButtonLoading(button, false);
     }
 }
 
-function showPendingDeletion() {
-    const requestedAt = new Date(api.user.deletion_requested_at);
-    const scheduledAt = new Date(requestedAt.getTime() + 5 * 86_400_000);
-    const when = Number.isFinite(scheduledAt.getTime())
-        ? new Intl.DateTimeFormat(undefined, { dateStyle: "long", timeStyle: "short" }).format(scheduledAt)
-        : "after the five-day grace period";
-    $("#pendingDeletionCopy").textContent = `It will be permanently deleted ${when}. Keep it now to restore normal use.`;
-    $("#pendingDeletionStatus").textContent = "";
-    $("#pendingDeletionDialog").showModal();
-}
+const PASSKEY_SIGN_OUT_WARNING = "You don't have a passkey. If you lose access to this phone number after signing out, you won't be able to recover your account. Set up a passkey first.";
 
-async function cancelAccountDeletion() {
-    const button = $("#cancelDeletionButton");
-    setButtonLoading(button, true, "Restoring...");
+// SettingsView.beginPasskeyProtectedAction(.signOut): an account without a
+// passkey is warned first ("Set Up Passkey" is the main button); then unsent
+// chat items are counted (SignOutUnsentItemsAlert.swift) before signing out.
+async function confirmSignOut() {
+    const button = $("#profileSignOutButton");
+    if (button.disabled) return;
+    if (accountNeedsPasskey()) {
+        const choice = await choiceSheet({
+            title: "Don't Lose Your Account",
+            message: PASSKEY_SIGN_OUT_WARNING,
+            confirmLabel: "Set Up Passkey",
+            secondaryLabel: "Sign Out Anyway",
+        });
+        if (choice === "confirm") return void addBackupPasskey();
+        if (choice !== "secondary") return;
+    }
+    button.disabled = true;
     try {
-        await api.cancelAccountDeletion(api.user.id);
-        api.user.deletion_requested_at = null;
-        $("#pendingDeletionDialog").close();
-        showToast("Your account is staying on Valid");
-    } catch (error) {
-        $("#pendingDeletionStatus").textContent = userMessage(error, "Could not keep your account.");
+        const userId = api.user?.id;
+        const unsent = userId ? await import("./chat/outbox.js")
+            .then(async ({ listChatTextOutbox, listChatMediaOutbox }) => (await listChatTextOutbox(userId)).length + (await listChatMediaOutbox(userId)).length)
+            .catch(() => 0) : 0;
+        if (unsent > 0 && !await confirmSheet({
+            title: "Sign out?",
+            message: unsent === 1 ? "You have 1 unsent item that will be discarded." : `You have ${unsent} unsent items that will be discarded.`,
+            confirmLabel: "Sign Out",
+            destructive: true,
+        })) return;
+        if (userId) {
+            try { localStorage.removeItem(notificationCategoryCacheKey(userId)); } catch { /* Nothing saved. */ }
+        }
+        await logoutAndReset();
     } finally {
-        setButtonLoading(button, false);
+        button.disabled = false;
     }
 }
 
@@ -7876,35 +8377,9 @@ function urlBase64ToUint8Array(value) {
 }
 
 function renderWebPushStatus() {
-    const button = $("#notificationButton");
-    if (!webPushSupported()) {
-        button.classList.add("hidden");
-        renderProfileActionsVisibility();
-        renderFeedNotificationPrompt();
-        dispatchEvent(new CustomEvent("valid:web-push-status"));
-        return;
-    }
-    button.classList.remove("hidden");
-    renderProfileActionsVisibility();
-    const status = $("#notificationStatusText");
-    const enabled = Boolean(state.webPushSubscription && state.webPushRegistrationState === "on");
-    button.setAttribute("aria-checked", String(enabled));
-    button.classList.toggle("on", enabled);
-    if (Notification.permission === "denied") {
-        status.textContent = "Blocked in browser settings";
-    } else if (state.webPushSubscription && state.webPushRegistrationState === "on") {
-        status.textContent = "On · tap to turn off";
-    } else if (state.webPushSubscription && state.webPushRegistrationState === "syncing") {
-        status.textContent = "Finishing setup…";
-    } else if (state.webPushSubscription && state.webPushRegistrationState === "error") {
-        status.textContent = "Setup incomplete · tap to retry";
-    } else {
-        status.textContent = "Off · tap to turn on";
-    }
-    // The switch already shows on/off; surface the states that need attention.
-    const attention = Notification.permission === "denied" || ["syncing", "error"].includes(state.webPushRegistrationState) && Boolean(state.webPushSubscription);
-    status.classList.toggle("visually-hidden", !attention);
-    status.classList.toggle("settings-row-warning", attention && status.textContent !== "Finishing setup…");
+    // Settings → Notifications: the row's summary and the sheet's banner
+    // follow permission and subscription changes.
+    renderNotificationSettings();
     renderFeedNotificationPrompt();
     // The chat notification cards follow permission and subscription changes.
     dispatchEvent(new CustomEvent("valid:web-push-status"));
@@ -8606,9 +9081,13 @@ function bindEvents() {
         if (event.target.closest("[data-edit-profile]")) openProfileDialog();
         if (event.target.closest("#viewClassmatesButton")) openClassmateDirectory();
         if (event.target.closest("#findContactsButton")) openClassmatesDialog();
-        if (event.target.closest("#profileSignOutButton")) logoutAndReset();
+        if (event.target.closest("#profileSignOutButton")) void confirmSignOut();
         const invite = event.target.closest("[data-profile-invite]");
         if (invite) shareProfileInvite(invite, invite.dataset.profileInvite);
+        if (event.target.closest("[data-open-creator-program]")) openCreatorProgram();
+        const schoolUnlock = event.target.closest("[data-school-unlock]");
+        if (schoolUnlock?.dataset.schoolUnlock === "vote") switchPanel("play");
+        if (schoolUnlock?.dataset.schoolUnlock === "invite") shareProfileInvite(schoolUnlock, "imessage");
         const rankedClassmate = event.target.closest("[data-school-classmate]");
         if (rankedClassmate) openClassmateProfile(rankedClassmate.dataset.schoolClassmate);
         const poll = event.target.closest("[data-top-poll]");
@@ -8686,6 +9165,13 @@ function bindEvents() {
         $("#godModePitchDialog").close();
         openEarnGodModeDialog();
     });
+    $("#godModeEarnChooserDialog").addEventListener("click", (event) => {
+        const option = event.target.closest("[data-earn-option]")?.dataset.earnOption;
+        if (!option) return;
+        $("#godModeEarnChooserDialog").close();
+        if (option === "invite") void openInviteFriendsDialog();
+        if (option === "creator") openCreatorProgram();
+    });
     $("#earnGodModeDialog").addEventListener("click", (event) => {
         const button = event.target.closest("[data-share-god-mode-invite]");
         if (button) shareGodModeInvite(button, button.dataset.shareGodModeInvite);
@@ -8745,7 +9231,12 @@ function bindEvents() {
     $("#deleteAccountForm").addEventListener("submit", requestAccountDeletion);
     $("#deleteAccountButton").addEventListener("click", () => void beginAccountDeletion());
     $("#cancelDeletionButton").addEventListener("click", cancelAccountDeletion);
-    $("#pendingDeletionLogout").addEventListener("click", logoutAndReset);
+    $("#deleteAccountHideFromPolls").addEventListener("click", (event) => {
+        const button = event.currentTarget;
+        button.setAttribute("aria-checked", String(button.getAttribute("aria-checked") !== "true"));
+        haptic("selection");
+        renderDeleteAccountDialog();
+    });
     $("#installAppButton").addEventListener("click", installWebApp);
     $("#androidInstallButton").addEventListener("click", installWebApp);
     $("#androidInstallDialog").addEventListener("cancel", (event) => event.preventDefault());
@@ -8755,7 +9246,18 @@ function bindEvents() {
             setAppUpdateButton("retry");
         });
     });
-    $("#notificationButton").addEventListener("click", toggleWebPush);
+    $("#notificationButton").addEventListener("click", openNotificationSettings);
+    $("#notificationPermissionButton").addEventListener("click", () => {
+        // Asked inside the tap: mobile browsers need the user gesture.
+        void toggleWebPush().finally(renderNotificationSettings);
+        renderNotificationSettings();
+    });
+    $("#notificationCategoryCard").addEventListener("click", (event) => {
+        const row = event.target.closest("[data-notification-category]");
+        if (!row) return;
+        haptic("selection");
+        void setNotificationCategory(row.dataset.notificationCategory, row.getAttribute("aria-checked") !== "true");
+    });
     $("#questionForm").addEventListener("submit", reviewQuestionSubmission);
     $("#questionForm").addEventListener("input", resetQuestionSubmissionIfDraftChanged);
     $("#questionForm").addEventListener("change", resetQuestionSubmissionIfDraftChanged);
@@ -8796,7 +9298,13 @@ function bindEvents() {
     $("#profileEditorBack").addEventListener("click", () => setProfileEditor("hub"));
     $("#profileEditorCancel").addEventListener("click", cancelProfileEditor);
     $("#profileReviewButton").addEventListener("click", () => setProfileEditor("review"));
-    $("#godModeUnsubscribeButton").addEventListener("click", unsubscribeFromGodMode);
+    $("#godModeUnsubscribeButton").addEventListener("click", openGodModePlan);
+    $("#godModeBillingRow").addEventListener("click", () => void openGodModeBillingPortal());
+    $("#godModePlanUnsubscribe").addEventListener("click", () => {
+        // "Unsubscribe" is the final intent: only now is the free-week offer checked.
+        $("#godModePlanDialog").close();
+        void unsubscribeFromGodMode();
+    });
     $("#profileSchoolLookup").addEventListener("click", lookupProfileSchools);
     $("#profileSchoolSearch").addEventListener("input", renderProfileSchoolResults);
     $("#profileShowSchoolFallback").addEventListener("click", () => {
@@ -8825,20 +9333,26 @@ function bindEvents() {
         if (done?.dataset.profileDone === "username") finishProfileUsername();
         if (done?.dataset.profileDone === "name") {
             syncProfileDraftFromInputs();
-            $("#profileNameStatus").textContent = profileNameIsValid() ? "" : "Use at least two letters for each name. Hyphens and apostrophes are okay.";
+            $(".profile-name-hint").classList.toggle("invalid", !profileNameIsValid());
             if (profileNameIsValid()) setProfileEditor("hub");
         }
         if (done?.dataset.profileDone === "grade" && profileGradeIsValid()) setProfileEditor("hub");
+        const gender = event.target.closest("[data-profile-gender]");
+        if (gender && state.profileDraft) {
+            state.profileDraft.gender = gender.dataset.profileGender;
+            renderProfileGenderOptions();
+        }
+        if (done?.dataset.profileDone === "gender" && profileGenderIsValid()) setProfileEditor("hub");
     });
     $("#profileFirstName").addEventListener("input", (event) => {
         event.target.value = event.target.value.replace(/[^\p{L}' -]/gu, "");
         syncProfileDraftFromInputs();
-        $("#profileNameStatus").textContent = profileNameIsValid() ? "" : "Use at least two letters for each name. Hyphens and apostrophes are okay.";
+        $(".profile-name-hint").classList.toggle("invalid", !profileNameIsValid());
     });
     $("#profileLastName").addEventListener("input", (event) => {
         event.target.value = event.target.value.replace(/[^\p{L}' -]/gu, "");
         syncProfileDraftFromInputs();
-        $("#profileNameStatus").textContent = profileNameIsValid() ? "" : "Use at least two letters for each name. Hyphens and apostrophes are okay.";
+        $(".profile-name-hint").classList.toggle("invalid", !profileNameIsValid());
     });
     $("#profileUsername").addEventListener("input", (event) => {
         event.target.value = event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "");
@@ -8852,6 +9366,7 @@ function bindEvents() {
     });
     $("#streakCelebration").addEventListener("click", hideStreakCelebration);
     $("#bioForm").addEventListener("submit", saveBio);
+    $("#profileBio").addEventListener("input", renderBioCount);
     $$("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
     addEventListener("valid:session-expired", () => showSignedOut("Your session expired. Sign in with your passkey again."));
     addEventListener("popstate", handleAppPopState);

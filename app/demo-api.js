@@ -116,8 +116,9 @@ export class DemoAPI {
             profile_picture_url: "../assets/AppIconV2.png",
             profile_picture_url_thumb: "../assets/AppIconV2.png",
             profile_picture_url_medium: "../assets/AppIconV2.png",
-            can_change_information: true,
-            next_information_change_at: null,
+            // ?profilelocked=1: changed recently, so the 14-day lock is on.
+            can_change_information: demoParams.get("profilelocked") !== "1",
+            next_information_change_at: demoParams.get("profilelocked") === "1" ? new Date(Date.now() + 5 * 86_400_000).toISOString() : null,
             active_global_boost: null,
             active_targeted_boosts: [],
         };
@@ -259,7 +260,7 @@ export class DemoAPI {
             { phone_number: "2".repeat(64), name: "Diego Ramos", is_six7_user: false, user_id: null, recommendation_strength: 1, vote_count: 2, weekly_vote_count: 1, invite_suggested: false, visibility_boosts: [] },
             { phone_number: "3".repeat(64), name: "Priya Shah", is_six7_user: false, user_id: null, recommendation_strength: 0, vote_count: 0, weekly_vote_count: 0, invite_suggested: false, visibility_boosts: [] },
         ];
-        this.inviteStatus = { limit: 3, sent_today: demoParams.get("invites") === "0" ? 3 : 1, remaining: demoParams.get("invites") === "0" ? 0 : 2, next_reset_at: ago(-180), qualifying_invites: 0, aura_reward_progress: 0, aura_reward_goal: 3, aura_reward_amount: 50, aura_rewards_claimed: 0, aura_rewards_max: 1, aura_reward_max_reached: false };
+        this.inviteStatus = { limit: 3, sent_today: demoParams.get("invites") === "0" ? 3 : 1, remaining: demoParams.get("invites") === "0" ? 0 : 2, next_reset_at: ago(-180), qualifying_invites: 0, aura_reward_progress: 0, aura_reward_goal: 3, aura_reward_amount: 50, aura_rewards_claimed: 0, aura_rewards_max: 1, aura_reward_max_reached: false, god_mode_invite_progress: 1, god_mode_invite_goal: 5, god_mode_invite_goal_reached: false, god_mode_invite_device_exclusions: 0 };
         this.askLink = {
             share_url: "https://validapp.lol/a/jules-demo",
             is_active: true,
@@ -901,6 +902,8 @@ export class DemoAPI {
             full_reveal_aura_cost: 1000,
             max_full_reveals_per_week: 2,
             god_mode_price: 6.99,
+            enable_god_mode_ugc_program: query.get("ugc") !== "0",
+            god_mode_invite_friend_goal: 5,
             global_visibility_boost_cost: 400,
             targeted_visibility_boost_cost: 200,
             enable_tbh_requests: true,
@@ -1391,12 +1394,23 @@ export class DemoAPI {
         return { completed: false, subscribed: false };
     }
 
+    // ?godmodebilling=past_due: the web payment failed (God Mode off, card to fix).
     async getGodModeBilling() {
+        const pastDue = new URLSearchParams(location.search).get("godmodebilling") === "past_due";
+        const stripe = this.demoGodMode && this.demoGodModeProvider === "stripe";
         return {
-            subscribed: this.demoGodMode,
-            provider: this.demoGodMode ? this.demoGodModeProvider : "none",
+            subscribed: this.demoGodMode && !pastDue,
+            provider: pastDue ? "none" : this.demoGodMode ? this.demoGodModeProvider : "none",
+            expires_at: this.demoGodMode ? ago(-4 * 24 * 60) : null,
+            stripe_status: pastDue ? "past_due" : stripe ? "active" : null,
             cancel_at_period_end: false,
+            manage: pastDue ? "stripe_portal" : null,
+            web_checkout: { available: !this.demoGodMode, reason: this.demoGodMode ? "subscribed" : null, price_label: this.demoGodMode ? null : "$6.99/week", price_cents: 699, price_interval: "week" },
         };
+    }
+
+    async createGodModeBillingPortal() {
+        return { url: "https://billing.stripe.com/demo" };
     }
 
     async getGodModeRetentionOffer() {
@@ -1519,7 +1533,8 @@ export class DemoAPI {
         this.anonymousInbox.questions = this.anonymousInbox.questions.filter((item) => item.id !== questionId);
     }
 
-    async requestAccountDeletion() {
+    async requestAccountDeletion(_userId, { hideFromPolls = false } = {}) {
+        this.lastDeletionHideFromPolls = hideFromPolls;
         const requestedAt = new Date();
         const scheduledFor = new Date(requestedAt.getTime() + 5 * 86_400_000);
         this.deletionRequestedAt = requestedAt.toISOString();
@@ -1528,6 +1543,7 @@ export class DemoAPI {
             message: "Account deletion scheduled.",
             requested_at: requestedAt.toISOString(),
             scheduled_for: scheduledFor.toISOString(),
+            hidden_from_polls: hideFromPolls === true,
         };
     }
 
@@ -1535,6 +1551,29 @@ export class DemoAPI {
         this.deletionRequestedAt = null;
         this.user.deletion_requested_at = null;
         return { message: "Account deletion cancelled." };
+    }
+
+    // Settings → Notifications. ?notifoff=chats,reminders starts those off;
+    // ?notiffail=1 makes every save fail (the switch flips back).
+    async getNotificationPreferences() {
+        this.notificationCategories ||= this.initialNotificationCategories();
+        return { user_id: "demo-user", soft_prompt_shown_count: 0, categories: { ...this.notificationCategories } };
+    }
+
+    async updateNotificationCategories(changes) {
+        this.notificationCategories ||= this.initialNotificationCategories();
+        this.notificationCategoryUpdates = [...(this.notificationCategoryUpdates || []), { ...changes }];
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        if (new URLSearchParams(location.search).get("notiffail") === "1") throw new Error("Couldn't reach Valid.");
+        for (const key of ["votes", "chats", "activity", "reminders"]) {
+            if (typeof changes[key] === "boolean") this.notificationCategories[key] = changes[key];
+        }
+        return { user_id: "demo-user", soft_prompt_shown_count: 0, categories: { ...this.notificationCategories } };
+    }
+
+    initialNotificationCategories() {
+        const off = new Set(String(new URLSearchParams(location.search).get("notifoff") || "").split(",").filter(Boolean));
+        return Object.fromEntries(["votes", "chats", "activity", "reminders"].map((key) => [key, !off.has(key)]));
     }
 
 }

@@ -60,6 +60,8 @@ function fixtures(params) {
             media_url: video ? "../assets/demo.mp4" : art(index),
             thumbnail_url: video ? art(index) : null,
             video_duration_ms: video ? 4_000 + (index % 4) * 3_500 : null,
+            // ?vaultprocessing=1: the newest video is still converting for browsers.
+            ...(video ? { video_state: params.get("vaultprocessing") === "1" && index === 2 ? "processing" : "ready" } : {}),
             text_overlays: index % 6 === 3 ? [{ text: CAPTIONS[index % CAPTIONS.length], x: 0.5, y: 0.72 }] : null,
             captured_at: capturedAt.toISOString(),
             is_private: false,
