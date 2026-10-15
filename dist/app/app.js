@@ -3398,6 +3398,8 @@ function openSignupDialog() {
     state.signupCompletionUncertain = false;
     state.signupAccountCreated = false;
     state.signupPickedContacts = [];
+    state.signupContactsChosen = false;
+    state.signupContactPickerFailed = false;
     state.signupVoteCount = 0;
     state.signupUsernameChecked = null;
     readInviteToken();
@@ -3782,10 +3784,12 @@ function selectAddedSchool() {
 }
 
 // ContactsPermissionView: picked before school. The Contact Picker exists only
-// in Chrome on Android; elsewhere the same card offers the invite share.
+// in Chrome on Android; elsewhere (or when it fails to open) the same card
+// offers the invite share. Like iOS, once the picker has been used the step
+// moves on, whatever the filters keep, so nobody is held on it.
 function renderSignupContactsStep() {
-    const picked = state.signupPickedContacts.length > 0;
-    const supported = contactsPickerSupported();
+    const picked = state.signupContactsChosen || state.signupPickedContacts.length > 0;
+    const supported = contactsPickerSupported() && !state.signupContactPickerFailed;
     $("#signupContactsDone").classList.toggle("hidden", !picked);
     $("#signupContactsChoose").classList.toggle("hidden", picked || !supported);
     $("#signupContactsInvite").classList.toggle("hidden", picked || supported);
@@ -3795,19 +3799,26 @@ async function chooseSignupContacts(button) {
     setButtonLoading(button, true, "Opening...");
     $("#signupStatus").textContent = "";
     try {
+        // Demo: `__demoContactPickerError` ("AbortError", "SecurityError") stands in for a picker that fails.
+        if (demoMode && window.__demoContactPickerError) throw Object.assign(new Error("Contact picker failed"), { name: window.__demoContactPickerError });
         const selected = demoMode
             ? (window.__demoPickedContacts || [{ name: ["Riley Demo"], tel: ["4155550111"] }, { name: ["Casey Demo"], tel: ["4155550112"] }])
             : await navigator.contacts.select(["name", "tel"], { multiple: true });
-        const payload = contactUploadPayload(selected, state.config?.contact_filter_rules);
-        if (!payload.contacts.length) {
-            $("#signupStatus").textContent = selected?.length ? "Choose friends with a name and a US phone number." : "";
-            return;
-        }
+        // Whatever the filters keep (family names, non-US numbers and unnamed
+        // contacts are dropped) is uploaded after sign-up; none is fine too.
+        const payload = contactUploadPayload(selected || [], state.config?.contact_filter_rules);
         state.signupPickedContacts = payload.contacts;
+        state.signupContactsChosen = true;
         successHaptic();
         renderSignupContactsStep();
     } catch (error) {
-        if (error.name !== "AbortError") $("#signupStatus").textContent = userMessage(error, "Could not open your contacts.");
+        // Closing the picker returns nothing to choose from; the step still moves on.
+        if (error.name === "AbortError") state.signupContactsChosen = true;
+        else {
+            // The picker can't open here: the invite card (which says so) and its Continue.
+            state.signupContactPickerFailed = true;
+        }
+        renderSignupContactsStep();
     } finally {
         setButtonLoading(button, false);
     }
