@@ -38,7 +38,17 @@ export function createFeedView(context) {
     const cardOpenButton = (label) => `<button class="feed-card-open" type="button" aria-label="${escapeHTML(label)}"></button>`;
     const tbhAvatarMarkup = (profile, request = false) => `<span class="tbh-avatar-shell ${request ? "request" : "response"}">${avatarMarkup(profile, "row-avatar tbh-avatar")}<span class="tbh-avatar-badge" aria-hidden="true">TBH</span></span>`;
     const inboxAvatar = (avatar, kind) => `<span class="inbox-avatar-shell">${avatar}<span class="inbox-content-badge ${kind}" aria-hidden="true">${kind === "poll" ? "POLL" : "ASK ME"}</span></span>`;
-    const feedAvatar = (item) => inboxAvatar(state.feedType === "personal" ? avatarMarkup(state.profile) : avatarMarkup({ first_name: item.voted_for_name || item.contact_name || "Someone", profile_picture_url: item.voted_for_profile_picture_url }), "poll");
+    // FeedItemRow: Inbox rows show your avatar with a POLL badge; School rows show
+    // the classmate, whose avatar and name open their profile.
+    const schoolName = (item) => item.voted_for_name || item.contact_name || "Someone";
+    const feedAvatar = (item) => {
+        if (state.feedType === "personal") return inboxAvatar(avatarMarkup(state.profile), "poll");
+        const avatar = avatarMarkup({ first_name: schoolName(item), profile_picture_url: item.voted_for_profile_picture_url });
+        return item.contact_user_id
+            ? `<button class="feed-profile-button" type="button" data-feed-profile="${escapeHTML(item.contact_user_id)}" aria-label="Open ${escapeHTML(schoolName(item))}’s profile.">${avatar}</button>`
+            : `<span class="feed-profile-button">${avatar}</span>`;
+    };
+    const crown = `<img class="feed-nomination-icon" src="../assets/app/crown.webp" alt="" width="22" height="22" decoding="async"> `;
 
     function pendingTbhRows() {
         if (state.feedType !== "personal" || !tbhRequestsEnabled() || state.feedSearch.trim()) return [];
@@ -108,9 +118,32 @@ export function createFeedView(context) {
         container.classList.remove("hidden");
     }
 
+    // FeedView+PersonalInbox: a Give a TBH card on top while requests wait, then
+    // "New" (since this visit began) and "Earlier"; the divider holds still
+    // until the user leaves the Inbox.
+    function personalInboxSections(rows) {
+        const sections = [];
+        const requests = state.tbhPendingRequests || [];
+        if (tbhRequestsEnabled() && requests.length && ["all", "tbhs"].includes(state.personalInboxFilter)) {
+            const count = requests.length;
+            sections.push({ key: "give-tbh-card", html: `<button class="give-tbh-card" type="button" data-give-tbh aria-label="Give a TBH. ${count} requests waiting."><span class="give-tbh-badge" aria-hidden="true">TBH</span><span class="give-tbh-copy"><strong>Give a TBH</strong><small>${count === 1 ? "1 classmate is waiting for your honest take" : `${count} classmates are waiting for your honest take`}</small></span><span class="give-tbh-chevron" aria-hidden="true">${uiIcon("next")}</span></button>` });
+        }
+        const cutoff = state.personalInboxVisible ? state.personalInboxCutoff : null;
+        let newCount = 0;
+        if (cutoff !== null) while (newCount < rows.length && (Date.parse(rows[newCount].timestamp) || 0) > cutoff) newCount += 1;
+        const header = (title) => ({ key: `inbox-header:${title}`, html: `<h3 class="inbox-section-header">${title}</h3>` });
+        rows.forEach((row, index) => {
+            if (newCount > 0 && index === 0) sections.push(header("New"));
+            if (newCount > 0 && index === newCount) sections.push(header("Earlier"));
+            sections.push(row);
+        });
+        return sections;
+    }
+
     function renderFeed() {
         void ensureStoriesView()?.activate();
         const list = $("#feedList");
+        $("#feedSearch").placeholder = state.feedType === "personal" ? "Search your inbox..." : "Search your school...";
         const query = state.feedSearch.trim().toLowerCase();
         renderPersonalInboxControls();
         renderFeedClassmateResults();
@@ -125,19 +158,26 @@ export function createFeedView(context) {
         const filteredVotes = (state.feedType === "school" && state.schoolFeedContent === "tbhs") || !showPolls ? [] : visible;
         if (!filteredVotes.length && !anonymousRows.length && !personalTbhRows.length && !schoolTbhRows.length) {
             const emptyState = query ? { title: "No results found", message: "Try searching for a name or question." } : state.schoolFeedContent === "tbhs" ? { title: "No TBHs yet", message: "Public TBHs from your school will show up here." } : state.myVotesOnly ? { title: "You haven't voted yet", message: "Answer some questions in the Play tab to see your votes here." } : state.feedType === "personal" ? { title: state.personalInboxFilter === "all" ? "Nothing in your Inbox yet" : `No ${personalInboxFilters[state.personalInboxFilter].title} yet`, message: personalInboxFilters[state.personalInboxFilter].empty } : { title: "No school activity yet", message: "As students at your school answer questions, activity will appear here." };
-            list.innerHTML = `<div class="feed-empty-state"><span class="feed-empty-art" aria-hidden="true"><svg viewBox="0 0 160 120"><path d="M22 36 80 76l58-40v54a12 12 0 0 1-12 12H34a12 12 0 0 1-12-12Z"/><path d="m22 36 58-22 58 22-58 40Z"/><path d="m22 96 41-34M138 96 97 62"/></svg></span><strong>${escapeHTML(emptyState.title)}</strong><p>${escapeHTML(emptyState.message)}</p></div>`;
+            // FeedEmptyStateView draws the winged envelope (message_1); search results show a magnifier.
+            const art = query
+                ? `<span class="feed-search-empty-art" aria-hidden="true">${uiIcon("search")}</span>`
+                : `<img class="feed-empty-artwork" src="../assets/app/message-1.webp" alt="" width="689" height="309" decoding="async">`;
+            list.innerHTML = `<div class="feed-empty-state ${query ? "search-empty" : ""}">${art}<strong>${escapeHTML(emptyState.title)}</strong><p>${escapeHTML(emptyState.message)}</p></div>`;
             renderTabBadges();
             return;
         }
         const voteRows = filteredVotes.map((item) => {
             normalizeReactionState(item);
-            const title = state.feedType === "personal" ? `${item.is_nomination ? `<img class="feed-nomination-icon" src="../assets/app/crown.webp" alt="" width="22" height="22" decoding="async"> ` : ""}<strong>You</strong> got ${item.is_nomination ? "nominated" : "voted"}` : `<strong>${escapeHTML(item.voted_for_name || item.contact_name || "Someone")}</strong> got voted`;
+            const name = state.feedType === "personal" ? "<strong>You</strong>"
+                : item.contact_user_id ? `<button class="feed-profile-name" type="button" data-feed-profile="${escapeHTML(item.contact_user_id)}">${escapeHTML(schoolName(item))}</button>`
+                : `<strong>${escapeHTML(schoolName(item))}</strong>`;
+            const title = `${item.is_nomination ? crown : ""}${name} got ${item.is_nomination ? "nominated" : "voted"}`;
             const detail = context.formatVoterHint(item);
             return { key: `poll:${item.question_answer_id}`, timestamp: item.timestamp, item, html: `<article class="feed-card vote-feed-row" data-answer-id="${item.question_answer_id}" data-feed-detail="${item.question_answer_id}">${cardOpenButton(`Open poll details: ${item.question_text}`)}${feedAvatar(item)}<div class="feed-body"><div class="feed-meta"><span>${title}</span></div><div class="feed-question">${escapeHTML(item.question_text)}</div><div class="feed-detail-row">${detail ? `<span class="feed-answer">${escapeHTML(detail)}</span>` : "<span></span>"}<time>${escapeHTML(relativeTime(item.timestamp))}</time></div></div>${reactionControlMarkup(item, "poll", item.question_answer_id)}</article>` };
         });
         const rows = [...anonymousRows, ...personalTbhRows, ...schoolTbhRows, ...voteRows];
         const sortedRows = rows.sort((left, right) => state.feedType === "school" && state.schoolFeedSort === "hottest" ? schoolHotScore(right) - schoolHotScore(left) : (Date.parse(right.timestamp) || 0) - (Date.parse(left.timestamp) || 0));
-        reconcileKeyedElements(list, sortedRows);
+        reconcileKeyedElements(list, appliesPersonalFilter ? personalInboxSections(sortedRows) : sortedRows);
         renderTabBadges();
     }
 

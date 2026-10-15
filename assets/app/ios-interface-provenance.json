@@ -48,5 +48,15 @@
     "width": 174,
     "height": 174,
     "conversion": "resize 174 174 (3x of 58pt share icon); cwebp"
+  },
+  {
+    "source": "ios/Six7/Six7/Assets.xcassets/message_1.imageset/message_1.png",
+    "sourceSHA256": "62cda3cf0c3615f9ffb513e2b3a691670ad194f671decdf3ceaa86e90d3fbb3d",
+    "web": "assets/app/message-1.webp",
+    "webSHA256": "84204f12ad3fa3dd99b26190623c5051980947fdb8c6dee922685c842fe9201d",
+    "bytes": 20214,
+    "width": 689,
+    "height": 309,
+    "conversion": "cwebp -q 85 -alpha_q 100 (FeedEmptyStateView artwork, original size)"
   }
 ]

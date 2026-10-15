@@ -409,7 +409,7 @@ h3 { font-size: 1.45rem; }
 .feed-body { min-width: 0; }
 .feed-meta { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 5px; color: var(--muted); font-size: .78rem; }
 .feed-meta span { min-width: 0; }
-.feed-meta strong { color: var(--ink); }
+.feed-meta strong, .feed-meta .feed-profile-name { color: var(--ink); }
 .feed-meta time { flex: 0 0 auto; }
 .feed-question { margin-bottom: 5px; font-size: 1.03rem; line-height: 1.18; }
 .feed-answer { color: var(--dark-teal); font-size: .86rem; }
@@ -549,10 +549,38 @@ h3 { font-size: 1.45rem; }
 .mini-button:active { background: rgba(var(--surface-rgb),.85); opacity: var(--button-pressed-opacity); }
 .empty-card { padding: 28px; color: var(--muted); text-align: center; box-shadow: none; border-style: dashed; }
 .feed-empty-state { min-height: 390px; display: grid; align-content: center; justify-items: center; gap: 8px; padding: 36px 22px; text-align: center; }
-.feed-empty-art { width: min(260px, 72vw); display: block; margin-bottom: 12px; }
-.feed-empty-art svg { width: 100%; height: auto; overflow: visible; fill: #fff; stroke: var(--ink); stroke-width: 5; stroke-linejoin: round; filter: drop-shadow(0 5px 0 rgba(0,0,0,.12)); }
-.feed-empty-state > strong { font-size: 1.55rem; }
-.feed-empty-state p { max-width: 330px; margin: 0; color: var(--muted); line-height: 1.35; }
+/* FeedEmptyStateView: message_1 at 300pt wide, title 20, message 16. */
+.feed-empty-artwork { width: min(300px, 80vw); height: auto; margin: 40px 0 44px; }
+.feed-empty-state > strong { font-size: 20px; font-weight: 400; }
+.feed-empty-state p { max-width: 330px; margin: 0; color: var(--muted); font-size: 16px; line-height: 1.35; }
+/* UnifiedSearchResultsView: a grey magnifier, "No results found". */
+.feed-empty-state.search-empty { min-height: 0; align-content: start; gap: 12px; padding-top: 60px; }
+.feed-search-empty-art { color: var(--muted); opacity: .55; }
+.feed-search-empty-art svg { width: 48px; height: 48px; }
+.feed-empty-state.search-empty > strong { color: var(--muted); font-size: 18px; }
+.feed-empty-state.search-empty p { font-size: 14px; }
+/* FeedView+PersonalInbox: New / Earlier, the Give a TBH card, and paging. */
+.inbox-section-header { margin: 14px 24px 2px; color: var(--muted); font-size: 12px; font-weight: 400; letter-spacing: 1px; text-transform: uppercase; }
+.give-tbh-card { width: 100%; display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 13px; margin: 0 0 8px; padding: 12px 14px; border: 3px solid var(--outline); border-radius: 20px; background: var(--soft-pink); color: var(--ink); cursor: pointer; font: inherit; text-align: left; }
+.give-tbh-badge { width: 48px; height: 48px; display: grid; place-items: center; border: 2px solid var(--outline); border-radius: 50%; background: var(--peach); color: #000; font-size: 12px; }
+.give-tbh-copy { display: grid; gap: 3px; min-width: 0; }
+.give-tbh-copy strong { font-size: 18px; font-weight: 400; }
+.give-tbh-copy small { color: var(--muted); font-size: 13px; line-height: 1.3; }
+.give-tbh-chevron svg { width: 16px; height: 16px; stroke-width: 3.2; }
+.give-tbh-list { display: grid; gap: 12px; padding: 18px; }
+.give-tbh-row { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 14px; border: 3px solid var(--outline); border-radius: 20px; background: var(--white); color: var(--ink); cursor: pointer; font: inherit; text-align: left; }
+.give-tbh-row .row-avatar { width: 48px; height: 48px; }
+.give-tbh-row > span:nth-child(2) { display: grid; gap: 4px; min-width: 0; }
+.give-tbh-row strong { font-size: 17px; font-weight: 400; }
+.give-tbh-row small { color: var(--muted); font-size: 14px; }
+.give-tbh-write { padding: 8px 12px; border: 2px solid var(--outline); border-radius: 999px; background: var(--peach); color: #000; font-size: 14px; }
+.feed-load-more { min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--muted); font-size: 14px; }
+.feed-load-more:not(.loading) > * { visibility: hidden; }
+.feed-load-more-spinner { width: 16px; height: 16px; border: 2px solid rgba(0,0,0,.15); border-top-color: var(--ink); border-radius: 50%; animation: play-gear-spin .8s linear infinite; }
+/* School rows: the classmate's avatar and name open their profile. */
+.feed-profile-button { position: relative; display: block; width: 60px; height: 60px; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; }
+.feed-profile-button .row-avatar { width: 100%; height: 100%; }
+.feed-profile-name { display: inline; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; font: inherit; font-weight: inherit; }
 .locked-card { display: grid; justify-items: center; gap: 8px; }
 .locked-card strong { color: var(--ink); font-size: 1.25rem; }
 .locked-card span { font-size: .9rem; }
@@ -1583,7 +1611,8 @@ body:has(dialog.ui-sheet[open]) .toast[popover] { top: calc(env(safe-area-inset-
 .school-feed-controls { display: flex; gap: 10px; overflow-x: auto; overscroll-behavior-x: contain; padding: 0 14px 12px 2px; scroll-padding-inline: 14px; scroll-snap-type: x proximity; scrollbar-width: none; touch-action: pan-x; -webkit-overflow-scrolling: touch; }
 .school-feed-controls::-webkit-scrollbar { display: none; }
 .school-feed-controls > div { display: flex; gap: 6px; flex: 0 0 auto; }
-.school-feed-controls > div + div { min-height: 24px; border-left: 1px solid rgba(0,0,0,.18); padding-left: 10px; }
+.school-feed-divider { flex: 0 0 1px; align-self: center; height: 24px; background: rgba(0,0,0,.18); }
+:root[data-theme="dark"] .school-feed-divider { background: rgba(255,255,255,.22); }
 .school-feed-controls button { height: 36px; padding: 0 13px; border: 2px solid var(--outline); border-radius: 999px; background: rgba(var(--surface-rgb),.8); font: inherit; scroll-snap-align: center; }
 .school-feed-controls button.active { border-color: var(--peach); background: var(--peach); color: var(--on-peach); }
 

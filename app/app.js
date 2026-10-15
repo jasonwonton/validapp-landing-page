@@ -3259,7 +3259,6 @@ function selectFeedClassmate(classmateId) {
     state.myVotesOnly = false;
     state.schoolFeedContent = "all";
     $$("[data-feed]").forEach((button) => button.classList.toggle("active", button.dataset.feed === "school"));
-    $("#myVotesFilter").classList.add("hidden");
     $("#schoolFeedControls").classList.remove("hidden");
     loadFeed(true);
 }
@@ -4195,8 +4194,11 @@ async function loadFeed(reset = false) {
     }
     const status = $("#feedStatus");
     const loadMore = $("#loadMoreFeed");
-    status.textContent = hadVisibleFeed && reset ? "Refreshing…" : "Loading votes...";
-    loadMore.classList.add("hidden");
+    if (reset) {
+        status.textContent = hadVisibleFeed ? "Refreshing…" : "Loading votes...";
+        loadMore.classList.add("hidden");
+    }
+    loadMore.classList.toggle("loading", !reset);
     try {
         let items;
         if (feedType === "personal") items = await api.getPersonalFeed(api.user.id, state.feedOffset, search);
@@ -4221,11 +4223,39 @@ async function loadFeed(reset = false) {
             writeAppCache("feed-personal", state.feedItems.slice(0, 60));
         }
         renderFeed();
+        loadMore.classList.remove("loading");
         loadMore.classList.toggle("hidden", schoolSort === "hottest" || schoolContent === "tbhs" || items.length < 20);
+        // Still in reach after this page (a short list or a tall screen): ask for the next one.
+        requestAnimationFrame(maybeLoadMoreFeed);
     } catch (error) {
         if (generation !== state.feedGeneration) return;
+        loadMore.classList.remove("loading");
         status.textContent = userMessage(error, "Could not load the feed.");
     }
+}
+
+function maybeLoadMoreFeed() {
+    const sentinel = $("#loadMoreFeed");
+    if (!sentinel || sentinel.classList.contains("hidden") || sentinel.classList.contains("loading")) return;
+    if (state.activePanel !== "feed" || isFeedVoteLocked() || $("#feedStatus").textContent) return;
+    if (sentinel.getBoundingClientRect().top > window.innerHeight + 600) return;
+    void loadFeed(false);
+}
+
+// TbhGiveInboxCard → TbhGiveInboxSheet.
+function openGiveTbhSheet() {
+    $("#giveTbhList").innerHTML = state.tbhPendingRequests.map((request) => `<button class="give-tbh-row" type="button" data-give-tbh-request="${escapeHTML(request.id)}">${avatarMarkup({ first_name: request.requester_first_name, last_name: request.requester_last_name, profile_picture_url: request.requester_profile_picture_url }, "row-avatar")}<span><strong>TBH for ${escapeHTML(request.requester_first_name)}</strong><small>${escapeHTML(promptForKey(request.prompt_key).title)}</small></span><span class="give-tbh-write">Write</span></button>`).join("");
+    $("#giveTbhDialog").showModal();
+}
+
+// FeedItemRow.openSchoolProfile: a classmate's avatar or name opens their profile.
+async function openFeedRowProfile(userId) {
+    const known = () => [...(state.classmateDirectory || []), ...(state.classmates || [])].some((classmate) => String(classmate.user_id) === String(userId));
+    if (!known() && !state.classmateDirectory) {
+        try { state.classmateDirectory = await api.getClassmates(api.user.id, "", 500); } catch (_) { /* Answered below. */ }
+    }
+    if (!known()) return showToast("This person doesn’t have an available profile yet.");
+    await openClassmateProfile(userId);
 }
 
 // Kinds: selection | light | medium | heavy | success | warning | error (preferences.js).
@@ -7664,12 +7694,8 @@ function bindEvents() {
         state.myVotesOnly = false;
         state.schoolFeedContent = "all";
         $$(".segment").forEach((segment) => segment.classList.toggle("active", segment === button));
-        $("#myVotesFilter").classList.add("hidden");
         $("#schoolFeedControls").classList.toggle("hidden", state.feedType !== "school");
         $("#personalInboxControls").classList.toggle("hidden", state.feedType !== "personal");
-        $("#myVotesFilter").classList.remove("active");
-        $("#myVotesFilter").setAttribute("aria-pressed", "false");
-        $("#myVotesFilter").textContent = "○ My Votes";
         loadFeed(true);
     }));
     $("#personalInboxControls").addEventListener("click", (event) => {
@@ -7696,13 +7722,6 @@ function bindEvents() {
         }
         if (sort || content) loadFeed(true);
     });
-    $("#myVotesFilter").addEventListener("click", (event) => {
-        state.myVotesOnly = !state.myVotesOnly;
-        event.currentTarget.classList.toggle("active", state.myVotesOnly);
-        event.currentTarget.setAttribute("aria-pressed", String(state.myVotesOnly));
-        event.currentTarget.textContent = `${state.myVotesOnly ? "✓" : "○"} My Votes`;
-        loadFeed(true);
-    });
     $("#feedSearch").addEventListener("input", (event) => {
         state.feedSearch = event.currentTarget.value;
         state.feedClassmateResults = [];
@@ -7713,7 +7732,18 @@ function bindEvents() {
         const classmate = event.target.closest("[data-feed-classmate]");
         if (classmate) selectFeedClassmate(classmate.dataset.feedClassmate);
     });
-    $("#loadMoreFeed").addEventListener("click", () => loadFeed(false));
+    $("#giveTbhList").addEventListener("click", (event) => {
+        const request = event.target.closest("[data-give-tbh-request]");
+        if (!request) return;
+        $("#giveTbhDialog").close();
+        openTbhComposer(request.dataset.giveTbhRequest);
+    });
+    // FeedView+PersonalInbox pages ahead on its own: a sentinel below the list.
+    if ("IntersectionObserver" in window) {
+        new IntersectionObserver((entries) => {
+            if (entries.some((entry) => entry.isIntersecting)) maybeLoadMoreFeed();
+        }, { rootMargin: "0px 0px 600px 0px" }).observe($("#loadMoreFeed"));
+    }
     for (const root of [$('#feedDetailDialog'), $('#tbhDetailDialog')]) root.addEventListener('click', event => {
         const send = event.target.closest('[data-send-content]');
         if (send) void sendContentLink(send);
@@ -7734,6 +7764,9 @@ function bindEvents() {
         const reactors = event.target.closest("[data-reactors]");
         if (reactionPicker) return openReactionPicker(reactionPicker.dataset.reactionPicker, reactionPicker);
         if (reactors) return openReactorList(reactors.dataset.reactors);
+        if (event.target.closest("[data-give-tbh]")) return openGiveTbhSheet();
+        const feedProfile = event.target.closest("[data-feed-profile]");
+        if (feedProfile) return void openFeedRowProfile(feedProfile.dataset.feedProfile);
         const tbhRequest = event.target.closest("[data-tbh-request]");
         const tbhDismiss = event.target.closest("[data-tbh-dismiss]");
         const tbhSuppress = event.target.closest("[data-tbh-suppress]");

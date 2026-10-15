@@ -170,6 +170,7 @@ export class DemoAPI {
                 image_url: "../assets/app/anonymous.webp",
                 question_answer_id: 9003,
                 voted_for_name: "Maya Chen",
+                contact_user_id: "classmate-1",
                 voted_for_profile_picture_url: "../assets/app/anonymous.webp",
                 voter_gender: "female",
                 voter_grade: "Junior",
@@ -192,6 +193,7 @@ export class DemoAPI {
                 question_text: "Who is most likely to start a company?",
                 question_answer_id: 9004,
                 voted_for_name: "Noah Williams",
+                contact_user_id: "classmate-2",
                 voted_for_profile_picture_url: "../assets/app/lock.webp",
                 voter_gender: "male",
                 voter_grade: "Sophomore",
@@ -555,12 +557,24 @@ export class DemoAPI {
     }
 
     async getPersonalFeed(_userId, offset = 0) {
+        // ?feedpages=1: 45 Inbox polls served 20 at a time, for automatic paging.
+        if (new URLSearchParams(location.search).get("feedpages") === "1") {
+            this.pagedPersonalFeed ||= [...this.personalFeed, ...Array.from({ length: 45 - this.personalFeed.length }, (_, index) => ({
+                ...this.personalFeed[index % this.personalFeed.length],
+                question_answer_id: 9100 + index,
+                question_text: `Older poll ${index + 1}`,
+                timestamp: new Date(Date.now() - (3 + index) * 86_400_000).toISOString(),
+            }))];
+            return this.pagedPersonalFeed.slice(offset, offset + 20).map((item) => ({ ...item }));
+        }
         return offset ? [] : this.personalFeed.map((item) => ({ ...item }));
     }
 
     async getSchoolFeed(_userId, cursor = null, _search = "", sort = "recent") {
         if (cursor) return [];
         const items = this.schoolFeed.map((item) => ({ ...item }));
+        // ?nominations=1: a School nomination ("👑 Ava Patel got nominated").
+        if (new URLSearchParams(location.search).get("nominations") === "1") items.unshift({ ...items[0], question_answer_id: 9010, timestamp: new Date(Date.now() - 60_000).toISOString(), question_text: "Who should be Homecoming royalty?", is_nomination: true, voted_for_name: "Ava Patel", selected_contact_name: "Ava Patel", contact_user_id: "classmate-3", voted_for_profile_picture_url: "../assets/app/pencil-clipboard.webp", presented_options: [] });
         if (sort === "hottest") items.sort((left, right) => Number(right.reaction_count || 0) - Number(left.reaction_count || 0));
         return items;
     }

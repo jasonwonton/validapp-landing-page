@@ -61,7 +61,6 @@
                     </div>
                     <div class="feed-tools">
                         <label class="feed-search"><span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg></span><input id="feedSearch" type="search" placeholder="Search your inbox..." autocomplete="off"></label>
-                        <button id="myVotesFilter" class="filter-button hidden" type="button" aria-pressed="false">○ My Votes</button>
                     </div>
                     <div id="personalInboxControls" class="personal-inbox-controls" aria-label="Inbox filters">
                         <div class="personal-inbox-filter-rail" role="group" aria-label="Inbox content">
@@ -74,6 +73,7 @@
                     </div>
                     <div id="schoolFeedControls" class="school-feed-controls hidden" aria-label="School feed filters">
                         <div role="group" aria-label="School feed order"><button class="active" type="button" data-school-sort="recent">Recent</button><button type="button" data-school-sort="hottest">Hottest</button></div>
+                        <span class="school-feed-divider" aria-hidden="true"></span>
                         <div role="group" aria-label="School feed content"><button class="active" type="button" data-school-content="all">All</button><button type="button" data-school-content="tbhs">TBHs</button><button type="button" data-school-content="my_votes">My Votes</button></div>
                     </div>
                     <div id="feedClassmateResults" class="feed-classmate-results hidden"></div>
@@ -141,7 +141,7 @@
                             <p id="feedDetailStatus" class="status-message" role="status"></p>
                         </div>
                     </section>
-                    <button id="loadMoreFeed" class="secondary-button hidden" type="button">Load more</button>
+                    <div id="loadMoreFeed" class="feed-load-more hidden" aria-live="polite"><span class="feed-load-more-spinner" aria-hidden="true"></span><span>Loading more...</span></div>
                 </div>
             </section>
 
@@ -701,6 +701,11 @@
         <div id="reactionPickerOptions" class="reaction-picker-options"></div>
     </dialog>
 
+    <!-- TbhGiveInboxSheet: the waiting TBH requests, each opening the composer. -->
+    <dialog id="giveTbhDialog" class="modal give-tbh-dialog" aria-labelledby="giveTbhTitle">
+        <div class="sheet-heading"><button class="sheet-heading-control" type="button" data-close-dialog>Close</button><h2 id="giveTbhTitle">Give a TBH</h2><span></span></div>
+        <div id="giveTbhList" class="give-tbh-list"></div>
+    </dialog>
     <dialog id="reactorListDialog" class="modal reactor-list-dialog" aria-labelledby="reactorListTitle">
         <div class="sheet-heading"><button class="sheet-heading-control" type="button" data-close-dialog aria-label="Done">Done</button><h2 id="reactorListTitle">Reactions</h2><span></span></div>
         <div id="reactorList" class="reactor-list"></div>
