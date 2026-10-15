@@ -99,6 +99,11 @@ const paths = {
     'ellipsis-circle': '<circle cx="12" cy="12" r="9.5"/><circle cx="7.6" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="16.4" cy="12" r="1.2" fill="currentColor" stroke="none"/>',
     // SF Symbols checkmark.seal.fill ("Valid team", BoostFeedbackSheet.swift).
     'seal-check': '<path fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M12.00 1.60 14.23 3.69 17.20 2.99 18.08 5.92 21.01 6.80 20.31 9.77 22.40 12.00 20.31 14.23 21.01 17.20 18.08 18.08 17.20 21.01 14.23 20.31 12.00 22.40 9.77 20.31 6.80 21.01 5.92 18.08 2.99 17.20 3.69 14.23 1.60 12.00 3.69 9.77 2.99 6.80 5.92 5.92 6.80 2.99 9.77 3.69Z"/><path d="m8 12.2 2.8 2.8 5.2-5.6" stroke="var(--seal-check-mark, #fff)" stroke-width="2.2"/>',
+    // Send To (CaptureSendSheet, SendToRecipientList): SF Symbols
+    // checkmark.circle.fill, circle and circle.dashed (the My Story row).
+    'checkmark-circle-filled': '<circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="m7.4 12.3 3.1 3.1 6.1-6.6" stroke="var(--check-ink, #fff)" stroke-width="2.4"/>',
+    'circle-outline': '<circle cx="12" cy="12" r="9.5"/>',
+    'circle-dashed': '<circle cx="12" cy="12" r="9.5" stroke-dasharray="3.2 2.75" stroke-width="2.4"/>',
     // SF Symbols crown.fill (GodModeCard.swift).
     'crown-filled': '<path fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" d="M3.6 8.6 7.6 14 12 7.2l4.4 6.8 4-5.4-1.5 8.6H5.1Z"/><circle cx="3.4" cy="7.6" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="5.4" r="1.6" fill="currentColor" stroke="none"/><circle cx="20.6" cy="7.6" r="1.6" fill="currentColor" stroke="none"/><rect x="5.1" y="18.4" width="13.8" height="2.6" rx="1.1" fill="currentColor" stroke="none"/>',
 };

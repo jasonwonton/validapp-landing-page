@@ -93,6 +93,14 @@ export function confirmSheet({ title, message = "", confirmLabel = "OK", cancelL
 }
 
 /**
+ * A one-button alert ("Couldn't send" / OK), drawn as the same card.
+ * @returns {Promise<void>} once it is dismissed.
+ */
+export function alertSheet({ title, message = "", confirmLabel = "OK" } = {}) {
+    return presentSheet({ title, message, className: "ui-sheet-alert", confirmLabel, result: () => undefined, cancelled: undefined });
+}
+
+/**
  * Two real choices plus dismissal, e.g. an offer with a way past it.
  * @returns {Promise<"confirm" | "secondary" | null>} null on Escape or a backdrop tap.
  */
