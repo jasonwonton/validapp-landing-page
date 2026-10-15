@@ -61,6 +61,7 @@ const APP_SHELL = [
     "./thumbhash.js",
     "./play-choices.js",
     "./question-attribution.js",
+    "./notification-soft-prompt.js",
     "./chat/outbox.js",
     "./chat/thumbhash.js",
     "./chat/realtime.js",
