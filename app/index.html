@@ -114,6 +114,7 @@
                             </form>
                     </section>
                     <div id="feedStatus" class="inline-status" role="status"></div>
+                    <div id="weeklyGameRoot" class="weekly-game-root" hidden></div>
                     <div id="feedList" class="card-list"></div>
                     <section id="feedDetailDialog" class="detail-screen hidden" role="dialog" aria-modal="true" aria-label="Poll details">
                         <div class="detail-screen-header">
@@ -858,14 +859,19 @@
         </div>
     </dialog>
 
-    <dialog id="nominationDialog" class="modal">
+    <dialog id="nominationDialog" class="modal nomination-dialog" aria-labelledby="nominationTitle">
         <div class="nomination-modal">
-            <div class="modal-heading">
-                <h2>Nominate someone</h2>
-                <button class="icon-button" aria-label="Close" type="button" data-close-dialog>×</button>
+            <div class="nomination-toolbar">
+                <button class="nomination-close" type="button" data-close-dialog>Close</button>
+                <h2 id="nominationTitle">Nominate Someone</h2>
+                <span aria-hidden="true"></span>
             </div>
-            <p class="form-hint">Don't think the four choices fit? Pick another classmate.</p>
-            <label class="feed-search nomination-search"><span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg></span><input id="nominationSearch" type="search" placeholder="Search classmates..." autocomplete="off"></label>
+            <p class="form-hint">Don't think any of the options fit? Nominate someone for the poll!</p>
+            <div id="nominationTabs" class="nomination-tabs" role="tablist" aria-label="Who to nominate">
+                <button class="active" type="button" role="tab" data-nomination-tab="classmates" aria-selected="true">Classmates (0)</button>
+                <button type="button" role="tab" data-nomination-tab="contacts" aria-selected="false">Not on Valid (0)</button>
+            </div>
+            <label class="feed-search nomination-search"><span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg></span><input id="nominationSearch" type="search" placeholder="Search classmates" autocomplete="off" aria-label="Search"></label>
             <div id="nominationList" class="nomination-list"></div>
             <p id="nominationStatus" class="status-message" role="status"></p>
         </div>

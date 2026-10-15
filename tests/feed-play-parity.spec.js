@@ -140,7 +140,7 @@ test('play lock countdown uses hours and minutes like PlayLockedView', async ({ 
     for (let answered = 0; answered < 4; answered += 1) {
         await page.locator('#playCard .play-card:not(.play-card-leaving) [data-choice]').first().click();
     }
-    await page.getByRole('button', { name: 'W aura' }).click();
+    await page.getByRole('button', { name: 'w aura' }).click();
     await expect(page.locator('#playLockMessage')).toHaveText(/^Unlocks in 1h 5m$/);
 });
 
@@ -151,19 +151,19 @@ for (const via of ['Done button', 'history.back()']) {
         await signIn(page);
         await page.getByRole('button', { name: 'School', exact: true }).click();
         await expect(page.locator('#feedList [data-feed-detail]').first()).toBeVisible();
-        await page.evaluate(() => window.scrollTo(0, 600));
-        await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(600);
+        await page.evaluate(() => window.scrollTo(0, 500));
+        await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(500);
         await page.locator('#feedList [data-feed-detail]').last().evaluate((node) => node.click());
         await expect(page.locator('#feedDetailDialog')).toBeVisible();
         if (via === 'Done button') await page.locator('[data-close-feed-detail]').click();
         else await page.evaluate(() => history.back());
         await expect(page.locator('#feedDetailDialog')).toBeHidden();
         await page.waitForTimeout(150);
-        expect(await page.evaluate(() => Math.round(window.scrollY))).toBe(600);
+        expect(await page.evaluate(() => Math.round(window.scrollY))).toBe(500);
         // Tab switching still restores each tab's own position.
         await page.getByRole('button', { name: 'Profile', exact: true }).click();
         await page.getByRole('button', { name: 'Feed', exact: true }).click();
-        await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(600);
+        await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(500);
     });
 }
 

@@ -21,12 +21,12 @@ export function resolveQuestionAttribution({ showsAttribution, isAnonymous, iden
     return { kind: "anonymous", viewerIsAuthor: false };
 }
 
-/** A Play question from GET /questions/unanswered. Web Play offers no reveal. */
+/** A Play question from GET /questions/unanswered; `submitter_revealed` after a God Mode reveal. */
 export function playQuestionAttribution(question, viewerUserId) {
     return resolveQuestionAttribution({
         showsAttribution: Boolean(question?.is_user_submitted),
         isAnonymous: Boolean(question?.is_anonymous),
-        identityRevealed: false,
+        identityRevealed: question?.submitter_revealed === true,
         submitterName: question?.submitted_by_name,
         submitterUserId: question?.submitted_by_user_id,
         viewerUserId,

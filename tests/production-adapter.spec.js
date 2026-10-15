@@ -1144,7 +1144,7 @@ test("real adapter submits a Play vote and multipart school question", async ({ 
     await page.getByRole("button", { name: "Play", exact: true }).click();
     await expect(page.getByText("Who gives the best advice?")).toBeVisible();
     await page.locator("[data-choice]").first().click();
-    await expect(page.getByRole("heading", { name: "Congrats!" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Congrats", exact: true })).toBeVisible();
     const vote = requests.find((request) => request.path.endsWith("/question-answers"));
     expect(vote.authorization).toBe("Bearer session-token");
     expect(vote.body).toMatchObject({

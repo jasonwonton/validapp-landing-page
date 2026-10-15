@@ -720,7 +720,7 @@ test("play supports shuffle and paid classmate nominations", async ({ page }) =>
     await page.getByRole("button", { name: /Shuffle/ }).click();
     await page.getByRole("button", { name: /Nominate/ }).click();
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByRole("heading", { name: "Nominate someone" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "Nominate Someone" })).toBeVisible();
     await expect(dialog.getByText("100").first()).toBeVisible();
     const candidate = dialog.locator("[data-nomination]").first();
     const name = await candidate.locator("strong").textContent();
@@ -745,13 +745,13 @@ test("play exposes safety controls for classmate-submitted polls", async ({ page
     await page.getByRole("button", { name: "Play", exact: true }).click();
     await page.locator("[data-choice]").first().click();
     await expect(page.getByText("Who should plan the senior trip?")).toBeVisible();
-    await expect(page.getByRole("menuitem", { name: "Report question" })).toBeHidden();
-    await expect(page.getByRole("menuitem", { name: "Block submitter" })).toBeHidden();
+    await expect(page.getByRole("menuitem", { name: "Report a Safety Issue" })).toBeHidden();
+    await expect(page.getByRole("menuitem", { name: "Block User" })).toBeHidden();
     await page.getByRole("button", { name: "More question actions" }).click();
-    await expect(page.getByRole("menuitem", { name: "Report question" })).toBeVisible();
-    await expect(page.getByRole("menuitem", { name: "Block submitter" })).toBeVisible();
-    await page.getByRole("menuitem", { name: "Report question" }).click();
-    await page.locator(".ui-sheet").getByRole("button", { name: "Report" }).click();
+    await expect(page.getByRole("menuitem", { name: "Report a Safety Issue" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Block User" })).toBeVisible();
+    await page.getByRole("menuitem", { name: "Report a Safety Issue" }).click();
+    await page.locator(".ui-sheet").getByRole("button", { name: "Report for Review" }).click();
     await expect(page.locator("#toast")).toContainText("Reported to Valid");
     await expect(page.getByText("Who gives the best advice?")).toBeVisible();
 });
@@ -762,10 +762,10 @@ test("completing a poll set celebrates earned aura before cooldown", async ({ pa
     for (let answered = 0; answered < 4; answered += 1) {
         await page.locator("[data-choice]").first().click();
     }
-    await expect(page.getByRole("heading", { name: "Congrats!" })).toBeVisible();
-    await expect(page.getByText("You just earned 20 aura")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Congrats", exact: true })).toBeVisible();
+    await expect(page.getByText("you just earned 20 aura")).toBeVisible();
     await expect(page.locator("#auraCount")).toHaveText("1,300");
-    await page.getByRole("button", { name: "W aura" }).click();
+    await page.getByRole("button", { name: "w aura" }).click();
     await expect(page.getByRole("heading", { name: "Next Poll Set Locked" })).toBeVisible();
     await expect(page.locator("#playLockMessage")).toContainText(/Unlocks in (\d+s|1m)$/);
 });

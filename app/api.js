@@ -691,10 +691,11 @@ export class ValidAPI {
         return this.request(`/users/${userId}/invites/status`);
     }
 
-    createInvite(userId, shareChannel = "web") {
+    createInvite(userId, shareChannel = "web", { surface = null } = {}) {
         return this.request(`/users/${userId}/invites`, {
             method: "POST",
-            body: JSON.stringify({ share_channel: shareChannel }),
+            // invite_surface names the screen for the invite funnel (play_lock, vote_prompt…).
+            body: JSON.stringify(surface ? { share_channel: shareChannel, invite_surface: surface } : { share_channel: shareChannel }),
         });
     }
 

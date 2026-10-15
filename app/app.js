@@ -13,6 +13,7 @@ import { showToast } from "./toast.js";
 import { userMessage } from "./user-message.js";
 import { answerPayload, buildChoicePool, canStartPlay, contactUploadPayload, selectPlayChoices, summarizeContactSync } from "./play-choices.js";
 import { ANONYMOUS_SUBMITTER_NAME, AUTHOR_ANONYMITY_HINT, feedQuestionAttribution, playQuestionAttribution } from "./question-attribution.js";
+import { askForNotifications, configureNotificationSoftPrompt } from "./notification-soft-prompt.js";
 
 // The localhost-only demo fixtures load on demand so they never join the
 // production module graph or the service-worker shell.
@@ -29,44 +30,175 @@ let weeklyGame = null;
 let weeklyGameOpening = false;
 let weeklyGameGeneration = 0;
 
-async function refreshWeeklyGame() {
-    if (!api.user?.id || !api.getWeeklyGame) { document.querySelector('#weeklyGameButton')?.remove(); return; }
+// The Game of the Week in the Inbox (FeedView+PersonalInbox): the first row
+// of the "All" list for a student with a school. One game is a row with its
+// rank and a small × to hide it; two or three live games are a row of tiles
+// (EasterEggGamesCard). Hidden, it leaves a "Show game" row to bring it back.
+// The server already drops games a browser can't host from `games`.
+const weeklyGameState = { featured: null, slots: [], loadedAt: 0, ranks: new Map(), entry: null, artMarkup: null };
+const WEEKLY_GAME_RANK_MAX_AGE_MS = 2 * 60_000;
+const weeklyGameHiddenKey = (userId) => `valid:weekly-game-hidden:${userId}`;
+
+function weeklyGameHidden() {
+    const key = weeklyGameHiddenKey(api.user?.id);
+    try { return sessionStorage.getItem(key) === "1" || localStorage.getItem(key) === "1"; } catch (_) { return false; }
+}
+
+// EasterEggGameStore.hideRow: hidden for this session, and for good while
+// the game still needs discovering.
+function setWeeklyGameHidden(hidden) {
+    const key = weeklyGameHiddenKey(api.user?.id);
+    try {
+        if (hidden) {
+            sessionStorage.setItem(key, "1");
+            if (weeklyGameState.featured?.discovery_required) localStorage.setItem(key, "1");
+        } else {
+            sessionStorage.removeItem(key);
+            localStorage.removeItem(key);
+        }
+    } catch (_) { /* Without storage the row comes back on the next visit. */ }
+}
+
+function resetWeeklyGameEntry() {
+    Object.assign(weeklyGameState, { featured: null, slots: [], loadedAt: 0, entry: null });
+    weeklyGameState.ranks.clear();
+    const root = document.querySelector("#weeklyGameRoot");
+    if (root) { root.replaceChildren(); root.hidden = true; }
+}
+
+function weeklyGameArtMarkup(release, size) {
+    return weeklyGameState.artMarkup?.(release, size) || "";
+}
+
+// PlayCongratsView: "Play ‹title›" below "w aura" when the game is open to
+// this student (a school, and a game the server offers).
+function postPlayWeeklyGame() {
+    if (!state.profile?.school_id || !weeklyGameState.entry || !weeklyGameState.featured?.release) return null;
+    return { release: weeklyGameState.featured.release };
+}
+
+const weeklyGameHome = (release) => (release?.home && typeof release.home === "object" ? release.home : {});
+const weeklyGameShowsScore = (release) => weeklyGameHome(release).score !== false && release?.score_validator !== "unranked-v1";
+
+// EasterEggGameSlot.daysLeft: `ends_on` is a US Pacific date.
+function weeklyGameDaysLeft(endsOn, now = new Date()) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(endsOn || "")) return null;
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+    return Math.round((Date.parse(`${endsOn}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
+}
+
+function weeklyGameSlotTag(slot) {
+    if (slot.label) return slot.label;
+    const days = weeklyGameDaysLeft(slot.ends_on);
+    if (days !== null) {
+        if (days === 0) return "Ends today";
+        if (days === 1) return "Ends tomorrow";
+        const [year, month, day] = slot.ends_on.split("-").map(Number);
+        return `Ends ${new Date(year, month - 1, day).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+    }
+    const rank = weeklyGameShowsScore(slot.release) ? weeklyGameState.ranks.get(slot.release.id)?.rank : null;
+    if (slot.kind === "weekly") return rank ? `This week · #${rank}` : "This week";
+    return rank ? `#${rank}` : "Play";
+}
+
+// The small line under a tile: Admin's caption, or the end date in its last week.
+function weeklyGameSlotCaption(slot) {
+    if (slot.label) return slot.label;
+    const days = weeklyGameDaysLeft(slot.ends_on);
+    return days !== null && days <= 7 ? weeklyGameSlotTag(slot) : "";
+}
+
+function weeklyGamePledge(release) {
+    const home = weeklyGameHome(release);
+    return home.mode === "campaign" && home.title && home.cta && Array.isArray(home.chips) ? home.chips[0] || "" : "";
+}
+
+function renderWeeklyGameEntry() {
+    const root = document.querySelector("#weeklyGameRoot");
+    if (!root) return;
+    const release = weeklyGameState.featured?.release;
+    if (!state.profile?.school_id || !weeklyGameState.entry || !release) {
+        root.replaceChildren();
+        root.hidden = true;
+        return;
+    }
+    root.hidden = false;
+    const hideButton = (label) => `<button class="inbox-row-hide" type="button" data-weekly-game-hide aria-label="${escapeHTML(label)}">${uiIcon("close")}</button>`;
+    if (weeklyGameHidden()) {
+        root.innerHTML = `<button class="weekly-game-recovery" type="button" data-weekly-game-restore aria-label="Show Game of the Week">${uiIcon("gamecontroller")}<span>Game of the Week</span><strong>Show game</strong></button>`;
+        return;
+    }
+    const slots = weeklyGameState.slots;
+    if (slots.length >= 2) {
+        root.innerHTML = `<div class="weekly-game-row weekly-game-tiles">
+            <div class="weekly-game-tile-row">${slots.slice(0, 3).map((slot, index) => {
+                const caption = weeklyGameSlotCaption(slot);
+                const pledge = weeklyGamePledge(slot.release);
+                const tag = weeklyGameSlotTag(slot);
+                const label = [slot.release.title, pledge, tag === "Play" ? "" : tag].filter(Boolean).join(", ");
+                return `<button class="weekly-game-tile" type="button" data-weekly-game-tile="${index}" aria-label="${escapeHTML(label)}"><span class="weekly-game-tile-icon">${weeklyGameArtMarkup(slot.release, 44)}${pledge ? `<span class="weekly-game-pledge">${escapeHTML(pledge)}</span>` : ""}</span><span class="weekly-game-tile-name">${escapeHTML(slot.release.title || "Game")}</span>${caption ? `<small>${escapeHTML(caption)}</small>` : ""}</button>`;
+            }).join("")}</div>
+            ${hideButton("Hide games")}
+        </div>`;
+        return;
+    }
+    const home = weeklyGameHome(release);
+    const rank = weeklyGameShowsScore(release) ? weeklyGameState.ranks.get(release.id)?.rank : null;
+    const subtitle = home.feed_subtitle || `${release.title || "Play"}${rank ? ` · #${rank}` : ""}`;
+    root.innerHTML = `<div class="weekly-game-row">
+        <button class="weekly-game-row-main" type="button" data-weekly-game-open><span class="weekly-game-row-art">${weeklyGameArtMarkup(release, 48)}</span><span class="weekly-game-row-copy"><strong>${escapeHTML(home.feed_title || "Game of the Week")}</strong><small>${escapeHTML(subtitle)}</small></span>${uiIcon("next")}</button>
+        ${hideButton("Hide Game of the Week")}
+    </div>`;
+}
+
+// The school rank under each game (GamesModel.board.me). Reading a board
+// never records discovery or starts a run.
+async function refreshWeeklyGameRanks(generation, { force = false } = {}) {
+    const releases = (weeklyGameState.slots.length >= 2 ? weeklyGameState.slots.map((slot) => slot.release) : [weeklyGameState.featured?.release])
+        .filter((release) => release?.id && weeklyGameShowsScore(release))
+        .filter((release) => force || Date.now() - (weeklyGameState.ranks.get(release.id)?.at || 0) > WEEKLY_GAME_RANK_MAX_AGE_MS);
+    if (!releases.length || !api.getWeeklyGameLeaderboard) return;
+    await Promise.all(releases.map(async (release) => {
+        const board = await api.getWeeklyGameLeaderboard(release.id).catch(() => null);
+        if (generation !== weeklyGameGeneration || !board) return;
+        weeklyGameState.ranks.set(release.id, { rank: board.unlocked === false ? null : board.me?.rank || null, at: Date.now() });
+    }));
+    if (generation === weeklyGameGeneration) renderWeeklyGameEntry();
+}
+
+async function refreshWeeklyGame({ forceRanks = false } = {}) {
+    if (!api.user?.id || !api.getWeeklyGame) { resetWeeklyGameEntry(); return; }
     const generation = ++weeklyGameGeneration;
     try {
         const result = await api.getWeeklyGame();
         if (generation !== weeklyGameGeneration || !api.user?.id) return;
-        // Follow the selected weekly release. Games this web player can't run
-        // yet still appear, opening a friendly iOS-app state; only the
-        // server's generic update notice (no game to name) stays hidden.
-        const { weeklyGameEntry } = await import('./weekly-game/compat.js');
+        const [{ weeklyGameEntry }, { gameArtMarkup }] = await Promise.all([import('./weekly-game/compat.js'), import('./weekly-game/home.js')]);
         if (generation !== weeklyGameGeneration) return;
-        const entry = weeklyGameEntry(result.release);
-        if (!entry) { document.querySelector('#weeklyGameButton')?.remove(); return; }
-        let button = document.querySelector('#weeklyGameButton');
-        if (!button) {
-            button = document.createElement('button');
-            button.id = 'weeklyGameButton'; button.className = 'weekly-game-entry'; button.type = 'button';
-            button.innerHTML = '<span class="weekly-game-entry-art" aria-hidden="true"></span><span><small id="weeklyGameLabel">WEEKLY GAME</small><strong id="weeklyGameTitle"></strong></span><span class="weekly-game-entry-arrow" aria-hidden="true">›</span>';
-            button.addEventListener('click', openWeeklyGame);
-            document.querySelector('#storiesRoot').insertAdjacentElement('afterend', button);
-        }
-        document.querySelector('#weeklyGameTitle').textContent = result.release?.title || 'Weekly game';
-        document.querySelector('#weeklyGameLabel').textContent = entry === 'play' ? 'WEEKLY GAME' : 'WEEKLY GAME · IN THE APP';
-        const artwork = /^https:\/\/validappcdn\.com\/games\/art\/[\w.-]+\.png$/.test(result.release?.artwork_url || '') ? result.release.artwork_url : null;
-        button.querySelector('.weekly-game-entry-art').innerHTML = result.release?.game_id === '67-challenge' ? '67' : result.release?.game_id === 'rose-flight' ? '<img src="/assets/weekly-game/rose.png" alt="" width="48" height="48" decoding="async">'
-            : artwork ? mediaImageMarkup(artwork, { alt: '', className: 'weekly-game-entry-artwork', loading: 'eager', attributes: 'width="52" height="52"' }) : uiIcon('camera');
+        weeklyGameState.artMarkup = gameArtMarkup;
+        weeklyGameState.featured = result || null;
+        // Follow the selected weekly release. A game this web player can't run
+        // yet still appears and its home says where to play it; only the
+        // server's generic update notice (no game to name) stays hidden.
+        weeklyGameState.entry = weeklyGameEntry(result?.release);
+        weeklyGameState.slots = (Array.isArray(result?.games) ? result.games : [])
+            .filter((slot) => slot?.release && weeklyGameEntry(slot.release))
+            .slice(0, 3);
+        weeklyGameState.loadedAt = Date.now();
+        renderWeeklyGameEntry();
+        void refreshWeeklyGameRanks(generation, { force: forceRanks });
     } catch (_) { /* Feed remains usable if the optional game request fails. */ }
 }
 
-async function openWeeklyGame() {
+async function openWeeklyGame({ release = null, launch = false } = {}) {
     if (weeklyGameOpening || !api.user?.id) return;
     const userId = api.user.id;
     weeklyGameOpening = true;
     try {
         const { createWeeklyGame } = await import('./weekly-game/index.js');
         if (api.user?.id !== userId) return;
-        weeklyGame ||= createWeeklyGame({ api, getProfilePhoto: () => state.profile?.profile_picture_url });
-        await weeklyGame.open();
+        // Closing a game refreshes its rank on the Inbox row.
+        weeklyGame ||= createWeeklyGame({ api, getProfilePhoto: () => state.profile?.profile_picture_url, onClose: () => { void refreshWeeklyGame({ forceRanks: true }); } });
+        await weeklyGame.open({ release, launch });
     } catch (error) { showToast(userMessage(error, 'Could not open the weekly game.')); }
     finally { weeklyGameOpening = false; }
 }
@@ -875,7 +1007,9 @@ function toggleDetailActionMenu(button) {
 function showSignedOut(message = "") {
     weeklyGameGeneration++;
     weeklyGame?.close();
-    document.querySelector('#weeklyGameButton')?.remove();
+    resetWeeklyGameEntry();
+    stopPlayInviteRefresh();
+    document.querySelector("#playInviteDialog")?.close();
     void presenceLifecycle?.stop();
     document.querySelectorAll(".activity-settings-dialog").forEach(dialog => dialog.close());
     clearInterval(state.playLockTimer);
@@ -4299,7 +4433,7 @@ function choicesForQuestion(question) {
 }
 
 function choiceMarkup(choice) {
-    return `<button class="choice-button" type="button" data-choice="${escapeHTML(choice.id)}"><span>${escapeHTML(choice.name)}</span></button>`;
+    return `<button class="choice-button" type="button" data-choice="${escapeHTML(choice.id)}"><span>${escapeHTML(cleanDisplayName(choice.name) || choice.name)}</span></button>`;
 }
 
 // Contacts the server matched to accounts sort first in the classmate directory.
@@ -4341,20 +4475,183 @@ async function loadPlayRoster() {
     return rebuildPlayPool();
 }
 
-function renderNotEnoughFriends() {
-    $("#playProgress").textContent = "";
-    $("#playCard").innerHTML = `<div class="empty-card locked-card"><img loading="lazy" decoding="async" class="empty-state-art" src="../assets/app/lock.webp" alt=""><strong>Add more friends to play Valid.</strong><span>You need at least four classmates or contacts.</span><button class="primary-button" type="button" data-find-classmates>Find classmates</button><button class="secondary-button" type="button" data-invite-unlock>Share an invite</button></div>`;
+// Play shows its streak / "Question X of Y" / aura row only while answering
+// (PlayGameView.counterHeader); loading, congrats and lock screens have none.
+function setPlayHeaderVisible(visible) {
+    $("#playPanel").classList.toggle("play-header-hidden", !visible);
+    if (!visible) $("#playProgress").textContent = "";
 }
 
+// PlayView.LoadingView: a 96 pt spinning gear, title and subtitle, centred.
+function renderPlayLoading() {
+    setPlayHeaderVisible(false);
+    const card = $("#playCard");
+    card.replaceChildren();
+    delete card.dataset.questionId;
+    $("#playStatus").innerHTML = `<span class="play-loading-state"><img class="play-loading-gear" src="../assets/app/setting-gear.webp" width="96" height="96" decoding="async" alt=""><strong>Loading polls...</strong><span>Spinning up your classmates’ questions.</span></span>`;
+}
+
+function renderNotEnoughFriends() {
+    setPlayHeaderVisible(false);
+    $("#playCard").innerHTML = `<div class="empty-card locked-card"><img loading="lazy" decoding="async" class="empty-state-art" src="../assets/app/lock.webp" alt=""><strong>Add more classmates to play Valid.</strong><span>You need at least four classmates or contacts.</span><button class="primary-button" type="button" data-find-classmates>Find classmates</button><button class="secondary-button" type="button" data-invite-unlock>Share an invite</button></div>`;
+}
+
+// String.cleanedForDisplay: names without emoji or doubled spaces.
+function cleanDisplayName(value) {
+    return String(value || "")
+        .replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\u{FE0F}\u{200D}\u{20E3}]/gu, "")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+// PlayLockedView.firstName: "Maya" from "Maya Lopez", the whole name when it has no space.
+function playContactFirstName(contact) {
+    const cleaned = cleanDisplayName(contact?.name);
+    return cleaned.split(" ")[0] || "your friend";
+}
+
+const playContactKey = (contact) => String(contact?.hashed_phone_number || contact?.phone_number || contact?.name || "");
+
+// SuggestedInviteHistory: friends this account already invited, so the next
+// lock names someone new. Per account, the most recent 50.
+const playInvitedKey = (userId) => `valid:play:suggested-invites:${userId}`;
+
+function readPlayInvited() {
+    try { return new Set(JSON.parse(localStorage.getItem(playInvitedKey(api.user?.id)) || "[]")); }
+    catch (_) { return new Set(); }
+}
+
+function recordPlayInvited(contact) {
+    const key = playContactKey(contact);
+    if (!api.user?.id || !key) return;
+    try {
+        const keys = [...readPlayInvited()].filter((item) => item !== key);
+        keys.push(key);
+        localStorage.setItem(playInvitedKey(api.user.id), JSON.stringify(keys.slice(-50)));
+    } catch (_) { /* Without storage the same friend may be suggested again. */ }
+}
+
+// InviteFriendsViewModel.prepareContacts: uploaded contacts not on Valid,
+// suggested friends first (most votes first), then mutuals, votes and name.
+function invitablePlayContacts() {
+    const suggestionsFirst = state.config?.enable_invite_suggestions !== false;
+    const seen = new Set();
+    return (state.playContacts || [])
+        .filter((contact) => {
+            const key = playContactKey(contact);
+            if (contact?.is_six7_user || contact?.user_id || !cleanDisplayName(contact?.name) || !key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        })
+        .sort((first, second) => {
+            const firstSuggested = first.invite_suggested === true;
+            const secondSuggested = second.invite_suggested === true;
+            const votes = (contact) => Math.max(0, Number(contact.vote_count || 0));
+            if (suggestionsFirst && firstSuggested !== secondSuggested) return firstSuggested ? -1 : 1;
+            if (suggestionsFirst && firstSuggested && votes(first) !== votes(second)) return votes(second) - votes(first);
+            const mutuals = (contact) => Math.max(0, Number(contact.recommendation_strength || 0));
+            if (mutuals(first) !== mutuals(second)) return mutuals(second) - mutuals(first);
+            if (votes(first) !== votes(second)) return votes(second) - votes(first);
+            return cleanDisplayName(first.name).localeCompare(cleanDisplayName(second.name), undefined, { sensitivity: "base" });
+        });
+}
+
+// PlayLockedView.loadSuggestedFriend: the invite sheet's first suggested
+// friend who hasn't been invited from here yet.
+function suggestedPlayFriend() {
+    if (state.config?.enable_invite_suggestions === false) return null;
+    const invited = readPlayInvited();
+    return invitablePlayContacts().find((contact) => contact.invite_suggested === true && !invited.has(playContactKey(contact))) || null;
+}
+
+function inviteResetDescription(status) {
+    const reset = Date.parse(status?.next_reset_at || "");
+    if (!Number.isFinite(reset)) return "";
+    const time = new Date(reset).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const seconds = Math.round((reset - Date.now()) / 1000);
+    const [value, unit] = Math.abs(seconds) >= 86_400 ? [Math.round(seconds / 86_400), "day"]
+        : Math.abs(seconds) >= 3_600 ? [Math.round(seconds / 3_600), "hour"]
+            : Math.abs(seconds) >= 60 ? [Math.round(seconds / 60), "minute"] : [seconds, "second"];
+    let relative = "";
+    try { relative = new Intl.RelativeTimeFormat(undefined, { style: "short", numeric: "always" }).format(value, unit); } catch (_) { relative = ""; }
+    return relative ? `${time} (${relative})` : time;
+}
+
+function inviteLimitMessage(status) {
+    if (!status) return "Daily invite unlocks are unavailable right now.";
+    const reset = inviteResetDescription(status);
+    return reset
+        ? `You've used today's invite unlocks. More are available at ${reset}.`
+        : "You've used today's invite unlocks. More are available soon.";
+}
+
+// PlayLockedActionButton: a full-width 52 pt peach card with a 32 pt icon.
+function playLockedButton({ label, icon, attributes = "", disabled = false }) {
+    return `<button class="play-locked-action" type="button" ${attributes} ${disabled ? "disabled" : ""}><span class="play-locked-action-icon" aria-hidden="true">${icon}</span><span class="play-locked-action-label">${escapeHTML(label)}</span></button>`;
+}
+
+const playInviteIcon = () => `<span class="play-invite-glyph">${uiIcon("message-fill")}</span>`;
+
+// PlayLockedView.inviteUnlockSection: loading, the named suggestion, the
+// generic ask, or the used-up message.
 function renderInviteUnlock() {
-    const remaining = Number(state.inviteStatus?.remaining || 0);
-    return `<div class="invite-unlock">
-        <span class="or-label">OR UNLOCK NOW</span>
-        <strong>Invite 1 friend to get your next poll set</strong>
-        <span>Invite a friend and you'll earn an extra poll unlock.</span>
-        ${state.inviteStatus ? `<small>${remaining} invite ${remaining === 1 ? "unlock" : "unlocks"} left today</small>` : ""}
-        <button class="primary-button" type="button" data-invite-unlock ${remaining < 1 && state.inviteStatus ? "disabled" : ""}>Invite & unlock polls</button>
-    </div>`;
+    const status = state.inviteStatus;
+    const divider = '<span class="play-locked-divider" aria-hidden="true"></span>';
+    if (!status && !state.playInviteStatusLoaded) {
+        return `${divider}<p class="play-invite-checking"><span class="play-spinner" aria-hidden="true"></span>Checking invite unlocks…</p>`;
+    }
+    const remaining = Math.max(0, Number(status?.remaining || 0));
+    if (!status || remaining < 1) return `${divider}<p class="play-invite-limit">${escapeHTML(inviteLimitMessage(status))}</p>`;
+    const friend = suggestedPlayFriend();
+    if (friend) {
+        const name = playContactFirstName(friend);
+        return `${divider}<p class="play-invite-headline">${escapeHTML(name)} has ${Math.max(0, Number(friend.vote_count || 0)).toLocaleString()} votes waiting</p>
+            ${playLockedButton({ label: `Invite ${name} to unlock`, icon: playInviteIcon(), attributes: `data-invite-suggested="${escapeHTML(playContactKey(friend))}"` })}
+            <p class="play-invite-meta"><button class="play-invite-other" type="button" data-invite-unlock>Choose someone else</button><span>· ${remaining} left today</span></p>`;
+    }
+    return `${divider}<p class="play-invite-headline">Invite 1 friend to unlock now</p>
+        ${playLockedButton({ label: "Invite & unlock polls", icon: playInviteIcon(), attributes: "data-invite-unlock" })}
+        <p class="play-invite-meta">${remaining} invite ${remaining === 1 ? "unlock" : "unlocks"} left today</p>`;
+}
+
+function renderPlayInviteBlock() {
+    const block = $("#playInviteBlock");
+    if (block) block.innerHTML = renderInviteUnlock();
+}
+
+// PlayLockedView refreshes the invite status when it appears and every 60 s.
+const PLAY_INVITE_REFRESH_MS = 60_000;
+
+async function refreshPlayInviteStatus({ maxAgeMs = 0 } = {}) {
+    const userId = api.user?.id;
+    if (!userId) return;
+    if (maxAgeMs && state.inviteStatus && Date.now() - (state.playInviteStatusAt || 0) < maxAgeMs) {
+        state.playInviteStatusLoaded = true;
+        renderPlayInviteBlock();
+        return;
+    }
+    const status = await api.getInviteStatus(userId).catch(() => undefined);
+    if (api.user?.id !== userId) return;
+    if (status !== undefined) {
+        state.inviteStatus = status;
+        state.playInviteStatusAt = Date.now();
+    }
+    state.playInviteStatusLoaded = true;
+    renderPlayInviteBlock();
+}
+
+function stopPlayInviteRefresh() {
+    clearInterval(state.playInviteTimer);
+    state.playInviteTimer = null;
+}
+
+function startPlayInviteRefresh() {
+    stopPlayInviteRefresh();
+    void refreshPlayInviteStatus({ maxAgeMs: 10_000 });
+    state.playInviteTimer = setInterval(() => {
+        if (!$("#playInviteBlock")) return stopPlayInviteRefresh();
+        if (!document.hidden) void refreshPlayInviteStatus();
+    }, PLAY_INVITE_REFRESH_MS);
 }
 
 // PlayLockedView.swift formatTime: "1h 5m", "1h", "4m 30s", "4m", "12s".
@@ -4368,17 +4665,32 @@ function formatLockRemaining(totalSeconds) {
     return `${rest}s`;
 }
 
+function playChatsEnabled() {
+    return state.config?.enable_chats === true && state.config?.enable_web_chats === true;
+}
+
+// PlayLockedView (1.6034), top to bottom: headline, lock art, countdown, the
+// invite block, "Send a memento", then "Submit a school question" with its cost.
 function renderLockedPlay() {
+    setPlayHeaderVisible(false);
     const until = state.playLocked?.locked_until;
     clearInterval(state.playLockTimer);
     state.playLockTimer = state.playLockTick = null;
+    const cost = Math.max(0, Number(state.config?.question_submission_aura_cost ?? 200));
+    const aura = Math.max(0, Number(state.profile?.aura_points || 0));
+    const canSubmit = aura >= cost;
     $("#playCard").innerHTML = `<article class="locked-play-card">
         <h3>Next Poll Set Locked</h3>
-        <img loading="lazy" decoding="async" class="lock-art" src="../assets/app/lock.webp" alt="">
-        <p id="playLockMessage">${until ? "Checking unlock time..." : "New polls drop soon."}</p>
-        ${renderInviteUnlock()}
-        <button class="question-secondary-action" type="button" data-open-question><img loading="lazy" decoding="async" src="../assets/app/pencil-clipboard.webp" alt="">Submit a school question</button>
+        <img decoding="async" class="lock-art" src="../assets/app/lock.webp" width="200" height="200" alt="">
+        <p id="playLockMessage" class="play-lock-message">${until ? "Checking unlock time..." : "New polls drop soon."}</p>
+        <div id="playInviteBlock" class="play-invite-block">${renderInviteUnlock()}</div>
+        ${playChatsEnabled() ? playLockedButton({ label: "Send a memento", icon: '<img src="../assets/app/memento-camera.webp" width="32" height="32" decoding="async" alt="">', attributes: "data-play-memento" }) : ""}
+        <div class="play-submit-question">
+            ${playLockedButton({ label: "Submit a school question", icon: '<img src="../assets/app/pencil-clipboard.webp" width="32" height="32" decoding="async" alt="">', attributes: "data-open-question", disabled: !canSubmit })}
+            <p class="play-invite-meta">${canSubmit ? `Create a poll for your school for ${cost.toLocaleString()} aura.` : `Costs ${cost.toLocaleString()} aura · you need ${(cost - aura).toLocaleString()} more`}</p>
+        </div>
     </article>`;
+    startPlayInviteRefresh();
     if (until) {
         const tick = () => {
             const remaining = Math.max(0, Math.ceil((new Date(until).getTime() - Date.now()) / 1000));
@@ -4387,14 +4699,7 @@ function renderLockedPlay() {
                 ? `Unlocks in ${formatLockRemaining(remaining)}`
                 : "Unlocking your next polls...";
             if (remaining > 0) return;
-            clearInterval(state.playLockTimer);
-            state.playLockTimer = state.playLockTick = null;
-            state.playLocked = null;
-            state.questions = [];
-            state.questionIndex = 0;
-            state.choicesByQuestion.clear();
-            state.skipsUsedInSet = 0;
-            loadPlay();
+            unlockPlay();
         };
         tick();
         // Ticks only while the page is visible (see the visibilitychange listener).
@@ -4405,14 +4710,187 @@ function renderLockedPlay() {
     }
 }
 
+// PlayViewModel.unlockGame: stop the timer, show "Loading polls..." and ask
+// for the next set. A server that is still locked answers 423, which redraws
+// the lock with its own unlock time.
+function unlockPlay() {
+    clearInterval(state.playLockTimer);
+    state.playLockTimer = state.playLockTick = null;
+    stopPlayInviteRefresh();
+    state.playLocked = null;
+    state.questions = [];
+    state.questionIndex = 0;
+    state.choicesByQuestion.clear();
+    state.skipsUsedInSet = 0;
+    return loadPlay();
+}
+
+// PlayViewModel.handleInviteSuccess: a sent invite re-checks the invite
+// status and tries the next set at once.
+async function handlePlayInviteSuccess() {
+    state.playInviteCheckPending = Date.now();
+    state.inviteStatus = await api.getInviteStatus(api.user.id).catch(() => state.inviteStatus);
+    state.playInviteStatusAt = Date.now();
+    await unlockPlay();
+}
+
+// An invite opened later (after the person came back to the app) can unlock
+// too: re-check whenever the lock screen becomes visible again, for 30 minutes
+// after a share.
+function recheckPlayInviteOnReturn() {
+    if (document.visibilityState !== "visible" || state.activePanel !== "play" || !$("#playInviteBlock")) return;
+    void refreshPlayInviteStatus();
+    if (state.playInviteCheckPending && Date.now() - state.playInviteCheckPending < 30 * 60_000) void unlockPlay();
+    else state.playInviteCheckPending = 0;
+}
+
+// One invite, shared the web way: the system share sheet, or a copied link
+// (iOS SnapchatInviteModal's fallback copies the link, then opens Snapchat).
+async function sharePlayInvite({ channel = "web", surface = "play_lock", button = null } = {}) {
+    if (button) setButtonLoading(button, true, "Opening…");
+    try {
+        const invite = await api.createInvite(api.user.id, channel, { surface });
+        if (navigator.share) {
+            await navigator.share({ title: "Join me on Valid", text: "Join Valid and unlock my next polls", url: invite.share_url });
+            return true;
+        }
+        await navigator.clipboard.writeText(invite.share_url);
+        if (channel === "snapchat" && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+            showToast("Invite link copied. Paste it in Snapchat.");
+            setTimeout(() => { location.href = "snapchat://"; }, 220);
+        } else showToast("Invite link copied");
+        return true;
+    } catch (error) {
+        if (error?.name !== "AbortError") showToast(userMessage(error, "Couldn't create your invite link. Please try again."));
+        return false;
+    } finally {
+        if (button?.isConnected) setButtonLoading(button, false);
+    }
+}
+
+function playInviteRowMarkup(contact) {
+    const name = cleanDisplayName(contact.name) || "Unknown";
+    const letters = name.split(" ").map((part) => part[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "S";
+    const mutuals = Math.max(0, Number(contact.recommendation_strength || 0));
+    const votes = Math.max(0, Number(contact.vote_count || 0));
+    return `<li class="play-invite-row" data-play-invite-row="${escapeHTML(playContactKey(contact))}">
+        <span class="play-invite-avatar" aria-hidden="true">${escapeHTML(letters)}</span>
+        <span class="play-invite-copy"><strong>${escapeHTML(name)}</strong><small>${mutuals ? `<span class="play-invite-mutuals">${uiIcon("person-2-fill")}${mutuals} mutual${mutuals === 1 ? "" : "s"}</span>` : ""}<span class="play-invite-votes ${votes ? "has-votes" : ""}">${uiIcon("heart")}${votes} vote${votes === 1 ? "" : "s"}</span></small></span>
+        <button class="play-invite-row-button" type="button" data-play-invite-contact="${escapeHTML(playContactKey(contact))}" aria-label="Invite ${escapeHTML(name)}">Invite</button>
+    </li>`;
+}
+
+// InviteFriendsView: "Unlock More Polls" from the lock screen, "Invite
+// Friends" after a set. Resolves when the sheet closes.
+function openPlayInviteDialog({ mode = "unlock" } = {}) {
+    document.querySelector("#playInviteDialog")?.close();
+    const unlock = mode === "unlock";
+    const surface = unlock ? "play_lock" : "play_congrats";
+    const contacts = invitablePlayContacts();
+    const dialog = document.createElement("dialog");
+    dialog.id = "playInviteDialog";
+    dialog.className = "ui-sheet play-invite-dialog";
+    dialog.setAttribute("aria-labelledby", "playInviteTitle");
+    const snapchat = `<div class="play-invite-snapchat"><img src="../assets/app/snapchat-logo.webp" width="40" height="40" decoding="async" alt=""><span><strong>Share on Snapchat</strong><small>Invite your friends to join</small></span><button type="button" data-play-invite-snapchat>Share</button></div>`;
+    dialog.innerHTML = `<div class="play-invite-sheet">
+        <div class="play-invite-toolbar"><span class="ui-sheet-grabber" aria-hidden="true"></span><button class="play-invite-done" type="button" data-play-invite-done>Done</button></div>
+        <header class="play-invite-header"><div><img src="../assets/app/letter_aligned.webp" width="96" height="96" decoding="async" alt=""><h2 id="playInviteTitle">${unlock ? "Unlock More Polls" : "Invite Friends"}</h2></div><p>${unlock ? "Invite one friend to earn an unlock for your next poll set." : "Valid is more fun when there are more classmates"}</p></header>
+        ${contacts.length
+            ? `<div class="play-invite-scroll">${snapchat}<ul class="play-invite-list" aria-label="Contacts to invite">${contacts.map(playInviteRowMarkup).join("")}</ul></div>`
+            : `<div class="play-invite-empty"><span class="play-invite-empty-icon" aria-hidden="true">${uiIcon("person-2-fill")}</span><strong>No contacts to invite</strong><p>Invite your friends to join Valid!</p><button class="play-invite-snapchat-button" type="button" data-play-invite-snapchat><img src="../assets/app/snapchat-logo.webp" width="28" height="28" decoding="async" alt="">Share on Snapchat</button><button class="play-invite-messages-button" type="button" data-play-invite-messages>${uiIcon("message-fill")}Invite via Messages</button></div>`}
+    </div>`;
+    return new Promise((resolve) => {
+        let succeeded = false;
+        const success = (contact = null) => {
+            if (contact?.invite_suggested) recordPlayInvited(contact);
+            if (!unlock) return;
+            succeeded = true;
+            dialog.close();
+        };
+        dialog.addEventListener("click", async (event) => {
+            if (event.target === dialog) {
+                const box = dialog.getBoundingClientRect();
+                if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) dialog.close();
+                return;
+            }
+            if (event.target.closest("[data-play-invite-done]")) return dialog.close();
+            const snap = event.target.closest("[data-play-invite-snapchat]");
+            if (snap && await sharePlayInvite({ channel: "snapchat", surface, button: snap })) return success();
+            const messages = event.target.closest("[data-play-invite-messages]");
+            if (messages && await sharePlayInvite({ channel: "imessage", surface, button: messages })) return success();
+            const invite = event.target.closest("[data-play-invite-contact]");
+            if (!invite) return;
+            const contact = contacts.find((item) => playContactKey(item) === invite.dataset.playInviteContact);
+            if (!await sharePlayInvite({ channel: "web", surface, button: invite })) return;
+            invite.replaceWith(Object.assign(document.createElement("span"), { className: "play-invite-row-done", textContent: "Invited" }));
+            success(contact);
+        });
+        dialog.addEventListener("close", () => {
+            dialog.remove();
+            resolve(succeeded);
+            if (succeeded) void handlePlayInviteSuccess();
+        }, { once: true });
+        document.body.append(dialog);
+        dialog.showModal();
+        dialog.querySelector("[data-play-invite-done]").focus({ preventScroll: true });
+    });
+}
+
+// The lock screen's invite: the sheet with contacts and Snapchat when there
+// are contacts to invite, else straight to the share sheet (iOS: Messages).
+async function inviteAndUnlock(button) {
+    const locked = Boolean($("#playInviteBlock"));
+    if (locked && invitablePlayContacts().length) {
+        await openPlayInviteDialog({ mode: "unlock" });
+        return;
+    }
+    const shared = await sharePlayInvite({ channel: "web", surface: locked ? "play_lock" : "play_not_enough_friends", button });
+    if (shared && locked) await handlePlayInviteSuccess();
+}
+
+// PlayLockedView.inviteSuggestedFriend: one tap invites the named friend.
+async function inviteSuggestedPlayFriend(button) {
+    const friend = invitablePlayContacts().find((contact) => playContactKey(contact) === button.dataset.inviteSuggested);
+    if (!friend) return;
+    if (!await sharePlayInvite({ channel: "web", surface: "play_lock_suggestion", button })) return;
+    recordPlayInvited(friend);
+    await handlePlayInviteSuccess();
+}
+
+// MainTabView: "Send a memento" opens the Chats tab's new-chat flow.
+async function openMementoFromPlay() {
+    switchPanel("chats");
+    for (let attempt = 0; attempt < 40 && state.activePanel === "chats"; attempt += 1) {
+        const compose = document.querySelector("#chatsPanel [data-new-chat]");
+        if (compose && compose.offsetParent) {
+            compose.click();
+            return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 75));
+    }
+}
+
+// PlayCongratsView: "Congrats", the aura (with the crown and 2× for God
+// Mode), "you just earned N aura", "w aura", then "Play ‹game›".
 function renderPlayCongrats() {
-    $("#playProgress").textContent = "Complete";
-    $("#playCard").innerHTML = `<article class="play-congrats-card">
-        <h3>Congrats!</h3>
-        <img loading="lazy" decoding="async" src="../assets/app/aura.webp" alt="">
-        <p>You just earned <strong>${Number(state.playAuraEarned).toLocaleString()} aura</strong></p>
-        <button class="primary-button" type="button" data-finish-play>W aura</button>
+    setPlayHeaderVisible(false);
+    const godMode = api.user?.subscribed_user === true;
+    const game = postPlayWeeklyGame();
+    $("#playCard").innerHTML = `<article class="play-congrats">
+        <h3>Congrats</h3>
+        <div class="play-congrats-art">
+            <img class="play-congrats-aura" decoding="async" src="../assets/app/aura.webp" width="150" height="150" alt="">
+            ${godMode ? '<img class="play-congrats-crown" decoding="async" src="../assets/app/crown.webp" width="60" height="60" alt=""><img class="play-congrats-two-x" decoding="async" src="../assets/app/two-x.webp" width="80" height="80" alt="2x">' : ""}
+        </div>
+        <p>you just earned ${Number(state.playAuraEarned).toLocaleString()} aura</p>
+        <div class="play-congrats-actions">
+            <button class="primary-button" type="button" data-finish-play>w aura</button>
+            ${game ? `<button class="play-congrats-game" type="button" data-play-congrats-game>${weeklyGameArtMarkup(game.release, 32)}<span>Play ${escapeHTML(game.release.title || "Game of the Week")}</span>${uiIcon("arrow-right")}</button>` : ""}
+        </div>
     </article>`;
+    if (!game && !weeklyGameState.loadedAt) void refreshWeeklyGame().then(() => {
+        if (state.playComplete && postPlayWeeklyGame() && $("#playCard .play-congrats")) renderPlayCongrats();
+    });
 }
 
 function renderPlay() {
@@ -4434,9 +4912,13 @@ function renderPlay() {
     }
     const choices = choicesForQuestion(question);
     if (choices.length < 4) return renderNotEnoughFriends();
+    setPlayHeaderVisible(true);
+    $("#playProgress").textContent = `Question ${Math.min(state.questionIndex + 1, state.questions.length)} of ${state.questions.length}`;
     const artworkURL = api.assetURL(question.image_url);
     const submitter = playQuestionAttribution(question, api.user?.id);
-    const attribution = submitter.kind !== "none" ? `<div class="question-attribution">${submitterAttributionContent(submitter, question.submitted_by_avatar_url)}<div class="detail-overflow play-overflow"><button class="detail-overflow-button play-overflow-button" type="button" data-toggle-play-menu aria-label="More question actions" aria-expanded="false">•••</button><div class="detail-overflow-menu hidden" role="menu" aria-label="Question actions"><button type="button" role="menuitem" data-play-question-action="report">Report question</button>${question.is_anonymous ? "" : `<button type="button" role="menuitem" data-play-question-action="block">Block submitter</button>`}</div></div></div>` : "";
+    const reveal = submitter.kind === "anonymous" && !submitter.viewerIsAuthor && question.can_reveal_submitter
+        ? `<button class="play-reveal-submitter" type="button" data-play-reveal-submitter aria-label="Reveal who submitted this question"><img src="../assets/app/crown.webp" width="22" height="22" alt="" decoding="async"><span>Reveal</span></button>` : "";
+    const attribution = submitter.kind !== "none" ? `<div class="question-attribution">${submitterAttributionContent(submitter, question.submitted_by_avatar_url)}${reveal}<div class="detail-overflow play-overflow"><button class="detail-overflow-button play-overflow-button" type="button" data-toggle-play-menu aria-label="More question actions" aria-expanded="false">•••</button><div class="detail-overflow-menu hidden" role="menu" aria-label="Question actions"><button type="button" role="menuitem" data-play-question-action="report">Report a Safety Issue</button>${question.is_anonymous ? "" : `<button type="button" role="menuitem" data-play-question-action="block">Block User</button>`}</div></div></div>` : "";
     const remainingSkips = Math.max(0, Number(state.config?.max_skips_per_set ?? 3) - state.skipsUsedInSet);
     const previousCard = card.dataset.questionId && card.dataset.questionId !== String(question.id) ? card.querySelector(":scope > .play-card") : null;
     card.innerHTML = `<article class="play-card">
@@ -4495,7 +4977,14 @@ const PLAY_CONFIG_FALLBACK = {
 // starts the server's play lock, so it is only requested once four people exist.
 async function loadPlay() {
     if (state.questions.length || state.playLocked) return renderPlay();
-    $("#playStatus").innerHTML = `<span class="play-loading-state"><img class="play-loading-gear" src="../assets/app/setting-gear.webp" width="58" height="58" decoding="async" alt=""><span>Finding questions and classmates…</span></span>`;
+    // One request chain at a time: a timer, an invite and a return to the
+    // page can all ask for the next set at once.
+    state.playLoading ||= loadPlaySet().finally(() => { state.playLoading = null; });
+    return state.playLoading;
+}
+
+async function loadPlaySet() {
+    renderPlayLoading();
     try {
         const [config, inviteStatus] = await Promise.all([
             state.config ? Promise.resolve(state.config) : api.getConfig().catch(() => ({ ...PLAY_CONFIG_FALLBACK })),
@@ -4503,6 +4992,8 @@ async function loadPlay() {
         ]);
         state.config = config;
         state.inviteStatus = inviteStatus;
+        state.playInviteStatusAt = Date.now();
+        state.playInviteStatusLoaded = true;
         await loadPlayRoster();
         state.choicesByQuestion.clear();
         if (!canStartPlay(state.playPool)) {
@@ -4521,9 +5012,14 @@ async function loadPlay() {
         if (error.status === 423) {
             state.playLocked = error.detail || {};
             state.inviteStatus = await api.getInviteStatus(api.user.id).catch(() => null);
+            state.playInviteStatusAt = Date.now();
+            state.playInviteStatusLoaded = true;
             $("#playStatus").textContent = "";
             renderLockedPlay();
-        } else $("#playStatus").textContent = userMessage(error, "Could not load Play.");
+        } else {
+            setPlayHeaderVisible(false);
+            $("#playStatus").textContent = userMessage(error, "Could not load Play.");
+        }
     }
 }
 
@@ -4541,19 +5037,59 @@ function nominationCandidates() {
     return state.playPool.filter((choice) => choice.user_id !== String(api.user.id) && !shown.has(choice.id));
 }
 
+// NominationSearchView: "Classmates (N)" / "Not on Valid (N)" tabs. Classmates
+// rank by votes, contacts by mutual connections, then by name; without a
+// search each tab shows its first 50.
+function nominationTabLists() {
+    const byName = (first, second) => cleanDisplayName(first.name).toLowerCase().localeCompare(cleanDisplayName(second.name).toLowerCase());
+    const candidates = nominationCandidates();
+    const classmates = candidates.filter((candidate) => candidate.is_classmate)
+        .sort((first, second) => Number(second.vote_count || 0) - Number(first.vote_count || 0) || byName(first, second));
+    const contacts = candidates.filter((candidate) => !candidate.is_six7_user && cleanDisplayName(candidate.name))
+        .sort((first, second) => Number(second.mutual_strength || 0) - Number(first.mutual_strength || 0) || byName(first, second));
+    return { classmates, contacts };
+}
+
+function nominationRowMarkup(candidate, cost) {
+    const name = cleanDisplayName(candidate.name) || candidate.name;
+    const mutuals = Math.max(0, Number(candidate.mutual_strength || 0));
+    const detail = candidate.is_classmate
+        ? (candidate.grade ? formatGrade(candidate.grade) : "")
+        : mutuals ? `${mutuals} mutual connection${mutuals === 1 ? "" : "s"}` : "";
+    return `<button class="nomination-row" type="button" data-nomination="${escapeHTML(candidate.id)}">
+        ${avatarMarkup({ ...candidate, first_name: name, last_name: "" }, "choice-avatar")}<span class="nomination-row-copy"><strong>${escapeHTML(name)}</strong>${detail ? `<small>${escapeHTML(detail)}</small>` : ""}</span>
+        <span class="nomination-cost"><img loading="lazy" decoding="async" src="../assets/app/aura.webp" alt="">${cost}</span>
+    </button>`;
+}
+
 function renderNominationList() {
     const query = $("#nominationSearch").value.trim().toLowerCase();
-    const candidates = nominationCandidates().filter((candidate) => candidate.name.toLowerCase().includes(query));
+    const lists = nominationTabLists();
+    const tab = state.nominationTab === "contacts" ? "contacts" : "classmates";
+    const tabs = $("#nominationTabs");
+    tabs.hidden = !lists.classmates.length && !lists.contacts.length;
+    tabs.querySelector('[data-nomination-tab="classmates"]').textContent = `Classmates (${lists.classmates.length})`;
+    tabs.querySelector('[data-nomination-tab="contacts"]').textContent = `Not on Valid (${lists.contacts.length})`;
+    tabs.querySelectorAll("[data-nomination-tab]").forEach((button) => {
+        const selected = button.dataset.nominationTab === tab;
+        button.classList.toggle("active", selected);
+        button.setAttribute("aria-selected", String(selected));
+    });
+    $("#nominationSearch").placeholder = tab === "classmates" ? "Search classmates" : "Search contacts";
+    const base = lists[tab];
+    const results = query ? base.filter((candidate) => cleanDisplayName(candidate.name).toLowerCase().includes(query)) : base.slice(0, 50);
     const cost = Number(state.config?.nomination_aura_cost ?? 100);
-    $("#nominationList").innerHTML = candidates.length ? candidates.map((candidate) => `<button class="nomination-row" type="button" data-nomination="${escapeHTML(candidate.id)}">
-        ${avatarMarkup(candidate, "choice-avatar")}<strong>${escapeHTML(candidate.name)}</strong>
-        <span class="nomination-cost"><img loading="lazy" decoding="async" src="../assets/app/aura.webp" alt="">${cost}</span>
-    </button>`).join("") : `<div class="empty-card">${query ? "No matching classmates." : "Everyone else is already in this round. Shuffle for new choices."}</div>`;
+    $("#nominationList").innerHTML = results.length
+        ? results.map((candidate) => nominationRowMarkup(candidate, cost)).join("")
+        : query
+            ? `<div class="nomination-empty">${uiIcon("person-slash")}<strong>No results found</strong><span>Try a different search term</span></div>`
+            : `<div class="nomination-empty">${uiIcon("person-badge-plus")}<strong>No one available to nominate</strong></div>`;
 }
 
 function openNominationDialog() {
     $("#nominationSearch").value = "";
     $("#nominationStatus").textContent = "";
+    state.nominationTab = "classmates";
     renderNominationList();
     $("#nominationDialog").showModal();
     $("#nominationSearch").focus();
@@ -4571,6 +5107,13 @@ function nominateClassmate(candidateId) {
     $("#nominationStatus").textContent = "";
     // Same confirm-and-spend sheet as boosts and reveals; it calls submitNomination.
     openAuraSpend("nominate", { candidate, question });
+    // PlayGameView+Overlays: "This will cost N aura points." and a "Nominate" button.
+    if ($("#auraSpendDialog").open && state.pendingAuraPurchase?.kind === "nominate") {
+        $("#auraSpendMessage").textContent = `This will cost ${cost.toLocaleString()} aura points.`;
+        const confirm = $("#confirmAuraSpend");
+        confirm.dataset.label = "Nominate";
+        confirm.innerHTML = "<span>Nominate</span>";
+    }
 }
 
 async function submitNomination({ candidate, question }) {
@@ -4642,7 +5185,11 @@ async function answerPlayQuestion(choiceId) {
         renderProfileHeader();
         animateAuraChange(expectedAura, selectedButton);
     }
-    schedulePlayAdvance(question, PLAY_ANSWER_HOLD_MS);
+    // PlayViewModel+Answering: a vote for a contact who isn't on Valid asks to
+    // invite them, and the next question waits for that answer.
+    const invitePrompt = votePromptInvite(selected);
+    if (invitePrompt) void promptVoteInvite(question, invitePrompt);
+    else schedulePlayAdvance(question, PLAY_ANSWER_HOLD_MS);
     try {
         const result = await api.answerQuestion(api.user.id, answerPayload({
             questionId: question.id,
@@ -4684,7 +5231,47 @@ async function answerPlayQuestion(choiceId) {
     }
 }
 
-function finishPlaySet() {
+// enable_invite_after_vote; with enable_invite_suggestions on, only once the
+// friend has 3 votes (InvitePromptInfo.suggestionMinVotes), counting this one.
+function votePromptInvite(choice) {
+    if (state.config?.enable_invite_after_vote !== true || !choice || choice.user_id || choice.is_six7_user) return null;
+    const suggestionsOn = state.config?.enable_invite_suggestions !== false;
+    const votes = Math.max(0, Number(choice.vote_count || 0)) + 1;
+    if (suggestionsOn && votes < 3) return null;
+    return { name: cleanDisplayName(choice.name) || "your friend", votes: suggestionsOn ? votes : null };
+}
+
+// PlayGameView+Overlays' ConfirmationModal, then the invite, then the toast.
+async function promptVoteInvite(question, { name, votes }) {
+    const accepted = await confirmSheet({
+        title: `Invite ${name}?`,
+        message: votes ? `They have ${votes.toLocaleString()} votes waiting on Valid.` : "Valid is more fun with more people! :)",
+        confirmLabel: "Invite",
+        cancelLabel: "Cancel",
+    });
+    if (accepted && await sharePlayInvite({ channel: "web", surface: "vote_prompt" })) {
+        showToast(`\u{1F525} nice - ${name} can vote on you when they join`);
+    }
+    schedulePlayAdvance(question, 0);
+}
+
+// PlayCongratsView.handleContinue: "w aura" asks for notifications first,
+// then shows the invite sheet (when there are contacts to invite), and the
+// lock starts once that closes.
+async function finishPlaySet(button = null) {
+    if (state.playFinishing) return;
+    state.playFinishing = true;
+    if (button) button.disabled = true;
+    try {
+        await askForNotifications({ reason: "play_congrats" });
+        if (api.user?.id && state.playComplete && invitablePlayContacts().length) await openPlayInviteDialog({ mode: "congrats" });
+    } catch (_) { /* The lock still starts. */ }
+    finally { state.playFinishing = false; }
+    if (!state.playComplete) return;
+    beginPlayCooldown();
+}
+
+function beginPlayCooldown() {
     state.playComplete = false;
     state.playAuraEarned = 0;
     state.skipsUsedInSet = 0;
@@ -4740,16 +5327,45 @@ function retryPendingPlaySkips() {
     }
 }
 
+// PlayGameView+Overlays: "Report a Safety Issue" with a reason field, and
+// "Block User".
+function playReportSheet() {
+    return new Promise((resolve) => {
+        const dialog = document.createElement("dialog");
+        dialog.className = "ui-sheet play-report-sheet";
+        dialog.setAttribute("aria-labelledby", "playReportTitle");
+        dialog.dataset.destructive = "true";
+        dialog.innerHTML = `<form method="dialog" class="ui-sheet-content">
+            <span class="ui-sheet-grabber" aria-hidden="true"></span>
+            <h2 id="playReportTitle">Report a Safety Issue</h2>
+            <p class="ui-sheet-message">Report only if this question is unsafe or breaks the rules. If you just don't want to answer it, use Skip instead.</p>
+            <label class="ui-sheet-details"><span class="visually-hidden">Reason</span><textarea rows="3" maxlength="500" placeholder="Explain why you're reporting this question..."></textarea></label>
+            <div class="ui-sheet-actions"><button class="danger-button ui-sheet-confirm" type="submit" value="confirm">Report for Review</button><button class="secondary-button ui-sheet-cancel" type="button" data-cancel>Cancel</button></div>
+        </form>`;
+        let result = null;
+        dialog.querySelector("form").addEventListener("submit", (event) => {
+            event.preventDefault();
+            result = { reason: dialog.querySelector("textarea").value.trim() };
+            dialog.close();
+        });
+        dialog.querySelector("[data-cancel]").addEventListener("click", () => dialog.close());
+        dialog.addEventListener("close", () => { dialog.remove(); resolve(result); }, { once: true });
+        document.body.append(dialog);
+        dialog.showModal();
+        dialog.querySelector("textarea").focus({ preventScroll: true });
+    });
+}
+
 async function moderatePlayQuestion(action) {
     const question = state.questions[state.questionIndex];
     if (!question?.is_user_submitted) return;
-    const confirmed = await confirmSheet(action === "block"
-        ? { title: "Block this question's submitter?", message: "You'll skip this poll and won't see their questions again.", confirmLabel: "Block", destructive: true }
-        : { title: "Report this question?", message: "Valid will review it, and you'll skip this poll.", confirmLabel: "Report", destructive: true });
-    if (!confirmed) return;
+    const report = action === "block"
+        ? (await confirmSheet({ title: "Block User", message: "You will no longer see this user's questions.", confirmLabel: "Block", destructive: true }) ? {} : null)
+        : await playReportSheet();
+    if (!report) return;
     try {
         if (action === "block") await api.blockQuestionSubmitter(api.user.id, question.id);
-        else await api.reportQuestion(api.user.id, question.id);
+        else await api.reportQuestion(api.user.id, question.id, report.reason || undefined);
         state.questionIndex += 1;
         renderPlay();
         showToast(action === "block" ? "Submitter blocked" : "Reported to Valid");
@@ -4758,19 +5374,32 @@ async function moderatePlayQuestion(action) {
     }
 }
 
-async function inviteAndUnlock(button) {
-    setButtonLoading(button, true, "Making your invite...");
+// PlayGameView.anonymousSubmitterRow: God Mode's crown "Reveal" on an
+// anonymous question, with the reveal or aura confirm first.
+async function revealPlayQuestionSubmitter(button) {
+    const question = state.questions[state.questionIndex];
+    if (!question?.can_reveal_submitter || question.submitter_revealed) return;
+    if (api.user?.subscribed_user !== true) return openGodModePitch();
+    const remaining = Math.max(0, Number(state.profile?.remaining_reveals || 0));
+    const cost = Math.max(0, Number(state.config?.full_reveal_aura_cost ?? DEFAULT_FULL_REVEAL_AURA_COST));
+    if (remaining <= 0 && Number(state.profile?.aura_points || 0) < cost) return showToast(`You need ${cost.toLocaleString()} aura.`);
+    const left = Math.max(0, remaining - 1);
+    if (!await confirmSheet(remaining > 0
+        ? { title: "Reveal who made this question?", message: `This uses 1 of your weekly reveals. You will have ${left} ${left === 1 ? "reveal" : "reveals"} left.`, confirmLabel: "Use 1 Reveal" }
+        : { title: "Reveal who made this question?", message: `Spend ${cost.toLocaleString()} aura to reveal the classmate who submitted it.`, confirmLabel: `Spend ${cost.toLocaleString()} aura` })) return;
+    button.disabled = true;
     try {
-        const invite = await api.createInvite(api.user.id, "web");
-        if (navigator.share) await navigator.share({ title: "Join me on Valid", text: "Join Valid and unlock my next polls", url: invite.share_url });
-        else {
-            await navigator.clipboard.writeText(invite.share_url);
-            showToast("Invite link copied");
+        const result = await api.revealQuestionSubmitter(api.user.id, question.id);
+        Object.assign(question, { submitter_revealed: true, submitted_by_name: result.full_name, submitted_by_user_id: result.submitted_by_user_id, submitted_by_avatar_url: result.profile_picture_url });
+        if (state.profile) {
+            state.profile.remaining_reveals = Math.max(0, Number(result.remaining_reveals || 0));
+            if (Number.isFinite(Number(result.total_aura_points))) state.profile.aura_points = Number(result.total_aura_points);
+            renderProfileHeader();
         }
+        if (state.questions[state.questionIndex] === question && !state.playTransition) renderPlay();
     } catch (error) {
-        if (error.name !== "AbortError") showToast(userMessage(error, "Could not create an invite."));
-    } finally {
-        setButtonLoading(button, false);
+        showToast(userMessage(error, "Could not reveal question author."));
+        if (button.isConnected) button.disabled = false;
     }
 }
 
@@ -6520,7 +7149,7 @@ function activatePanelRoute(panel) {
         notifications: chatNotificationBridge,
         onPlay: async () => {
             if (!state.profile?.school_id) return showToast('Join a school to play the Game of the Week.');
-            await openWeeklyGame();
+            await openWeeklyGame({ launch: true });
             void refreshWeeklyGame();
         },
     });
@@ -7487,6 +8116,26 @@ const chatNotificationBridge = {
     record: (action, source) => api.recordNotificationPreferencesAction(action, source),
 };
 
+// The notification soft prompt (Play congrats, onboarding) uses the same
+// Web Push path as the chat cards. The localhost demo has no push service:
+// ?push=default|denied fakes a browser there (?pushanswer= what it answers).
+function demoNotificationBridge() {
+    const params = new URLSearchParams(location.search);
+    let permission = params.get("push");
+    if (!["default", "denied", "granted"].includes(permission)) return null;
+    return {
+        permission: () => permission,
+        enable() {
+            const prompted = permission === "default";
+            if (prompted) permission = ["granted", "denied", "default"].includes(params.get("pushanswer")) ? params.get("pushanswer") : "granted";
+            return new Promise((resolve) => setTimeout(() => resolve({ permission, prompted, subscribed: permission === "granted" }), 150));
+        },
+        ensureSubscribed: () => Promise.resolve(false),
+        record: () => Promise.resolve(null),
+    };
+}
+configureNotificationSoftPrompt((demoMode && demoNotificationBridge()) || chatNotificationBridge);
+
 function bindEvents() {
     $("#passkeyButton").addEventListener("click", handlePasskeySignIn);
     $("#createAccountButton").addEventListener("click", openSignupDialog);
@@ -7772,10 +8421,40 @@ function bindEvents() {
             closeDetailActionMenus();
             moderatePlayQuestion(safetyAction.dataset.playQuestionAction);
         }
-        if (event.target.closest("[data-finish-play]")) finishPlaySet();
+        const finish = event.target.closest("[data-finish-play]");
+        if (finish) finishPlaySet(finish);
         if (event.target.closest("[data-open-question]")) openQuestionDialog();
+        const revealSubmitter = event.target.closest("[data-play-reveal-submitter]");
+        if (revealSubmitter) revealPlayQuestionSubmitter(revealSubmitter);
+        const suggested = event.target.closest("[data-invite-suggested]");
+        if (suggested) inviteSuggestedPlayFriend(suggested);
+        if (event.target.closest("[data-play-memento]")) openMementoFromPlay();
+        if (event.target.closest("[data-play-congrats-game]")) openWeeklyGame();
+    });
+    document.addEventListener("visibilitychange", recheckPlayInviteOnReturn);
+    $("#weeklyGameRoot").addEventListener("click", (event) => {
+        if (event.target.closest("[data-weekly-game-hide]")) {
+            setWeeklyGameHidden(true);
+            softHaptic();
+            return renderWeeklyGameEntry();
+        }
+        if (event.target.closest("[data-weekly-game-restore]")) {
+            setWeeklyGameHidden(false);
+            softHaptic();
+            return renderWeeklyGameEntry();
+        }
+        const tile = event.target.closest("[data-weekly-game-tile]");
+        if (tile) return void openWeeklyGame({ release: weeklyGameState.slots[Number(tile.dataset.weeklyGameTile)]?.release || null });
+        if (event.target.closest("[data-weekly-game-open]")) void openWeeklyGame();
     });
     $("#nominationSearch").addEventListener("input", renderNominationList);
+    $("#nominationTabs").addEventListener("click", (event) => {
+        const tab = event.target.closest("[data-nomination-tab]");
+        if (!tab || state.nominationTab === tab.dataset.nominationTab) return;
+        state.nominationTab = tab.dataset.nominationTab;
+        softHaptic();
+        renderNominationList();
+    });
     $("#nominationList").addEventListener("click", (event) => {
         const candidate = event.target.closest("[data-nomination]");
         if (candidate) nominateClassmate(candidate.dataset.nomination);
