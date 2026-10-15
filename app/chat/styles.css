@@ -1177,3 +1177,9 @@
 .chat-voice-inline.is-preview .chat-voice-hint { display: none; }
 /* With the header floating, the review is the form's only row. */
 .chat-camera-sheet:not(.is-capturing) .chat-media-form { grid-template-rows: minmax(0, 1fr); }
+/* The pill keeps room for its words (CameraReviewControls minimumSendWidth); the chip gives way. */
+.chat-camera-sheet .chat-media-review-actions, .chat-camera-sheet:has(.review-stage) .chat-media-review-actions { grid-template-columns: 56px minmax(0, 1fr) minmax(128px, auto); }
+.chat-camera-sheet .chat-media-review-actions > .chat-media-publish.send-pill { min-width: 128px; }
+.review-send-chip { overflow: hidden; }
+.review-send-chip strong { min-width: 0; }
+.send-pill-title, .send-pill-subtitle { white-space: nowrap; }
