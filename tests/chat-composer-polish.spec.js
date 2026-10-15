@@ -7,27 +7,36 @@ async function room(page) {
     await page.getByRole('button', { name: /Noah Williams/ }).click();
 }
 
-test('retention icons remain centered with their label in both themes and states', async ({ page }) => {
+test('the view-once switch sits on the tool column, starts on View once and says what it does', async ({ page }) => {
     await room(page);
-    await page.getByRole('button', { name: 'Send photo or video' }).click();
+    await page.getByRole('button', { name: 'Open camera' }).click();
     const dialog = page.locator('[data-chat-media-dialog]');
     await dialog.locator('.chat-media-file-input').setInputFiles('assets/AppIconV2.png');
     await expect(dialog.locator('.chat-media-publish')).toBeEnabled();
+    const toggle = dialog.locator('[data-review-tools]').getByRole('switch', { name: 'View once' });
     for (const theme of ['light', 'dark']) {
         await page.locator('html').evaluate((el, theme) => { el.dataset.theme = theme; }, theme);
-        for (const checked of [false, true]) {
-            await dialog.getByLabel('View once', { exact: true }).setChecked(checked);
-            const option = dialog.locator('.chat-media-option');
-            await expect(option.locator('span')).toHaveText(checked ? 'View once' : 'Keep in chat');
-            const icon = await option.locator(`[data-ui-icon="${checked ? 'view-once' : 'infinity'}"]`).boundingBox();
-            const label = await option.locator('span').boundingBox();
-            expect(Math.abs(icon.y + icon.height / 2 - label.y - label.height / 2)).toBeLessThan(1);
-            expect(icon.width).toBe(24); expect(icon.height).toBe(24);
-            await page.screenshot({ path: test.info().outputPath(`retention-${theme}-${checked}.png`) });
-        }
+        // ChatMediaCaptureView.isViewOnce starts true.
+        await expect(toggle).toHaveAttribute('aria-checked', 'true');
+        await expect(dialog.locator('.send-pill-subtitle')).toHaveText('View once');
+        await toggle.click();
+        await expect(toggle).toHaveAttribute('aria-checked', 'false');
+        await expect(dialog.locator('.view-once-hint')).toContainText('Keep in chat');
+        await expect(dialog.locator('.view-once-hint')).toContainText('Stays in the chat after it\u2019s opened');
+        await expect(dialog.locator('.send-pill-subtitle')).toHaveText('Keep in chat');
+        await expect(toggle.locator('[data-ui-icon="infinity"]')).toBeVisible();
+        await toggle.click();
+        await expect(dialog.locator('.view-once-hint')).toContainText('Opens one time, then it\u2019s gone');
+        const box = await toggle.boundingBox();
+        expect(box.width).toBe(44); expect(box.height).toBe(44);
+        await page.screenshot({ path: test.info().outputPath(`retention-${theme}.png`) });
     }
     await expect(dialog.getByRole('group', { name: 'Photo effect' })).toHaveCount(0);
     await expect(dialog.locator('[data-photo-cutout] [data-ui-icon="scissors"]')).toBeVisible();
+    // Save, the chat it goes to, then the worded Send pill.
+    await expect(dialog.getByRole('button', { name: 'Save' })).toBeVisible();
+    await expect(dialog.locator('[data-send-to-chip]')).toHaveAccessibleName('Sending to Noah Williams');
+    await expect(dialog.locator('.chat-media-publish .send-pill-title')).toHaveText('Send');
 });
 
 test('keyboard resize and Safari viewport pan keep composer against the keyboard and header visible', async ({ page }) => {
@@ -68,7 +77,7 @@ test('photo review has native control hierarchy and saved stickers are sent in o
         const original = DemoAPI.prototype.sendChatMessage;
         DemoAPI.prototype.sendChatMessage = function(userId, chatId, payload) { photoSends.push(payload); return original.call(this, userId, chatId, payload); };
     });
-    await page.getByRole('button', { name: 'Send photo or video' }).click();
+    await page.getByRole('button', { name: 'Open camera' }).click();
     const dialog = page.locator('[data-chat-media-dialog]');
     await dialog.locator('.chat-media-file-input').setInputFiles('assets/AppIconV2.png');
     await expect(dialog.locator('.chat-media-publish')).toBeEnabled();
@@ -88,8 +97,7 @@ test('photo review has native control hierarchy and saved stickers are sent in o
     await page.locator('[data-send-sticker="fixture-sticker"]').click();
     await expect(sticker).toBeVisible();
     await page.screenshot({ path: test.info().outputPath('photo-review.png') });
-    await dialog.getByLabel('View once', { exact: true }).check();
-    await expect(dialog.locator('.chat-media-option span')).toHaveText('View once');
+    await expect(dialog.getByRole('switch', { name: 'View once' })).toHaveAttribute('aria-checked', 'true');
     await dialog.locator('.chat-media-publish').click();
     await expect(dialog).toBeHidden();
     await expect(page.locator('.chat-photo-sticker')).toHaveCount(0);

@@ -51,7 +51,7 @@ test('real adapter renders active peers in Recent, inbox, direct header and grou
     await page.getByRole('button',{name:'Back to chats',exact:true}).click();
     await recent.getByRole('link',{name:/Weekend Crew/}).click();
     await expect(page.locator('.chat-room-title small')).toContainText('2 active now');
-    await page.getByRole('button',{name:'Chat settings',exact:true}).click();
+    await page.getByRole('button',{name:'Chat details',exact:true}).click();
     await expect(page.locator('[data-presence-member="classmate-1"]')).toHaveText('Active now');
     await expect(page.locator('[data-presence-member="demo-user"]')).toHaveCount(0);
     expect(state.requests.every(r => r.chat_ids.length<=20)).toBe(true);

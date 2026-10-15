@@ -114,7 +114,7 @@ test("report uses the iOS reason sheet and then offers to leave", async ({ page 
         DemoAPI.prototype.reportChat = async (...args) => { window.__reports.push(args); };
     });
     await openNoah(page);
-    await page.getByRole("button", { name: "Chat settings", exact: true }).click();
+    await page.getByRole("button", { name: "Chat details", exact: true }).click();
     await page.getByRole("button", { name: "Report chat" }).click();
     const sheet = page.getByRole("dialog", { name: "Why are you reporting Noah Williams?" });
     await expect(sheet).toBeVisible();
@@ -346,6 +346,8 @@ test("an Opus-only recorder sends voice through the media ingest", async ({ page
     await expect(page.getByRole("button", { name: "Playback speed 1×" })).toBeVisible();
     await page.locator("[data-send-voice]").click();
     await expect(page.locator(".chat-message.mine .chat-audio-message").last()).toBeVisible();
+    // The send is queued at once; wait for the ingest to deliver it.
+    await expect.poll(() => page.evaluate(() => window.__ingest.map(([name]) => name).includes("sendChatMessage"))).toBe(true);
     const log = await page.evaluate(() => window.__ingest);
     const names = log.map(([name]) => name);
     expect(names).not.toContain("createChatMediaUpload");
