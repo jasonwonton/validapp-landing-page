@@ -81,7 +81,6 @@ const paths = {
     'save-down': '<path d="M12 3v12m-5-5 5 5 5-5M5 20h14"/>',
     retake: '<path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.6"/><path d="M4 3.5v5.1h5.1"/>',
     'text-search': '<circle cx="11" cy="11" r="7.5"/><path d="m16.5 16.5 5 5M8 9h6M8 12h4.5M8 15h3"/>',
-    'arrow-right': '<path d="M4 12h16m-7-7 7 7-7 7"/>',
     // SF Symbols bell.badge.fill: a filled bell with the badge dot top right.
     'bell-badge': '<path fill="currentColor" stroke="none" d="M10.5 3.2a1.5 1.5 0 0 1 3 .1 6 6 0 0 1 1.3.5 4.5 4.5 0 0 0 4.2 6.2V14l1.6 2.4A1 1 0 0 1 19.8 18H4.2a1 1 0 0 1-.8-1.6L5 14v-3.5a6 6 0 0 1 5.5-6Zm-1 15.8h5a2.5 2.5 0 0 1-5 0Z"/><circle cx="19" cy="5" r="3" fill="currentColor" stroke="none"/>',
     // Tab bar (MainTabItems.swift TabIcon): outlined, and filled while selected.
