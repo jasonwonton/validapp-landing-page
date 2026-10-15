@@ -14,6 +14,7 @@ import { userMessage } from "./user-message.js";
 import { answerPayload, buildChoicePool, canStartPlay, contactUploadPayload, selectPlayChoices, summarizeContactSync } from "./play-choices.js";
 import { ANONYMOUS_SUBMITTER_NAME, AUTHOR_ANONYMITY_HINT, feedQuestionAttribution, playQuestionAttribution } from "./question-attribution.js";
 import { askForNotifications, configureNotificationSoftPrompt } from "./notification-soft-prompt.js";
+import { cameraTabHint, createMementoDay } from "./camera/memento-day.js";
 
 // The localhost-only demo fixtures load on demand so they never join the
 // production module graph or the service-worker shell.
@@ -1129,6 +1130,9 @@ async function showSignedIn() {
         }
         $("#activityStatusButton")?.classList.toggle("hidden", !chatsEnabled);
         $('.nav-item[data-panel="chats"]').classList.toggle("hidden", !chatsEnabled);
+        mementoDay.setUser(api.user.id);
+        renderCameraTab();
+        void refreshMementoDay({ force: true });
         $("#bottomNav").classList.toggle("chats-enabled", chatsEnabled);
         writeAppCache("profile", profile);
         renderProfileHeader();
@@ -4558,6 +4562,7 @@ function prepareFeedView() {
                 normalizeReactionState, dominantReaction, promptForKey, tbhAuthorLine,
                 tbhRequestsEnabled, renderTabBadges, formatVoterHint, showToast,
                 commentControlMarkup, personalInboxUnreadCounts,
+                openStoryCamera: () => openCamera({ startsWithStory: true }),
             });
             return feedView;
         });
@@ -8758,6 +8763,89 @@ function restorePanelScroll(panel, targetScroll) {
     });
 }
 
+// What the Chats view is built with, whether Chats or the Camera tab opens it first.
+function chatsRouteContext() {
+    return {
+        root: $("#chatsRoot"), api, presence: chatPresence,
+        getUser: () => api.user,
+        getConfig: () => state.config,
+        softHaptic, successHaptic, haptic, showToast,
+        installSwipeBack: edgeSwipeBackSupported() ? installEdgeSwipeBack : null,
+        onUnreadChange: renderChatUnreadBadge,
+        notifications: chatNotificationBridge,
+        onChatsLoaded: (chats) => mementoDay.setChats(chats),
+        onPlay: async () => {
+            if (!state.profile?.school_id) return showToast('Join a school to play the Game of the Week.');
+            await openWeeklyGame({ launch: true });
+            void refreshWeeklyGame();
+        },
+    };
+}
+
+// MainTabView's middle Camera tab (CameraTabItem, CameraTabCover). It opens
+// the Memento camera while a chat still needs today's Memento, otherwise the
+// shoot-first camera; Send to picks where the capture goes.
+const mementoDay = createMementoDay();
+let chatsRouteModule = null;
+let mementoDayLoadedAt = 0;
+let mementoDayMidnightTimer = null;
+const chatsOn = () => state.config?.enable_chats === true && state.config?.enable_web_chats === true;
+const storiesOn = () => state.config?.enable_stories === true && state.config?.enable_web_stories === true;
+const mementosOn = () => chatsOn() && state.config?.enable_chat_daily_ledger === true && state.config?.enable_web_mementos === true;
+
+function renderCameraTab() {
+    const button = $("[data-camera-tab]");
+    if (!button) return;
+    button.classList.toggle("hidden", !(chatsOn() || storiesOn()));
+    const status = mementosOn() ? mementoDay.status() : null;
+    $("#cameraTabDot").classList.toggle("hidden", !status?.isDue);
+    button.setAttribute("aria-description", cameraTabHint(status));
+}
+
+// The first 50 chats (what iOS caches) say which still need today's Memento.
+async function refreshMementoDay({ force = false } = {}) {
+    if (!api.user?.id || !mementosOn()) return renderCameraTab();
+    if (!force && Date.now() - mementoDayLoadedAt < 5 * 60_000) return;
+    mementoDayLoadedAt = Date.now();
+    try {
+        const response = await api.getChats(api.user.id, 50, 0);
+        mementoDay.setChats(response?.items || response || []);
+    } catch (_) {
+        mementoDayLoadedAt = 0;
+    }
+    // Just after local midnight a new Memento is due.
+    clearTimeout(mementoDayMidnightTimer);
+    const midnight = new Date();
+    midnight.setHours(24, 0, 5, 0);
+    mementoDayMidnightTimer = setTimeout(() => void refreshMementoDay({ force: true }), midnight - Date.now());
+}
+
+function preloadCameraRoute() {
+    if (chatsRouteModule) return Promise.resolve(chatsRouteModule);
+    return preloadRoute("chats").then((route) => (chatsRouteModule = route));
+}
+
+async function openCamera({ startsWithStory = false } = {}) {
+    if (!api.user?.id || !(chatsOn() || storiesOn())) return;
+    const status = mementosOn() ? mementoDay.status() : null;
+    // CameraTabState.opening: no answer yet counts as due.
+    const mementoAvailable = mementosOn() && !startsWithStory && (status?.isDue ?? true);
+    // Synchronous once loaded, so the camera is asked for inside the tap.
+    const route = chatsRouteModule || await preloadCameraRoute().catch(() => null);
+    if (!route) return showToast("The camera needs a connection to load. Try again.");
+    const view = route.ensureView(chatsRouteContext());
+    view.openCaptureFlow({
+        mode: mementoAvailable ? "memento" : "snap",
+        startsWithStory, mementoAvailable,
+        postedChatIds: () => mementoDay.postedChatIds(),
+        onMementoSent: (chatIds) => mementoDay.sendStarted(chatIds),
+        onClose: () => {
+            void refreshMementoDay({ force: true });
+            void feedView?.refreshStories?.();
+        },
+    });
+}
+
 function activatePanelRoute(panel) {
     const context = { isCurrent: () => state.activePanel === panel };
     if (panel === "feed") Object.assign(context, {
@@ -8768,20 +8856,7 @@ function activatePanelRoute(panel) {
         load: loadFeed,
     });
     if (panel === "play") context.load = loadPlay;
-    if (panel === "chats") Object.assign(context, {
-        root: $("#chatsRoot"), api, presence: chatPresence,
-        getUser: () => api.user,
-        getConfig: () => state.config,
-        softHaptic, successHaptic, haptic, showToast,
-        installSwipeBack: edgeSwipeBackSupported() ? installEdgeSwipeBack : null,
-        onUnreadChange: renderChatUnreadBadge,
-        notifications: chatNotificationBridge,
-        onPlay: async () => {
-            if (!state.profile?.school_id) return showToast('Join a school to play the Game of the Week.');
-            await openWeeklyGame({ launch: true });
-            void refreshWeeklyGame();
-        },
-    });
+    if (panel === "chats") Object.assign(context, chatsRouteContext());
     if (panel === "profile") context.load = loadProfilePanel;
     return activateRoute(panel, context).catch(() => {
         if (!context.isCurrent()) return;
@@ -10060,7 +10135,13 @@ function bindEvents() {
     document.addEventListener("click", (event) => {
         if (!event.target.closest(".detail-overflow")) closeDetailActionMenus();
     });
-    $$(".nav-item").forEach((button) => {
+    mementoDay.subscribe(renderCameraTab);
+    $("[data-camera-tab]").addEventListener("pointerdown", () => { void preloadCameraRoute().catch(() => null); }, { passive: true });
+    $("[data-camera-tab]").addEventListener("click", (event) => {
+        if (event.detail > 0) event.currentTarget.blur();
+        void openCamera();
+    });
+    $$(".nav-item[data-panel]").forEach((button) => {
         // The outlined icon, and the filled one shown while the tab is selected (TabIcon).
         const wrap = button.querySelector("[data-tab-icon]");
         if (wrap && !wrap.querySelector("svg")) wrap.insertAdjacentHTML("afterbegin", uiIcon(wrap.dataset.tabIcon) + uiIcon(`${wrap.dataset.tabIcon}-filled`));
@@ -10484,6 +10565,7 @@ function bindEvents() {
             refreshWebPushStatus();
             refreshAskSafetyState();
             refreshFeedIfStale(FEED_FOREGROUND_REFRESH_MS);
+            void refreshMementoDay();
             void refreshConfig();
             void refreshBanner();
             // Reset the worker's push counter to what the app shows now.
