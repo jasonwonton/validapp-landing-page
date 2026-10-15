@@ -190,8 +190,10 @@ test.describe("on iPhone", () => {
         await page.locator("#feedList [data-reactors]").first().click();
         const sheet = page.locator("#reactorListDialog");
         await expect(sheet).toBeVisible();
-        const box = await sheet.boundingBox();
-        expect(Math.round(box.y + box.height)).toBeGreaterThanOrEqual(843);
-        expect(box.width).toBeGreaterThanOrEqual(388);
+        // Measured once the sheet has finished rising.
+        await expect.poll(async () => {
+            const box = await sheet.boundingBox();
+            return Math.round(box.y + box.height) >= 843 && box.width >= 389;
+        }).toBe(true);
     });
 });

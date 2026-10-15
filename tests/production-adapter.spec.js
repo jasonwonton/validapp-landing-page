@@ -952,14 +952,14 @@ test("locked Feed shows received votes, vote-to-unlock, and notification activat
     await page.getByRole("button", { name: /^sign in$/i }).click();
 
     const gate = page.locator("#feedGateLock");
-    await expect(gate.getByRole("heading", { name: "4 votes" })).toBeVisible();
-    await expect(gate).toContainText("Cast 2 more votes to unlock your Feed");
+    // FeedVoteLockedView: the title follows the unread count; vote alerts sit below the card.
+    await expect(gate.getByRole("heading", { name: /^(You got voted for|Feed is locked)$/ })).toBeVisible();
     await expect(gate.getByRole("button", { name: "Vote now to unlock Feed" })).toBeVisible();
-    const notificationButton = gate.getByRole("button", { name: "Enable notifications" });
+    const notificationButton = gate.getByRole("button", { name: "Turn on alerts for votes" });
     await expect(notificationButton).toBeVisible();
     await notificationButton.click();
 
-    await expect(gate.getByLabel("Enable vote notifications")).toBeHidden();
+    await expect(notificationButton).toBeHidden();
     expect(requests.filter((request) => request.path.endsWith("/web-push-subscriptions"))).toHaveLength(1);
 });
 

@@ -141,11 +141,12 @@ test("God Mode actions avoid duplicate icons and overflow dots are centered", as
     const overflow = page.getByRole("button", { name: "More poll actions" });
     await expect(overflow).toHaveCSS("padding-top", "0px");
     await expect(overflow).toHaveCSS("padding-bottom", "0px");
-    expect(await overflow.evaluate((element) => getComputedStyle(element, "::before").content)).toBe('"•••"');
+    // QuestionDetailToolbar: an ellipsis.circle look-alike, centred in the button.
+    await expect(overflow.locator('[data-ui-icon="ellipsis-circle"]')).toBeVisible();
     const revealButton = page.getByRole("button", { name: "Get God Mode to Reveal who sent this" });
     await expect(revealButton.locator("img")).toHaveCount(0);
     expect(await revealButton.evaluate((element) => getComputedStyle(element, "::before").backgroundImage)).toContain("crown.webp");
-    await page.getByRole("button", { name: "Close" }).click();
+    await page.getByRole("button", { name: "Back" }).click();
 
     await page.getByRole("button", { name: "Profile", exact: true }).click();
     const startCard = page.locator(".god-mode-start-button");

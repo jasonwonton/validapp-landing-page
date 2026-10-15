@@ -61,7 +61,7 @@ export function createCommentsView(context) {
                     <div class="comments-header">
                         <span></span>
                         <strong id="commentsTitle">Comments</strong>
-                        <button class="sheet-text-control comments-done" type="button" data-close-comments>Done</button>
+                        <button class="sheet-text-control comments-done" type="button" data-close-comments data-focus-on-open>Done</button>
                     </div>
                 </div>
                 <div class="comments-layout">

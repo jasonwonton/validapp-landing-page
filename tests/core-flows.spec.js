@@ -426,10 +426,10 @@ test("feed navigation, filtering, and reactions work", async ({ page }) => {
     await expect(page.locator("#feedList .feed-section-heading")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Recent", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "My Votes", exact: true })).toBeVisible();
-    await page.getByPlaceholder("Search your inbox...").fill("company");
+    await page.getByPlaceholder("Search your school...").fill("company");
     await expect(page.getByText("Who is most likely to start a company?")).toBeVisible();
     await expect(page.getByText("Who has the best music taste?")).toBeHidden();
-    await page.getByPlaceholder("Search your inbox...").fill("");
+    await page.getByPlaceholder("Search your school...").fill("");
     const poll = page.locator("[data-feed-detail='9003']");
     await poll.locator("[data-reaction-picker]").click();
     await page.getByRole("dialog", { name: "Choose a reaction" }).getByRole("button", { name: "Love" }).click();
@@ -884,13 +884,15 @@ test("God Mode subscribers can reveal a vote sender and consume one weekly revea
     const detail = page.locator("#feedDetailDialog");
     await expect(detail.getByRole("button", { name: "Reveal who sent this (2 remaining)" })).toBeVisible();
     await detail.getByRole("button", { name: "Reveal who sent this (2 remaining)" }).click();
+    // QuestionDetailRevealConfirmations: a free reveal asks first.
+    await page.getByRole("dialog", { name: "Reveal who sent this?" }).getByRole("button", { name: "Use 1 Reveal" }).click();
     const sender = detail.locator(".revealed-sender-row");
     await expect(sender.getByText("Sent by Maya Chen", { exact: true })).toBeVisible();
     await expect(sender).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     await expect(sender).toHaveCSS("border-top-width", "0px");
     expect((await sender.boundingBox()).height).toBeLessThanOrEqual(48);
     await expect(page.locator("#toast")).toContainText("Revealed: Maya Chen");
-    await detail.getByRole("button", { name: "Close" }).click();
+    await detail.getByRole("button", { name: "Back" }).click();
     await page.getByRole("button", { name: "Profile", exact: true }).click();
     await expect(page.getByText("God Mode Active")).toBeVisible();
     await expect(page.getByText(/1 weekly reveal left/)).toBeVisible();

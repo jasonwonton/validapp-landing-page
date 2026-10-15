@@ -829,7 +829,7 @@ function openDetailScreen(screen, { historyMode = "push" } = {}) {
     document.body.classList.add("detail-screen-open");
     if (historyMode !== "none" && history.state?.detail !== screen.id) writeNavigationState(historyMode, screen.id);
     requestAnimationFrame(() => screen.classList.remove("detail-screen-opening"));
-    screen.querySelector("[aria-label='Close']")?.focus({ preventScroll: true, focusVisible: false });
+    screen.querySelector("[aria-label='Close'], [data-focus-on-open]")?.focus({ preventScroll: true, focusVisible: false });
 }
 
 function closeDetailScreen(screen, { fromHistory = false } = {}) {

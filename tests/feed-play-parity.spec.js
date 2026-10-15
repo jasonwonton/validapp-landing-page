@@ -30,7 +30,7 @@ test('poll detail title carries the iOS gender emoji and heart', async ({ page }
 });
 
 for (const [width, height] of [[375, 812], [390, 844], [430, 932]]) {
-    test(`poll detail fits the poll and engagement row in a ${width}x${height} screen`, async ({ page }) => {
+    test(`poll detail fits the poll and share row in a ${width}x${height} screen`, async ({ page }) => {
         await page.setViewportSize({ width, height });
         await page.emulateMedia({ reducedMotion: 'reduce' });
         await signIn(page);
@@ -38,8 +38,10 @@ for (const [width, height] of [[375, 812], [390, 844], [430, 932]]) {
         const detail = page.locator('#feedDetailDialog');
         await expect(detail).toBeVisible();
         await page.evaluate(() => document.fonts.ready);
-        const engagement = await detail.locator('.detail-engagement-row').boundingBox();
-        expect(engagement.y + engagement.height).toBeLessThanOrEqual(height);
+        // QuestionDetailView: the share row comes first under the card; Reveal and the
+        // engagement row follow it below the fold, as on iOS.
+        const share = await detail.locator('.feed-detail-share').boundingBox();
+        expect(share.y + share.height).toBeLessThanOrEqual(height);
         const options = await detail.locator('.feed-detail-option').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().toJSON()));
         expect(options).toHaveLength(4);
         // PollSnapshot.swift: 10pt between options and 10pt side margins, 100pt minimum height.
