@@ -1468,11 +1468,11 @@ body:has(dialog.ui-sheet[open]) .toast[popover] { top: calc(env(safe-area-inset-
     body.android-device .topbar,
     body.android-device .question-submit-dock,
     body.android-device .detail-screen-header { backdrop-filter: none; }
-    body.android-device dialog.modal:not(.reaction-picker-dialog) { inset: auto 0 0; width: 100%; max-width: none; max-height: min(90dvh, var(--visual-viewport-height, 90dvh)); margin: 0; border-radius: 28px 28px 0 0; transform: translateY(var(--sheet-drag, 0px)); transition: transform .16s ease; }
-    body.android-device dialog.modal:not(.reaction-picker-dialog)::before { content: ""; position: sticky; z-index: 5; top: 8px; width: 42px; height: 5px; display: block; margin: 8px auto 2px; border-radius: 999px; background: rgba(0,63,66,.28); }
-    body.android-device dialog.modal:not(.reaction-picker-dialog)::backdrop { background: rgba(5,9,20,.56); backdrop-filter: none; }
+    dialog.modal:not(.reaction-picker-dialog) { inset: auto 0 0; width: 100%; max-width: none; max-height: min(90dvh, var(--visual-viewport-height, 90dvh)); margin: 0; border-radius: 28px 28px 0 0; transform: translateY(var(--sheet-drag, 0px)); transition: transform .16s ease; }
+    dialog.modal:not(.reaction-picker-dialog)::before { content: ""; position: sticky; z-index: 5; top: 8px; width: 42px; height: 5px; display: block; margin: 8px auto 2px; border-radius: 999px; background: rgba(0,63,66,.28); }
+    dialog.modal:not(.reaction-picker-dialog)::backdrop { background: rgba(5,9,20,.56); backdrop-filter: none; }
     .classmate-picker-dialog { inset: auto 0 0; width: 100%; max-width: none; max-height: calc(100dvh - env(safe-area-inset-top)); margin: 0; border-radius: 28px 28px 0 0; transform: none; }
-    body.android-device dialog.classmate-picker-dialog { transform: translateY(var(--sheet-drag, 0px)); }
+    dialog.classmate-picker-dialog { transform: translateY(var(--sheet-drag, 0px)); }
     .classmate-picker-shell { height: min(86dvh, 760px); min-height: 0; padding: 0 14px calc(14px + env(safe-area-inset-bottom)); }
     .reactor-list-dialog { inset: auto 0 0; width: 100%; max-width: none; margin: 0; border-radius: 28px 28px 0 0; transform: none; }
     .feed-notification-prompt { grid-template-columns: 40px minmax(0, 1fr); }

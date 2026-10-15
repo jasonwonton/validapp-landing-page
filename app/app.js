@@ -6704,7 +6704,7 @@ function installNativeSheetGestures() {
     if (edgeSwipeBackSupported()) {
         for (const screen of $$(".detail-screen")) installEdgeSwipeBack(screen, () => closeDetailScreen(screen));
     }
-    if (!isAndroidDevice()) return;
+    // Sheets drag down on every phone, iPhone included (styles.css: dialog.modal at <=470px).
     for (const dialog of $$("dialog.modal")) {
         if (dialog.dataset.sheetGesture === "1" || dialog.classList.contains("reaction-picker-dialog")) continue;
         dialog.dataset.sheetGesture = "1";
@@ -6712,6 +6712,7 @@ function installNativeSheetGestures() {
         let dragDistance = 0;
         let dragFrame = null;
         dialog.addEventListener("pointerdown", (event) => {
+            if (!matchMedia("(max-width: 470px)").matches) return;
             const rect = dialog.getBoundingClientRect();
             if (event.clientY - rect.top > 72 || event.target.closest("button, input, textarea, select, a")) return;
             startY = event.clientY;
