@@ -1022,7 +1022,8 @@ body.play-active .play-actions { margin: 0; }
 .feedback-history-card header { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font-size: .76rem; }
 .feedback-history-card p { margin: 0; line-height: 1.35; overflow-wrap: anywhere; }
 .feedback-team-response { display: grid; gap: 3px; padding: 9px; border-radius: 10px; background: color-mix(in srgb, var(--mint) 42%, var(--white)); }
-.feedback-team-response strong { font-size: .76rem; }
+.feedback-team-response strong { display: inline-flex; align-items: center; gap: 4px; font-size: .76rem; }
+.feedback-team-seal { width: 14px; height: 14px; color: #1a73e8; }
 .feedback-team-response time { color: var(--muted); font-size: .7rem; }
 .modal input:not([type="file"]):not([type="radio"]):not([type="checkbox"]), .modal select { width: 100%; min-height: 44px; padding: 9px 11px; border: 2px solid var(--outline); border-radius: 11px; background: var(--white); }
 .android-install-dialog { position: fixed; inset: 0; width: 100%; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom)); border: 0; background: var(--aqua); }

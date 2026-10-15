@@ -1302,12 +1302,6 @@ function renderProfilePanel() {
     const schoolName = currentProfileSchoolName();
     const grade = formatGrade(profile.grade || "").replace(/^Grade\s+/i, "");
     const canChangeInformation = profile.can_change_information !== false;
-    const nextChangeDate = profile.next_information_change_at ? new Date(profile.next_information_change_at) : null;
-    const informationStatus = !canChangeInformation
-        ? (nextChangeDate && !Number.isNaN(nextChangeDate.getTime())
-            ? `Available again ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(nextChangeDate)}`
-            : "Profile change currently unavailable")
-        : "";
     const streak = Math.max(0, Number(profile.current_streak || 0));
     const pendingPhoto = state.pendingProfilePhoto;
     const hasProfilePhoto = Boolean(pendingPhoto || (imageURL && !String(profile.profile_picture_url || "").includes("default.png")));
@@ -1318,14 +1312,14 @@ function renderProfilePanel() {
             <span class="photo-edit-badge" aria-hidden="true">${pendingPhoto?.status === "failed" ? "!" : uiIcon("edit")}</span>
         </button>
         ${pendingPhoto?.status === "failed" ? '<p class="profile-photo-warning" role="status">Upload failed. Tap your photo to try again.</p>' : ""}
-        ${hasProfilePhoto ? "" : '<p class="profile-photo-warning">Users without profile pictures receive fewer votes.</p>'}
+        ${hasProfilePhoto ? "" : '<p class="profile-photo-warning">\u26a0\ufe0f Users without profile pictures receive less votes.</p>'}
         <h3>${escapeHTML(displayName(profile))}</h3>
         <div class="profile-identity-line"><span class="profile-handle">@${escapeHTML(profile.username || "valid")}</span>${streak ? `<span class="profile-streak ${profile.streak_needs_activity ? "needs-activity" : ""}" aria-label="${streak} day streak">${uiIcon("fire")} ${streak}</span>` : ""}</div>
         <button class="profile-bio-button ${profile.bio ? "" : "empty"}" type="button" data-edit-bio>${profile.bio ? escapeHTML(profile.bio) : '<span>Add bio</span><span class="profile-add-bio-icon" aria-hidden="true">+</span>'}</button>
         ${(schoolName || grade) ? `<div class="profile-school-meta">${schoolName ? `<span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-school.svg" alt=""><span>${escapeHTML(schoolName)}</span></span>` : ""}${grade ? `<span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-graduation-cap.svg" alt=""><span>${escapeHTML(grade)}</span></span>` : ""}</div>` : ""}
         <button class="profile-information-inline" type="button" data-edit-profile>
             <span class="profile-information-icon">${profileInformationIcon(canChangeInformation)}</span>
-            <span class="profile-information-copy"><strong>Profile information</strong>${informationStatus ? `<small>${escapeHTML(informationStatus)}</small>` : ""}</span>
+            <span class="profile-information-copy"><strong>Profile information</strong></span>
             <span class="profile-information-chevron" aria-hidden="true">›</span>
         </button>
         <div class="profile-stats-grid">
@@ -5950,7 +5944,7 @@ function renderFeedbackHistory() {
             ? `${item.report_subject_type === "profile" ? "Profile" : "Question"} report update`
             : "Your feedback";
         const responseMarkup = responses.length
-            ? responses.map((response) => `<div class="feedback-team-response"><strong>Valid team</strong><p>${escapeHTML(response.response_text || "")}</p><time datetime="${escapeHTML(response.created_at || "")}">${escapeHTML(feedbackHistoryDate(response.created_at))}</time></div>`).join("")
+            ? responses.map((response) => `<div class="feedback-team-response"><strong><svg class="feedback-team-seal" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="m12 1.8 2.4 1.7 2.9-.2 1 2.8 2.5 1.5-.6 2.9 1.2 2.7-2.1 2-.3 2.9-2.9.6-1.7 2.4-2.8-.9-2.8.9-1.7-2.4-2.9-.6-.3-2.9-2.1-2 1.2-2.7-.6-2.9 2.5-1.5 1-2.8 2.9.2Zm4 7.1-1.4-1.3-4 4.4-2-2-1.4 1.4 3.4 3.4Z"/></svg>Valid team</strong><p>${escapeHTML(response.response_text || "")}</p><time datetime="${escapeHTML(response.created_at || "")}">${escapeHTML(feedbackHistoryDate(response.created_at))}</time></div>`).join("")
             : `<p class="form-hint">No team reply yet.</p>`;
         return `<article class="feedback-history-card ${isTarget ? "notification-target" : ""}" data-feedback-history="${escapeHTML(item.id)}" tabindex="-1"><header><strong>${escapeHTML(label)}</strong><time datetime="${escapeHTML(item.created_at || "")}">${escapeHTML(feedbackHistoryDate(item.created_at))}</time></header><p>${escapeHTML(item.feedback_text || "")}</p>${responseMarkup}</article>`;
     }).join("");
@@ -6015,10 +6009,10 @@ async function submitFeedback(event) {
 // Profile photos go through the iOS circle crop and upload format (≤1024 px JPEG
 // 0.82), so large camera photos no longer hit a 5 MB wall. The new photo shows
 // at once with an uploading state, and a failed upload stays retryable.
-async function cropProfilePhoto(file) {
+async function cropProfilePhoto(file, options = {}) {
     try {
         const { cropAvatar } = await import("./avatar-crop.js");
-        return await cropAvatar(file);
+        return await cropAvatar(file, options);
     } catch (error) {
         showToast(userMessage(error, "That photo could not be opened. Choose a JPEG or PNG."));
         return null;
@@ -6052,7 +6046,8 @@ async function changeProfilePicture(event) {
     const file = input.files[0];
     input.value = "";
     if (!file) return;
-    const cropped = await cropProfilePhoto(file);
+    // SettingsView's circle cropper strings.
+    const cropped = await cropProfilePhoto(file, { title: "Choose your profile photo", instructions: "Pinch to zoom and drag to frame your photo." });
     if (cropped) await uploadProfilePhoto(cropped);
 }
 
