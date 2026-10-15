@@ -344,6 +344,10 @@ export function buildChoicePool({ contacts = [], classmates = [], selfUserId = n
             visibility_boosts: Array.isArray(contact.visibility_boosts) ? contact.visibility_boosts : [],
             mutual_strength: Math.max(0, Number(contact.recommendation_strength || 0)),
             weekly_vote_count: Math.max(0, Number(contact.weekly_vote_count || 0)),
+            // The invite prompt after a vote and the lock screen's named
+            // suggestion read these (PlayViewModel+Answering, PlayLockedView).
+            vote_count: Math.max(0, Number(contact.vote_count || 0)),
+            invite_suggested: contact.invite_suggested === true,
         };
         pool.push(choice);
         if (userId) {
@@ -371,6 +375,8 @@ export function buildChoicePool({ contacts = [], classmates = [], selfUserId = n
             grade: classmate.grade || null,
             gender: classmate.gender || null,
             weekly_vote_count: Math.max(0, Number(classmate.weekly_vote_count || 0)),
+            // NominationSearchView ranks classmates by total votes.
+            vote_count: Math.max(0, Number(classmate.vote_count || 0)),
         };
         if (indexByUserId.has(userId)) {
             const index = indexByUserId.get(userId);

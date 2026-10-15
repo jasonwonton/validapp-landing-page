@@ -42,7 +42,7 @@ test('Play: the author of an anonymous question sees it anonymously, with the pr
     await expect(attribution).not.toContainText('Jamie Rivera');
     await expect(attribution.locator('img')).toHaveAttribute('src', /anonymous\.webp/);
     await expect(attribution.locator('[data-submitter-author-hint]')).toHaveText('Your name is hidden from classmates');
-    await expect(attribution.getByRole('menuitem', { name: 'Block submitter', includeHidden: true })).toHaveCount(0);
+    await expect(attribution.getByRole('menuitem', { name: 'Block User', includeHidden: true })).toHaveCount(0);
 });
 
 test('Play: classmates see an anonymous question anonymously, without the hint', async ({ page }) => {

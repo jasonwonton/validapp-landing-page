@@ -27,12 +27,32 @@ export class DemoAPI {
     async getWeeklyGame() {
         assertLocalDemo();
         const { DEMO_RELEASE, DEMO_SCUBA_RELEASE } = await import('./weekly-game/demo-release.js');
-        const scuba = new URLSearchParams(window.location.search).get('weeklygame') === 'scuba';
-        return { release: structuredClone(scuba ? DEMO_SCUBA_RELEASE : DEMO_RELEASE), discovery_required: false };
+        const params = new URLSearchParams(window.location.search);
+        const scuba = params.get('weeklygame') === 'scuba';
+        const release = structuredClone(scuba ? DEMO_SCUBA_RELEASE : DEMO_RELEASE);
+        // ?games=3: Admin's Live games, shown as tiles (EasterEggGamesCard).
+        if (params.get('games') === '3' || params.get('games') === '2') {
+            const day = (offset) => new Date(Date.now() + offset * 86_400_000).toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+            const games = [
+                { release, kind: 'weekly', ends_on: null, label: null },
+                { release: structuredClone(scuba ? DEMO_RELEASE : DEMO_SCUBA_RELEASE), kind: 'pinned', ends_on: day(1), label: null },
+                { release: { ...structuredClone(DEMO_RELEASE), id: 'e'.repeat(64), game_id: 'air-high-five', title: 'Air High Five', artwork_url: null }, kind: 'pinned', ends_on: null, label: 'Spirit Week' },
+            ].slice(0, Number(params.get('games')));
+            return { release, games, discovery_required: false };
+        }
+        return { release, discovery_required: false };
     }
 
     async getWeeklyGameLeaderboard() {
-        return { unlocked: true, entries: [{ rank: 1, name: 'Maya Chen', score: 67 }] };
+        return {
+            unlocked: true, personal_best: 31,
+            entries: [
+                { user_id: 'classmate-1', rank: 1, name: 'Maya Chen', score: 67 },
+                { user_id: 'classmate-2', rank: 2, name: 'Noah Williams', score: 52 },
+                { user_id: 'classmate-3', rank: 3, name: 'Ava Patel', score: 44 },
+            ],
+            me: { user_id: 'demo-user', rank: 4, name: 'Jules Rivera', score: 31 },
+        };
     }
 
     async unlockWeeklyGame() { return { unlocked: true }; }
@@ -214,7 +234,10 @@ export class DemoAPI {
         this.questions = [
             { id: 201, question_text: "Who would survive longest on a deserted island?", image_url: "../assets/app/lock.webp" },
             { id: 202, question_text: "Who should plan the senior trip?", image_url: "../assets/app/pencil-clipboard.webp", is_user_submitted: true, is_anonymous: false, submitted_by_name: "Maya Chen", submitted_by_avatar_url: "../assets/app/anonymous.webp" },
-            { id: 203, question_text: "Who gives the best advice?", image_url: "../assets/app/anonymous.webp" },
+            // ?anonq=1: an anonymous classmate question God Mode can reveal.
+            demoParams.get("anonq") === "1"
+                ? { id: 203, question_text: "Who gives the best advice?", image_url: "../assets/app/anonymous.webp", is_user_submitted: true, is_anonymous: true, can_reveal_submitter: true }
+                : { id: 203, question_text: "Who gives the best advice?", image_url: "../assets/app/anonymous.webp" },
             { id: 204, question_text: "Who is secretly the funniest person here?", image_url: "../assets/AppIconV2.png" },
         ];
         this.questionSubmissions = [
@@ -229,7 +252,14 @@ export class DemoAPI {
             { user_id: "classmate-5", first_name: "Sofia", last_name: "Kim", username: "sofiak", grade: "Freshman", school_name: "Westview High School", vote_count: 27, weekly_vote_count: 9, profile_picture_url: "../assets/app/aura.webp" },
             { user_id: "classmate-6", first_name: "Mateo", last_name: "Lee", username: "mateol", grade: "Senior", school_name: "Westview High School", vote_count: 24, weekly_vote_count: 7, profile_picture_url: "../assets/valid_logo.png" },
         ];
-        this.inviteStatus = { limit: 3, sent_today: 1, remaining: 2, next_reset_at: ago(-720), qualifying_invites: 0, aura_reward_progress: 0, aura_reward_goal: 3, aura_reward_amount: 50, aura_rewards_claimed: 0, aura_rewards_max: 1, aura_reward_max_reached: false };
+        // ?contacts=1: uploaded contacts, some not on Valid with votes waiting
+        // (the Play lock suggestion, invite sheet and post-vote invite).
+        if (demoParams.get("contacts") === "1") this.contacts = [
+            { phone_number: "1".repeat(64), name: "Maya Lopez", is_six7_user: false, user_id: null, recommendation_strength: 3, vote_count: 5, weekly_vote_count: 2, invite_suggested: true, visibility_boosts: [] },
+            { phone_number: "2".repeat(64), name: "Diego Ramos", is_six7_user: false, user_id: null, recommendation_strength: 1, vote_count: 2, weekly_vote_count: 1, invite_suggested: false, visibility_boosts: [] },
+            { phone_number: "3".repeat(64), name: "Priya Shah", is_six7_user: false, user_id: null, recommendation_strength: 0, vote_count: 0, weekly_vote_count: 0, invite_suggested: false, visibility_boosts: [] },
+        ];
+        this.inviteStatus = { limit: 3, sent_today: demoParams.get("invites") === "0" ? 3 : 1, remaining: demoParams.get("invites") === "0" ? 0 : 2, next_reset_at: ago(-180), qualifying_invites: 0, aura_reward_progress: 0, aura_reward_goal: 3, aura_reward_amount: 50, aura_rewards_claimed: 0, aura_rewards_max: 1, aura_reward_max_reached: false };
         this.askLink = {
             share_url: "https://validapp.lol/a/jules-demo",
             is_active: true,
@@ -888,6 +918,8 @@ export class DemoAPI {
             enable_web_calls: this.demoCallsEnabled,
             enable_web_comments: new URLSearchParams(location.search).get("comments") !== "0",
             enable_vault: new URLSearchParams(location.search).get("vault") !== "0",
+            enable_invite_after_vote: new URLSearchParams(location.search).get("contacts") === "1",
+            enable_invite_suggestions: true,
         };
     }
 

@@ -245,7 +245,7 @@ test("the Play lock countdown stops ticking while the page is hidden", async ({ 
     await signIn(page);
     await page.getByRole("button", { name: "Play", exact: true }).click();
     for (let answered = 0; answered < 4; answered += 1) await page.locator("[data-choice]").first().click();
-    await page.getByRole("button", { name: "W aura" }).click();
+    await page.getByRole("button", { name: "w aura" }).click();
     await expect(page.locator("#playLockMessage")).toContainText(/Unlocks in/);
     const setHidden = (hidden) => page.evaluate((value) => {
         Object.defineProperty(document, "hidden", { configurable: true, get: () => value });

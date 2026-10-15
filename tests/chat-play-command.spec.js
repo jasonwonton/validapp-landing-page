@@ -27,7 +27,10 @@ test('/play opens the weekly game locally, preserves the reply and never queues 
         const game = page.getByRole('dialog', { name: 'Weekly game', exact: true });
         await expect(game.getByRole('heading', { name: '67 Challenge' })).toBeVisible();
         await expect(game.locator('[data-instruction]')).toBeVisible();
-        await game.getByRole('button', { name: 'Close weekly game' }).click();
+        // iOS: /play starts a round over the game home; ✕ returns to the home, Done to the chat.
+        await game.getByRole('button', { name: 'Close game' }).click();
+        await page.getByRole('dialog', { name: 'Game of the Week' }).getByRole('button', { name: 'Done' }).click();
+        await expect(page.getByRole('dialog', { name: 'Game of the Week' })).toHaveCount(0);
         await expect(page.locator('.chat-reply-draft')).toContainText('That was hilarious');
         await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveValue('');
         expect(await page.evaluate(() => sentChatBodies)).toEqual([]);
@@ -50,7 +53,8 @@ test('chat command uses the selected Love Flap release and returns to the same r
     await page.getByRole('button', { name: 'Send message', exact: true }).click();
     await expect(page.locator('[data-status]')).toHaveText('Tap or press space to flap through the pipes.', { timeout: 20000 });
     await expect(page.frameLocator('iframe[title^="Love Flap"]').locator('canvas')).toBeVisible();
-    await page.getByRole('button', { name: 'Close weekly game' }).click();
+    await page.getByRole('button', { name: 'Close game' }).click();
+    await page.getByRole('dialog', { name: 'Game of the Week' }).getByRole('button', { name: 'Done' }).click();
     await expect(page.locator('.chat-room-title')).toContainText('Noah Williams');
     expect(await page.evaluate(() => sentChatBodies)).toEqual([]);
 });
@@ -68,11 +72,12 @@ test('game loading errors do not send the command as chat text', async ({ page }
     await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveValue('');
 });
 
-test('local demo shows the weekly game card without test-only API overrides', async ({ page }) => {
+test('local demo shows the Game of the Week row without test-only API overrides', async ({ page }) => {
     await page.goto('/app/?demo=1&signin=1');
     await page.getByRole('button', { name: /^sign in$/i }).click();
-    await expect(page.locator('#weeklyGameButton')).toBeVisible();
-    await expect(page.locator('#weeklyGameTitle')).toHaveText('67 Challenge');
-    await page.locator('#weeklyGameButton').click();
-    await expect(page.getByRole('dialog', { name: 'Weekly game' })).toBeVisible();
+    const row = page.locator('#weeklyGameRoot [data-weekly-game-open]');
+    await expect(row).toBeVisible();
+    await expect(row).toContainText('67 Challenge');
+    await row.click();
+    await expect(page.getByRole('dialog', { name: 'Game of the Week' })).toBeVisible();
 });
