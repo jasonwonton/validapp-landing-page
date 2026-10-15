@@ -986,6 +986,8 @@ export class DemoAPI {
             enable_web_mementos: true,
             enable_stories: ["stories", "native-stories"].some((key) => new URLSearchParams(location.search).get(key) === "1"),
             enable_web_stories: new URLSearchParams(location.search).get("stories") === "1",
+            // `&mementocap=N`: how many chats one Memento may go to (Send to's cap).
+            daily_entry_max_audience_chats: Number(new URLSearchParams(location.search).get("mementocap")) || 250,
             enable_calls: this.demoCallsEnabled,
             enable_web_calls: this.demoCallsEnabled,
             enable_web_comments: new URLSearchParams(location.search).get("comments") !== "0",
@@ -1043,6 +1045,7 @@ export class DemoAPI {
             throw error;
         }
         const id = `story-${payload.clientRequestId}`;
+        (this.publishedStoryTags ||= []).push([...(payload.taggedUserIds || [])]);
         const owner = this.storyAuthors().find((author) => author.is_owner);
         owner.items.push({
             id,
@@ -1224,24 +1227,30 @@ export class DemoAPI {
     async putDirectUpload() {}
     async finalizeDailyHighlightUpload(_userId, mediaId) { return { media_asset_id: mediaId, state: "ready" }; }
     async publishDailyHighlight(_userId, mediaId, chatIds, caption) {
-        if (!Array.isArray(chatIds) || chatIds.length !== 1 || !chatIds[0]) throw new Error("A Memento must be shared to exactly one chat.");
+        if (!Array.isArray(chatIds) || !chatIds.length) throw new Error("Choose a chat for your Memento.");
         const entryId = `entry-${Date.now()}`;
-        const chatId = chatIds[0];
-        const row = this.dailyRows[chatId];
-        if (!row) throw new Error("That chat is unavailable.");
-        row.viewer_has_posted_today = true;
-        row.viewer_has_shared = true;
-        row.view_gate_locked = false;
-        row.posted_count += 1;
         const swappedImageURL = this.dailyMediaAssets[mediaId]?.hasSecondary ? "../assets/app/anonymous.webp" : null;
-        row.entries.push({ user_id: "demo-user", first_name: "Jules", last_name: "Rivera", has_posted: true, entry_id: entryId, caption, image_url: "../assets/AppIconV2.png", swapped_image_url: swappedImageURL, published_at: new Date().toISOString() });
-        const chat = this.chats.find((item) => item.id === chatId);
-        chat.has_posted_today_memento = true;
-        chat.today_memento_count = row.posted_count;
-        const message = await this.sendChatMessage(null, chatId, { daily_entry_id: entryId, body: caption || "Sent a Memento", client_request_id: crypto.randomUUID() });
-        const savedMessage = this.chatMessages[chatId].find((item) => item.id === message.id);
-        Object.assign(savedMessage, { memento_image_url: "../assets/AppIconV2.png", memento_swapped_image_url: swappedImageURL, memento_ledger_date: localLedgerDate() });
-        return { entry_id: entryId, ledger_date: localLedgerDate(), shared_chat_ids: [...chatIds], aura_points_earned: 10, total_aura_points: this.profile.aura_points + 10, published_at: new Date().toISOString() };
+        const shared = [], skipped = [];
+        for (const chatId of chatIds) {
+            const row = this.dailyRows[chatId] ||= { chat_id: chatId, ledger_date: localLedgerDate(), viewer_has_posted_today: false, viewer_has_shared: false, viewer_is_eligible: true, view_gate_locked: false, posted_count: 0, eligible_count: 2, entries: [] };
+            const chat = this.chats.find((item) => item.id === chatId);
+            if (!chat || row.viewer_has_posted_today) { skipped.push(chatId); continue; }
+            row.viewer_has_posted_today = true;
+            row.viewer_has_shared = true;
+            row.view_gate_locked = false;
+            row.posted_count += 1;
+            row.entries.push({ user_id: "demo-user", first_name: "Jules", last_name: "Rivera", has_posted: true, entry_id: entryId, caption, image_url: "../assets/AppIconV2.png", swapped_image_url: swappedImageURL, published_at: new Date().toISOString() });
+            chat.has_posted_today_memento = true;
+            chat.today_memento_count = row.posted_count;
+            this.chatMessages[chatId] ||= [];
+            const message = await this.sendChatMessage(null, chatId, { daily_entry_id: entryId, body: caption || "Sent a Memento", client_request_id: crypto.randomUUID() });
+            const savedMessage = this.chatMessages[chatId].find((item) => item.id === message.id);
+            Object.assign(savedMessage, { memento_image_url: "../assets/AppIconV2.png", memento_swapped_image_url: swappedImageURL, memento_ledger_date: localLedgerDate() });
+            shared.push(chatId);
+        }
+        if (!shared.length) throw new Error("That chat is unavailable.");
+        (this.publishedMementoAudiences ||= []).push([...chatIds]);
+        return { entry_id: entryId, ledger_date: localLedgerDate(), shared_chat_ids: shared, skipped_chat_ids: skipped, aura_points_earned: 10, total_aura_points: this.profile.aura_points + 10, published_at: new Date().toISOString() };
     }
 
     async getClassmates() {

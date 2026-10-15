@@ -963,7 +963,7 @@ export class ValidAPI {
         return this.request(`/users/${userId}/story-uploads/${mediaAssetId}/finalize`, { method: "POST", timeoutMs: 60_000 });
     }
 
-    publishStory(userId, mediaAssetId, { caption = null, overlay = null, clientRequestId = crypto.randomUUID(), captureId = null } = {}) {
+    publishStory(userId, mediaAssetId, { caption = null, overlay = null, clientRequestId = crypto.randomUUID(), captureId = null, taggedUserIds = null } = {}) {
         const overlayText = overlay?.text?.trim() || null;
         return this.request(`/users/${userId}/stories`, {
             method: "POST",
@@ -975,6 +975,8 @@ export class ValidAPI {
                 text_overlay_x: overlayText ? Number(overlay.x ?? 0.5) : null,
                 text_overlay_y: overlayText ? Number(overlay.y ?? 0.5) : null,
                 ...(captureId ? { capture_id: captureId } : {}),
+                // "Tag classmates" in Send To (StoryTags.limit = 5).
+                ...(taggedUserIds?.length ? { tagged_user_ids: taggedUserIds.slice(0, 5) } : {}),
             }),
         });
     }
@@ -1390,11 +1392,13 @@ export class ValidAPI {
         });
     }
 
+    // One Memento can go to several chats at once (MementoAudiencePicker);
+    // /config daily_entry_max_audience_chats is how many the app offers.
     publishDailyHighlight(userId, mediaAssetId, chatIds, caption = null, clientRequestId = crypto.randomUUID()) {
-        if (!Array.isArray(chatIds) || chatIds.length !== 1 || !chatIds[0]) {
-            throw new APIError("A Memento must be shared to exactly one chat.", 400);
+        const scopedChatIds = [...new Set((Array.isArray(chatIds) ? chatIds : []).filter(Boolean).map(String))];
+        if (!scopedChatIds.length) {
+            throw new APIError("Choose a chat for your Memento.", 400);
         }
-        const scopedChatIds = [chatIds[0]];
         return this.request(`/users/${userId}/daily-entries`, {
             method: "POST",
             body: JSON.stringify({

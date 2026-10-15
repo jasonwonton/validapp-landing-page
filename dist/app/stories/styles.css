@@ -17,38 +17,18 @@
 .story-add-another { position: absolute; top: 35px; right: -8.5px; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer; }
 .story-add-another .story-add-badge { right: 9px; bottom: 9px; }
 :root[data-theme="dark"] .story-avatar::after { border-color: rgba(161,176,179,.45); }
-.story-composer { width: min(94vw, 520px); max-height: 92dvh; padding: 0; border: 2px solid var(--outline); border-radius: 22px; background: var(--aqua); color: var(--ink); }
-.story-composer::backdrop { background: rgba(5,9,20,.72); backdrop-filter: blur(3px); }
-.story-composer form { display: grid; gap: 12px; padding: 16px; }
-.story-composer header { display: grid; grid-template-columns: 70px minmax(0, 1fr) 70px; align-items: center; text-align: center; }
-.story-composer header button { min-height: 40px; padding: 4px; border: 0; background: transparent; color: inherit; text-align: left; }
-/* The composer frame has the viewer's shape (an iPhone screen, 9 : 19.5), so a
-   caption dragged here lands on the same spot of the media in the viewer. */
-.story-composer-preview { position: relative; container-type: inline-size; justify-self: center; height: min(46dvh, 440px); aspect-ratio: 9 / 19.5; display: grid; align-content: center; justify-items: center; gap: 8px; overflow: hidden; border: 3px solid var(--outline); border-radius: 20px; background: var(--white); text-align: center; }
-.story-composer-preview p { margin: 0 10px; font-size: .78rem; }
-.story-composer-preview img, .story-composer-preview video, .story-composer-preview .story-filter-canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
-.story-composer-preview .media-overlay-positioner { width: 100%; max-width: none; min-height: 0; padding: 3px 8px; border-radius: 0; background: rgba(0,0,0,.42); font-size: max(10px, 5.35cqw); font-weight: 500; line-height: 1.2; }
-.story-source-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.story-composer .story-source-button { position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 12px; border: 2px solid var(--outline); border-radius: 14px; background: var(--white); color: var(--ink); font-size: 1rem; cursor: pointer; }
-.story-source-button .ui-icon { width: 20px; height: 20px; }
-.story-source-button input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
-.story-source-button:focus-within { outline: 3px solid var(--peach); outline-offset: 2px; }
-.story-composer label { display: grid; gap: 5px; font-size: .8rem; }
-.story-composer label input { font-size: 16px; min-height: 46px; padding: 8px 11px; border: 2px solid var(--outline); border-radius: 12px; background: var(--white); color: var(--ink); }
-.story-upload-progress { height: 8px; overflow: hidden; border-radius: 99px; background: rgba(5,9,20,.12); }
-.story-upload-progress span { display: block; height: 100%; background: #1eb780; transition: width .15s linear; }
-/* Runtime styles (runtime-style.js) are single-attribute rules in the app
-   stylesheet, which loads first: defaults they override stay at zero specificity. */
-:where(.story-upload-progress span) { width: 0; }
-.story-composer-status { min-height: 1.3em; margin: -3px 0; color: var(--muted); font-size: .78rem; text-align: center; }
+/* "Posting…" and "Tap to retry" under your avatar (StoryStrip), and the
+   "Your Story didn't post" choices. */
+.story-author-button.story-posting small { color: var(--muted); }
+.story-author-button.story-failed small { color: var(--danger-text); }
+.story-failed-sheet .story-failed-actions { display: grid; gap: 10px; }
+.story-failed-sheet .story-failed-actions button { width: 100%; min-height: var(--button-height-small); margin: 0; border-radius: 25px; font-size: 16px; }
+.story-failed-sheet .story-failed-actions .secondary-button { border: 2px solid var(--outline); background: var(--white); color: var(--ink); }
 
 @media (prefers-reduced-motion: reduce) {
     .stories-rail { scroll-behavior: auto; }
 }
 
-:root[data-theme="dark"] .story-composer-preview,
-:root[data-theme="dark"] .story-source-button,
-:root[data-theme="dark"] .story-composer label input,
 :root[data-theme="dark"] .story-share-search,
 :root[data-theme="dark"] .story-share-preview,
 :root[data-theme="dark"] .story-share-people label,
@@ -209,12 +189,3 @@ label.failed .story-share-check .ui-icon { width: 28px; height: 28px; stroke-wid
     :where(.story-stage), .story-zones button > span { transition: none; }
     .story-sheet[open] { animation: none; }
 }
-/* Swipe colour looks on a Story photo (stories/photo-filter.js), as in the chat review. */
-.story-composer-preview .story-filter-canvas { pointer-events: none; }
-.story-composer-preview:has(.story-filter-canvas) { touch-action: pan-y; }
-.story-composer-preview .story-filter-name { position: absolute; z-index: 2; inset: 50% 0 auto; margin: 0; transform: translateY(-50%); color: #fff; text-align: center; font-size: 22px; font-weight: 900; text-shadow: 0 1px 6px rgba(0,0,0,.45); opacity: 0; pointer-events: none; }
-.story-filter-name.show { animation: story-filter-flash 1.37s both; }
-/* Same timing as .review-filter-name (camera.css), which isn't loaded here. */
-@keyframes story-filter-flash { 0% { opacity: 0; animation-timing-function: ease-out; } 8.76% { opacity: 1; animation-timing-function: linear; } 74.45% { opacity: 1; animation-timing-function: ease-in; } 100% { opacity: 0; } }
-/* Reduced motion (styles.css shortens every animation): shown without fading, hidden by photo-filter.js. */
-@media (prefers-reduced-motion: reduce) { .story-composer-preview .story-filter-name.show { animation: none; opacity: 1; } }

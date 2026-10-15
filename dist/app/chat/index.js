@@ -22,6 +22,7 @@ import {
     MAX_AUTOMATIC_ATTEMPTS,
     MAX_MEDIA_AUTOMATIC_ATTEMPTS,
     chatTextSendIsRetryable,
+    deliveringMediaRecords,
     listChatMediaOutbox,
     listChatTextOutbox,
     markChatMediaOutboxAttempt,
@@ -42,6 +43,9 @@ import {
     saveChatAppearance,
 } from "./appearance.js";
 import { createStickerMaker } from "./sticker-maker.js";
+import { chatPersonSubtitle, mergeChatPeople } from "./people.js";
+const loadSendTo = () => import("../camera/send-to.js");
+const loadCaptureQueue = () => import("../camera/capture-queue.js");
 import { createNotificationNudge } from "./notification-nudge.js";
 import { createMessageWindow } from "./message-window.js";
 import { createTimelineScroll } from "./timeline-scroll.js";
@@ -100,7 +104,7 @@ function localLedgerDate(date = new Date()) {
     return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 }
 
-export function createChatsView({ root, api, getUser, getConfig, presence, softHaptic, successHaptic, haptic, showToast, installSwipeBack, onUnreadChange, onPlay, notifications }) {
+export function createChatsView({ root, api, getUser, getConfig, presence, softHaptic, successHaptic, haptic, showToast, installSwipeBack, onUnreadChange, onPlay, notifications, onChatsLoaded }) {
     const feedback = (kind) => (haptic || globalThis.ValidPreferences?.haptic)?.(kind);
     const attentionPriority = chat => chatAttentionPriority(chat, {
         dailyLedgerEnabled: dailyLedgerEnabled(),
@@ -194,7 +198,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     const failedChatIds = new Set();
     const sendingChatCounts = new Map();
     // Outbox records this tab is delivering right now; the retry loop leaves them alone.
-    const deliveringRecordIds = new Set();
+    const deliveringRecordIds = deliveringMediaRecords;
     // Say hi card (SayHiModel): suggestions, per-friend status, the chats waves started.
     let sayHi = { userId: null, items: [], loadedAt: 0, statuses: new Map(), chats: new Map(), loading: false };
     // The room's "New messages" boundary for this visit (ChatUnreadAnchorState).
@@ -204,6 +208,11 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     let streakTicker = null;
     // New Chat (ChatCreationModel): mode, step, people, choices.
     let creation = null;
+    // The shoot-first camera (CameraFirstFlowView: Camera tab, Story rail +)
+    // and the Camera tab's Memento camera; null while the camera belongs to
+    // the open chat. { startsWithStory, mementoAvailable, postedChatIds, onClose, onMementoSent }
+    let shootFirst = null;
+    let mementoFromTab = null;
 
     root.innerHTML = `
         <div class="chat-shell">
@@ -273,6 +282,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                     <button class="primary-button memento-publish send-pill" type="submit" disabled><span class="send-pill-title">Send</span>${uiIcon('send')}</button>
                 </div>
             </form>
+            <div class="camera-mode-bar" role="group" aria-label="Camera mode" hidden><button type="button" data-camera-mode="memento" aria-label="Memento">MEMENTO</button><button type="button" data-camera-mode="snap" aria-label="Camera">CAMERA</button></div>
         </dialog>
         <dialog class="chat-sheet chat-camera-sheet" data-chat-media-dialog aria-label="Send media">
             <form class="chat-media-form">
@@ -286,10 +296,11 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 <p class="chat-media-send-count" hidden></p>
                 <div class="chat-media-progress hidden"><span></span></div>
                 <p class="chat-media-status" role="status"></p>
-                <div class="chat-media-review-actions"><button type="button" class="review-save" data-save-chat-media aria-label="Save"><span class="review-save-circle">${uiIcon('save-down')}</span><small>Save</small></button><span class="review-send-chip" data-send-to-chip role="note"><span class="review-chip-avatar" aria-hidden="true"></span><strong></strong></span><button class="primary-button chat-media-publish send-pill" type="submit" aria-label="Send" disabled><span class="send-pill-copy" aria-hidden="true"><span class="send-pill-title">Send</span><small class="send-pill-subtitle">View once</small></span>${uiIcon('send')}</button></div>
+                <div class="chat-media-review-actions"><button type="button" class="review-save" data-save-chat-media aria-label="Save"><span class="review-save-circle">${uiIcon('save-down')}</span><small>Save</small></button><button type="button" class="review-send-chip" data-send-to-chip aria-description="Add My Story or more people"><span class="review-chip-avatar" aria-hidden="true"></span><strong></strong><span class="review-chip-plus" aria-hidden="true">${uiIcon('plus')}</span></button><button class="primary-button chat-media-publish send-pill" type="submit" aria-label="Send" disabled><span class="send-pill-copy" aria-hidden="true"><span class="send-pill-title">Send</span><small class="send-pill-subtitle">View once</small></span>${uiIcon('send')}</button></div>
                 </section>
                 <input class="chat-media-file-input" type="file" accept="image/*,video/mp4" hidden aria-label="Photo or video file">
             </form>
+            <div class="camera-mode-bar" role="group" aria-label="Camera mode" hidden><button type="button" data-camera-mode="memento" aria-label="Memento">MEMENTO</button><button type="button" data-camera-mode="snap" aria-label="Camera">CAMERA</button></div>
         </dialog>
         <dialog class="chat-sheet chat-stickers-sheet" data-sticker-library-dialog aria-label="Send a sticker"><section class="chat-stickers-content"><header><button type="button" data-close-stickers>Close</button><strong>Send a Sticker</strong><button type="button" data-edit-stickers aria-pressed="false">Edit</button></header><p>Tap a sticker to send it.</p><p class="chat-sticker-status" role="status"></p><section class="chat-sticker-library"><input class="chat-sticker-file-input visually-hidden" type="file" accept="image/*" capture="environment"><div><small>Loading…</small></div></section></section></dialog>
         <dialog class="chat-sheet chat-mementos-sheet" data-memento-gallery-dialog aria-label="Mementos"><section class="chat-mementos-content"><header><button type="button" data-close-memento-gallery>Close</button><strong>Mementos</strong><span></span></header><p class="chat-memento-gallery-status" role="status"></p><div class="chat-memento-gallery"></div></section></dialog>
@@ -312,8 +323,14 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         <dialog class="chat-sheet" data-chat-readers-dialog aria-label="Read receipts"><div class="chat-readers-content"></div></dialog>
         <dialog class="chat-media-viewer" data-chat-media-viewer aria-label="Chat media" aria-describedby="chatViewerHint"><span class="visually-hidden" id="chatViewerHint">Drag down to close. Pinch or double-tap to zoom.</span><button type="button" data-close-media aria-label="Close">${uiIcon('close')}</button><div class="chat-viewer-stage"><div class="chat-viewer-media"><img class="chat-viewer-placeholder" alt="" aria-hidden="true" hidden><img alt="" hidden><video playsinline controls hidden></video><div class="chat-viewer-overlay" hidden></div></div></div><progress class="chat-ephemeral-progress" max="1" value="0" aria-label="Media time remaining" hidden></progress><small class="chat-capture-note" hidden>Screenshots aren’t detected on the web</small><button type="button" data-pause-ephemeral aria-label="Pause media" hidden>${uiIcon("pause")}</button><p></p><div class="chat-viewer-actions"><button type="button" data-swap-viewed-memento aria-label="Swap front and back photos" hidden>⇄ Swap views</button><button type="button" data-share-viewed-memento hidden>Share</button><button type="button" data-reply-viewed-media hidden>Reply</button><button type="button" data-react-viewed-media hidden>${uiIcon("heart")} React</button></div></dialog>`;
 
-    const $ = (selector) => root.querySelector(selector);
-    const $$ = (selector) => [...root.querySelectorAll(selector)];
+    // The camera, Memento and viewer sheets open over any tab (the Camera tab,
+    // the Story rail's +), so they live outside the hidden Chats panel.
+    const overlayHost = document.createElement('div');
+    overlayHost.className = 'chat-overlay-host';
+    overlayHost.append(...root.querySelectorAll(':scope > dialog'));
+    document.body.append(overlayHost);
+    const $ = (selector) => root.querySelector(selector) || overlayHost.querySelector(selector);
+    const $$ = (selector) => [...root.querySelectorAll(selector), ...overlayHost.querySelectorAll(selector)];
     const notificationNudge = createNotificationNudge({
         notifications,
         getUserId: () => getUser()?.id,
@@ -533,6 +550,8 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     // today wait for the viewer's own. The server's view_gate_locked is ignored
     // in rooms, as iOS ignores it.
     const chatAccessUnavailable = () => false;
+    const chatsEnabled = () => getConfig()?.enable_chats === true && getConfig()?.enable_web_chats === true;
+    const storiesEnabled = () => getConfig()?.enable_stories === true && getConfig()?.enable_web_stories === true;
 
     function currentChatAppearance() {
         return loadChatAppearance(userId(), store.state.activeChatId);
@@ -644,6 +663,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         clearTimeout(replayHoldTimer); replayHoldTimer = null; replayHoldTarget = null;
     });
     root.addEventListener("click", handleClick);
+    overlayHost.addEventListener("click", handleClick);
     root.addEventListener("dblclick", handleMessageDoubleClick);
     // The room pops like a detail screen: it follows the finger over the chat
     // list and, when released past the threshold, leaves exactly like Back.
@@ -705,6 +725,8 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     $(".chat-sticker-file-input").addEventListener("change", selectStickerSource);
     $(".chat-media-form").addEventListener("submit", publishChatMedia);
     $("[data-chat-media-dialog]").addEventListener("close", resetChatMediaComposer);
+    $("[data-chat-media-dialog]").addEventListener("close", () => finishCaptureFlow("snap"));
+    $("[data-memento-dialog]").addEventListener("close", () => finishCaptureFlow("memento"));
     $('[data-chat-media-dialog]').addEventListener('cancel', event => { if (chatMediaPublishing) event.preventDefault(); });
     $("[data-chat-view-once]").addEventListener("click", () => {
         if (chatMediaPublishing) return;
@@ -715,6 +737,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     $('.chat-composer textarea').addEventListener('focus', () => $('.chat-room-screen').classList.add('composer-focused'));
     $('.chat-composer textarea').addEventListener('blur', () => $('.chat-room-screen').classList.remove('composer-focused'));
     $("[data-chat-media-viewer]").addEventListener("close", () => { if (!$("[data-chat-media-viewer]").open) { mediaOpenGeneration++; resetMediaViewerContents(); } });
+    window.addEventListener("valid:capture-sent", (event) => { if (activation && event.detail?.chatId) scheduleChatRowRefresh(String(event.detail.chatId)); });
     window.addEventListener("online", () => {
         if (!activation) return;
         void retryPendingMessages(null);
@@ -857,6 +880,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             const response = await api.getChats(userId(), 100, 0);
             store.replaceChats(response.items || response || []);
             lastListLoad = Date.now();
+            onChatsLoaded?.(store.state.chats);
             await refreshFailedChats();
             renderChatList();
             void loadSayHi();
@@ -1863,6 +1887,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         try {
             const records = await listChatMediaOutbox(userId()).catch(() => []);
             const due = records.filter((record) => ["memento", "chat_media"].includes(record.kind)
+                && record.source !== "send_to"
                 && !deliveringRecordIds.has(record.id)
                 && Number(record.attempts || 0) < MAX_MEDIA_AUTOMATIC_ATTEMPTS
                 && Number(record.next_attempt_at || 0) <= Date.now()).slice(0, 2);
@@ -2111,40 +2136,12 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
 
     // ChatCreationModel.merge: classmates, plus registered contacts beyond school.
     function mergeCreationPeople(classmates, contacts) {
-        const viewer = String(userId());
-        const contactById = new Map();
-        for (const contact of contacts) {
-            if (!contact?.user_id || contact.is_six7_user === false || String(contact.user_id) === viewer) continue;
-            const prior = contactById.get(String(contact.user_id));
-            if (!prior || Number(contact.recommendation_strength || 0) > Number(prior.recommendation_strength || 0)) contactById.set(String(contact.user_id), contact);
-        }
-        const seen = new Set([viewer]);
-        const people = [];
-        for (const classmate of classmates) {
-            const id = String(classmate.user_id || classmate.id);
-            if (seen.has(id)) continue;
-            seen.add(id);
-            const contact = contactById.get(id);
-            contactById.delete(id);
-            people.push({ id, name: displayMember(classmate), first: classmate.first_name || displayMember(classmate).split(/\s+/)[0], username: classmate.username || null, grade: classmate.grade || null, school: classmate.school_name || null, avatar: classmate.profile_picture_url, school_mate: true, contact: Boolean(contact), mutual: contact ? Math.max(0, Number(contact.recommendation_strength || 0) - 1) : 0 });
-        }
-        for (const [id, contact] of contactById) {
-            if (seen.has(id)) continue;
-            seen.add(id);
-            const name = String(contact.name || '').trim() || 'Valid User';
-            people.push({ id, name, first: name.split(/\s+/)[0], username: null, grade: null, school: contact.school_name || null, avatar: contact.profile_picture_url, school_mate: false, contact: true, mutual: Math.max(0, Number(contact.recommendation_strength || 0) - 1) });
-        }
-        return people;
+        return mergeChatPeople(classmates, contacts, userId());
     }
 
     // ChatPersonCandidate.subtitle.
     function creationSubtitle(person, hasChat) {
-        const known = person.contact ? "In your contacts" : person.username ? `@${person.username}` : person.grade || "On Valid";
-        if (!hasChat && person.contact) return `${known} · Say hi ${SAY_HI_WAVE}`;
-        if (person.school_mate) return `${known} · Your school`;
-        if (person.mutual > 0) return `${known} · ${person.mutual} mutual`;
-        if (person.school) return `${known} · ${person.school}`;
-        return known;
+        return chatPersonSubtitle(person, hasChat);
     }
 
     function creationMatches(text, query) {
@@ -2595,6 +2592,8 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             return showToast?.(row?.viewer_is_eligible === false ? "You can start posting Mementos tomorrow." : "No Mementos are available yet.");
         }
         if (!store.state.activeChatId || mementoPublishing) return;
+        mementoFromTab = null;
+        renderCameraModeBars(null);
         renderMementoAudience();
         $("[data-memento-dialog]").showModal();
         startMementoCamera();
@@ -2602,6 +2601,13 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
 
     // ReviewSendTitle.toChat: "Send to Crew" from a chat, "Send" without a name.
     function renderMementoAudience() {
+        // The Camera tab has no home chat: "Send" opens Send to (MementoReviewFlow).
+        if (mementoFromTab) {
+            $(".memento-publish .send-pill-title").textContent = mementoPublishing ? "Sending…" : "Send";
+            $(".memento-publish").setAttribute("aria-description", "Choose who gets it");
+            return;
+        }
+        $(".memento-publish").removeAttribute("aria-description");
         const activeChat = store.state.chats.find((chat) => String(chat.id) === String(store.state.activeChatId));
         const destination = String(activeChat?.display_name || store.state.detail?.chat?.display_name || "").trim();
         $(".memento-publish .send-pill-title").textContent = mementoPublishing ? "Sending…" : destination ? `Send to ${destination}` : "Send";
@@ -2655,6 +2661,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     async function publishMemento(event) {
         event.preventDefault();
         if (mementoPublishing) return;
+        if (mementoFromTab) return publishMementoToAudience();
         if (!selectedMementoFile || !store.state.activeChatId) {
             $(".memento-status").textContent = "Take a photo before sending your Memento.";
             return;
@@ -2721,6 +2728,128 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             bumpSending(chatId, -1);
             setTimeout(() => URL.revokeObjectURL(previewURL), 60_000);
         }
+    }
+
+    // From the Camera tab: Send to picks the chats (MementoAudiencePicker),
+    // then one Memento goes to all of them and the camera closes.
+    async function publishMementoToAudience() {
+        if (!selectedMementoFile) {
+            $(".memento-status").textContent = "Take a photo before sending your Memento.";
+            return;
+        }
+        const context = mementoFromTab;
+        const { openSendTo } = await loadSendTo();
+        const choice = await openSendTo({
+            api, userId: userId(), config: getConfig(), mode: "memento",
+            postedChatIds: new Set([...(context.postedChatIds?.() || []), ...[...mementoSentToday].filter(([, date]) => date === localLedgerDate()).map(([chatId]) => chatId)]),
+            allowsChats: true, haptic: feedback,
+        });
+        if (!choice?.chatIds.length || mementoFromTab !== context || !selectedMementoFile) return;
+        mementoPublishing = true;
+        renderMementoAudience();
+        $(".memento-publish").disabled = true;
+        mementoRequestId ||= crypto.randomUUID();
+        const requestId = mementoRequestId;
+        const chatIds = choice.chatIds.map(String);
+        const record = {
+            id: `${userId()}:memento:${requestId}`, user_id: userId(), kind: "memento",
+            file: selectedMementoFile, secondary: selectedMementoSecondaryFile,
+            chat_id: chatIds[0], chat_ids: chatIds, caption: null, ledger_date: localLedgerDate(), request_id: requestId,
+        };
+        try {
+            await putChatMediaOutbox(record);
+        } catch (_) {
+            mementoPublishing = false;
+            renderMementoAudience();
+            $(".memento-publish").disabled = false;
+            $(".memento-status").textContent = "This Memento could not be saved for a safe retry. Free some device storage and try again.";
+            return;
+        }
+        for (const chatId of chatIds) mementoSentToday.set(chatId, localLedgerDate());
+        context.onMementoSent?.(chatIds);
+        mementoRequestId = null;
+        mementoPublishing = false;
+        $("[data-memento-dialog]").close();
+        successHaptic?.();
+        deliveringRecordIds.add(record.id);
+        try {
+            await deliverMediaRecord(record);
+            await removeChatMediaOutbox(record.id);
+            await loadChats({ quiet: true }).catch(() => null);
+            if (chatIds.includes(String(store.state.activeChatId))) await openChat(store.state.activeChatId, { updateHistory: false, force: true });
+        } catch (error) {
+            if (chatTextSendIsRetryable(error)) await markChatMediaOutboxAttempt(record.id).catch(() => null);
+            else {
+                await removeChatMediaOutbox(record.id).catch(() => null);
+                for (const chatId of chatIds) mementoSentToday.delete(chatId);
+            }
+            showToast?.(chatTextSendIsRetryable(error) ? "Memento didn't send. It will retry while Valid is open." : userMessage(error, "Memento didn't send"));
+        } finally {
+            deliveringRecordIds.delete(record.id);
+        }
+    }
+
+    // The Camera tab (CameraTabCover): the Memento camera while one is due,
+    // otherwise the shoot-first camera; the Story rail's + opens the latter
+    // with My Story ticked in Send to.
+    function openCaptureFlow({ mode = "snap", startsWithStory = false, mementoAvailable = false, postedChatIds = null, onClose = null, onMementoSent = null } = {}) {
+        if (chatMediaPublishing || mementoPublishing) return false;
+        const context = { startsWithStory, mementoAvailable, postedChatIds, onClose, onMementoSent };
+        document.activeElement?.blur();
+        if (mode === "memento") {
+            mementoFromTab = context;
+            shootFirst = null;
+            renderMementoAudience();
+            renderCameraModeBars("memento");
+            $("[data-memento-dialog]").showModal();
+            void startMementoCamera();
+        } else {
+            shootFirst = context;
+            mementoFromTab = null;
+            if (voiceMode) resetChatMediaComposer();
+            renderCameraModeBars("snap");
+            $(".chat-media-file-input").accept = ingestEnabled(getConfig()) ? "image/*,video/*" : "image/*,video/mp4";
+            $("[data-chat-media-dialog]").classList.add("is-shoot-first");
+            $("[data-chat-media-dialog]").showModal();
+            void startChatCamera();
+            $('[data-chat-camera]').focus({ preventScroll: true });
+        }
+        return true;
+    }
+
+    // MEMENTO · CAMERA under the shutter, only while a Memento is still available.
+    function renderCameraModeBars(selected) {
+        const available = Boolean((shootFirst || mementoFromTab)?.mementoAvailable);
+        for (const bar of $$(".camera-mode-bar")) {
+            bar.hidden = !available;
+            for (const button of bar.querySelectorAll("[data-camera-mode]")) {
+                const on = button.dataset.cameraMode === selected;
+                button.classList.toggle("selected", on);
+                button.setAttribute("aria-pressed", String(on));
+            }
+        }
+    }
+
+    function switchCameraMode(mode) {
+        const context = shootFirst || mementoFromTab;
+        if (!context || chatMediaPublishing || mementoPublishing) return;
+        const from = shootFirst ? "snap" : "memento";
+        if (mode === from) return;
+        feedback("selection");
+        // The other camera takes over the context first, so the closing
+        // sheet's close event does not end the flow.
+        if (from === "snap") { chatCameraToken++; chatCamera?.close(); } else { mementoCameraToken++; mementoCamera?.close(); }
+        $(from === "snap" ? "[data-chat-media-dialog]" : "[data-memento-dialog]").close();
+        openCaptureFlow({ ...context, mode });
+    }
+
+    function finishCaptureFlow(kind) {
+        const context = kind === "snap" ? shootFirst : mementoFromTab;
+        if (!context) return;
+        if (kind === "snap") { shootFirst = null; $("[data-chat-media-dialog]").classList.remove("is-shoot-first"); }
+        else mementoFromTab = null;
+        renderCameraModeBars(null);
+        context.onClose?.();
     }
 
     // A pending bubble the server's own message replaces.
@@ -2814,9 +2943,12 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
 
     // The review's chip says who it goes to (CameraReviewControls.sendToChip).
     function renderSendToChip() {
-        const chat = store.state.chats.find(item => item.id === store.state.activeChatId) || store.state.detail?.chat;
+        // Shoot-first: no delivery control, just Save and "Send" (CameraReviewControls).
+        const chat = shootFirst ? null : store.state.chats.find(item => item.id === store.state.activeChatId) || store.state.detail?.chat;
         const chip = $('[data-send-to-chip]');
         chip.hidden = !chat;
+        $('.chat-media-publish .send-pill-subtitle').hidden = Boolean(shootFirst);
+        $('[data-chat-view-once]').hidden = Boolean(shootFirst);
         if (!chat) return;
         chip.querySelector('strong').textContent = chat.display_name;
         chip.querySelector('.review-chip-avatar').innerHTML = conversationAvatarMarkup(chat);
@@ -2853,6 +2985,9 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
 
     function openChatMediaComposer() {
         if (!store.state.activeChatId || chatAccessUnavailable() || chatMediaPublishing) return;
+        shootFirst = null;
+        $("[data-chat-media-dialog]").classList.remove("is-shoot-first");
+        renderCameraModeBars(null);
         if (voiceMode) resetChatMediaComposer();
         document.activeElement?.blur();
         $(".chat-media-file-input").accept = ingestEnabled(getConfig()) ? "image/*,video/*" : "image/*,video/mp4";
@@ -3195,8 +3330,111 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
 
     // The capture is queued (the outbox) and the camera closes at once, with
     // the pending bubble in the chat (CameraFirstFlowView.queue). No toast.
+    // The bytes that go up: edits, stickers and the filter are burned in and
+    // the JPEG is encoded exactly once, so a retry and every destination
+    // (Send to) reuse the same file.
+    async function encodedChatMedia(media) {
+        let file = media.file;
+        let thumbnail = media.thumbnail || null;
+        let previewHash = null;
+        if (media.kind === "photo") {
+            if (!chatMediaEncoded) {
+                const pipeline = await photoPipeline();
+                const composed = reviewEditor.compose({ drawExtras: (context, width, height) => photoStickers.draw(context, width, height) });
+                try { chatMediaEncoded = await pipeline.encodeChatPhoto(composed, media.profile); }
+                finally { composed.width = composed.height = 0; }
+            }
+            ({ file, preview: thumbnail, previewHash } = chatMediaEncoded);
+        }
+        return {
+            kind: media.kind, file, thumbnail, previewHash,
+            contentType: media.ingest ? (media.contentType || file.type) : file.type,
+            ingest: Boolean(media.ingest), durationMs: media.durationMs,
+        };
+    }
+
+    function setChatMediaWorking(working) {
+        const button = $(".chat-media-publish");
+        button.disabled = working || !selectedChatMedia;
+        button.querySelector('.send-pill-title').textContent = working ? "Sending…" : "Send";
+        $$('[data-retake-chat-photo], [data-record-voice], [data-chat-view-once], [data-send-to-chip], [data-save-chat-media]').forEach(control => { control.disabled = working; });
+        if (!working) renderChatMediaSave();
+    }
+
+    // Shoot-first "Send" (CameraFirstFlowView): pick in Send to, queue every
+    // destination, close the camera. Chats always open once.
+    async function sendShootFirst() {
+        const context = shootFirst;
+        const media = selectedChatMedia;
+        if (!context || !media || chatMediaPublishing) return;
+        chatMediaPublishing = true;
+        setChatMediaWorking(true);
+        let payload;
+        try {
+            payload = { ...await encodedChatMedia(media), overlay: reviewEditor?.textOverlay() || null };
+        } catch (error) {
+            $(".chat-media-status").textContent = userMessage(error, "Could not prepare that media.");
+        }
+        chatMediaPublishing = false;
+        setChatMediaWorking(false);
+        if (!payload || media !== selectedChatMedia || shootFirst !== context) return;
+        const { openSendTo } = await loadSendTo();
+        const choice = await openSendTo({
+            api, userId: userId(), config: getConfig(), mode: "capture",
+            startsWithStory: context.startsWithStory, allowsStory: storiesEnabled(), allowsChats: chatsEnabled(), haptic: feedback,
+        });
+        if (!choice || media !== selectedChatMedia || shootFirst !== context) return;
+        chatMediaPublishing = true;
+        setChatMediaWorking(true);
+        const { queueCapture, queueFailureMessage } = await loadCaptureQueue();
+        const failed = await queueCapture({ api, userId: userId(), media: payload, story: choice.story, tags: choice.tags, chatIds: choice.chatIds, viewOnce: true, showToast });
+        chatMediaPublishing = false;
+        if (choice.chatIds.length) successHaptic?.();
+        if (failed.story || failed.chats) {
+            const { alertSheet } = await import("../ui-dialogs.js");
+            await alertSheet({ title: "Couldn't send", message: queueFailureMessage(failed), confirmLabel: "Close" });
+        }
+        $("[data-chat-media-dialog]").close();
+    }
+
+    // The chip's + (sendToChip): this chat stays ticked; My Story and other
+    // chats go through the queue, this chat through the room as usual.
+    async function sendToMore() {
+        const chat = store.state.chats.find(item => item.id === store.state.activeChatId) || store.state.detail?.chat;
+        const media = selectedChatMedia;
+        if (shootFirst || !chat || !media || media.kind === "audio" || chatMediaPublishing) return;
+        chatMediaPublishing = true;
+        setChatMediaWorking(true);
+        let payload;
+        try {
+            payload = { ...await encodedChatMedia(media), overlay: reviewEditor?.textOverlay() || null };
+        } catch (error) {
+            $(".chat-media-status").textContent = userMessage(error, "Could not prepare that media.");
+        }
+        chatMediaPublishing = false;
+        setChatMediaWorking(false);
+        if (!payload || media !== selectedChatMedia) return;
+        const { openSendTo } = await loadSendTo();
+        const choice = await openSendTo({
+            api, userId: userId(), config: getConfig(), mode: "capture", keptChat: chat, chatsViewOnce: chatViewOnce,
+            allowsStory: storiesEnabled(), allowsChats: true, haptic: feedback,
+        });
+        if (!choice || media !== selectedChatMedia || store.state.activeChatId !== chat.id) return;
+        const others = choice.chatIds.filter(chatId => String(chatId) !== String(chat.id));
+        if (choice.story || others.length) {
+            const { queueCapture } = await loadCaptureQueue();
+            const failed = await queueCapture({ api, userId: userId(), media: payload, story: choice.story, tags: choice.tags, chatIds: others, viewOnce: chatViewOnce, showToast });
+            if (failed.story || failed.chats) {
+                showToast?.(failed.story && failed.chats ? "This didn't send to your other chats or Story. It still sent here."
+                    : failed.story ? "This wasn't added to your Story. It still sent here." : "This didn't send to your other chats. It still sent here.");
+            }
+        }
+        await publishChatMedia();
+    }
+
     async function publishChatMedia(event) {
-        event.preventDefault();
+        event?.preventDefault();
+        if (shootFirst && event?.type === "submit") return sendShootFirst();
         if (!selectedChatMedia || !store.state.activeChatId || chatMediaPublishing) return;
         chatMediaPublishing = true;
         const chatId = store.state.activeChatId;
@@ -3212,23 +3450,10 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         const recordId = `${senderId}:chat-media:${uploadRequestId}`;
         button.disabled = true;
         button.querySelector('.send-pill-title').textContent = "Sending…";
-        root.querySelectorAll('[data-retake-chat-photo], [data-record-voice], [data-chat-view-once]').forEach(control => { control.disabled = true; });
+        $$('[data-retake-chat-photo], [data-record-voice], [data-chat-view-once], [data-send-to-chip]').forEach(control => { control.disabled = true; });
         let record;
         try {
-            let uploadFile = media.file;
-            let thumbnail = media.thumbnail || null;
-            let previewHash = null;
-            if (media.kind === "photo") {
-                // Edits, stickers and the filter are burned in and the JPEG is
-                // encoded exactly once; a retry reuses the same bytes.
-                if (!chatMediaEncoded) {
-                    const pipeline = await photoPipeline();
-                    const composed = reviewEditor.compose({ drawExtras: (context, width, height) => photoStickers.draw(context, width, height) });
-                    try { chatMediaEncoded = await pipeline.encodeChatPhoto(composed, media.profile); }
-                    finally { composed.width = composed.height = 0; }
-                }
-                ({ file: uploadFile, preview: thumbnail, previewHash } = chatMediaEncoded);
-            }
+            const { file: uploadFile, thumbnail, previewHash } = await encodedChatMedia(media);
             if (preparationGeneration !== chatMediaPreparationGeneration || senderId !== userId()) throw new Error('Media selection changed. Try again.');
             record = {
                 id: recordId, user_id: senderId, kind: "chat_media", file: uploadFile, thumbnail, preview_hash: previewHash, chat_id: chatId,
@@ -3241,7 +3466,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             chatMediaPublishing = false;
             button.querySelector('.send-pill-title').textContent = "Send";
             button.disabled = !selectedChatMedia;
-            root.querySelectorAll('[data-retake-chat-photo], [data-record-voice], [data-chat-view-once]').forEach(control => { control.disabled = false; });
+            $$('[data-retake-chat-photo], [data-record-voice], [data-chat-view-once], [data-send-to-chip]').forEach(control => { control.disabled = false; });
             $(".chat-media-status").textContent = /Media selection changed/.test(error?.message || '') ? error.message
                 : "This media could not be saved for a safe retry. Free some device storage and try again.";
             return;
@@ -3323,7 +3548,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         setRuntimeStyles($(".chat-media-progress span"), { width: "0" });
         $(".chat-media-publish").disabled = true;
         $(".chat-media-publish .send-pill-title").textContent = "Send";
-        root.querySelectorAll('[data-retake-chat-photo], [data-record-voice], [data-chat-view-once]').forEach(control => { control.disabled = false; });
+        $$('[data-retake-chat-photo], [data-record-voice], [data-chat-view-once], [data-send-to-chip]').forEach(control => { control.disabled = false; });
         syncVoiceComposer();
     }
 
@@ -4294,6 +4519,8 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         }
         if (target.matches("[data-open-memento]")) return openMementoComposer({ showExisting: target.hasAttribute("data-show-mementos") });
         if (target.matches("[data-open-chat-media]")) return openChatMediaComposer();
+        if (target.dataset.cameraMode) return switchCameraMode(target.dataset.cameraMode);
+        if (target.matches("[data-send-to-chip]")) return void sendToMore();
         if (target.matches("[data-close-chat-media]")) { if (!chatMediaPublishing) $('[data-chat-media-dialog]').close(); return; }
         if (target.matches("[data-make-sticker]")) { $('[data-save-sticker]').textContent = photoStickerMode ? 'Save and add' : 'Save and send'; return $(".chat-sticker-file-input").click(); }
         if (target.matches('[data-retry-stickers]')) return loadStickerLibrary();
@@ -4462,7 +4689,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         }
     }
 
-    return { activate, refresh, openChat, store, beforeSessionEnd: async () => {
+    return { activate, refresh, openChat, store, openCaptureFlow, beforeSessionEnd: async () => {
         stopTyping();
         if (store.state.activeChatId) leaveRoom();
         realtime.stop();
