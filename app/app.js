@@ -1561,7 +1561,7 @@ function renderGodModeCard() {
     const weeklyReveals = Math.max(1, Number(state.config?.max_full_reveals_per_week || 2));
     const weeklyPrice = Math.max(0, Number(state.config?.god_mode_price || 6.99));
     $("#godModeCard").innerHTML = `<article class="god-mode-card ${active ? "active" : ""}">
-        <div class="god-mode-title"><span><img loading="lazy" decoding="async" src="../assets/app/crown.webp" alt=""></span><div><strong>${active ? "God Mode Active" : "God Mode"}</strong><small>${active ? "Everything unlocked" : `$${weeklyPrice.toFixed(2)} / week`}</small></div>${active ? `<span class="god-mode-active">Active</span>` : ""}</div>
+        <div class="god-mode-title"><span class="god-mode-crown">${uiIcon("crown-filled")}</span><div><strong>${active ? "God Mode Active" : "God Mode"}</strong><small>${active ? "Everything unlocked" : `$${weeklyPrice.toFixed(2)} / week`}</small></div>${active ? `<span class="god-mode-active">\u2728 Active</span>` : ""}</div>
         <p class="god-mode-benefits-heading">${active ? "You're enjoying:" : "Go legendary with:"}</p>
         <ul><li>${weeklyReveals} weekly reveals to see exactly who voted.</li><li>First-letter hints on every poll.</li><li>${multiplier}× aura on every answer you give.</li><li>Get boosted to the top of classmates' polls.</li></ul>
         ${active
@@ -1620,7 +1620,11 @@ function renderGodModePitch() {
     const weeklyPrice = Math.max(0, Number(state.config?.god_mode_price || 6.99));
     const multiplier = Math.max(1, Number(state.profile?.god_mode_aura_multiplier || 2));
     const revealNames = ["Sydney Sweeney", "LaMelo Ball", "Jordan Lee", "Taylor Swift"];
-    $("#godModePitchBody").innerHTML = `<div class="god-mode-pitch-topbar"><button class="god-mode-close-button" type="button" data-close-dialog aria-label="Close God Mode">×</button></div>
+    // GodModePitchView: a sheet with a grabber and no close button; drag down or "Maybe later".
+    const earnSubtitle = state.config?.enable_god_mode_ugc_program === true
+        ? "Invite friends or join our Creator program"
+        : godModeInviteProgressLabel();
+    $("#godModePitchBody").innerHTML = `<span class="god-mode-pitch-grabber" aria-hidden="true"></span>
         <section class="god-mode-pitch-hero">
             <h2>See who likes you with</h2>
             <div class="god-mode-pitch-brand"><img loading="lazy" decoding="async" src="../assets/app/crown.webp" alt=""><strong>God Mode</strong></div>
@@ -1631,20 +1635,21 @@ function renderGodModePitch() {
                     <img loading="lazy" decoding="async" class="god-mode-letter" src="../assets/app/letter_aligned.webp" alt="">
                     <span class="god-mode-lens"><img loading="lazy" decoding="async" src="../assets/app/magnifying_glass.webp" alt=""><span class="god-mode-reveal-names">${revealNames.map((name) => `<strong>${escapeHTML(name).replace(" ", "<br>")}</strong>`).join("")}</span></span>
                 </div>
-                <h3>${weeklyReveals} Reveals / Week</h3><p>See the full names on ${weeklyReveals} polls every week.</p>
+                <h3>${weeklyReveals} Reveals / Week</h3><p>Reveal voters or anonymous school-question authors up to ${weeklyReveals} times every week.</p>
             </article>
             <article class="god-mode-benefit-card"><img loading="lazy" decoding="async" class="god-mode-benefit-image scroll" src="../assets/app/scroll.webp" alt=""><h3>First-Letter Hints</h3><p>Get the first letter on every personal poll automatically.</p></article>
             <article class="god-mode-benefit-card"><img loading="lazy" decoding="async" class="god-mode-benefit-image aura" src="../assets/app/aura.webp" alt=""><h3>${multiplier}× Aura Boost</h3><p>Earn ${multiplier === 2 ? "double" : `${multiplier}×`} aura for every answer you give in Play.</p></article>
-            <article class="god-mode-benefit-card"><img loading="lazy" decoding="async" class="god-mode-benefit-image rocket" src="../assets/app/rocket.webp" alt=""><h3>Get boosted</h3><p>Get boosted to the top of your classmates' polls to see what they think of you.</p></article>
+            <article class="god-mode-benefit-card"><img loading="lazy" decoding="async" class="god-mode-benefit-image rocket" src="../assets/app/rocket.webp" alt=""><h3>Get boosted</h3><p>Get boosted to the top of your classmates polls to see what they think of you</p></article>
         </div>
         <div class="god-mode-page-dots" aria-hidden="true"><span class="active"></span><span></span><span></span><span></span></div>
         <div class="god-mode-pitch-actions">
-            <button class="god-mode-earn-button" type="button" data-earn-god-mode><strong>Earn God Mode</strong><small id="godModeInviteProgress">${escapeHTML(godModeInviteProgressLabel())}</small></button>
+            <button class="god-mode-earn-button" type="button" data-earn-god-mode><strong>Earn God Mode</strong><small id="godModeInviteProgress">${escapeHTML(earnSubtitle)}</small></button>
             <button class="god-mode-checkout-button" type="button" data-start-god-mode><span><strong>Start God Mode</strong><small>$${weeklyPrice.toFixed(2)} per week</small></span></button>
             <button class="god-mode-maybe-button" type="button" data-close-dialog>Maybe later</button>
             <p id="godModeCheckoutStatus" class="status-message" role="status"></p>
-            <p class="god-mode-legal"><a href="/terms.html">Terms</a><span>·</span><a href="/privacy-policy.html">Privacy Policy</a></p>
-        </div>`;
+            <p class="god-mode-legal"><a href="/terms.html">Terms</a><a href="/privacy-policy.html">Privacy Policy</a></p>
+        </div>
+        <p class="god-mode-terms">Payment is charged by Stripe at checkout and renews every week until you cancel. Cancel anytime from Edit information; God Mode stays on until the end of the paid week.</p>`;
     $(".god-mode-benefit-carousel")?.addEventListener("scroll", syncGodModeCarouselDots, { passive: true });
 }
 
@@ -1660,7 +1665,7 @@ function openGodModePitch() {
     api.getInviteStatus(api.user.id).then((inviteStatus) => {
         state.inviteStatus = inviteStatus;
         const progress = $("#godModeInviteProgress");
-        if (progress) progress.textContent = godModeInviteProgressLabel();
+        if (progress && state.config?.enable_god_mode_ugc_program !== true) progress.textContent = godModeInviteProgressLabel();
     }).catch(() => {
         const progress = $("#godModeInviteProgress");
         if (progress && !state.inviteStatus) progress.textContent = "Invite friends for God Mode rewards";
@@ -5654,7 +5659,7 @@ function renderFeedbackHistory() {
             ? `${item.report_subject_type === "profile" ? "Profile" : "Question"} report update`
             : "Your feedback";
         const responseMarkup = responses.length
-            ? responses.map((response) => `<div class="feedback-team-response"><strong>Valid team</strong><p>${escapeHTML(response.response_text || "")}</p><time datetime="${escapeHTML(response.created_at || "")}">${escapeHTML(feedbackHistoryDate(response.created_at))}</time></div>`).join("")
+            ? responses.map((response) => `<div class="feedback-team-response"><strong class="valid-team-label">${uiIcon("seal-check")}Valid team</strong><p>${escapeHTML(response.response_text || "")}</p><time datetime="${escapeHTML(response.created_at || "")}">${escapeHTML(feedbackHistoryDate(response.created_at))}</time></div>`).join("")
             : `<p class="form-hint">No team reply yet.</p>`;
         return `<article class="feedback-history-card ${isTarget ? "notification-target" : ""}" data-feedback-history="${escapeHTML(item.id)}" tabindex="-1"><header><strong>${escapeHTML(label)}</strong><time datetime="${escapeHTML(item.created_at || "")}">${escapeHTML(feedbackHistoryDate(item.created_at))}</time></header><p>${escapeHTML(item.feedback_text || "")}</p>${responseMarkup}</article>`;
     }).join("");
@@ -6735,14 +6740,15 @@ function installNativeSheetGestures() {
         for (const screen of $$(".detail-screen")) installEdgeSwipeBack(screen, () => closeDetailScreen(screen));
     }
     // Sheets drag down on every phone, iPhone included (styles.css: dialog.modal at <=470px).
-    for (const dialog of $$("dialog.modal")) {
+    for (const dialog of $$("dialog.modal, #godModePitchDialog")) {
         if (dialog.dataset.sheetGesture === "1" || dialog.classList.contains("reaction-picker-dialog")) continue;
         dialog.dataset.sheetGesture = "1";
         let startY = null;
         let dragDistance = 0;
         let dragFrame = null;
         dialog.addEventListener("pointerdown", (event) => {
-            if (!matchMedia("(max-width: 470px)").matches) return;
+            // The God Mode paywall is a sheet at every width (GodModePitchView).
+            if (dialog.id !== "godModePitchDialog" && !matchMedia("(max-width: 470px)").matches) return;
             const rect = dialog.getBoundingClientRect();
             if (event.clientY - rect.top > 72 || event.target.closest("button, input, textarea, select, a")) return;
             startY = event.clientY;

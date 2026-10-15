@@ -741,12 +741,16 @@ h3 { font-size: 1.45rem; }
 .god-mode-card.active { background: rgba(var(--surface-rgb),.9); }
 #godModeCard.attention .god-mode-card { animation: god-mode-attention .8s ease 2; }
 .god-mode-title { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
-.god-mode-title > span:first-child { width: 42px; height: 42px; display: grid; place-items: center; border: 2px solid var(--outline); border-radius: 50%; background: #fff4a8; }
-.god-mode-title > span:first-child img { width: 36px; height: 36px; object-fit: contain; }
+/* GodModeCard: SF crown.fill in the highlight yellow; "✨ Active" in green. */
+.god-mode-title > .god-mode-crown { width: 42px; height: 42px; display: grid; place-items: center; color: #ffcc00; }
+.god-mode-crown svg { width: 30px; height: 30px; }
+:root[data-theme="dark"] .god-mode-crown { color: #ffd166; }
+.valid-team-label { display: inline-flex; align-items: center; gap: 4px; color: var(--dark-teal); --seal-check-mark: var(--white); }
+.valid-team-label svg { width: 15px; height: 15px; }
 .god-mode-title > div { display: grid; gap: 2px; }
 .god-mode-title > div strong { font-size: 1.18rem; }
 .god-mode-title small, .god-mode-card p { color: var(--muted); }
-.god-mode-active { padding: 6px 9px; border-radius: 999px; background: rgba(28,151,98,.15); color: #136a47; font-size: .8rem; white-space: nowrap; }
+.god-mode-active { padding: 4px 8px; border-radius: 999px; background: rgba(52,199,89,.2); color: #1f8a3b; font-size: 14px; white-space: nowrap; }
 .god-mode-card ul { display: grid; gap: 6px; margin: 0; padding-left: 22px; }
 .god-mode-card p { margin: 0; font-size: .86rem; line-height: 1.4; }
 .god-mode-benefits-heading { color: var(--ink) !important; font-size: 1rem !important; }
@@ -768,11 +772,16 @@ h3 { font-size: 1.45rem; }
 .aura-price-button:disabled { opacity: .45; cursor: not-allowed; }
 .aura-price-button.insufficient:disabled { background: var(--ink); color: var(--white); opacity: 1; }
 .aura-price-button:not(:disabled):active { background: var(--peach-pressed); opacity: var(--button-pressed-opacity); }
-.god-mode-pitch-dialog { position: fixed; inset: 0; width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; overflow: auto; overscroll-behavior: contain; padding: 0; border: 0; background: var(--aqua); }
-.god-mode-pitch-dialog::backdrop { background: var(--aqua); }
-.god-mode-pitch-content { width: min(600px, 100%); min-height: 100%; display: grid; align-content: start; gap: 16px; margin: 0 auto; padding: max(10px, env(safe-area-inset-top)) 18px calc(24px + env(safe-area-inset-bottom)); }
-.god-mode-pitch-topbar { min-height: 44px; display: flex; justify-content: flex-end; align-items: center; }
-.god-mode-close-button { width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 2px solid rgba(5,9,20,.16); border-radius: 50%; background: rgba(var(--surface-rgb),.72); color: var(--ink); cursor: pointer; font-size: 1.8rem; line-height: 1; }
+/* GodModePitchView is a sheet: grabber, no close button, drag down to dismiss. */
+.god-mode-pitch-dialog { position: fixed; inset: auto 0 0; width: min(600px, 100%); max-width: none; height: auto; max-height: calc(var(--visual-viewport-height, 100dvh) - max(24px, env(safe-area-inset-top))); margin: 0 auto; overflow: auto; overscroll-behavior: contain; padding: 0; border: 0; border-radius: 28px 28px 0 0; background: var(--aqua); color: var(--ink); transform: translateY(var(--sheet-drag, 0px)); transition: transform .16s ease; }
+.god-mode-pitch-dialog[open] { animation: god-mode-sheet-in .3s cubic-bezier(.2,.8,.2,1); }
+.god-mode-pitch-dialog::backdrop { background: rgba(5,9,20,.5); }
+@keyframes god-mode-sheet-in { from { translate: 0 100%; } to { translate: 0 0; } }
+.god-mode-pitch-content { width: 100%; display: grid; align-content: start; gap: 16px; margin: 0 auto; padding: 8px 18px calc(24px + env(safe-area-inset-bottom)); }
+.god-mode-pitch-grabber { justify-self: center; width: 60px; height: 6px; border-radius: 999px; background: rgba(0,0,0,.25); }
+:root[data-theme="dark"] .god-mode-pitch-grabber { background: rgba(255,255,255,.3); }
+.god-mode-terms { margin: 0 6px; color: var(--muted); font-size: 12px; line-height: 1.4; text-align: left; }
+@media (prefers-reduced-motion: reduce) { .god-mode-pitch-dialog[open] { animation: none; } }
 .god-mode-pitch-hero { display: grid; justify-items: center; gap: 6px; text-align: center; }
 .god-mode-pitch-hero h2 { margin: 0; font-size: clamp(1.35rem, 5vw, 1.85rem); }
 .god-mode-pitch-brand { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: clamp(2.2rem, 11vw, 3.5rem); line-height: 1; }
@@ -805,7 +814,7 @@ h3 { font-size: 1.45rem; }
 .god-mode-earn-button:active { background: rgba(var(--surface-rgb),.85); opacity: var(--button-pressed-opacity); }
 .god-mode-checkout-button:active { background: var(--peach-pressed); opacity: var(--button-pressed-opacity); }
 .god-mode-maybe-button { min-height: 40px; border: 0; background: transparent; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
-.god-mode-legal { display: flex; justify-content: center; gap: 8px; margin: 0; font-size: .78rem; }
+.god-mode-legal { display: flex; justify-content: center; gap: 14px; margin: 0; font-size: 14px; }
 .god-mode-legal a { color: inherit; }
 .earn-god-mode-dialog { width: min(520px, calc(var(--visual-viewport-width, 100%) - 24px)); max-height: min(760px, calc(var(--visual-viewport-height, 100dvh) - 34px)); border: 3px solid var(--outline); border-radius: 28px; }
 .earn-god-mode-content { display: grid; gap: 18px; padding: 18px 18px 22px; }
