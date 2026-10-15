@@ -138,7 +138,7 @@ test.describe("cold start", () => {
         await expect(page.locator("#authView")).toBeHidden();
     });
 
-    test("an expired cookie shows Welcome Back without opening signup for a returning user", async ({ page }) => {
+    test("an expired cookie returns a returning user to the age screen, with Log in over it", async ({ page }) => {
         await page.addInitScript(() => localStorage.setItem("valid:signed-in-before", "1"));
         await page.addInitScript(() => {
             Object.defineProperty(window, "PublicKeyCredential", { configurable: true, value: class {} });
@@ -146,10 +146,11 @@ test.describe("cold start", () => {
         await page.route("**/api/v1/**", (route) => route.fulfill({ status: 401,
             headers: { "WWW-Authenticate": "Bearer" }, json: { detail: "Authentication required" } }));
         await page.goto("/app/");
-        await expect(page.getByText("Welcome Back")).toBeVisible();
+        // GettingStartedView is the root for new and signed-out users alike.
+        await expect(page.locator("#signupDialog").getByRole("button", { name: "Get Started!" })).toBeVisible();
         await expect(page.locator("#launchSplash")).toBeHidden();
-        await page.waitForTimeout(300);
-        await expect(page.locator("#signupDialog")).not.toBeVisible();
+        await expect(page.locator("#signupDialog").getByRole("button", { name: /Already have an account\? Log in/ })).toBeVisible();
+        await expect(page.getByText("Welcome Back")).toBeHidden();
     });
 });
 
@@ -330,6 +331,7 @@ test.describe("install and update", () => {
     test("the update prompt is reachable while signed out", async ({ page }) => {
         await page.goto("/app/?demo=1&signin=1");
         await expect(page.getByText("Welcome Back")).toBeVisible();
+        await page.getByRole("dialog", { name: "Welcome Back" }).getByRole("button", { name: "Cancel" }).click();
         await page.evaluate(() => document.querySelector("#appUpdatePrompt").classList.remove("hidden"));
         await expect(page.getByRole("button", { name: "Update" })).toBeVisible();
     });

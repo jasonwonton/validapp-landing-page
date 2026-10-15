@@ -43,18 +43,37 @@ test('confirmed missing cookie still permits normal signup', async ({ page }) =>
     await expect(page.locator('#retrySessionButton')).toBeHidden();
 });
 
-test('missing cookie on an unsupported browser shows help without starting signup', async ({ page }) => {
+test('missing cookie on an unsupported browser keeps the age screen and explains on Get Started', async ({ page }) => {
     await page.addInitScript(() => {
         Object.defineProperty(window, 'PublicKeyCredential', { configurable: true, value: undefined });
     });
     await page.route('**/api/v1/**', route => route.fulfill({ status: 401,
         headers: { 'WWW-Authenticate': 'Bearer' }, json: { detail: 'Authentication required' } }));
     await page.goto('/app/');
-    await expect(page.locator('#authBrowserHelp')).toBeVisible();
-    await expect(page.locator('#authStatus')).toContainText('cannot use passkeys');
-    await expect(page.locator('#signupDialog')).toBeHidden();
+    const dialog = page.locator('#signupDialog');
+    await expect(dialog.getByRole('button', { name: 'Get Started!' })).toBeVisible();
     await expect(page.locator('#retrySessionButton')).toBeHidden();
-    await expect(page.locator('#createAccountButton')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Get Started!' }).click();
+    await expect(page.locator('#signupBrowserHelp')).toBeVisible();
+    await expect(page.locator('#signupStatus')).toContainText('cannot use passkeys');
+    await expect(dialog.getByRole('button', { name: 'Get Started!' })).toBeVisible();
+    // Log in explains the same thing in the sheet.
+    await dialog.getByRole('button', { name: /Already have an account\? Log in/ }).click();
+    await expect(page.locator('#authStatus')).toContainText('does not support passkeys');
+    await expect(page.locator('#passkeyButton')).toBeDisabled();
+});
+
+test('the recovery card matches iOS and can switch accounts', async ({ page }) => {
+    await page.route('**/api/v1/**', route => {
+        if (new URL(route.request().url()).pathname.endsWith('/auth/session')) return route.fulfill({ status: 503, json: { detail: 'Temporary failure' } });
+        return route.fulfill({ status: 204, body: '' });
+    });
+    await page.goto('/app/');
+    await expect(page.getByRole('heading', { name: 'Reconnecting to your account' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
+    await page.getByRole('button', { name: 'Sign out and use another account' }).click();
+    await expect(page.locator('#signupDialog').getByRole('button', { name: 'Get Started!' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Reconnecting to your account' })).toBeHidden();
 });
 
 test('signup setup retry obtains a fresh challenge after browser SecurityError', async ({ page }) => {

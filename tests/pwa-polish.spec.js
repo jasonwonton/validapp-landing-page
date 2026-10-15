@@ -8,15 +8,18 @@ async function signInToDemo(page, query = "") {
 
 test("initial shell parks inactive dialogs until first use", async ({ page }) => {
     await page.goto("/app/?demo=1&signin=1");
+    // The signed-out root (age screen and sign-in sheet) is open, not parked.
     const shell = await page.evaluate(() => ({
-        elements: document.querySelectorAll("*").length,
+        elements: [...document.querySelectorAll("*")].filter((element) => !element.closest("#signupDialog, #signInDialog")).length,
         parked: document.querySelectorAll("dialog[data-ui-parked='true']").length,
     }));
-    // v93 adds one reconnect button to the 450-node shell.
-    expect(shell.elements).toBeLessThanOrEqual(451);
+    // v93 adds one reconnect button to the 450-node shell; the onboarding
+    // parity release parks two more sheets (add school, friends) and the
+    // session recovery card replaces the sign-in card.
+    expect(shell.elements).toBeLessThanOrEqual(454);
     expect(shell.parked).toBeGreaterThanOrEqual(20);
 
-    await page.getByRole("button", { name: "Create an account" }).click();
+    // The age screen is the signed-out root, so sign-up is already mounted.
     await expect(page.locator("#signupDialog")).toBeVisible();
     await expect(page.locator("#signupForm")).toBeAttached();
     await expect(page.locator("#signupDialog")).not.toHaveAttribute("data-ui-parked", "true");
@@ -61,7 +64,7 @@ test("shared action buttons use the iOS button tokens", async ({ page }) => {
         boxShadow: "none",
         fontSize: "22px",
     });
-    expect(await styleSnapshot(page.locator("#createAccountButton"))).toMatchObject({
+    expect(await styleSnapshot(page.locator("#signupRecoverAccount"))).toMatchObject({
         minHeight: "50px",
         borderRadius: "25px",
         borderWidth: "2px",
