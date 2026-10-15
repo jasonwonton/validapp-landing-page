@@ -48,5 +48,15 @@
     "width": 174,
     "height": 174,
     "conversion": "resize 174 174 (3x of 58pt share icon); cwebp"
+  },
+  {
+    "source": "ios/Six7/Six7/Assets.xcassets/memento_camera.imageset/memento_camera.png",
+    "sourceSHA256": "22aaa4d85c5cfed8e8cbc268f07f503a8391be03f88059172a3e1aac30754a9f",
+    "web": "assets/app/memento-camera.webp",
+    "webSHA256": "101701b69f4b0c8cc444088a36104f1c223c546a9e83713545162b6c8e6ef817",
+    "bytes": 15378,
+    "width": 144,
+    "height": 144,
+    "conversion": "cwebp -lossless (native 144x144, iOS rel/1.6034)"
   }
 ]
