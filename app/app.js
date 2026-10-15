@@ -6754,80 +6754,147 @@ async function beginAccountDeletion() {
     state.profileDraft = null;
     state.pendingProfileInformation = null;
     if ($("#profileDialog").open) $("#profileDialog").close();
-    const passkeys = state.passkeyStatus;
-    const missingPasskey = passkeys && passkeys.registered !== true && Number(passkeys.credentialCount || 0) < 1;
-    if (missingPasskey) {
-        let setUpPasskey = false;
-        const noteChoice = (event) => { if (event.target.closest?.(".ui-sheet-cancel")) setUpPasskey = true; };
-        document.addEventListener("click", noteChoice, true);
-        const deleteAnyway = await confirmSheet({
+    // SettingsView.passkeyWarningMessage(.deleteAccount): "Set Up Passkey" is the main button.
+    if (accountNeedsPasskey()) {
+        const choice = await choiceSheet({
             title: "Don't Lose Your Account",
-            message: "You don't have a passkey. If you lose access to this phone number during the 5-day countdown, you won't be able to recover your account. Set up a passkey first.",
-            confirmLabel: "Delete Anyway",
-            cancelLabel: "Set Up Passkey",
-            destructive: true,
+            message: "You don't have a passkey. If you delete the app and lose access to this phone number during the 5-day countdown, you won't be able to recover your account. Set up a passkey first.",
+            confirmLabel: "Set Up Passkey",
+            secondaryLabel: "Delete Anyway",
         });
-        document.removeEventListener("click", noteChoice, true);
-        if (!deleteAnyway) {
-            if (setUpPasskey) void addBackupPasskey();
-            return;
-        }
+        if (choice === "confirm") return void addBackupPasskey();
+        if (choice !== "secondary") return;
     }
     openDeleteAccountDialog();
 }
 
-function openDeleteAccountDialog() {
-    $("#deleteAccountForm").reset();
-    $("#deleteAccountStatus").textContent = "";
-    $("#deleteAccountDialog").showModal();
+const ACCOUNT_DELETION_GRACE_DAYS = 5;
+const accountDeletionHidesKey = (userId) => `valid:account-deletion-hides-from-polls:${userId}`;
+
+// GodModeDeletionNotice.lines: deleting never cancels a subscription.
+function accountDeletionBillingNotices() {
+    const billing = state.godModeBilling?.userId === api.user?.id ? state.godModeBilling : null;
+    const lines = [];
+    if (billing?.provider === "apple" || billing?.manage === "app_store") {
+        lines.push("Deleting your account doesn't cancel your App Store subscription. Manage it in Settings > Apple Account > Subscriptions.");
+    }
+    const webBilling = billing?.provider === "stripe" || billing?.manage === "stripe_portal"
+        || ["active", "trialing", "past_due", "unpaid", "paused", "incomplete"].includes(billing?.stripeStatus || "");
+    if (webBilling) lines.push("Deleting your account doesn't cancel your web subscription.");
+    return lines;
 }
 
+function renderDeleteAccountDialog() {
+    const hide = $("#deleteAccountHideFromPolls").getAttribute("aria-checked") === "true";
+    const voting = $("#deleteAccountVotingLine");
+    voting.textContent = hide
+        ? "No one will be able to vote for you in polls, even friends who have your number saved."
+        : "Once it's gone, friends who have your number saved can still vote for you in polls.";
+    voting.classList.toggle("emphasis", hide);
+    $("#deleteAccountHideFromPolls").classList.toggle("on", hide);
+    $("#deleteAccountBillingNotices").innerHTML = accountDeletionBillingNotices().map((line) => `<p>${escapeHTML(line)}</p>`).join("");
+}
+
+function openDeleteAccountDialog() {
+    $("#deleteAccountForm").reset();
+    // Off by default: hiding is opt-in (DeleteAccountModal.hideFromPollsByDefault).
+    $("#deleteAccountHideFromPolls").setAttribute("aria-checked", "false");
+    $("#deleteAccountStatus").textContent = "";
+    renderDeleteAccountDialog();
+    $("#deleteAccountDialog").showModal();
+    // The billing lines arrive with the billing status.
+    void refreshGodModeBilling().then(() => {
+        if ($("#deleteAccountDialog").open) renderDeleteAccountDialog();
+    });
+}
+
+// SettingsViewModel.requestAccountDeletion: the account stays signed in and
+// the countdown screen takes over.
 async function requestAccountDeletion(event) {
     event.preventDefault();
     const button = event.currentTarget.querySelector("button[type=submit]");
+    const hideFromPolls = $("#deleteAccountHideFromPolls").getAttribute("aria-checked") === "true";
     setButtonLoading(button, true, "Scheduling...");
     $("#deleteAccountStatus").textContent = "";
+    let result;
     try {
-        await preloadRoute("chats").then((route) => route?.beforeSessionEnd?.()).catch(() => null);
-        await stopCallListener();
-        const result = await api.requestAccountDeletion(api.user.id);
-        await presenceLifecycle?.stop();
-        const scheduled = new Intl.DateTimeFormat(undefined, { dateStyle: "long", timeStyle: "short" }).format(new Date(result.scheduled_for));
-        $("#deleteAccountDialog").close();
-        await import("./chat/outbox.js")
-            .then(({ clearChatOutboxes }) => clearChatOutboxes(api.user.id))
-            .catch(() => null);
-        clearQuestionSubmissionState();
-        api.clearSession();
-        showSignedOut(`Account deletion is scheduled for ${scheduled}. Sign in with your passkey before then if you want to keep it.`);
+        result = await api.requestAccountDeletion(api.user.id, { hideFromPolls });
     } catch (error) {
-        $("#deleteAccountStatus").textContent = userMessage(error, "Could not schedule account deletion.");
-    } finally {
         setButtonLoading(button, false);
+        $("#deleteAccountStatus").textContent = hideFromPolls
+            ? "We couldn't delete your account or hide your number. Nothing changed. Please try again."
+            : "We couldn't schedule deletion. Please try again.";
+        return;
+    }
+    setButtonLoading(button, false);
+    const hidden = result?.hidden_from_polls === true;
+    try { localStorage.setItem(accountDeletionHidesKey(api.user.id), hidden ? "1" : "0"); } catch { /* The note falls back to the default wording. */ }
+    api.user.deletion_requested_at = result?.requested_at || new Date().toISOString();
+    state.accountDeletionScheduledFor = result?.scheduled_for || null;
+    $("#deleteAccountDialog").close();
+    if (hideFromPolls && !hidden) {
+        // An older server, or one that skipped the hide: the account is still deleted.
+        await confirmSheet({ title: "Couldn't hide your number", message: `Your account will still be deleted in ${ACCOUNT_DELETION_GRACE_DAYS} days.`, confirmLabel: "OK", cancelLabel: "Close" });
+    }
+    showPendingDeletion();
+}
+
+function accountDeletionScheduledFor() {
+    const scheduled = new Date(state.accountDeletionScheduledFor || "");
+    if (!Number.isNaN(scheduled.getTime())) return scheduled;
+    const requestedAt = new Date(api.user?.deletion_requested_at || "");
+    return new Date(requestedAt.getTime() + ACCOUNT_DELETION_GRACE_DAYS * 86_400_000);
+}
+
+function renderPendingDeletionCountdown() {
+    const scheduled = accountDeletionScheduledFor();
+    if (Number.isNaN(scheduled.getTime())) return;
+    const total = Math.max(0, Math.ceil((scheduled.getTime() - Date.now()) / 1000));
+    const parts = { days: Math.floor(total / 86_400), hours: Math.floor((total % 86_400) / 3_600), minutes: Math.floor((total % 3_600) / 60), seconds: total % 60 };
+    const units = { days: "d", hours: "h", minutes: "m", seconds: "s" };
+    for (const [key, value] of Object.entries(parts)) {
+        $(`[data-countdown-unit="${key}"]`).textContent = `${String(value).padStart(2, "0")} ${units[key]}`;
+    }
+    $("#pendingDeletionCountdown").setAttribute("aria-label", `${parts.days} days, ${parts.hours} hours, ${parts.minutes} minutes, ${parts.seconds} seconds remaining`);
+    if (total <= 0) {
+        // AuthService.finishExpiredAccountDeletion: time's up, sign out here.
+        clearInterval(state.pendingDeletionTimer);
+        state.pendingDeletionTimer = null;
+        $("#pendingDeletionDialog").close();
+        api.clearSession();
+        showSignedOut("Your account has been deleted.");
     }
 }
 
 function showPendingDeletion() {
-    const requestedAt = new Date(api.user.deletion_requested_at);
-    const scheduledAt = new Date(requestedAt.getTime() + 5 * 86_400_000);
-    const when = Number.isFinite(scheduledAt.getTime())
-        ? new Intl.DateTimeFormat(undefined, { dateStyle: "long", timeStyle: "short" }).format(scheduledAt)
-        : "after the five-day grace period";
-    $("#pendingDeletionCopy").textContent = `It will be permanently deleted ${when}. Keep it now to restore normal use.`;
+    let hides = false;
+    try { hides = localStorage.getItem(accountDeletionHidesKey(api.user?.id)) === "1"; } catch { hides = false; }
+    $("#pendingDeletionCopy").textContent = hides
+        ? "After deletion, you won't receive any more compliments in Valid. No one can vote for you in polls, even friends who have your number saved, until you come back."
+        : "After deletion, you won't receive any more compliments in Valid, but friends who have your number saved can still vote for you in polls.";
     $("#pendingDeletionStatus").textContent = "";
-    $("#pendingDeletionDialog").showModal();
+    clearInterval(state.pendingDeletionTimer);
+    renderPendingDeletionCountdown();
+    state.pendingDeletionTimer = setInterval(renderPendingDeletionCountdown, 1000);
+    const dialog = $("#pendingDeletionDialog");
+    if (!dialog.open) dialog.showModal();
 }
 
 async function cancelAccountDeletion() {
     const button = $("#cancelDeletionButton");
-    setButtonLoading(button, true, "Restoring...");
+    setButtonLoading(button, true, "Keeping account…");
+    $("#pendingDeletionStatus").textContent = "";
     try {
         await api.cancelAccountDeletion(api.user.id);
         api.user.deletion_requested_at = null;
+        state.accountDeletionScheduledFor = null;
+        clearInterval(state.pendingDeletionTimer);
+        state.pendingDeletionTimer = null;
+        try { localStorage.removeItem(accountDeletionHidesKey(api.user.id)); } catch { /* Nothing saved. */ }
         $("#pendingDeletionDialog").close();
         showToast("Your account is staying on Valid");
     } catch (error) {
-        $("#pendingDeletionStatus").textContent = userMessage(error, "Could not keep your account.");
+        $("#pendingDeletionStatus").textContent = "We couldn't keep your account. Check your connection and try again.";
     } finally {
         setButtonLoading(button, false);
     }
@@ -8375,7 +8442,12 @@ function bindEvents() {
     $("#deleteAccountForm").addEventListener("submit", requestAccountDeletion);
     $("#deleteAccountButton").addEventListener("click", () => void beginAccountDeletion());
     $("#cancelDeletionButton").addEventListener("click", cancelAccountDeletion);
-    $("#pendingDeletionLogout").addEventListener("click", logoutAndReset);
+    $("#deleteAccountHideFromPolls").addEventListener("click", (event) => {
+        const button = event.currentTarget;
+        button.setAttribute("aria-checked", String(button.getAttribute("aria-checked") !== "true"));
+        haptic("selection");
+        renderDeleteAccountDialog();
+    });
     $("#installAppButton").addEventListener("click", installWebApp);
     $("#androidInstallButton").addEventListener("click", installWebApp);
     $("#androidInstallDialog").addEventListener("cancel", (event) => event.preventDefault());

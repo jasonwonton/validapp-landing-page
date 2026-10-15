@@ -893,31 +893,45 @@
         </div>
     </dialog>
 
-    <dialog id="deleteAccountDialog" class="modal">
+    <!-- DeleteAccountModal.swift: the terms, a voting line that follows the switch, billing notices, then [Cancel] [Delete account]. -->
+    <dialog id="deleteAccountDialog" class="modal delete-account-modal" aria-labelledby="deleteAccountTitle">
         <form id="deleteAccountForm" method="dialog">
-            <div class="modal-heading">
-                <h2>Delete Account?</h2>
-                <button class="icon-button" aria-label="Close" type="button" data-close-dialog>×</button>
+            <h2 id="deleteAccountTitle">Delete Account?</h2>
+            <div class="delete-account-copy">
+                <p>We'll delete your account in 5 days. You can keep it from the countdown screen any time before then.</p>
+                <p id="deleteAccountVotingLine">Once it's gone, friends who have your number saved can still vote for you in polls.</p>
+                <div id="deleteAccountBillingNotices"></div>
             </div>
-            <div class="deletion-warning">
-                <strong>You have 5 days to change your mind.</strong>
-                <p>We'll permanently delete your account in 5 days. After deletion, you won't receive any more compliments in Valid, but people who have you as a contact can still vote for you. You can keep your account from the countdown screen any time before then.</p>
-            </div>
-            <label for="deleteConfirmation">Type <strong>DELETE</strong> to confirm</label>
-            <input id="deleteConfirmation" autocomplete="off" pattern="DELETE" required>
+            <button id="deleteAccountHideFromPolls" class="delete-account-hide-row" type="button" role="switch" aria-checked="false" aria-label="Hide my number from polls" aria-describedby="deleteAccountHideNote">
+                <span><strong>Hide my number from polls</strong><small id="deleteAccountHideNote">If you keep your account or come back, people can vote for you again.</small></span>
+                <span class="settings-switch" aria-hidden="true"><span></span></span>
+            </button>
             <p id="deleteAccountStatus" class="status-message" role="status"></p>
-            <button class="primary-button danger-button" type="submit">Delete Account</button>
-            <button class="secondary-button" type="button" data-close-dialog>Keep my account</button>
+            <div class="delete-account-actions">
+                <button class="secondary-button" type="button" data-close-dialog>Cancel</button>
+                <button class="primary-button danger-button" type="submit">Delete account</button>
+            </div>
         </form>
     </dialog>
 
-    <dialog id="pendingDeletionDialog" class="modal pending-deletion-modal">
+    <!-- AccountDeletionPendingView.swift: full screen while the account counts down; signed in. -->
+    <dialog id="pendingDeletionDialog" class="pending-deletion-screen" aria-labelledby="pendingDeletionTitle">
         <div class="pending-deletion-content">
-            <h2>Your account is scheduled for deletion</h2>
-            <p id="pendingDeletionCopy"></p>
-            <p id="pendingDeletionStatus" class="status-message" role="status"></p>
-            <button id="cancelDeletionButton" class="primary-button" type="button">Keep my account</button>
-            <button id="pendingDeletionLogout" class="secondary-button" type="button">Log out</button>
+            <img class="pending-deletion-logo" src="../assets/valid_logo.png" alt="" width="964" height="372" decoding="async">
+            <h2 id="pendingDeletionTitle">Account deletion scheduled</h2>
+            <p class="pending-deletion-lead">Your data will be deleted in</p>
+            <div id="pendingDeletionCountdown" class="pending-deletion-countdown" role="timer" aria-live="off">
+                <span><strong data-countdown-unit="days">00 d</strong></span>
+                <span><strong data-countdown-unit="hours">00 h</strong></span>
+                <span><strong data-countdown-unit="minutes">00 m</strong></span>
+                <span><strong data-countdown-unit="seconds">00 s</strong></span>
+            </div>
+            <p id="pendingDeletionCopy" class="pending-deletion-note"></p>
+            <div class="pending-deletion-keep">
+                <p>Changed your mind? Keep your account before time runs out.</p>
+                <p id="pendingDeletionStatus" class="status-message" role="status"></p>
+                <button id="cancelDeletionButton" class="primary-button" type="button">Keep my account</button>
+            </div>
         </div>
     </dialog>
 

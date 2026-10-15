@@ -1392,8 +1392,13 @@ export class ValidAPI {
         return url.href;
     }
 
-    requestAccountDeletion(userId) {
-        return this.request(`/users/${userId}/delete`, { method: "POST" });
+    // `hideFromPolls` also hides the number from polls in the same request
+    // (DeleteAccountModal on iOS); older servers ignore the body.
+    requestAccountDeletion(userId, { hideFromPolls = false } = {}) {
+        return this.request(`/users/${userId}/delete`, {
+            method: "POST",
+            body: JSON.stringify({ hide_from_polls: hideFromPolls === true }),
+        });
     }
 
     cancelAccountDeletion(userId) {

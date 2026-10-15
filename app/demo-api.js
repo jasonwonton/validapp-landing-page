@@ -1481,7 +1481,8 @@ export class DemoAPI {
         this.anonymousInbox.questions = this.anonymousInbox.questions.filter((item) => item.id !== questionId);
     }
 
-    async requestAccountDeletion() {
+    async requestAccountDeletion(_userId, { hideFromPolls = false } = {}) {
+        this.lastDeletionHideFromPolls = hideFromPolls;
         const requestedAt = new Date();
         const scheduledFor = new Date(requestedAt.getTime() + 5 * 86_400_000);
         this.deletionRequestedAt = requestedAt.toISOString();
@@ -1490,6 +1491,7 @@ export class DemoAPI {
             message: "Account deletion scheduled.",
             requested_at: requestedAt.toISOString(),
             scheduled_for: scheduledFor.toISOString(),
+            hidden_from_polls: hideFromPolls === true,
         };
     }
 
