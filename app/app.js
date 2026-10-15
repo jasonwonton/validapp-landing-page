@@ -979,10 +979,10 @@ async function showSignedIn() {
             presenceLifecycle = bindPresenceLifecycle(chatPresence);
             const button = document.createElement('button');
             button.id = 'activityStatusButton';
-            button.setAttribute('aria-label', 'Activity status');
+            button.setAttribute('aria-label', 'Activity Status');
             button.type = 'button';
             button.className = 'settings-row';
-            button.innerHTML = `<span class="settings-icon" aria-hidden="true">${uiIcon('activity')}</span><span><strong>Activity status</strong><small>Choose whether people see when you’re active</small></span><span aria-hidden="true">›</span>`;
+            button.innerHTML = `<span class="settings-icon" aria-hidden="true">${uiIcon('activity')}</span><span><strong>Activity Status</strong><small>Choose whether people see when you’re active</small></span><span aria-hidden="true">›</span>`;
             button.addEventListener('click', async () => {
                 try {
                     const { openActivitySettings } = await import('./chat/activity-settings.js');
@@ -1340,6 +1340,7 @@ function renderProfilePanel() {
     renderPasskeyStatus();
     renderTabBadges();
     renderMemoriesEntry();
+    void loadNotificationCategories();
 }
 
 // Memories + Vault live in a lazily loaded module (app/vault/).
@@ -1530,22 +1531,215 @@ function renderChatUnreadBadge(count) {
     renderTabBadges();
 }
 
-function renderPasskeyStatus() {
+// SettingsView+Presentations.swift: "Don't lose your account! Set up a
+// passkey" shows only while the account has no passkey, just above Sign out.
+function accountHasPasskey() {
     const count = Math.max(0, Number(state.passkeyStatus?.credentialCount || 0));
-    const registered = state.passkeyStatus?.registered === true || count > 0;
-    const button = $("#addPasskeyButton");
-    button.classList.toggle("hidden", !state.passkeyStatus);
-    renderProfileActionsVisibility();
-    if (!state.passkeyStatus) return;
-    button.querySelector("strong").textContent = registered ? "Add another passkey" : "Register a passkey";
-    $("#passkeyStatusText").textContent = registered
-        ? `${count} ${count === 1 ? "passkey" : "passkeys"} registered`
-        : "Add a secure way to sign in";
+    return state.passkeyStatus?.registered === true || count > 0;
 }
 
-function renderProfileActionsVisibility() {
-    const section = $("#addPasskeyButton").closest(".profile-actions");
-    section.classList.toggle("hidden", [...section.querySelectorAll(".settings-row")].every((row) => row.classList.contains("hidden")));
+function accountNeedsPasskey() {
+    return Boolean(state.passkeyStatus) && !accountHasPasskey();
+}
+
+function renderPasskeyStatus() {
+    $("#addPasskeyButton").classList.toggle("hidden", !accountNeedsPasskey());
+    renderProfileActionsVisibility();
+}
+
+// The Settings card always has Blocked Users; nothing to hide here now.
+function renderProfileActionsVisibility() {}
+
+// Settings → Notifications (NotificationSettingsSheet.swift and
+// NotificationCategoriesStore.swift): four server-side switches. A flip shows
+// at once and saves in the background; saves of one switch run in order and
+// only the last flip is sent; a failed save puts back only its own switch and
+// says so at the bottom of the sheet. Browser permission is separate: while
+// push isn't on here, a banner offers to turn it on and the switches dim.
+const NOTIFICATION_CATEGORIES = [
+    { key: "votes", title: "Votes", subtitle: "When someone picks you or reveals you", icon: '<path fill="currentColor" d="M9.6 2.5a2 2 0 0 1 2 2v5.6l.6-.1c.4-.6 1-.9 1.7-.9.6 0 1.1.3 1.5.7.4-.4 1-.6 1.5-.6.7 0 1.3.3 1.7.9l.3-.1c1.2 0 2.1 1 2.1 2.2v3.1c0 3.6-2.4 6.3-6.2 6.3h-1.2c-2 0-3.4-.7-4.6-2.3l-3.3-4.5a1.8 1.8 0 0 1 2.7-2.3l1.2 1.2V4.5a2 2 0 0 1 2-2Z"/>' },
+    { key: "chats", title: "Chats", subtitle: "Messages, Mementos and chat invites", icon: '<path fill="currentColor" d="M3.5 3.5h9.5A3.5 3.5 0 0 1 16.5 7v4.2a3.5 3.5 0 0 1-3.5 3.5H8.2L4.6 17.4v-2.8A3.4 3.4 0 0 1 0 11.2V7a3.5 3.5 0 0 1 3.5-3.5Z" transform="translate(1.5 .5)"/><path fill="currentColor" d="M19.2 9.2h.3a3 3 0 0 1 3 3v3.6a3 3 0 0 1-2.4 3v2.6l-3.3-2.6h-4.2a3 3 0 0 1-2.6-1.5h3.8a5.4 5.4 0 0 0 5.4-5.4Z"/>' },
+    { key: "activity", title: "Activity", subtitle: "Reactions, comments, Story tags, TBHs and news from Valid", icon: '<path fill="currentColor" d="M10 3.5c.5 3.7 2.3 5.6 6 6-3.7.5-5.5 2.3-6 6-.5-3.7-2.3-5.5-6-6 3.7-.4 5.5-2.3 6-6ZM18 13c.3 2 1.2 3 3.2 3.3-2 .3-2.9 1.2-3.2 3.2-.3-2-1.2-2.9-3.2-3.2 2-.3 2.9-1.3 3.2-3.3ZM18.5 2c.2 1.2.8 1.8 2 2-1.2.2-1.8.8-2 2-.2-1.2-.8-1.8-2-2 1.2-.2 1.8-.8 2-2Z"/>' },
+    { key: "reminders", title: "Reminders", subtitle: "Vote again, streaks and daily nudges", icon: '<path fill="currentColor" fill-rule="evenodd" d="M12 4.5a8.3 8.3 0 1 1 0 16.6 8.3 8.3 0 0 1 0-16.6Zm-.9 3.6v5.6l4 2.4.9-1.5-3.1-1.9V8.1ZM2.6 6.6 6.4 3.4l1.3 1.5-3.8 3.2ZM21.4 6.6l-3.8-3.2-1.3 1.5 3.8 3.2Z"/>' },
+];
+const NOTIFICATION_CATEGORY_REFRESH_MS = 5 * 60_000;
+const ALL_NOTIFICATION_CATEGORIES_ON = Object.freeze({ votes: true, chats: true, activity: true, reminders: true });
+const notificationCategoryStore = {
+    userId: null,
+    values: { ...ALL_NOTIFICATION_CATEGORIES_ON },
+    confirmed: { ...ALL_NOTIFICATION_CATEGORIES_ON },
+    generation: {},
+    pending: new Set(),
+    chains: {},
+    flips: 0,
+    fetchedAt: 0,
+    loading: null,
+    failureTimer: null,
+};
+
+function notificationCategoriesFrom(response) {
+    const categories = response?.categories || {};
+    return Object.fromEntries(NOTIFICATION_CATEGORIES.map(({ key }) => [key, categories[key] !== false]));
+}
+
+function notificationCategoryCacheKey(userId) {
+    return `valid:notification-categories:${userId}`;
+}
+
+function notificationCategoryStoreFor(userId) {
+    const store = notificationCategoryStore;
+    if (store.userId === userId) return store;
+    Object.assign(store, { userId, generation: {}, pending: new Set(), chains: {}, fetchedAt: 0, loading: null });
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(notificationCategoryCacheKey(userId)) || "null"); } catch { saved = null; }
+    store.values = notificationCategoriesFrom({ categories: saved });
+    store.confirmed = { ...store.values };
+    return store;
+}
+
+function applyNotificationCategories(next) {
+    const store = notificationCategoryStore;
+    store.values = { ...next };
+    try { localStorage.setItem(notificationCategoryCacheKey(store.userId), JSON.stringify(store.values)); } catch { /* Shown from the server next time. */ }
+    renderNotificationSettings();
+}
+
+// The server's values for every switch with no save of its own waiting.
+function adoptNotificationCategories(server, except = null) {
+    const store = notificationCategoryStore;
+    const next = { ...store.values };
+    for (const { key } of NOTIFICATION_CATEGORIES) {
+        if (key !== except && !store.pending.has(key)) next[key] = server[key];
+    }
+    applyNotificationCategories(next);
+}
+
+function notificationCategorySummary(values = notificationCategoryStore.values) {
+    const on = NOTIFICATION_CATEGORIES.filter(({ key }) => values[key]);
+    if (on.length === NOTIFICATION_CATEGORIES.length) return "All on";
+    if (!on.length) return "All off";
+    return on.map(({ title }) => title).join(", ");
+}
+
+async function loadNotificationCategories({ force = false } = {}) {
+    const userId = api.user?.id;
+    if (!userId || typeof api.getNotificationPreferences !== "function") return;
+    const store = notificationCategoryStoreFor(userId);
+    renderNotificationSettings();
+    if (!force && (store.loading || Date.now() - store.fetchedAt < NOTIFICATION_CATEGORY_REFRESH_MS)) return store.loading;
+    // A flip made while this read runs may reach the server after it read.
+    const flipsAtStart = store.pending.size ? null : store.flips;
+    const load = api.getNotificationPreferences().then((response) => {
+        if (store.userId !== userId || flipsAtStart === null || store.flips !== flipsAtStart) return;
+        store.fetchedAt = Date.now();
+        store.confirmed = notificationCategoriesFrom(response);
+        adoptNotificationCategories(store.confirmed);
+    }).catch(() => null).finally(() => {
+        if (store.loading === load) store.loading = null;
+    });
+    store.loading = load;
+    return load;
+}
+
+function setNotificationCategory(key, enabled) {
+    const store = notificationCategoryStore;
+    const userId = api.user?.id;
+    const category = NOTIFICATION_CATEGORIES.find((item) => item.key === key);
+    if (!category || !userId || store.userId !== userId || store.values[key] === enabled) return null;
+    if ($("#notificationSaveFailure").dataset.category === key) hideNotificationSaveFailure();
+    store.flips += 1;
+    applyNotificationCategories({ ...store.values, [key]: enabled });
+    const generation = (store.generation[key] || 0) + 1;
+    store.generation[key] = generation;
+    store.pending.add(key);
+    const task = (store.chains[key] || Promise.resolve()).then(async () => {
+        // A newer flip of this switch sends the final value.
+        if (store.userId !== userId || store.generation[key] !== generation) return;
+        try {
+            const saved = notificationCategoriesFrom(await api.updateNotificationCategories({ [key]: enabled }));
+            if (store.userId !== userId) return;
+            store.confirmed = saved;
+            if (store.generation[key] === generation) {
+                store.pending.delete(key);
+                adoptNotificationCategories(saved);
+            } else {
+                adoptNotificationCategories(saved, key);
+            }
+        } catch {
+            if (store.userId !== userId || store.generation[key] !== generation) return;
+            store.pending.delete(key);
+            applyNotificationCategories({ ...store.values, [key]: store.confirmed[key] });
+            showNotificationSaveFailure(key, `Couldn't save ${category.title}. Check your connection and try again.`);
+        }
+    });
+    store.chains[key] = task;
+    return task;
+}
+
+function showNotificationSaveFailure(key, message) {
+    const line = $("#notificationSaveFailure");
+    clearTimeout(notificationCategoryStore.failureTimer);
+    line.dataset.category = key;
+    line.textContent = message;
+    line.classList.remove("hidden");
+    haptic("error");
+    notificationCategoryStore.failureTimer = setTimeout(hideNotificationSaveFailure, 3000);
+}
+
+function hideNotificationSaveFailure() {
+    const line = $("#notificationSaveFailure");
+    clearTimeout(notificationCategoryStore.failureTimer);
+    delete line.dataset.category;
+    line.textContent = "";
+    line.classList.add("hidden");
+}
+
+// "allowed", "denied" (blocked in the browser) or "notAsked" (not on here yet).
+function notificationPermissionState() {
+    if (!webPushSupported()) return "notAsked";
+    if (Notification.permission === "denied") return "denied";
+    return state.webPushSubscription && state.webPushRegistrationState === "on" ? "allowed" : "notAsked";
+}
+
+function renderNotificationSettings() {
+    const summary = $("#notificationStatusText");
+    if (summary) summary.textContent = notificationCategoryStore.userId && notificationCategoryStore.userId === api.user?.id
+        ? notificationCategorySummary()
+        : notificationCategorySummary(ALL_NOTIFICATION_CATEGORIES_ON);
+    const dialog = $("#notificationSettingsDialog");
+    if (!dialog?.open) return;
+    const permission = notificationPermissionState();
+    const off = permission !== "allowed";
+    $("#notificationPermissionBanner").classList.toggle("hidden", !off);
+    $("#notificationPermissionTitle").textContent = permission === "denied" ? "Notifications are off for Valid" : "Notifications aren't on yet";
+    const bannerButton = $("#notificationPermissionButton");
+    bannerButton.disabled = Boolean(state.webPushBusy);
+    bannerButton.setAttribute("aria-busy", String(Boolean(state.webPushBusy)));
+    bannerButton.textContent = state.webPushBusy ? "Turning on…" : "Turn on notifications";
+    const card = $("#notificationCategoryCard");
+    card.classList.toggle("dimmed", off);
+    if (!card.childElementCount) {
+        card.innerHTML = NOTIFICATION_CATEGORIES.map(({ key, title, subtitle, icon }) => `<button class="notification-category-row" type="button" role="switch" aria-checked="true" data-notification-category="${key}" aria-label="${title}" aria-describedby="notificationCategory-${key}">
+            <span class="notification-category-icon" aria-hidden="true"><svg viewBox="0 0 24 24">${icon}</svg></span>
+            <span><strong>${title}</strong><small id="notificationCategory-${key}">${subtitle}</small></span>
+            <span class="settings-switch" aria-hidden="true"><span></span></span>
+        </button>`).join("");
+    }
+    for (const row of card.querySelectorAll("[data-notification-category]")) {
+        const on = notificationCategoryStore.values[row.dataset.notificationCategory] !== false;
+        row.setAttribute("aria-checked", String(on));
+        row.classList.toggle("on", on);
+    }
+}
+
+function openNotificationSettings() {
+    const dialog = $("#notificationSettingsDialog");
+    hideNotificationSaveFailure();
+    if (!dialog.open) dialog.showModal();
+    renderNotificationSettings();
+    // Opening the sheet always reads the server, and the browser permission.
+    void loadNotificationCategories({ force: true });
+    void refreshWebPushStatus();
 }
 
 function renderGodModeCard() {
@@ -6433,6 +6627,45 @@ async function cancelAccountDeletion() {
     }
 }
 
+const PASSKEY_SIGN_OUT_WARNING = "You don't have a passkey. If you lose access to this phone number after signing out, you won't be able to recover your account. Set up a passkey first.";
+
+// SettingsView.beginPasskeyProtectedAction(.signOut): an account without a
+// passkey is warned first ("Set Up Passkey" is the main button); then unsent
+// chat items are counted (SignOutUnsentItemsAlert.swift) before signing out.
+async function confirmSignOut() {
+    const button = $("#profileSignOutButton");
+    if (button.disabled) return;
+    if (accountNeedsPasskey()) {
+        const choice = await choiceSheet({
+            title: "Don't Lose Your Account",
+            message: PASSKEY_SIGN_OUT_WARNING,
+            confirmLabel: "Set Up Passkey",
+            secondaryLabel: "Sign Out Anyway",
+        });
+        if (choice === "confirm") return void addBackupPasskey();
+        if (choice !== "secondary") return;
+    }
+    button.disabled = true;
+    try {
+        const userId = api.user?.id;
+        const unsent = userId ? await import("./chat/outbox.js")
+            .then(async ({ listChatTextOutbox, listChatMediaOutbox }) => (await listChatTextOutbox(userId)).length + (await listChatMediaOutbox(userId)).length)
+            .catch(() => 0) : 0;
+        if (unsent > 0 && !await confirmSheet({
+            title: "Sign out?",
+            message: unsent === 1 ? "You have 1 unsent item that will be discarded." : `You have ${unsent} unsent items that will be discarded.`,
+            confirmLabel: "Sign Out",
+            destructive: true,
+        })) return;
+        if (userId) {
+            try { localStorage.removeItem(notificationCategoryCacheKey(userId)); } catch { /* Nothing saved. */ }
+        }
+        await logoutAndReset();
+    } finally {
+        button.disabled = false;
+    }
+}
+
 async function logoutAndReset() {
     const userId = api.user?.id;
     state.webPushSigningOut = true;
@@ -7135,35 +7368,9 @@ function urlBase64ToUint8Array(value) {
 }
 
 function renderWebPushStatus() {
-    const button = $("#notificationButton");
-    if (!webPushSupported()) {
-        button.classList.add("hidden");
-        renderProfileActionsVisibility();
-        renderFeedNotificationPrompt();
-        dispatchEvent(new CustomEvent("valid:web-push-status"));
-        return;
-    }
-    button.classList.remove("hidden");
-    renderProfileActionsVisibility();
-    const status = $("#notificationStatusText");
-    const enabled = Boolean(state.webPushSubscription && state.webPushRegistrationState === "on");
-    button.setAttribute("aria-checked", String(enabled));
-    button.classList.toggle("on", enabled);
-    if (Notification.permission === "denied") {
-        status.textContent = "Blocked in browser settings";
-    } else if (state.webPushSubscription && state.webPushRegistrationState === "on") {
-        status.textContent = "On · tap to turn off";
-    } else if (state.webPushSubscription && state.webPushRegistrationState === "syncing") {
-        status.textContent = "Finishing setup…";
-    } else if (state.webPushSubscription && state.webPushRegistrationState === "error") {
-        status.textContent = "Setup incomplete · tap to retry";
-    } else {
-        status.textContent = "Off · tap to turn on";
-    }
-    // The switch already shows on/off; surface the states that need attention.
-    const attention = Notification.permission === "denied" || ["syncing", "error"].includes(state.webPushRegistrationState) && Boolean(state.webPushSubscription);
-    status.classList.toggle("visually-hidden", !attention);
-    status.classList.toggle("settings-row-warning", attention && status.textContent !== "Finishing setup…");
+    // Settings → Notifications: the row's summary and the sheet's banner
+    // follow permission and subscription changes.
+    renderNotificationSettings();
     renderFeedNotificationPrompt();
     // The chat notification cards follow permission and subscription changes.
     dispatchEvent(new CustomEvent("valid:web-push-status"));
@@ -7812,7 +8019,7 @@ function bindEvents() {
         if (event.target.closest("[data-edit-profile]")) openProfileDialog();
         if (event.target.closest("#viewClassmatesButton")) openClassmateDirectory();
         if (event.target.closest("#findContactsButton")) openClassmatesDialog();
-        if (event.target.closest("#profileSignOutButton")) logoutAndReset();
+        if (event.target.closest("#profileSignOutButton")) void confirmSignOut();
         const invite = event.target.closest("[data-profile-invite]");
         if (invite) shareProfileInvite(invite, invite.dataset.profileInvite);
         const rankedClassmate = event.target.closest("[data-school-classmate]");
@@ -7961,7 +8168,18 @@ function bindEvents() {
             setAppUpdateButton("retry");
         });
     });
-    $("#notificationButton").addEventListener("click", toggleWebPush);
+    $("#notificationButton").addEventListener("click", openNotificationSettings);
+    $("#notificationPermissionButton").addEventListener("click", () => {
+        // Asked inside the tap: mobile browsers need the user gesture.
+        void toggleWebPush().finally(renderNotificationSettings);
+        renderNotificationSettings();
+    });
+    $("#notificationCategoryCard").addEventListener("click", (event) => {
+        const row = event.target.closest("[data-notification-category]");
+        if (!row) return;
+        haptic("selection");
+        void setNotificationCategory(row.dataset.notificationCategory, row.getAttribute("aria-checked") !== "true");
+    });
     $("#questionForm").addEventListener("submit", reviewQuestionSubmission);
     $("#questionForm").addEventListener("input", resetQuestionSubmissionIfDraftChanged);
     $("#questionForm").addEventListener("change", resetQuestionSubmissionIfDraftChanged);

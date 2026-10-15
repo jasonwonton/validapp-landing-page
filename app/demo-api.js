@@ -227,7 +227,7 @@ export class DemoAPI {
             { user_id: "classmate-5", first_name: "Sofia", last_name: "Kim", username: "sofiak", grade: "Freshman", school_name: "Westview High School", vote_count: 27, weekly_vote_count: 9, profile_picture_url: "../assets/app/aura.webp" },
             { user_id: "classmate-6", first_name: "Mateo", last_name: "Lee", username: "mateol", grade: "Senior", school_name: "Westview High School", vote_count: 24, weekly_vote_count: 7, profile_picture_url: "../assets/valid_logo.png" },
         ];
-        this.inviteStatus = { limit: 3, sent_today: 1, remaining: 2, next_reset_at: ago(-720), qualifying_invites: 0, aura_reward_progress: 0, aura_reward_goal: 3, aura_reward_amount: 50, aura_rewards_claimed: 0, aura_rewards_max: 1, aura_reward_max_reached: false };
+        this.inviteStatus = { limit: 3, sent_today: 1, remaining: 2, next_reset_at: ago(-720), qualifying_invites: 0, aura_reward_progress: 0, aura_reward_goal: 3, aura_reward_amount: 50, aura_rewards_claimed: 0, aura_rewards_max: 1, aura_reward_max_reached: false, god_mode_invite_progress: 1, god_mode_invite_goal: 5, god_mode_invite_goal_reached: false, god_mode_invite_device_exclusions: 0 };
         this.askLink = {
             share_url: "https://validapp.lol/a/jules-demo",
             is_active: true,
@@ -1484,6 +1484,29 @@ export class DemoAPI {
         this.deletionRequestedAt = null;
         this.user.deletion_requested_at = null;
         return { message: "Account deletion cancelled." };
+    }
+
+    // Settings → Notifications. ?notifoff=chats,reminders starts those off;
+    // ?notiffail=1 makes every save fail (the switch flips back).
+    async getNotificationPreferences() {
+        this.notificationCategories ||= this.initialNotificationCategories();
+        return { user_id: "demo-user", soft_prompt_shown_count: 0, categories: { ...this.notificationCategories } };
+    }
+
+    async updateNotificationCategories(changes) {
+        this.notificationCategories ||= this.initialNotificationCategories();
+        this.notificationCategoryUpdates = [...(this.notificationCategoryUpdates || []), { ...changes }];
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        if (new URLSearchParams(location.search).get("notiffail") === "1") throw new Error("Couldn't reach Valid.");
+        for (const key of ["votes", "chats", "activity", "reminders"]) {
+            if (typeof changes[key] === "boolean") this.notificationCategories[key] = changes[key];
+        }
+        return { user_id: "demo-user", soft_prompt_shown_count: 0, categories: { ...this.notificationCategories } };
+    }
+
+    initialNotificationCategories() {
+        const off = new Set(String(new URLSearchParams(location.search).get("notifoff") || "").split(",").filter(Boolean));
+        return Object.fromEntries(["votes", "chats", "activity", "reminders"].map((key) => [key, !off.has(key)]));
     }
 
 }

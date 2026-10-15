@@ -607,6 +607,21 @@ export class ValidAPI {
         });
     }
 
+    // Settings → Notifications: the four switches iOS shows
+    // (NotificationCategoriesStore). GET returns `categories`; a missing one
+    // (older server) means everything is on.
+    getNotificationPreferences() {
+        return this.request("/notification-preferences");
+    }
+
+    // Sends only the switches that changed; the answer has all four as saved.
+    updateNotificationCategories(changes, source = "web_settings") {
+        return this.request("/notification-preferences/categories", {
+            method: "PUT",
+            body: JSON.stringify({ ...changes, source }),
+        });
+    }
+
     recordStreakWarningOpen(streakWarningId) {
         return this.request("/notification-preferences/streak-warning-open", {
             method: "POST",
