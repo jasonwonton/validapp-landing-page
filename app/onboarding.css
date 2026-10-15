@@ -214,3 +214,7 @@
 .in-app-push-banner strong, .in-app-push-banner small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .in-app-push-banner small { color: var(--muted); font-size: .88rem; }
 @media (prefers-reduced-motion: reduce) { .in-app-push-banner { transition: none; } }
+
+/* Dark mode: the selected school and the age wheel keep their contrast. */
+:root[data-theme="dark"] .signup-school-result.selected { background: rgba(255, 177, 94, .2); box-shadow: 0 0 0 2px var(--peach); }
+:root[data-theme="dark"] .signup-age-wheel { background: linear-gradient(to bottom, transparent 45px, rgba(145, 227, 221, .12) 45px, rgba(145, 227, 221, .12) 87px, transparent 87px), rgba(var(--surface-rgb), .72); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08); }
