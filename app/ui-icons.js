@@ -61,6 +61,24 @@ const paths = {
     photo: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="2"/><path d="m3 17 6-6 4 4 3-3 5 5"/>',
     // SF Symbols bell.badge.fill: a filled bell with the badge dot top right.
     'bell-badge': '<path fill="currentColor" stroke="none" d="M10.5 3.2a1.5 1.5 0 0 1 3 .1 6 6 0 0 1 1.3.5 4.5 4.5 0 0 0 4.2 6.2V14l1.6 2.4A1 1 0 0 1 19.8 18H4.2a1 1 0 0 1-.8-1.6L5 14v-3.5a6 6 0 0 1 5.5-6Zm-1 15.8h5a2.5 2.5 0 0 1-5 0Z"/><circle cx="19" cy="5" r="3" fill="currentColor" stroke="none"/>',
+    // Tab bar (MainTabItems.swift TabIcon): outlined, and filled while selected.
+    // Look-alikes of house, hand.tap, bubble.left.and.bubble.right and person.crop.circle.
+    'tab-feed': '<path d="M3 10.8 12 3.2l9 7.6"/><path d="M5.5 8.9V19.5a1.5 1.5 0 0 0 1.5 1.5h3v-5.2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V21h3a1.5 1.5 0 0 0 1.5-1.5V8.9"/>',
+    'tab-feed-filled': '<path fill="currentColor" stroke="none" d="M12 2.4a1 1 0 0 1 .65.24l9 7.6a1 1 0 0 1-1.3 1.53L19.2 10.8v8.7a2.3 2.3 0 0 1-2.3 2.3H14.4v-6a1.2 1.2 0 0 0-1.2-1.2h-2.4a1.2 1.2 0 0 0-1.2 1.2v6H7.1a2.3 2.3 0 0 1-2.3-2.3v-8.7l-1.15.97a1 1 0 0 1-1.3-1.53l9-7.6A1 1 0 0 1 12 2.4Z"/>',
+    'tab-play': '<path d="M7.6 6.2a4.4 4.4 0 0 1 7.8 0"/><path d="M10 15.6V8a1.5 1.5 0 0 1 3 0v4.4a1.25 1.25 0 0 1 2.5 0v.5a1.25 1.25 0 0 1 2.5 0v4.2c0 2.9-2 4.8-5 4.8h-1.2c-1.9 0-3-.8-4.1-2.3l-2.4-3.4a1.3 1.3 0 0 1 2-1.6Z"/>',
+    'tab-play-filled': '<path d="M7.6 6.2a4.4 4.4 0 0 1 7.8 0"/><path fill="currentColor" d="M10 15.6V8a1.5 1.5 0 0 1 3 0v4.4a1.25 1.25 0 0 1 2.5 0v.5a1.25 1.25 0 0 1 2.5 0v4.2c0 2.9-2 4.8-5 4.8h-1.2c-1.9 0-3-.8-4.1-2.3l-2.4-3.4a1.3 1.3 0 0 1 2-1.6Z"/>',
+    'tab-chats': '<path d="M5 3h7a3.5 3.5 0 0 1 3.5 3.5V10a3.5 3.5 0 0 1-3.5 3.5H8l-4.5 3.2v-3.4A3.5 3.5 0 0 1 1.5 10V6.5A3.5 3.5 0 0 1 5 3Z"/><path d="M17.6 8.5h1.9a3 3 0 0 1 3 3V15a3 3 0 0 1-2 2.83v3.37L16.8 18H12a3 3 0 0 1-2.75-1.8"/>',
+    'tab-chats-filled': '<path fill="currentColor" stroke="none" d="M12 8.5h7.5a3 3 0 0 1 3 3V15a3 3 0 0 1-2 2.83v3.37L16.8 18H12a3 3 0 0 1-3-3v-3.5a3 3 0 0 1 3-3Z"/><path fill="currentColor" stroke="var(--tab-icon-cutout, var(--aqua))" stroke-width="2" d="M5 3h7a3.5 3.5 0 0 1 3.5 3.5V10a3.5 3.5 0 0 1-3.5 3.5H8l-4.5 3.2v-3.4A3.5 3.5 0 0 1 1.5 10V6.5A3.5 3.5 0 0 1 5 3Z"/>',
+    'tab-profile': '<circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="9.4" r="3.2"/><path d="M5.7 18.4c1.4-2.3 3.6-3.5 6.3-3.5s4.9 1.2 6.3 3.5"/>',
+    'tab-profile-filled': '<path fill="currentColor" stroke="none" fill-rule="evenodd" d="M4.15 18.2A10 10 0 1 1 19.85 18.2C18.4 15.9 15.5 14.6 12 14.6S5.6 15.9 4.15 18.2ZM15.4 9.4a3.4 3.4 0 1 0-6.8 0 3.4 3.4 0 0 0 6.8 0Z"/>',
+    // SF Symbols lock.fill (FeedVoteLockedView).
+    'lock-filled': '<path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" stroke-width="2.4"/><rect x="4.5" y="10" width="15" height="12" rx="2.6" fill="currentColor" stroke="none"/>',
+    // SF Symbols ellipsis.circle (QuestionDetailToolbar).
+    'ellipsis-circle': '<circle cx="12" cy="12" r="9.5"/><circle cx="7.6" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="16.4" cy="12" r="1.2" fill="currentColor" stroke="none"/>',
+    // SF Symbols checkmark.seal.fill ("Valid team", BoostFeedbackSheet.swift).
+    'seal-check': '<path fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M12.00 1.60 14.23 3.69 17.20 2.99 18.08 5.92 21.01 6.80 20.31 9.77 22.40 12.00 20.31 14.23 21.01 17.20 18.08 18.08 17.20 21.01 14.23 20.31 12.00 22.40 9.77 20.31 6.80 21.01 5.92 18.08 2.99 17.20 3.69 14.23 1.60 12.00 3.69 9.77 2.99 6.80 5.92 5.92 6.80 2.99 9.77 3.69Z"/><path d="m8 12.2 2.8 2.8 5.2-5.6" stroke="var(--seal-check-mark, #fff)" stroke-width="2.2"/>',
+    // SF Symbols crown.fill (GodModeCard.swift).
+    'crown-filled': '<path fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" d="M3.6 8.6 7.6 14 12 7.2l4.4 6.8 4-5.4-1.5 8.6H5.1Z"/><circle cx="3.4" cy="7.6" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="5.4" r="1.6" fill="currentColor" stroke="none"/><circle cx="20.6" cy="7.6" r="1.6" fill="currentColor" stroke="none"/><rect x="5.1" y="18.4" width="13.8" height="2.6" rx="1.1" fill="currentColor" stroke="none"/>',
 };
 export function uiIcon(name) {
     if (!paths[name]) throw new Error(`Unknown interface icon: ${name}`);

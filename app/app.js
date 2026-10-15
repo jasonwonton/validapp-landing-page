@@ -1495,19 +1495,23 @@ function personalInboxUnreadCounts() {
     syncPersonalInboxVisit();
     const cutoff = state.personalInboxVisible ? state.personalInboxCutoff : personalInboxReadReference();
     const polls = cutoff === null ? 0 : state.personalFeedItems.filter((item) => feedItemTime(item) > cutoff).length;
-    const tbhs = state.tbhPendingRequests.filter((item) => !item.opened_at).length
-        + state.tbhInboxItems.filter((item) => !item.opened_at).length;
+    const tbhRequests = state.tbhPendingRequests.filter((item) => !item.opened_at).length;
+    const tbhs = tbhRequests + state.tbhInboxItems.filter((item) => !item.opened_at).length;
     const askMe = (state.anonymousInbox?.questions || []).filter((item) => !item.opened_at).length;
-    return { all: polls + tbhs + askMe, polls, tbhs, ask_me: askMe };
+    return { all: polls + tbhs + askMe, polls, tbhs, ask_me: askMe, tbhRequests };
 }
+
+const TAB_BADGE_CAP = 99;
 
 function renderTabBadges() {
     const counts = personalInboxUnreadCounts();
     // While the Inbox is on screen its loaded polls count as read for the tab badge.
     const unread = counts.all - (state.personalInboxVisible ? counts.polls : 0);
+    // FeedTabBadge: unread polls plus waiting TBH requests, at most 99 (TabBadgeCount).
     const feedBadge = $("#feedTabBadge");
-    feedBadge.textContent = unread > 9 ? "9+" : String(unread || "");
-    feedBadge.classList.toggle("hidden", unread < 1);
+    const feedBadgeCount = Math.min(TAB_BADGE_CAP, (state.personalInboxVisible ? 0 : counts.polls) + counts.tbhRequests);
+    feedBadge.textContent = String(feedBadgeCount || "");
+    feedBadge.classList.toggle("hidden", feedBadgeCount < 1);
     if ("setAppBadge" in navigator) {
         const totalUnread = unread + Number(state.chatUnreadCount || 0);
         const badgePromise = totalUnread > 0 ? navigator.setAppBadge(totalUnread) : navigator.clearAppBadge?.();
@@ -1518,14 +1522,16 @@ function renderTabBadges() {
             navigator.serviceWorker?.controller?.postMessage({ type: "VALID_BADGE_SYNC", count: totalUnread });
         }
     }
-    const profileIncomplete = !state.profile?.profile_picture_url || !String(state.profile?.bio || "").trim();
-    $("#profileTabBadge").classList.toggle("hidden", !profileIncomplete);
+    // ProfileTabBadge.needsProfilePicture: "!" only while there is no photo (or the default one).
+    const picture = state.profile?.profile_picture_url;
+    const needsPicture = Boolean(state.profile) && (!picture || String(picture).includes("default.png"));
+    $("#profileTabBadge").classList.toggle("hidden", !needsPicture);
 }
 
 function renderChatUnreadBadge(count) {
     state.chatUnreadCount = Math.max(0, Number(count || 0));
     const badge = $("#chatsTabBadge");
-    badge.textContent = state.chatUnreadCount > 9 ? "9+" : String(state.chatUnreadCount || "");
+    badge.textContent = String(Math.min(TAB_BADGE_CAP, state.chatUnreadCount) || "");
     badge.classList.toggle("hidden", state.chatUnreadCount < 1);
     renderTabBadges();
 }
@@ -3714,6 +3720,8 @@ function isFeedVoteLocked() {
     return Boolean(progress?.lock_reasons?.includes("votes") && Number(progress.votes_cast || 0) < Number(progress.required_votes || 0));
 }
 
+// FeedVoteLockedView.swift: the unread count (not lifetime votes) picks the
+// title, and the vote-alerts card offers notifications only here.
 function renderFeedGate() {
     const locked = isFeedVoteLocked();
     $("#feedGateLock").classList.toggle("hidden", !locked);
@@ -3722,26 +3730,52 @@ function renderFeedGate() {
         renderFeedNotificationPrompt();
         return;
     }
-    const cast = Number(state.classmatesStatus?.votes_cast || 0);
-    const required = Number(state.classmatesStatus?.required_votes || 0);
-    const remaining = Math.max(0, required - cast);
-    const received = Math.max(0, Number(state.profile?.vote_count || 0));
-    const receivedLabel = received === 1 ? "vote" : "votes";
-    $("#feedGateLock").innerHTML = `<article class="feed-gate-card">
-        <img loading="lazy" decoding="async" class="feed-gate-lock" src="../assets/app/lock.webp" alt="" aria-hidden="true">
-        <p class="feed-gate-eyebrow">You got</p>
-        <h3 class="feed-gate-vote-count">${received.toLocaleString()} ${receivedLabel}</h3>
-        <p>Cast ${remaining} more ${remaining === 1 ? "vote" : "votes"} to unlock your Feed and see what classmates said.</p>
-        <progress class="feed-gate-progress" max="${Math.max(1, required)}" value="${Math.min(cast, Math.max(1, required))}" aria-label="Votes required to unlock Feed"></progress>
-        <strong>${cast} / ${required} votes cast</strong>
-        <button class="primary-button" type="button" data-vote-to-unlock>Vote now to unlock Feed</button>
-        <section class="feed-gate-notification" aria-label="Enable vote notifications">
-            <strong>Don’t miss your next vote</strong>
-            <small>Enable notifications to know when someone picks you.</small>
-            <button class="secondary-button" type="button" data-enable-feed-notifications>Enable notifications</button>
-        </section>
-    </article>`;
+    const cast = Math.max(0, Number(state.classmatesStatus?.votes_cast || 0));
+    const required = Math.max(0, Number(state.classmatesStatus?.required_votes || 0));
+    const unread = personalInboxUnreadCounts().polls;
+    const hasUnread = unread > 0;
+    const votesText = required > 0 ? `${Math.min(cast, required)} / ${required} votes cast` : "";
+    $("#feedGateLock").innerHTML = `<div class="feed-gate-screen">
+        <article class="feed-gate-card">
+            <span class="feed-gate-lock-symbol" aria-hidden="true">${uiIcon("lock-filled")}</span>
+            ${hasUnread ? `<strong class="feed-gate-new-votes">${unread === 1 ? "1 NEW VOTE" : `${unread} NEW VOTES`}</strong>` : ""}
+            <div class="feed-gate-copy">
+                <h3>${hasUnread ? "You got voted for" : "Feed is locked"}</h3>
+                <p>${hasUnread ? "See what people are saying." : "Answer a few polls to see what everyone is saying."}</p>
+            </div>
+            ${votesText ? `<span class="feed-gate-votes-cast"><i aria-hidden="true"></i>${votesText}</span>` : ""}
+            <button class="primary-button feed-gate-vote-button" type="button" data-vote-to-unlock>Vote now to unlock Feed</button>
+        </article>
+        <button class="feed-gate-notification feed-lock-alerts" type="button" data-enable-feed-notifications aria-label="Turn on alerts for votes">
+            <span class="feed-lock-alerts-icon" aria-hidden="true">${uiIcon("bell-badge")}</span>
+            <span class="feed-lock-alerts-copy"><strong>Turn on vote alerts</strong><span>Know right away when someone picks you.</span></span>
+            <span class="feed-lock-alerts-chevron" aria-hidden="true">${uiIcon("next")}</span>
+        </button>
+    </div>`;
     renderFeedNotificationPrompt();
+    void refreshLockedUnreadVoteCount();
+}
+
+// FeedViewModel.refreshLockedUnreadVoteCount: the lock and the tab badge read
+// the unread count, so load the first Inbox page without showing its rows.
+let lockedUnreadRefresh = null;
+let lockedUnreadRefreshedAt = 0;
+async function refreshLockedUnreadVoteCount() {
+    if (lockedUnreadRefresh || !api.user?.id || Date.now() - lockedUnreadRefreshedAt < 60_000) return;
+    lockedUnreadRefreshedAt = Date.now();
+    const userId = api.user.id;
+    lockedUnreadRefresh = (async () => {
+        try {
+            const items = await api.getPersonalFeed(userId, 0, "");
+            if (api.user?.id !== userId) return;
+            state.personalFeedItems = Array.isArray(items) ? items.slice() : [];
+            state.personalFeedHasMore = state.personalFeedItems.length >= PERSONAL_FEED_PAGE_SIZE;
+            state.personalFeedLoaded = true;
+            renderTabBadges();
+            if (isFeedVoteLocked()) renderFeedGate();
+        } catch (_) { /* The lock keeps its last count. */ }
+    })();
+    try { await lockedUnreadRefresh; } finally { lockedUnreadRefresh = null; }
 }
 
 function renderFeedNotificationPrompt() {
@@ -7703,7 +7737,6 @@ function bindEvents() {
         if (event.target.closest("[data-vote-to-unlock]")) switchPanel("play");
         if (event.target.closest("[data-enable-feed-notifications]")) toggleWebPush();
     });
-    $("#feedNotificationButton").addEventListener("click", toggleWebPush);
     $("#anonymousAnswerForm").addEventListener("submit", answerAnonymousQuestion);
     $("#anonymousAnswerText").addEventListener("input", updateAnonymousAnswerButton);
     $("#anonymousReportForm").addEventListener("submit", submitAnonymousReport);
@@ -7727,9 +7760,10 @@ function bindEvents() {
     document.addEventListener("click", (event) => {
         if (!event.target.closest(".detail-overflow")) closeDetailActionMenus();
     });
-    const tabIcons = { feed: "newspaper", play: "play-circle", chats: "chat-pair", profile: "person-circle" };
     $$(".nav-item").forEach((button) => {
-        button.querySelector("svg").outerHTML = uiIcon(tabIcons[button.dataset.panel]);
+        // The outlined icon, and the filled one shown while the tab is selected (TabIcon).
+        const wrap = button.querySelector("[data-tab-icon]");
+        if (wrap && !wrap.querySelector("svg")) wrap.insertAdjacentHTML("afterbegin", uiIcon(wrap.dataset.tabIcon) + uiIcon(`${wrap.dataset.tabIcon}-filled`));
         const preload = () => { void preloadRoute(button.dataset.panel); };
         button.addEventListener("pointerenter", preload, { passive: true });
         button.addEventListener("focus", preload);

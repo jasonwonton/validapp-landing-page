@@ -55,17 +55,12 @@
                 <div id="feedGateLock" class="hidden"></div>
                 <div id="feedUnlockedContent">
                     <div id="storiesRoot"></div>
-                    <section id="feedNotificationPrompt" class="feed-notification-prompt hidden" aria-label="Enable vote notifications">
-                        <img class="feed-notification-icon" src="../assets/app/notification-bell.webp" alt="" width="44" height="44" decoding="async">
-                        <span><strong>Don’t miss your next vote</strong><small>Enable notifications to know when someone picks you.</small></span>
-                        <button id="feedNotificationButton" class="secondary-button" type="button">Enable notifications</button>
-                    </section>
                     <div class="segmented-control" role="group" aria-label="Feed type">
                         <button class="segment active" data-feed="personal" type="button">Inbox</button>
                         <button class="segment" data-feed="school" type="button">School</button>
                     </div>
                     <div class="feed-tools">
-                        <label class="feed-search"><span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg></span><input id="feedSearch" type="search" placeholder="Search names, questions..." autocomplete="off"></label>
+                        <label class="feed-search"><span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4 4"/></svg></span><input id="feedSearch" type="search" placeholder="Search your inbox..." autocomplete="off"></label>
                         <button id="myVotesFilter" class="filter-button hidden" type="button" aria-pressed="false">○ My Votes</button>
                     </div>
                     <div id="personalInboxControls" class="personal-inbox-controls" aria-label="Inbox filters">
@@ -212,11 +207,15 @@
         <span><strong>Valid is ready to update</strong><small>Restart for the latest version.</small></span>
         <button id="applyAppUpdate" type="button">Update</button>
     </div>
+    <!-- Icons only, like MainTabView: the name is each button's aria-label and
+         app.js draws the outlined and filled icons. iOS puts its Camera tab
+         between Play and Chats; insert it there as another .nav-item (the bar
+         sizes its columns to the visible items). -->
     <nav id="bottomNav" class="bottom-nav hidden" aria-label="App navigation">
-        <button class="nav-item active" data-panel="feed" type="button" aria-current="page" aria-label="Feed"><span class="nav-icon-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h11a2 2 0 0 1 2 2V19H6a2 2 0 0 1-2-2V5.5Z"/><path d="M17 8h3v9a2 2 0 0 1-2 2h-1M7 9h7M7 12h7M7 15h4"/></svg><span id="feedTabBadge" class="tab-badge hidden" aria-hidden="true"></span></span><span>Feed</span></button>
-        <button class="nav-item" data-panel="play" type="button" aria-label="Play"><span class="nav-icon-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path class="nav-icon-fill" d="m10 8 6 4-6 4Z"/></svg></span><span>Play</span></button>
-        <button class="nav-item hidden" data-panel="chats" type="button" aria-label="Chats"><span class="nav-icon-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h11a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3H9l-4.5 3 .8-3.7A3 3 0 0 1 4 13.5v-8Z"/><path d="M8 9h6M8 12h4"/></svg><span id="chatsTabBadge" class="tab-badge hidden" aria-hidden="true"></span></span><span>Chats</span></button>
-        <button class="nav-item" data-panel="profile" type="button" aria-label="Profile"><span class="nav-icon-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.25"/><path d="M5.5 20c.4-4.1 2.6-6.2 6.5-6.2s6.1 2.1 6.5 6.2"/><circle cx="12" cy="12" r="9.5"/></svg><span id="profileTabBadge" class="tab-badge profile-tab-badge hidden" aria-hidden="true">!</span></span><span>Profile</span></button>
+        <button class="nav-item active" data-panel="feed" type="button" aria-current="page" aria-label="Feed"><span class="nav-icon-wrap" data-tab-icon="tab-feed"><span id="feedTabBadge" class="tab-badge hidden" aria-hidden="true"></span></span></button>
+        <button class="nav-item" data-panel="play" type="button" aria-label="Play"><span class="nav-icon-wrap" data-tab-icon="tab-play"></span></button>
+        <button class="nav-item hidden" data-panel="chats" type="button" aria-label="Chats"><span class="nav-icon-wrap" data-tab-icon="tab-chats"><span id="chatsTabBadge" class="tab-badge hidden" aria-hidden="true"></span></span></button>
+        <button class="nav-item" data-panel="profile" type="button" aria-label="Profile"><span class="nav-icon-wrap" data-tab-icon="tab-profile"><span id="profileTabBadge" class="tab-badge profile-tab-badge hidden" aria-hidden="true">!</span></span></button>
     </nav>
 
     <dialog id="androidInstallDialog" class="android-install-dialog" aria-label="Install Valid on Android">
