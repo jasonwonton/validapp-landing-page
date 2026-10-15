@@ -1742,19 +1742,29 @@ function openNotificationSettings() {
     void refreshWebPushStatus();
 }
 
+// GodModeCard.swift: a yellow crown, "$6.99/week", the four value props and
+// "Start God Mode"; subscribers see "God Mode Active" and "\u2728 Active".
+const GOD_MODE_CROWN_ICON = '<svg class="god-mode-crown-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3.2 7.6a1.3 1.3 0 0 1 2-1.3l3.7 3 2.1-4.6a1.1 1.1 0 0 1 2 0l2.1 4.6 3.7-3a1.3 1.3 0 0 1 2 1.3l-1.7 9.2H4.9ZM5.2 18.3h13.6v1.2a1.2 1.2 0 0 1-1.2 1.2H6.4a1.2 1.2 0 0 1-1.2-1.2Z"/></svg>';
+
+function godModeConfigPrice() {
+    return Math.max(0, Number(state.config?.god_mode_price || 6.99));
+}
+
 function renderGodModeCard() {
     const active = api.user?.subscribed_user === true;
     const multiplier = Math.max(1, Number(state.profile?.god_mode_aura_multiplier || 2));
-    const remainingReveals = Math.max(0, Number(state.profile?.remaining_reveals || 0));
     const weeklyReveals = Math.max(1, Number(state.config?.max_full_reveals_per_week || 2));
-    const weeklyPrice = Math.max(0, Number(state.config?.god_mode_price || 6.99));
+    const valueProps = [
+        `${weeklyReveals} weekly reveals for voters or anonymous question authors.`,
+        "First-letter hints on every poll.",
+        `${multiplier}\u00d7 aura on every answer you give.`,
+        "Get boosted to the top of classmates' polls.",
+    ];
     $("#godModeCard").innerHTML = `<article class="god-mode-card ${active ? "active" : ""}">
-        <div class="god-mode-title"><span><img loading="lazy" decoding="async" src="../assets/app/crown.webp" alt=""></span><div><strong>${active ? "God Mode Active" : "God Mode"}</strong><small>${active ? "Everything unlocked" : `$${weeklyPrice.toFixed(2)} / week`}</small></div>${active ? `<span class="god-mode-active">Active</span>` : ""}</div>
-        <p class="god-mode-benefits-heading">${active ? "You're enjoying:" : "Go legendary with:"}</p>
-        <ul><li>${weeklyReveals} weekly reveals to see exactly who voted.</li><li>First-letter hints on every poll.</li><li>${multiplier}× aura on every answer you give.</li><li>Get boosted to the top of classmates' polls.</li></ul>
-        ${active
-        ? `<p>Your subscription is recognized on web · ${remainingReveals} weekly ${remainingReveals === 1 ? "reveal" : "reveals"} left. Billing stays with the store where you subscribed.</p>`
-        : `<button class="god-mode-start-button" type="button" data-open-god-mode><span><strong>Start God Mode</strong><small>$${weeklyPrice.toFixed(2)} per week</small></span></button>`}
+        <div class="god-mode-title"><span>${GOD_MODE_CROWN_ICON}</span><div><strong>${active ? "God Mode Active" : "God Mode"}</strong><small>${active ? "Everything unlocked" : `$${godModeConfigPrice().toFixed(2)}/week`}</small></div>${active ? `<span class="god-mode-active">\u2728 Active</span>` : ""}</div>
+        <p class="god-mode-benefits-heading">${active ? "You\u2019re enjoying:" : "Go legendary with:"}</p>
+        <ul>${valueProps.map((prop) => `<li>${escapeHTML(prop)}</li>`).join("")}</ul>
+        ${active ? "" : `<button class="god-mode-start-button" type="button" data-open-god-mode><span><strong>Start God Mode</strong></span></button>`}
     </article>`;
 }
 
@@ -1771,27 +1781,54 @@ function hasStripeGodMode() {
 
 async function refreshGodModeBilling() {
     const userId = api.user?.id;
-    if (!userId || !hasActiveGodMode() || typeof api.getGodModeBilling !== "function") return;
+    if (!userId || typeof api.getGodModeBilling !== "function") return;
     try {
         const billing = await api.getGodModeBilling(userId);
         if (api.user?.id !== userId) return;
-        state.godModeBilling = { userId, provider: billing?.provider || null };
+        state.godModeBilling = {
+            userId,
+            provider: billing?.provider || null,
+            subscribed: billing?.subscribed === true,
+            stripeStatus: billing?.stripe_status || null,
+            cancelAtPeriodEnd: billing?.cancel_at_period_end === true,
+            expiresAt: billing?.expires_at || null,
+            manage: billing?.manage || null,
+            webPriceLabel: billing?.web_checkout?.price_label || null,
+        };
         if (billing?.cancel_at_period_end === true) state.godModeCancellation = billing;
     } catch {
         return;
     }
-    if (state.profileEditor === "hub") renderProfileEditorHub();
+    if (state.profileEditor === "hub" && $("#profileDialog").open) renderProfileEditorHub();
+}
+
+// GodModeBillingStatus.needsPaymentUpdate: the web payment failed and Stripe
+// still holds the subscription; the fix is the card.
+function godModeNeedsPaymentUpdate() {
+    const billing = state.godModeBilling;
+    if (!billing || billing.userId !== api.user?.id) return false;
+    return ["past_due", "unpaid", "incomplete"].includes(billing.stripeStatus || "");
+}
+
+// The Earn button's line (GodModePitchView.earnGodModeSubtitle), from the
+// God Mode invite goal; older servers only send the aura reward fields.
+function godModeInviteProgress() {
+    const status = state.inviteStatus;
+    if (!status) return null;
+    const progress = Number(status.god_mode_invite_progress ?? status.aura_reward_progress);
+    const goal = Number(status.god_mode_invite_goal ?? status.aura_reward_goal);
+    if (!Number.isFinite(progress) || !Number.isFinite(goal)) return null;
+    const safeGoal = Math.max(1, goal);
+    const reached = (status.god_mode_invite_goal_reached ?? status.aura_reward_max_reached) === true || progress >= safeGoal;
+    return { progress: Math.max(0, Math.min(progress, safeGoal)), goal: safeGoal, reached };
 }
 
 function godModeInviteProgressLabel() {
-    const status = state.inviteStatus;
-    if (!status) return "Loading invite progress...";
-    const goal = Math.max(1, Number(status.aura_reward_goal || 1));
-    const maxReached = status.aura_reward_max_reached === true;
-    const progress = maxReached
-        ? goal
-        : Math.max(0, Math.min(goal, Number(status.aura_reward_progress || 0)));
-    return `${progress} / ${goal} qualifying invites`;
+    if (state.config?.enable_god_mode_ugc_program === true) return "Invite friends or join our Creator program";
+    const invites = godModeInviteProgress();
+    if (!invites) return "Invite friends to unlock God Mode";
+    if (invites.reached) return "God Mode invite goal reached";
+    return `${invites.progress} / ${invites.goal} qualifying invites`;
 }
 
 function syncGodModeCarouselDots() {
@@ -1803,9 +1840,22 @@ function syncGodModeCarouselDots() {
     $$(".god-mode-page-dots span").forEach((dot, index) => dot.classList.toggle("active", index === activeIndex));
 }
 
+// The web price: Stripe's own label from the billing status when the server
+// sends it ("$6.99/week"), else the configured display price.
+function godModeWebPriceLine() {
+    const label = state.godModeBilling?.userId === api.user?.id ? state.godModeBilling?.webPriceLabel : null;
+    if (label) return label.replace(/\/(\w+)$/, " per $1");
+    return `$${godModeConfigPrice().toFixed(2)} per week`;
+}
+
 function renderGodModePitch() {
     const weeklyReveals = Math.max(1, Number(state.config?.max_full_reveals_per_week || 2));
-    const weeklyPrice = Math.max(0, Number(state.config?.god_mode_price || 6.99));
+    if (!state.godModeBilling?.webPriceLabel) {
+        void refreshGodModeBilling().then(() => {
+            const price = $("#godModeCheckoutPrice");
+            if (price) price.textContent = godModeWebPriceLine();
+        });
+    }
     const multiplier = Math.max(1, Number(state.profile?.god_mode_aura_multiplier || 2));
     const revealNames = ["Sydney Sweeney", "LaMelo Ball", "Jordan Lee", "Taylor Swift"];
     $("#godModePitchBody").innerHTML = `<div class="god-mode-pitch-topbar"><button class="god-mode-close-button" type="button" data-close-dialog aria-label="Close God Mode">×</button></div>
@@ -1819,19 +1869,20 @@ function renderGodModePitch() {
                     <img loading="lazy" decoding="async" class="god-mode-letter" src="../assets/app/letter_aligned.webp" alt="">
                     <span class="god-mode-lens"><img loading="lazy" decoding="async" src="../assets/app/magnifying_glass.webp" alt=""><span class="god-mode-reveal-names">${revealNames.map((name) => `<strong>${escapeHTML(name).replace(" ", "<br>")}</strong>`).join("")}</span></span>
                 </div>
-                <h3>${weeklyReveals} Reveals / Week</h3><p>See the full names on ${weeklyReveals} polls every week.</p>
+                <h3>${weeklyReveals} Reveals / Week</h3><p>Reveal voters or anonymous school-question authors up to ${weeklyReveals} times every week.</p>
             </article>
             <article class="god-mode-benefit-card"><img loading="lazy" decoding="async" class="god-mode-benefit-image scroll" src="../assets/app/scroll.webp" alt=""><h3>First-Letter Hints</h3><p>Get the first letter on every personal poll automatically.</p></article>
             <article class="god-mode-benefit-card"><img loading="lazy" decoding="async" class="god-mode-benefit-image aura" src="../assets/app/aura.webp" alt=""><h3>${multiplier}× Aura Boost</h3><p>Earn ${multiplier === 2 ? "double" : `${multiplier}×`} aura for every answer you give in Play.</p></article>
-            <article class="god-mode-benefit-card"><img loading="lazy" decoding="async" class="god-mode-benefit-image rocket" src="../assets/app/rocket.webp" alt=""><h3>Get boosted</h3><p>Get boosted to the top of your classmates' polls to see what they think of you.</p></article>
+            <article class="god-mode-benefit-card"><img loading="lazy" decoding="async" class="god-mode-benefit-image rocket" src="../assets/app/rocket.webp" alt=""><h3>Get boosted</h3><p>Get boosted to the top of your classmates polls to see what they think of you</p></article>
         </div>
         <div class="god-mode-page-dots" aria-hidden="true"><span class="active"></span><span></span><span></span><span></span></div>
         <div class="god-mode-pitch-actions">
             <button class="god-mode-earn-button" type="button" data-earn-god-mode><strong>Earn God Mode</strong><small id="godModeInviteProgress">${escapeHTML(godModeInviteProgressLabel())}</small></button>
-            <button class="god-mode-checkout-button" type="button" data-start-god-mode><span><strong>Start God Mode</strong><small>$${weeklyPrice.toFixed(2)} per week</small></span></button>
+            <button class="god-mode-checkout-button" type="button" data-start-god-mode><span><strong>Start God Mode</strong><small id="godModeCheckoutPrice">${escapeHTML(godModeWebPriceLine())}</small></span></button>
             <button class="god-mode-maybe-button" type="button" data-close-dialog>Maybe later</button>
             <p id="godModeCheckoutStatus" class="status-message" role="status"></p>
             <p class="god-mode-legal"><a href="/terms.html">Terms</a><span>·</span><a href="/privacy-policy.html">Privacy Policy</a></p>
+            <p class="god-mode-terms">Payment is charged by Stripe at checkout and renews every week until you cancel. Cancel anytime from Edit information; God Mode stays on until the end of the paid week.</p>
         </div>`;
     $(".god-mode-benefit-carousel")?.addEventListener("scroll", syncGodModeCarouselDots, { passive: true });
 }
@@ -1926,22 +1977,43 @@ async function startGodModeCheckout(button) {
 
 function renderEarnGodModeProgress() {
     const container = $("#earnGodModeProgress");
-    const status = state.inviteStatus;
-    if (!status) {
-        container.innerHTML = `<div class="earn-invite-progress"><span><strong>Qualifying invites</strong><small>Loading…</small></span><progress max="1" value="0" aria-label="Loading invite progress"></progress></div>`;
+    const invites = godModeInviteProgress();
+    if (!invites) {
+        container.innerHTML = state.inviteStatus ? "" : `<div class="earn-invite-progress"><span><strong>Qualifying invites</strong><small>Loading…</small></span><progress max="1" value="0" aria-label="Loading invite progress"></progress></div>`;
         return;
     }
-    const goal = Math.max(1, Number(status.aura_reward_goal || 1));
-    const maxReached = status.aura_reward_max_reached === true;
-    const progress = maxReached ? goal : Math.max(0, Math.min(goal, Number(status.aura_reward_progress || 0)));
-    const remaining = Math.max(0, goal - progress);
+    const remaining = Math.max(0, invites.goal - invites.progress);
     container.innerHTML = `<div class="earn-invite-progress">
-        <span><strong>Qualifying invites: ${progress} / ${goal}</strong><small>${maxReached ? "Reward earned" : `${remaining} to go`}</small></span>
-        <progress max="${goal}" value="${progress}" aria-label="${progress} of ${goal} qualifying invites"></progress>
+        <span><strong>Qualifying invites: ${invites.progress} / ${invites.goal}</strong><small>${invites.reached ? "Reward earned" : `${remaining} to go`}</small></span>
+        <progress max="${invites.goal}" value="${invites.progress}" aria-label="${invites.progress} of ${invites.goal} qualifying invites"></progress>
     </div>`;
 }
 
+// GodModeEarnView.swift: "Invite N friends" or, with the Creator program on,
+// "Join our Creator program".
+function renderGodModeEarnChooser() {
+    const creator = state.config?.enable_god_mode_ugc_program === true;
+    const invites = godModeInviteProgress();
+    const goal = invites?.goal || Math.max(1, Number(state.config?.god_mode_invite_friend_goal || 5));
+    $("#godModeEarnChooserSubtitle").textContent = creator ? "Choose how you want to unlock reveals." : "Invite friends to unlock reveals.";
+    $("#godModeEarnInviteTitle").textContent = `Invite ${goal} friends`;
+    $("#godModeEarnInviteSubtitle").textContent = invites
+        ? `${invites.progress} / ${invites.goal} qualifying invites`
+        : `Earn God Mode when ${goal} qualifying friends join.`;
+    $("#godModeEarnCreator").classList.toggle("hidden", !creator);
+}
+
 async function openEarnGodModeDialog() {
+    const dialog = $("#godModeEarnChooserDialog");
+    renderGodModeEarnChooser();
+    if (!dialog.open) dialog.showModal();
+    try {
+        state.inviteStatus = await api.getInviteStatus(api.user.id);
+        renderGodModeEarnChooser();
+    } catch (_) { /* The chooser still works without fresh progress. */ }
+}
+
+async function openInviteFriendsDialog() {
     const dialog = $("#earnGodModeDialog");
     $("#earnGodModeStatus").textContent = "";
     renderEarnGodModeProgress();
@@ -1950,6 +2022,11 @@ async function openEarnGodModeDialog() {
         state.inviteStatus = await api.getInviteStatus(api.user.id);
         renderEarnGodModeProgress();
     } catch (_) { /* Sharing still works when progress is temporarily unavailable. */ }
+}
+
+// The Creator program lives on the website (CreatorProgramView.swift on iOS).
+function openCreatorProgram() {
+    window.open("/creatorprogram.html", "_blank", "noopener");
 }
 
 async function shareGodModeInvite(button, channel) {
@@ -5374,13 +5451,7 @@ function renderProfileEditorHub() {
     $("#profileReviewButton").textContent = changeCount === 1 ? "Review 1 change" : `Review ${changeCount} changes`;
     $("#profileReviewButton").disabled = !profileDraftIsValid();
     $("#deleteAccountButton").classList.toggle("hidden", state.config?.enable_delete_account === false);
-    const unsubscribeButton = $("#godModeUnsubscribeButton");
-    const cancellationScheduled = state.godModeCancellation?.cancel_at_period_end === true;
-    unsubscribeButton.classList.toggle("hidden", !hasStripeGodMode());
-    unsubscribeButton.disabled = cancellationScheduled;
-    $("#godModeUnsubscribeLabel").textContent = cancellationScheduled
-        ? "God Mode cancellation scheduled"
-        : "Unsubscribe from God Mode";
+    renderGodModeManageEntry();
     // "Oct 20, 2026", as InformationEditSheet's .abbreviated date.
     const nextChange = new Date(state.profile?.next_information_change_at || "");
     const lockedMessage = Number.isNaN(nextChange.getTime())
@@ -5389,6 +5460,69 @@ function renderProfileEditorHub() {
     $("#profileEditHint").innerHTML = informationLocked
         ? `<strong>Profile changes are temporarily locked</strong><span>${escapeHTML(lockedMessage)}</span>`
         : "<strong>Profile changes are available every 14 days</strong><span>Change any combination below. Nothing is saved until you review and confirm everything.</span>";
+}
+
+// GodModeSubscriptionRow.swift, for web (Stripe) billing: a failed payment
+// shows the full "Payment failed — update your card" row; a healthy
+// subscription a quiet "Manage God Mode" (the plan sheet); one set to cancel
+// "God Mode ends Oct 8".
+function godModeEndsAt() {
+    if (state.godModeCancellation?.cancel_at_period_end !== true) return null;
+    return state.godModeCancellation.subscription_expires_at || state.godModeCancellation.expires_at || null;
+}
+
+function renderGodModeManageEntry() {
+    const needsPayment = godModeNeedsPaymentUpdate();
+    $("#godModeBillingRow").classList.toggle("hidden", !needsPayment);
+    const button = $("#godModeUnsubscribeButton");
+    const cancelling = state.godModeCancellation?.cancel_at_period_end === true;
+    button.classList.toggle("hidden", needsPayment || !hasStripeGodMode());
+    button.disabled = cancelling;
+    const endsAt = formatBillingShortDate(godModeEndsAt());
+    $("#godModeUnsubscribeLabel").textContent = cancelling
+        ? (endsAt ? `God Mode ends ${endsAt}` : "Won\u2019t renew")
+        : "Manage God Mode";
+}
+
+// GodModePlan.statusLine: "Renews Oct 15 · on the web" while Stripe says it
+// renews, "Active through Oct 15 · on the web" otherwise.
+function godModePlanStatusLine() {
+    const billing = state.godModeBilling;
+    const date = formatBillingShortDate(billing?.expiresAt || api.user?.subscription_expires_at);
+    const renews = ["active", "trialing"].includes(billing?.stripeStatus || "") && billing?.cancelAtPeriodEnd !== true;
+    const stateLine = date ? (renews ? `Renews ${date}` : `Active through ${date}`) : "Active";
+    return `${stateLine} \u00b7 on the web`;
+}
+
+function openGodModePlan() {
+    if (!hasStripeGodMode() || state.godModeCancellation?.cancel_at_period_end === true) return;
+    $("#godModePlanStatus").textContent = godModePlanStatusLine();
+    const unsubscribe = $("#godModePlanUnsubscribe");
+    unsubscribe.disabled = false;
+    unsubscribe.removeAttribute("aria-busy");
+    $("#godModePlanDialog").showModal();
+}
+
+async function openGodModeBillingPortal() {
+    const row = $("#godModeBillingRow");
+    const status = $("#profileGodModeStatus");
+    if (row.disabled) return;
+    row.disabled = true;
+    row.setAttribute("aria-busy", "true");
+    status.classList.remove("is-neutral");
+    status.textContent = "";
+    const portalWindow = window.open("about:blank", "_blank");
+    try {
+        const { url } = await api.createGodModeBillingPortal(api.user.id);
+        if (portalWindow) portalWindow.location.href = url;
+        else window.location.href = url;
+    } catch (error) {
+        portalWindow?.close();
+        status.textContent = friendlyErrorMessage(error, "Could not open billing. Try again.");
+    } finally {
+        row.disabled = false;
+        row.removeAttribute("aria-busy");
+    }
 }
 
 async function godModeRetentionOffer() {
@@ -5422,14 +5556,15 @@ async function offerGodModeFreeWeek(offer) {
     const second = formatBillingShortDate(offer.second_reveal_at);
     // The free week gets no weekly refill: two reveals (day 2, day 5), each
     // only while still subscribed (granted by the server).
-    const terms = [];
-    if (first && second) terms.push(`Reveals on ${first} and ${second} while you’re still subscribed.`);
-    if (to) terms.push(`Then ${offer.price_label || "your regular price"} starting ${to}.`);
-    if (from && to) terms.push(`Cancel before ${to} and it ends ${from}.`);
+    // GodModeRetentionOffer.offerTerms: "Then $9.99/week. Cancel before Oct 15
+    // and you'll lose your free week (God Mode ends Oct 8)."
+    const terms = from && to
+        ? `${offer.price_label ? `Then ${offer.price_label}. ` : ""}Cancel before ${to} and you'll lose your free week (God Mode ends ${from}).`
+        : "";
     const choice = await choiceSheet({
         title: "Stay for a free week?",
         message: first && second ? "Your next week is on us, with 2 reveals." : "Your next week is on us.",
-        finePrint: terms.join(" "),
+        finePrint: terms,
         confirmLabel: "Get my free week",
         secondaryLabel: "Unsubscribe anyway",
     });
@@ -5473,13 +5608,13 @@ async function unsubscribeFromGodMode() {
         if (await offerGodModeFreeWeek(offer)) return;
     } else {
         // Cancelling during the free week takes it back (server-enforced).
-        const paidThrough = offer?.reason === "in_free_week" ? formatBillingShortDate(offer.paid_through) : "";
+        const inFreeWeek = offer?.reason === "in_free_week";
         // Keeping is the primary action; unsubscribing stays a full,
         // clearly labeled button right below it.
         const choice = await choiceSheet({
             title: "Unsubscribe from God Mode?",
-            message: paidThrough
-                ? `Your free week ends and God Mode stays active through ${paidThrough}, then it won’t renew.`
+            message: inFreeWeek
+                ? "You'll lose your free week."
                 : "You’ll keep God Mode through the end of your current billing period, and then it won’t renew.",
             confirmLabel: "Keep God Mode",
             secondaryLabel: "Unsubscribe",
@@ -5497,7 +5632,7 @@ async function unsubscribeFromGodMode() {
         state.godModeCancellation = result;
         const ending = formatBillingShortDate(result.subscription_expires_at);
         status.textContent = ending
-            ? `Unsubscribed. God Mode stays active through ${ending}.`
+            ? `Unsubscribed. God Mode ends ${ending}.`
             : "Unsubscribed. God Mode stays active through the current billing period.";
         showToast("God Mode renewal canceled");
         renderProfileEditorHub();
@@ -8153,6 +8288,13 @@ function bindEvents() {
         $("#godModePitchDialog").close();
         openEarnGodModeDialog();
     });
+    $("#godModeEarnChooserDialog").addEventListener("click", (event) => {
+        const option = event.target.closest("[data-earn-option]")?.dataset.earnOption;
+        if (!option) return;
+        $("#godModeEarnChooserDialog").close();
+        if (option === "invite") void openInviteFriendsDialog();
+        if (option === "creator") openCreatorProgram();
+    });
     $("#earnGodModeDialog").addEventListener("click", (event) => {
         const button = event.target.closest("[data-share-god-mode-invite]");
         if (button) shareGodModeInvite(button, button.dataset.shareGodModeInvite);
@@ -8274,7 +8416,13 @@ function bindEvents() {
     $("#profileEditorBack").addEventListener("click", () => setProfileEditor("hub"));
     $("#profileEditorCancel").addEventListener("click", cancelProfileEditor);
     $("#profileReviewButton").addEventListener("click", () => setProfileEditor("review"));
-    $("#godModeUnsubscribeButton").addEventListener("click", unsubscribeFromGodMode);
+    $("#godModeUnsubscribeButton").addEventListener("click", openGodModePlan);
+    $("#godModeBillingRow").addEventListener("click", () => void openGodModeBillingPortal());
+    $("#godModePlanUnsubscribe").addEventListener("click", () => {
+        // "Unsubscribe" is the final intent: only now is the free-week offer checked.
+        $("#godModePlanDialog").close();
+        void unsubscribeFromGodMode();
+    });
     $("#profileSchoolLookup").addEventListener("click", lookupProfileSchools);
     $("#profileSchoolSearch").addEventListener("input", renderProfileSchoolResults);
     $("#profileShowSchoolFallback").addEventListener("click", () => {

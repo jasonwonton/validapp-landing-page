@@ -813,6 +813,11 @@ export class ValidAPI {
         return this.request(`/users/${userId}/god-mode/retention-offer/decline`, { method: "POST" });
     }
 
+    // Stripe's Customer Portal (a failed payment's card update).
+    createGodModeBillingPortal(userId) {
+        return this.request(`/users/${userId}/god-mode/billing-portal`, { method: "POST" });
+    }
+
     unsubscribeFromGodMode(userId) {
         return this.request(`/users/${userId}/god-mode/unsubscribe`, { method: "POST" });
     }

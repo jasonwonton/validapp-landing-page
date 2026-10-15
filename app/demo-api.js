@@ -855,6 +855,8 @@ export class DemoAPI {
             full_reveal_aura_cost: 1000,
             max_full_reveals_per_week: 2,
             god_mode_price: 6.99,
+            enable_god_mode_ugc_program: query.get("ugc") !== "0",
+            god_mode_invite_friend_goal: 5,
             global_visibility_boost_cost: 400,
             targeted_visibility_boost_cost: 200,
             enable_tbh_requests: true,
@@ -1340,12 +1342,23 @@ export class DemoAPI {
         return { completed: false, subscribed: false };
     }
 
+    // ?godmodebilling=past_due: the web payment failed (God Mode off, card to fix).
     async getGodModeBilling() {
+        const pastDue = new URLSearchParams(location.search).get("godmodebilling") === "past_due";
+        const stripe = this.demoGodMode && this.demoGodModeProvider === "stripe";
         return {
-            subscribed: this.demoGodMode,
-            provider: this.demoGodMode ? this.demoGodModeProvider : "none",
+            subscribed: this.demoGodMode && !pastDue,
+            provider: pastDue ? "none" : this.demoGodMode ? this.demoGodModeProvider : "none",
+            expires_at: this.demoGodMode ? ago(-4 * 24 * 60) : null,
+            stripe_status: pastDue ? "past_due" : stripe ? "active" : null,
             cancel_at_period_end: false,
+            manage: pastDue ? "stripe_portal" : null,
+            web_checkout: { available: !this.demoGodMode, reason: this.demoGodMode ? "subscribed" : null, price_label: this.demoGodMode ? null : "$6.99/week", price_cents: 699, price_interval: "week" },
         };
+    }
+
+    async createGodModeBillingPortal() {
+        return { url: "https://billing.stripe.com/demo" };
     }
 
     async getGodModeRetentionOffer() {
