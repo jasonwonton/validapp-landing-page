@@ -234,6 +234,7 @@ test("a long unread run opens at the first unread under New messages", async ({ 
     await expect(page.locator('[data-message-id="long-11"]')).toBeInViewport();
     await expect(page.locator('[data-message-id="long-40"]')).not.toBeInViewport();
     await expect(page.locator("[data-jump-latest]")).toBeVisible();
+    await expect(page.locator("[data-jump-latest]")).toHaveText("30 new messages");
 });
 
 test("Call back and View N work from the inbox without opening the room", async ({ page }) => {

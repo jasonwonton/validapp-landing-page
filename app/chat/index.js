@@ -1676,7 +1676,15 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         const visible = messageWindow.range(store.state.activeChatId, store.messages());
         $('[data-jump-latest]').classList.toggle('hidden', !store.state.activeChatId || chatAccessUnavailable()
             || (!historyHasNewer && !visible.hiddenAfter && timelineScroll.atBottom()));
-        if (!store.state.loadingRoom && !historyHasNewer && !visible.hiddenAfter && timelineScroll.atBottom()) void markRoomRead();
+        // ChatRoomNewMessagesPill: "New message" / "3 new messages", else "Latest".
+        const read = Math.max(unreadAnchor.chatId === store.state.activeChatId ? unreadAnchor.boundary : 0, readWatermark.chatId === store.state.activeChatId ? readWatermark.sequence : 0);
+        const fresh = store.messages().filter(item => Number(item.room_sequence) > read && !(item.viewer_is_sender || String(item.sender_user_id) === String(userId())) && item.kind !== 'system').length;
+        const label = fresh === 1 ? 'New message' : fresh > 1 ? `${fresh} new messages` : 'Latest';
+        const pillText = $('[data-jump-latest] span');
+        if (pillText.textContent !== label) pillText.textContent = label;
+        // Reads wait for the unread anchor's decision (ChatUnreadAnchorState.holdsReadPosition).
+        const deciding = unreadAnchor.chatId === store.state.activeChatId && unreadAnchor.active && !unreadAnchor.decided;
+        if (!store.state.loadingRoom && !deciding && !historyHasNewer && !visible.hiddenAfter && timelineScroll.atBottom()) void markRoomRead();
     }
 
     async function advanceHistory(direction, { retry = false } = {}) {
