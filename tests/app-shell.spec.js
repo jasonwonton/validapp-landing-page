@@ -304,25 +304,28 @@ test.describe("install and update", () => {
     test.describe("on iPhone Safari", () => {
         test.use({ userAgent: IPHONE_SAFARI });
 
-        test("offers Add to Home Screen where Android offers install and notifications", async ({ page }) => {
+        test("offers Add to Home Screen from Profile, not as a card on the unlocked Feed", async ({ page }) => {
             await signInToDemo(page);
-            const prompt = page.locator("#feedNotificationPrompt");
-            await expect(prompt).toBeVisible();
-            await expect(prompt.getByRole("button", { name: "Add to Home Screen" })).toBeVisible();
-            await prompt.getByRole("button", { name: "Add to Home Screen" }).click();
+            // Like iOS, the unlocked Feed carries no notification card.
+            await expect(page.locator("#feedNotificationPrompt")).toHaveCount(0);
+            await page.locator("#bottomNav").getByRole("button", { name: "Profile", exact: true }).click();
+            const row = page.locator("#installAppButton");
+            await expect(row).toBeVisible();
+            await expect(row).toContainText("Add to Home Screen");
+            await row.click();
             const sheet = page.getByRole("dialog", { name: "Add Valid to your Home Screen" });
             await expect(sheet).toBeVisible();
             await expect(sheet).toContainText("Share");
             await expect(sheet).toContainText("notifications work only in the Home Screen app");
             await sheet.getByRole("button", { name: "Got it" }).click();
             await expect(sheet).toBeHidden();
-            await expect(prompt).toBeHidden();
+        });
 
-            await page.locator("#bottomNav").getByRole("button", { name: "Profile", exact: true }).click();
-            const row = page.locator("#installAppButton");
-            await expect(row).toBeVisible();
-            await expect(row).toContainText("Add to Home Screen");
-            await row.click();
+        test("the locked Feed's vote alerts card leads to Add to Home Screen", async ({ page }) => {
+            await signInToDemo(page, "&locked=1");
+            const alerts = page.getByRole("button", { name: "Turn on alerts for votes" });
+            await expect(alerts).toBeVisible();
+            await alerts.click();
             await expect(page.getByRole("dialog", { name: "Add Valid to your Home Screen" })).toBeVisible();
         });
     });

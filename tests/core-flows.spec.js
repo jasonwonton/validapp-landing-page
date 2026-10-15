@@ -191,7 +191,7 @@ test("strict production CSP permits dynamic progress UI", async ({ page }) => {
     });
     await page.goto("/app/?demo=1&locked=1");
     await page.getByRole("button", { name: /^sign in$/i }).click();
-    await expect(page.locator(".feed-gate-progress")).toBeVisible();
+    await expect(page.locator(".feed-gate-votes-cast")).toBeVisible();
     expect(violations).toEqual([]);
 });
 
@@ -426,10 +426,10 @@ test("feed navigation, filtering, and reactions work", async ({ page }) => {
     await expect(page.locator("#feedList .feed-section-heading")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Recent", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "My Votes", exact: true })).toBeVisible();
-    await page.getByPlaceholder("Search names, questions...").fill("company");
+    await page.getByPlaceholder("Search your inbox...").fill("company");
     await expect(page.getByText("Who is most likely to start a company?")).toBeVisible();
     await expect(page.getByText("Who has the best music taste?")).toBeHidden();
-    await page.getByPlaceholder("Search names, questions...").fill("");
+    await page.getByPlaceholder("Search your inbox...").fill("");
     const poll = page.locator("[data-feed-detail='9003']");
     await poll.locator("[data-reaction-picker]").click();
     await page.getByRole("dialog", { name: "Choose a reaction" }).getByRole("button", { name: "Love" }).click();
@@ -444,12 +444,14 @@ test("God Mode first-letter hints appear in the personal feed and poll detail", 
     const poll = page.locator("[data-feed-detail='9001']");
     await expect(poll.locator(".feed-answer")).toHaveText("from a 👧💗 Sophomore (M)");
     await poll.click();
-    await expect(page.locator("#feedDetailDialog .feed-detail-first-letter-hint")).toHaveText("Hint: starts with M");
+    // QuestionDetailView keeps the hint on the row only; the detail has no hint line.
+    await expect(page.locator("#feedDetailDialog")).toBeVisible();
+    await expect(page.locator("#feedDetailDialog .feed-detail-first-letter-hint")).toHaveCount(0);
 });
 
 test("feed search includes classmates and filters their school activity", async ({ page }) => {
     await signInToDemo(page);
-    await page.getByPlaceholder("Search names, questions...").fill("Maya");
+    await page.getByPlaceholder("Search your inbox...").fill("Maya");
     await expect(page.locator("#feedList [data-anonymous-question]")).toHaveCount(0);
     const classmateResult = page.locator("[data-feed-classmate='classmate-1']");
     await expect(classmateResult).toContainText("Maya Chen");
@@ -489,12 +491,12 @@ test("feed polls open the iOS-style detail and moderation flow", async ({ page }
     await expect(dialog.getByRole("button", { name: "Share poll to TikTok" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Get God Mode to Reveal who sent this" })).toBeVisible();
     await expect(dialog.getByRole("menuitem", { name: "Delete This Question" })).toBeHidden();
-    await expect(dialog.getByRole("menuitem", { name: "Report question" })).toBeHidden();
+    await expect(dialog.getByRole("menuitem", { name: "Report a Safety Issue" })).toBeHidden();
     await dialog.getByRole("button", { name: "More poll actions" }).click();
     await expect(dialog.getByRole("menuitem", { name: "Delete This Question" })).toBeVisible();
-    await expect(dialog.getByRole("menuitem", { name: "Report question" })).toBeVisible();
-    await dialog.getByRole("menuitem", { name: "Report question" }).click();
-    await page.locator(".ui-sheet").getByRole("button", { name: "Report" }).click();
+    await expect(dialog.getByRole("menuitem", { name: "Report a Safety Issue" })).toBeVisible();
+    await dialog.getByRole("menuitem", { name: "Report a Safety Issue" }).click();
+    await page.locator(".ui-sheet").getByRole("button", { name: "Report for Review" }).click();
     await expect(dialog).toBeHidden();
     await expect(page.locator("#toast")).toContainText("Question reported");
     await expect(page.locator("[data-feed-detail='9001']")).toHaveCount(0);
@@ -626,9 +628,11 @@ test("non-subscribers can reach God Mode from a received vote", async ({ page })
 test("new users vote to unlock Feed just like iOS", async ({ page }) => {
     await page.goto("/app/?demo=1&locked=1&signin=1");
     await page.getByRole("button", { name: /^sign in$/i }).click();
-    await expect(page.getByRole("heading", { name: "84 votes" })).toBeVisible();
-    await expect(page.getByText("Cast 2 more votes to unlock your Feed and see what classmates said.")).toBeVisible();
-    await expect(page.locator(".feed-gate-lock")).toHaveAttribute("src", "../assets/app/lock.webp");
+    // FeedVoteLockedView: the unread count, not lifetime votes.
+    await expect(page.getByText("2 NEW VOTES")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "You got voted for" })).toBeVisible();
+    await expect(page.getByText("See what people are saying.")).toBeVisible();
+    await expect(page.locator(".feed-gate-lock-symbol [data-ui-icon='lock-filled']")).toBeVisible();
     await expect(page.getByText("1 / 3 votes cast")).toBeVisible();
     await page.getByRole("button", { name: "Vote now to unlock Feed" }).click();
     await expect(page.getByText("Who would survive longest on a deserted island?")).toBeVisible();
@@ -636,7 +640,7 @@ test("new users vote to unlock Feed just like iOS", async ({ page }) => {
     await page.locator("[data-choice]").first().click();
     await page.getByRole("button", { name: "Feed", exact: true }).click();
     await expect(page.getByRole("button", { name: /What is something you are genuinely proud/ })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "84 votes" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "You got voted for" })).toHaveCount(0);
 });
 
 test("anonymous inbox supports private answers and safety controls", async ({ page }) => {

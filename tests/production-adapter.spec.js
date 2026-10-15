@@ -1006,7 +1006,7 @@ test("unified search debounces rapid typing into one bounded request pair", asyn
     await expect(page.locator("#passkeyButton")).toBeEnabled();
     requests.length = 0;
 
-    await page.getByPlaceholder("Search names, questions...").evaluate((input) => {
+    await page.getByPlaceholder("Search your inbox...").evaluate((input) => {
         for (const value of ["M", "Ma", "May", "Maya"]) {
             input.value = value;
             input.dispatchEvent(new InputEvent("input", { bubbles: true, data: value.at(-1), inputType: "insertText" }));

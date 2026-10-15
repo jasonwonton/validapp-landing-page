@@ -37,7 +37,7 @@ for (const theme of ['light', 'dark']) for (const width of [320, 393, 440]) for 
         await expect(detail).toBeVisible();
         await page.evaluate(() => document.fonts.ready);
         await detail.locator('.feed-detail-art img').evaluate(img => img.decode());
-        for (const selector of ['.detail-screen-header > strong', '.detail-back-button', '.feed-detail-prompt > h3', '.feed-detail-option strong', '.share-platform-button.snapchat span', '#revealFeedSenderButton', '.feed-detail-first-letter-hint']) {
+        for (const selector of ['.detail-screen-header > strong', '.detail-back-button', '.feed-detail-prompt > h3', '.feed-detail-option strong', '.share-platform-button.snapchat span', '#revealFeedSenderButton']) {
             expect(await contrast(detail.locator(selector).first()), selector).toBeGreaterThanOrEqual(4.5);
         }
         await expect(detail.locator('.feed-detail-option.selected')).toContainText('Jason Wong');
@@ -53,13 +53,13 @@ for (const theme of ['light', 'dark']) for (const width of [320, 393, 440]) for 
         expect(secondRow.y + secondRow.height).toBeLessThanOrEqual(page.viewportSize().height);
         expect(art.width).toBeCloseTo(art.height, 0);
         expect(await detail.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-        for (const name of ['Close', 'More poll actions', 'Share poll to Snapchat', 'Share poll to Instagram', 'Share poll to TikTok']) {
+        for (const name of ['Back', 'More poll actions', 'Share poll to Snapchat', 'Share poll to Instagram', 'Share poll to TikTok']) {
             const button = detail.getByRole('button', { name, exact: true });
             const bounds = await button.boundingBox();
             expect(bounds.height, name).toBeGreaterThanOrEqual(44);
         }
         await page.screenshot({ path: `artifacts/poll-detail/${theme}-${width}-${compact ? 'short' : 'tall'}-${testInfo.project.name}.png`, animations: 'disabled' });
         await detail.getByRole('button', { name: 'More poll actions' }).click();
-        await expect(detail.getByRole('menuitem', { name: 'Report question' })).toBeVisible();
+        await expect(detail.getByRole('menuitem', { name: 'Report a Safety Issue' })).toBeVisible();
     });
 }

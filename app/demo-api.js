@@ -557,6 +557,8 @@ export class DemoAPI {
     }
 
     async getPersonalFeed(_userId, offset = 0) {
+        // ?emptyfeed=1: no polls in the Inbox (FeedEmptyStateView under Polls).
+        if (new URLSearchParams(location.search).get("emptyfeed") === "1") return [];
         // ?feedpages=1: 45 Inbox polls served 20 at a time, for automatic paging.
         if (new URLSearchParams(location.search).get("feedpages") === "1") {
             this.pagedPersonalFeed ||= [...this.personalFeed, ...Array.from({ length: 45 - this.personalFeed.length }, (_, index) => ({

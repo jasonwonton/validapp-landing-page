@@ -275,7 +275,7 @@ test('feed controls answer to 44px hit areas without changing their drawing', as
     expect(await page.locator('#feedList [role="button"] button').count()).toBe(0);
     await expect(page.getByRole('button', { name: /^Open poll details:/ }).first()).toBeVisible();
     await page.locator('[data-feed-detail="9001"]').click();
-    for (const name of ['Close', 'More poll actions']) {
+    for (const name of ['Back', 'More poll actions']) {
         const box = await page.locator('#feedDetailDialog').getByRole('button', { name, exact: true }).boundingBox();
         expect(box.height, name).toBeGreaterThanOrEqual(44);
         expect(box.width, name).toBeGreaterThanOrEqual(44);
