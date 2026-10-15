@@ -193,6 +193,8 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     // Chats with a text the viewer's sends could not deliver, and in-flight sends.
     const failedChatIds = new Set();
     const sendingChatCounts = new Map();
+    // Outbox records this tab is delivering right now; the retry loop leaves them alone.
+    const deliveringRecordIds = new Set();
     // Say hi card (SayHiModel): suggestions, per-friend status, the chats waves started.
     let sayHi = { userId: null, items: [], loadedAt: 0, statuses: new Map(), chats: new Map(), loading: false };
     // The room's "New messages" boundary for this visit (ChatUnreadAnchorState).
@@ -1853,6 +1855,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         try {
             const records = await listChatMediaOutbox(userId()).catch(() => []);
             const due = records.filter((record) => ["memento", "chat_media"].includes(record.kind)
+                && !deliveringRecordIds.has(record.id)
                 && Number(record.attempts || 0) < MAX_MEDIA_AUTOMATIC_ATTEMPTS
                 && Number(record.next_attempt_at || 0) <= Date.now()).slice(0, 2);
             for (const record of due) {
@@ -2691,6 +2694,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         successHaptic?.();
         bumpSending(chatId, 1);
         if (store.state.activeChatId === chatId) { renderDailyRow(); renderMessages(true); }
+        deliveringRecordIds.add(record.id);
         try {
             await deliverMediaRecord(record);
             await removeChatMediaOutbox(record.id);
@@ -2705,6 +2709,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             markPendingFailed(chatId, pendingId, chatTextSendIsRetryable(error) ? "Memento didn't send. It will retry while Valid is open." : userMessage(error, "Memento didn't send"));
             if (store.state.activeChatId === chatId) renderDailyRow();
         } finally {
+            deliveringRecordIds.delete(record.id);
             bumpSending(chatId, -1);
             setTimeout(() => URL.revokeObjectURL(previewURL), 60_000);
         }
@@ -3256,6 +3261,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         renderMessages(true);
         successHaptic?.();
         bumpSending(chatId, 1);
+        deliveringRecordIds.add(record.id);
         try {
             const result = await deliverMediaRecord(record);
             await removeChatMediaOutbox(record.id);
@@ -3274,6 +3280,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 markPendingFailed(chatId, pendingId, userMessage(error, "Couldn't send"));
             }
         } finally {
+            deliveringRecordIds.delete(record.id);
             bumpSending(chatId, -1);
             setTimeout(() => URL.revokeObjectURL(previewURL), 60_000);
         }

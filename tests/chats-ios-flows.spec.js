@@ -266,7 +266,8 @@ test("Call back and View N work from the inbox without opening the room", async 
     await expect(page).not.toHaveURL(/chat=chat-mateo/);
     await expect(page.locator('[data-chat-screen="room"]')).toBeHidden();
     const call = page.getByRole("dialog", { name: "Valid call" });
-    await call.getByRole("button", { name: "Close" }).click();
+    // Close the outcome, or end it while the browser still asks for the microphone.
+    await call.getByRole("button", { name: /^(Close|End call)$/ }).first().click();
     await expect(call).toBeHidden();
     const noah = page.locator(".chat-list .chat-row").filter({ hasText: "Noah Williams" });
     await noah.getByRole("button", { name: "View 1 unopened snap" }).click();
