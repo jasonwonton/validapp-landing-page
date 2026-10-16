@@ -171,12 +171,16 @@ export async function deliverStory(api, userId, record, { onProgress, onStatus, 
     const save = saver(record);
     if (!record.ingest) {
         let mediaAssetId = record.finalized_asset_id;
+        // Only a video Story has a poster and a duration; the API refuses a
+        // photo Story that sends either (a camera photo carries a chat preview).
+        const isVideo = record.content_type === "video/mp4";
+        const thumbnail = isVideo ? record.thumbnail : null;
         if (!mediaAssetId) {
             const session = await api.createStoryUpload(userId, {
                 contentType: record.content_type,
                 sizeBytes: record.file.size,
-                thumbnailSizeBytes: record.thumbnail?.size ?? null,
-                durationMs: record.duration_ms,
+                thumbnailSizeBytes: thumbnail?.size ?? null,
+                durationMs: isVideo ? record.duration_ms : null,
                 clientRequestId: record.upload_request_id,
             });
             if (record.media_asset_id !== session.media_asset_id) await save({ media_asset_id: session.media_asset_id, file_uploaded: false, thumbnail_uploaded: false });
@@ -184,8 +188,8 @@ export async function deliverStory(api, userId, record, { onProgress, onStatus, 
                 await api.putDirectUpload(record.file, session, { onProgress: (progress) => onProgress?.(progress * 0.88), signal });
                 if (!session.already_finalized) await save({ file_uploaded: true });
             }
-            if (record.thumbnail && !session.already_finalized && !record.thumbnail_uploaded) {
-                await api.putDirectUpload(record.thumbnail, {
+            if (thumbnail && !session.already_finalized && !record.thumbnail_uploaded) {
+                await api.putDirectUpload(thumbnail, {
                     upload_url: session.thumbnail_upload_url,
                     upload_method: session.upload_method,
                     required_headers: session.thumbnail_required_headers,

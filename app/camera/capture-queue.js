@@ -30,7 +30,8 @@ function storyRecord(userId, media, tags) {
         user_id: String(userId),
         kind: "story",
         file: media.file,
-        thumbnail: media.thumbnail || null,
+        // A photo Story has no poster (the chat preview is for chats only).
+        thumbnail: media.kind === "video" ? media.thumbnail || null : null,
         content_type: media.ingest ? (media.contentType || media.file.type) : media.file.type,
         ingest: Boolean(media.ingest),
         duration_ms: media.durationMs ?? null,
@@ -142,7 +143,17 @@ async function scheduleRetries(api, userId, options) {
 // back online, a timer). The chat room retries its own sends the same way.
 export async function resumeQueue(api, userId, options = {}) {
     if (!userId || navigator.onLine === false) return;
-    const records = await listChatMediaOutbox(userId).catch(() => []);
+    let records = await listChatMediaOutbox(userId).catch(() => []);
+    // web-v118..v120 sent a photo Story's chat preview as a poster and the API
+    // refused it; those posts now go through, so try them again once.
+    const refusedPhotos = records.filter((record) => record.kind === "story" && record.refused && record.content_type === "image/jpeg" && !record.photo_poster_retried);
+    for (const record of refusedPhotos) {
+        await patchChatMediaOutbox(record.id, { attempts: 0, next_attempt_at: 0, refused: false, photo_poster_retried: true }).catch(() => null);
+    }
+    if (refusedPhotos.length) {
+        records = await listChatMediaOutbox(userId).catch(() => []);
+        announceStories();
+    }
     const due = records.filter((record) => (record.kind === "story" || (record.kind === "chat_media" && record.source === "send_to"))
         && !deliveringMediaRecords.has(record.id)
         && Number(record.attempts || 0) < MAX_MEDIA_AUTOMATIC_ATTEMPTS

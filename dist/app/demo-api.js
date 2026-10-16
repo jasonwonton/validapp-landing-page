@@ -1025,6 +1025,11 @@ export class DemoAPI {
         return { authors: structuredClone(this.storyAuthors()), server_time: new Date().toISOString() };
     }
     async createStoryUpload(_userId, payload) {
+        // StoryUploadCreateRequest: a photo Story has no poster or duration; a video needs both.
+        const video = payload.contentType === "video/mp4";
+        const invalid = !["image/jpeg", "video/mp4"].includes(payload.contentType)
+            || (video ? payload.thumbnailSizeBytes == null || payload.durationMs == null : payload.thumbnailSizeBytes != null || payload.durationMs != null);
+        if (invalid) throw Object.assign(new Error("Photo Stories cannot include video metadata"), { status: 422 });
         return {
             media_asset_id: `story-media-${payload.clientRequestId}`,
             upload_url: "data:application/octet-stream,",

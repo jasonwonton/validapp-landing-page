@@ -482,3 +482,31 @@ test("a Story viewer row opens a direct chat with that viewer", async ({ page })
     await expect(page).toHaveURL(/tab=chats/);
     await expect(page).toHaveURL(/chat=chat-/);
 });
+
+test("a photo Story the API refused for carrying a poster posts after the update", async ({ page }) => {
+    await page.goto("/app/?demo=1&signin=1&stories=1");
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await expect(page.getByRole("region", { name: "Stories" })).toBeVisible({ timeout: 20_000 });
+    // What web-v118..v120 saved: a camera photo with its chat preview, refused (Tap to retry).
+    await page.evaluate(async () => {
+        const { putChatMediaOutbox } = await import("/app/chat/outbox.js");
+        const canvas = new OffscreenCanvas(90, 160);
+        canvas.getContext("2d").fillRect(0, 0, 90, 160);
+        const blob = await canvas.convertToBlob({ type: "image/jpeg" });
+        await putChatMediaOutbox({
+            id: "demo-user:story:refused", user_id: "demo-user", kind: "story",
+            file: new File([blob], "chat-photo.jpg", { type: "image/jpeg" }), thumbnail: new File([blob], "preview.jpg", { type: "image/jpeg" }),
+            content_type: "image/jpeg", ingest: false, duration_ms: null, caption: null, overlay: null, tagged_user_ids: null,
+            upload_request_id: "22222222-2222-4222-8222-000000000001", publish_request_id: "22222222-2222-4222-8222-000000000002",
+            attempts: 4, next_attempt_at: 0, refused: true,
+        });
+    });
+    await page.reload();
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await expect(page.getByRole("region", { name: "Stories" })).toBeVisible();
+    await expect.poll(() => page.evaluate(async () => {
+        const { listChatMediaOutbox } = await import("/app/chat/outbox.js");
+        return (await listChatMediaOutbox("demo-user")).filter((record) => record.kind === "story").length;
+    }), { timeout: 8_000 }).toBe(0);
+    await expect(page.locator(".own-story .story-author-button")).toContainText("Your Story");
+});

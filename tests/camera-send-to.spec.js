@@ -68,6 +68,7 @@ async function recordSends(page) {
         };
         wrap("sendChatMessage", (_user, chatId, payload) => { if (payload.media_asset_id) sends.chats.push({ chatId, viewOnce: payload.view_once }); });
         wrap("publishStory", (_user, _asset, payload) => sends.stories.push({ tags: payload.taggedUserIds || [] }));
+        wrap("createStoryUpload", (_user, payload) => (window.storyUploads ||= []).push(payload));
         wrap("publishDailyHighlight", (_user, _asset, chatIds) => sends.mementos.push(chatIds));
         wrap("createChat", (_user, members) => sends.created.push(members));
     });
@@ -270,6 +271,9 @@ test.describe("Camera tab and Send to", () => {
         await page.evaluate(() => { window.holdStory = false; window.storyGate?.(); });
         await expect(own).toContainText("Your Story");
         await expect.poll(() => page.evaluate(() => sends.stories)).toEqual([{ tags: ["classmate-3", "classmate-4"] }]);
+        // A photo Story carries no poster or duration (the API refuses them).
+        expect(await page.evaluate(() => storyUploads.map(({ contentType, thumbnailSizeBytes, durationMs }) => ({ contentType, thumbnailSizeBytes, durationMs }))))
+            .toEqual([{ contentType: "image/jpeg", thumbnailSizeBytes: null, durationMs: null }]);
 
         // A refused post waits for "Tap to retry", then Try again posts it.
         await page.evaluate(() => { window.refuseStory = true; });
