@@ -81,17 +81,7 @@
         }
         .mission p { color: #000; }
         .mission p:last-child { margin-bottom: 0; }
-        .page-section { margin-top: 48px; scroll-margin-top: 24px; }
-        h3 { margin: 0 0 8px; font-size: 1.15rem; font-weight: 400; line-height: 1.3; }
-        .age-answers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 14px; margin: 18px 0 8px; }
-        .age-answer, .control-card { padding: 18px 20px; background: #fff; border: 1px solid var(--border); border-radius: 16px; }
-        .age-answer { border: 2px solid var(--text); }
-        .age-answer p, .control-card p { margin: 0 0 10px; font-size: 0.95rem; }
-        .age-answer p:last-child, .control-card p:last-child { margin-bottom: 0; }
-        .control-group-title { margin: 28px 0 14px; color: var(--muted); font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.06em; }
-        .control-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 14px; }
-        .control-card .where { margin-top: 10px; color: var(--text); font-size: 0.85rem; }
-        .questions { margin-top: 48px; }
+        .questions { margin-top: 36px; }
         details { border-bottom: 1px solid var(--border); }
         summary {
             padding: 20px 0;
@@ -163,72 +153,6 @@
             <p>We're building Valid to make it easier to express appreciation, start conversations, and strengthen friendships within school communities. That purpose also means taking concerns about privacy, spending, and harmful behavior seriously.</p>
         </section>
 
-        <section class="page-section" id="parental-controls" aria-labelledby="controls-title">
-            <h2 id="controls-title">Parental controls</h2>
-            <h3 id="monitor">Can I see my child’s polls and who they’re talking to?</h3>
-            <p>Yes. With a parent view, you sign in to Valid with your own phone number and see your child’s feed (the polls they’re in) and their chats, read-only. You can’t vote, post, or send messages as your child, and you can report anything that worries you straight to our team.</p>
-            <div class="age-answers">
-                <div class="age-answer" id="under-13">
-                    <h3>Under 13</h3>
-                    <p>Your child needs your permission to join. When they sign up, you read a short notice, agree, and take a quick thumbs-up photo with them. You can add your phone number then for the parent view, or skip it.</p>
-                    <p>You can withdraw permission from the parent view at any time.</p>
-                </div>
-                <div class="age-answer" id="teens">
-                    <h3>13 and older</h3>
-                    <p>Teens don’t have a parent view by default. If you’d like one, email <a href="mailto:support@validapp.lol?subject=Parent%20view%20for%20my%20teen">support@validapp.lol</a> with your teen’s username and we’ll turn on <strong>Link a parent</strong> for their account.</p>
-                    <p>Your teen then links you from their phone (<strong>Profile → Profile information → Link a parent</strong>) using your number and a code we text you. Your teen agrees to it and can see that a parent is linked.</p>
-                </div>
-            </div>
-
-            <h3 class="control-group-title">In Valid</h3>
-            <div class="control-grid">
-                <div class="control-card">
-                    <h3>Requests first</h3>
-                    <p>Chats with someone new start as a request your child can accept or ignore, with a warning if the person isn’t in their contacts or school. Adults can’t message a teen until the teen accepts. Under 13s only connect with contacts and classmates.</p>
-                </div>
-                <div class="control-card">
-                    <h3>Block and report</h3>
-                    <p>Your child can block anyone and report a poll, chat, comment, or profile for our team to review.</p>
-                    <p class="where">Profile → Settings → Blocked Users</p>
-                </div>
-                <div class="control-card">
-                    <h3>Activity status</h3>
-                    <p>Choose whether people can see when your child is active.</p>
-                    <p class="where">Profile → Settings → Activity Status</p>
-                </div>
-                <div class="control-card">
-                    <h3>Delete the account</h3>
-                    <p>Your child can delete their account at any time, or you can email us to remove their information.</p>
-                    <p class="where">Profile → Profile information → Delete account</p>
-                </div>
-            </div>
-
-            <h3 class="control-group-title">On your child’s iPhone</h3>
-            <div class="control-grid">
-                <div class="control-card">
-                    <h3>Time limits</h3>
-                    <p>Set a daily limit for Valid or schedule Downtime, like school hours or bedtime.</p>
-                    <p class="where">Settings → Screen Time → App Limits</p>
-                </div>
-                <div class="control-card">
-                    <h3>Purchases</h3>
-                    <p>Turn on Ask to Buy so you approve any subscription before it goes through.</p>
-                    <p class="where">Settings → your name → Family Sharing</p>
-                </div>
-                <div class="control-card">
-                    <h3>Notifications</h3>
-                    <p>Turn notifications off or quiet them so the app isn’t pulling your child back in.</p>
-                    <p class="where">Settings → Notifications → Valid</p>
-                </div>
-                <div class="control-card">
-                    <h3>Contacts access</h3>
-                    <p>Review or turn off Valid’s access to your child’s contacts.</p>
-                    <p class="where">Settings → Valid</p>
-                </div>
-            </div>
-            <p style="margin-top: 20px;">Need something else, like removing your child from polls? Email <a href="mailto:support@validapp.lol">support@validapp.lol</a> and we’ll take care of it.</p>
-        </section>
-
         <section class="questions" aria-labelledby="questions-title">
             <h2 id="questions-title">Your questions, answered</h2>
 
@@ -236,7 +160,7 @@
                 <summary>What is Valid, and who is it for?</summary>
                 <div class="answer">
                     <p>We created Valid to give students a safe space to connect within their communities. Students connect with classmates and people in their contacts. Anyone else has to send a request, which your child can accept or ignore, with a warning if they don’t know the person. Children under 13 can only connect with contacts and classmates.</p>
-                    <p>Through positive polls, chats, and Stories, students can express appreciation and build friendships with the people around them. Children under 13 need a parent’s permission to join (see <a href="#parental-controls">Parental controls</a>).</p>
+                    <p>Through positive polls, chats, and Stories, students can express appreciation and build friendships with the people around them. Children under 13 need a parent’s permission to join.</p>
                 </div>
             </details>
 
@@ -246,6 +170,15 @@
                     <p>We care deeply about students' experience on Valid, and we do our best to make it a kind, welcoming place. <strong>Every poll is reviewed by a human moderator before it is published.</strong> Our rules prohibit bullying, harassment, impersonation, and manipulating votes. Students also have reporting and blocking tools to help protect their experience.</p>
                     <p><strong>Our moderation SLA is under 15 minutes.</strong> That is our commitment to a fast moderation turnaround when content needs review.</p>
                     <p>No social app can prevent every harmful interaction, including sarcasm or conflict that carries over from school. If something feels wrong, we want students and parents to report it so we can address it.</p>
+                </div>
+            </details>
+
+            <details id="parental-controls">
+                <summary>Can I see my child’s polls and who they’re talking to?</summary>
+                <div class="answer">
+                    <p>Yes, with a parent view. You sign in to Valid with your own phone number and see your child’s feed and chats, read-only. You can’t vote, post, or message as your child, and you can report anything that worries you to our team.</p>
+                    <p><strong>Under 13:</strong> your child needs your permission to join. At signup you agree to a short notice and take a quick thumbs-up photo with them, and you can add your number for the parent view or skip it. You can withdraw permission at any time.</p>
+                    <p><strong>13 and older:</strong> teens don’t have a parent view by default. Email <a href="mailto:support@validapp.lol?subject=Parent%20view%20for%20my%20teen">support@validapp.lol</a> with your teen’s username and we’ll turn on <strong>Link a parent</strong> for them. Your teen then links you from <strong>Profile → Profile information → Link a parent</strong> with your number and a code we text you, so they know a parent is linked.</p>
                 </div>
             </details>
 
