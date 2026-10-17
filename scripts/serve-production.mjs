@@ -59,7 +59,13 @@ function requestPath(rawURL = "/") {
     return decoded.startsWith("/") ? decoded : `/${decoded}`;
 }
 
+// validapp.lol/add/<username> is one page (add.html) that reads the
+// username from the address. Production needs the same rewrite at the edge
+// (see the add-me-link notes); this keeps `npm start` faithful to it.
+const ADD_LINK_PATH = /^\/add\/[^/]+\/?$/;
+
 async function resolveFile(root, pathname) {
+    if (ADD_LINK_PATH.test(pathname)) pathname = "/add.html";
     const candidatePath = pathname.endsWith("/") ? `${pathname}index.html` : pathname;
     const resolved = path.resolve(root, `.${candidatePath}`);
     if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) return null;

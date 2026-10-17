@@ -32,6 +32,7 @@ const staticFiles = [
     "creatorprogram.html",
     "validchallenge.html",
     "index.html",
+    "add.html",
     "privacy-policy.html",
     "terms.html",
 ];
