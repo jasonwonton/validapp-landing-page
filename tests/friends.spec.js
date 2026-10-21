@@ -20,8 +20,8 @@ test("Add Friends sends, cancels, accepts and removes with refresh reconciliatio
     await row(dialog, 2).getByRole("button", { name: "Accept", exact: true }).click();
     await dialog.getByRole("button", { name: "Friends", exact: true }).click();
     await expect(row(dialog, 2).getByRole("button", { name: "Message", exact: true })).toBeVisible();
-    page.once("dialog", (prompt) => prompt.accept());
     await row(dialog, 2).getByRole("button", { name: "Remove friend", exact: true }).click();
+    await page.locator(".ui-sheet").getByRole("button", { name: "Remove friend", exact: true }).click();
     await expect(row(dialog, 2)).toHaveCount(0);
     await page.reload();
     await page.getByRole("button", { name: /^sign in$/i }).click();
@@ -98,4 +98,86 @@ test("failed loads expose retry and stale search never replaces a newer query", 
     await expect(row(dialog, 2)).toBeVisible();
     await expect(row(dialog, 1)).toHaveCount(0);
     await expect(dialog.getByLabel("Find people")).toHaveValue("noahw");
+});
+
+test("blocking removes a friendship and opaque blocked rows never reveal a sender", async ({ page }) => {
+    const dialog = await signIn(page);
+    await dialog.getByRole("button", { name: "Friends", exact: true }).click();
+    await row(dialog, 1).getByRole("button", { name: /Maya Chen/ }).click();
+    const profile = page.getByRole("dialog", { name: "Profile", exact: true });
+    await expect(profile.getByRole("button", { name: "Chat", exact: true })).toBeVisible();
+    await profile.getByRole("button", { name: "More profile actions" }).click();
+    await profile.locator('[data-block-classmate]').click();
+    await page.locator('.ui-sheet').getByRole("button", { name: "Block", exact: true }).click();
+    await expect(profile).toBeHidden();
+    await page.locator('.chat-page-header [data-open-friends]').click();
+    await dialog.getByRole("button", { name: "Friends", exact: true }).click();
+    await expect(row(dialog, 1)).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Blocked", exact: true }).click();
+    await expect(row(dialog, 1)).toContainText("Maya");
+    await row(dialog, 1).getByRole("button", { name: "Unblock", exact: true }).click();
+    await expect(row(dialog, 1)).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Friends", exact: true }).click();
+    await expect(row(dialog, 1)).toHaveCount(0);
+    await page.evaluate(async () => {
+        const { DemoAPI } = await import('/app/demo-api.js');
+        DemoAPI.prototype.getBlockedProfiles = async () => [{ user_id: 'opaque-block', first_name: 'SECRET NAME', username: 'private-name', profile_picture_url: 'https://private.invalid/secret', anonymous_sender: true }];
+    });
+    await dialog.getByRole("button", { name: "Blocked", exact: true }).click();
+    const anonymous = dialog.locator('[data-friend-row="opaque-block"]');
+    await expect(anonymous.locator("[data-friend-profile]")).toBeDisabled();
+    await expect(anonymous).toContainText("Anonymous sender");
+    await expect(anonymous).not.toContainText("SECRET NAME");
+    await expect(anonymous.locator('[src*="private.invalid"]')).toHaveCount(0);
+});
+
+test("signed-out Add me deep link resumes after login and rejected links do not create requests", async ({ page }) => {
+    await page.goto('/app/?demo=1&signin=1&friends=1&add=maya_c');
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    const dialog = page.getByRole("dialog", { name: "Add Friends", exact: true });
+    await expect(dialog).toBeVisible();
+    await expect(row(dialog, 1)).toBeVisible();
+    await dialog.getByRole("button", { name: "Open a link or QR code" }).click();
+    await dialog.getByLabel("Valid Add me link").fill('https://untrusted.invalid/add/maya_c');
+    await dialog.getByRole("button", { name: "Open link", exact: true }).click();
+    await expect(dialog).toContainText('Use a https://validapp.lol/add/username link');
+    await dialog.getByRole("button", { name: /^Requests/ }).click();
+    await expect(row(dialog, 1)).toHaveCount(0);
+});
+
+test('a cancelled browser share leaves Add me off; a completed share enables it', async ({ page }) => {
+    const dialog = await signIn(page);
+    await page.evaluate(() => { Object.defineProperty(navigator, 'share', { configurable: true, value: async () => { throw new DOMException('Cancelled', 'AbortError'); } }); });
+    await dialog.getByRole('button', { name: 'My link & QR code', exact: true }).click();
+    await expect(dialog.getByLabel('Link enabled')).not.toBeChecked();
+    await dialog.getByRole('button', { name: 'Share link', exact: true }).click();
+    await expect(dialog.getByLabel('Link enabled')).not.toBeChecked();
+    await page.evaluate(() => { Object.defineProperty(navigator, 'share', { configurable: true, value: async () => {} }); });
+    await dialog.getByRole('button', { name: 'Share link', exact: true }).click();
+    await expect(dialog.getByLabel('Link enabled')).toBeChecked();
+});
+
+test('a failed lazy Friends load can be retried after reconnecting', async ({ page }) => {
+    await page.route('**/app/friends/index.js', route => route.abort('internetdisconnected'));
+    await page.goto('/app/?demo=1&signin=1&friends=1');
+    await page.getByRole('button', { name: /^sign in$/i }).click();
+    await page.getByRole('button', { name: 'Chats', exact: true }).click();
+    await page.locator('.chat-page-header [data-open-friends]').click();
+    await expect(page.locator('#toast')).toContainText("Add Friends couldn't open");
+    await page.unroute('**/app/friends/index.js');
+    await page.locator('.chat-page-header [data-open-friends]').click();
+    await expect(page.getByRole('dialog', { name: 'Add Friends', exact: true })).toBeVisible();
+});
+
+test('Friends stays readable and reachable at compact and desktop widths', async ({ page }) => {
+    const dialog = await signIn(page);
+    for (const width of [320, 390, 1280]) {
+        await page.setViewportSize({ width, height: 800 });
+        await expect(dialog.getByRole('button', { name: 'Close Add Friends', exact: true })).toBeInViewport();
+        await expect(dialog.getByLabel('Find people')).toBeInViewport();
+        expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+        expect((await dialog.getByLabel('Find people').boundingBox()).width).toBeGreaterThan(140);
+        for (const tab of ['Classmates', 'Friends', 'Privacy']) await dialog.getByRole('button', { name: tab, exact: true }).click();
+        await expect(dialog.getByRole('checkbox', { name: /School and contacts only/ })).toBeVisible();
+    }
 });

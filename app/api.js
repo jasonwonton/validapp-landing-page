@@ -98,7 +98,7 @@ export class ValidAPI {
             const retry = !recover && this.baseURL === `${window.location.origin}/api/v1`
                 && ['GET', 'HEAD', 'OPTIONS'].includes((options.method || 'GET').toUpperCase());
             ({ response, payload } = await fetchSessionRequest(`${this.baseURL}${path}`, {
-                ...fetchOptions, headers, credentials: "include",
+                ...fetchOptions, headers, credentials: options.credentials || "include",
             }, { fetcher, retry, signal: options.signal, timeoutMs: options.timeoutMs || 15000 }));
         } catch (error) {
             if (options.signal?.aborted) throw error;
@@ -115,6 +115,9 @@ export class ValidAPI {
             throw failure;
         }
 
+        if (options.auth !== false && requestRevision !== this.sessionRevision) {
+            throw new APIError("Your account changed. Open this screen again.", 409, { code: "session_changed" });
+        }
         const contentType = response.headers.get("content-type") || "";
         if (!response.ok) {
             let sessionInvalid = false;
@@ -170,6 +173,10 @@ export class ValidAPI {
             throw failure;
         }
 
+        if (options.auth !== false && !["GET", "HEAD"].includes((options.method || "GET").toUpperCase())
+            && /\/(?:blocks\/|reports\/users\/|friends\/|people\/requests)/.test(path)) {
+            window.dispatchEvent(new CustomEvent("valid:people-changed", { detail: { owner: this.user?.id } }));
+        }
         return includeResponseHeaders ? { data: payload, headers: response.headers } : payload;
     }
 
@@ -568,14 +575,15 @@ export class ValidAPI {
 
     getBlockedUsers(userId) { return this.request(`/users/${userId}/blocks/profiles`); }
 
-    getFriends(userId, cursor = "") {
-        const params = new URLSearchParams({ limit: "100" });
+    getFriends(userId, cursor = "", limit = 100) {
+        const params = new URLSearchParams({ limit: String(Math.max(1, Math.min(500, limit))) });
         if (cursor) params.set("cursor", cursor);
         return this.request(`/users/${userId}/friends?${params}`);
     }
 
     getFriendSuggestions(userId) { return this.request(`/users/${userId}/friends/suggestions`); }
     getPeopleRequests(userId) { return this.request(`/users/${userId}/people/requests`); }
+    getFriendRequestMessages(userId, requesterId) { return this.request(`/users/${userId}/people/requests/${encodeURIComponent(requesterId)}/messages`); }
     lookupPerson(userId, username) {
         return this.request(`/users/${userId}/people/lookup?${new URLSearchParams({ username })}`);
     }
@@ -897,6 +905,11 @@ export class ValidAPI {
         });
     }
 
+    getPublicAskContext(publicToken) { return this.request(`/a/${encodeURIComponent(publicToken)}/context`); }
+    submitPublicAsk(publicToken, body, senderNonce) {
+        return this.request(`/a/${encodeURIComponent(publicToken)}`, { method: "POST", body: JSON.stringify({ body, sender_nonce: senderNonce }) });
+    }
+
     getAnonymousInbox(userId, limit = 30, offset = 0, cursor = {}) {
         const params = new URLSearchParams({ limit: String(limit), offset: String(offset), include_sent: "true", ...cursor });
         return this.request(`/users/${userId}/anonymous-inbox?${params}`);
@@ -1068,7 +1081,8 @@ export class ValidAPI {
         return this.request(`/users/${userId}/chats-unread-count`);
     }
 
-    createChat(userId, memberUserIds, name = null, clientRequestId = crypto.randomUUID(), createdFrom = null) {
+    getDirectChat(userId, targetId) { return this.request(`/users/${userId}/direct-chats/${encodeURIComponent(targetId)}`); }
+    createChat(userId, memberUserIds, name = null, clientRequestId = crypto.randomUUID(), createdFrom = null, initialMessage = null) {
         return this.request(`/users/${userId}/chats`, {
             method: "POST",
             body: JSON.stringify({
@@ -1077,6 +1091,7 @@ export class ValidAPI {
                 client_request_id: clientRequestId,
                 timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
                 ...(createdFrom ? { created_from: createdFrom } : {}),
+                ...(initialMessage ? { initial_message: initialMessage } : {}),
             }),
         });
     }

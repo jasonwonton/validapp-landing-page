@@ -11,6 +11,22 @@
 let sheetSequence = 0;
 const MAX_DETAILS_LENGTH = 500;
 
+// Shared by child login/signup and the separately scoped parent SMS flows.
+// The owner clears the timer when its screen closes.
+export function startCodeResendCountdown(button, availableAt) {
+    const parsed = Date.parse(availableAt || "");
+    const readyAt = Number.isFinite(parsed) ? parsed : Date.now() + 30_000;
+    const timer = setInterval(tick, 1000);
+    function tick() {
+        const seconds = Math.max(0, Math.ceil((readyAt - Date.now()) / 1000));
+        button.disabled = seconds > 0;
+        button.textContent = seconds > 0 ? `Resend in ${seconds}s` : "Resend Code";
+        if (!seconds || !button.isConnected) clearInterval(timer);
+    }
+    tick();
+    return timer;
+}
+
 function element(tag, properties = {}, children = []) {
     const node = document.createElement(tag);
     for (const [key, value] of Object.entries(properties)) {

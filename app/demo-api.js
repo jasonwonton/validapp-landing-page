@@ -939,6 +939,8 @@ export class DemoAPI {
         const profile = this.blockedUsers?.find(p => p.user_id === blockedUserId);
         if (profile) this.classmates.push(profile);
         this.blockedUsers = (this.blockedUsers || []).filter(p => p.user_id !== blockedUserId);
+        this.friendFixture().blocked = this.friendFixture().blocked.filter((id) => id !== blockedUserId);
+        this.saveFriendFixture();
         return { success: true };
     }
 
@@ -956,7 +958,11 @@ export class DemoAPI {
         return null;
     }
     // Media routes without a named method (the ingest) go to the demo media fixtures.
-    async request(path, options = {}) { return (await import("./demo-media.js")).demoMediaRequest(this, path, options); }
+    async request(path, options = {}) {
+        if (path === "/parent-approvals/policy") return { enabled: false };
+        if (path === "/parent-approvals/my-status") return { can_link: false, monitoring: false };
+        return (await import("./demo-media.js")).demoMediaRequest(this, path, options);
+    }
     // Named ingest methods (media-ingest.js prefers them) share the same fixtures.
     createMediaIngest(userId, payload) { return this.request(`/users/${userId}/media-ingests`, { method: "POST", body: JSON.stringify(payload) }); }
     finalizeMediaIngest(userId, ingestId) { return this.request(`/users/${userId}/media-ingests/${ingestId}/finalize`, { method: "POST" }); }
@@ -981,6 +987,7 @@ export class DemoAPI {
             god_mode_invite_friend_goal: 5,
             global_visibility_boost_cost: 400,
             targeted_visibility_boost_cost: 200,
+            activity_log_enabled: new URLSearchParams(location.search).get("activity") === "1",
             friends_enabled: new URLSearchParams(location.search).get("friends") === "1",
             add_links_enabled: new URLSearchParams(location.search).get("friends") === "1",
             enable_tbh_requests: true,
@@ -1275,6 +1282,7 @@ export class DemoAPI {
     }
     saveFriendFixture() { try { sessionStorage.setItem("valid:demo-friends", JSON.stringify(this.friendFixture())); } catch { /* fixture only */ } }
     fixturePeople(ids) { return structuredClone([...this.classmates, ...(this.blockedUsers || [])].filter((p) => ids.includes(p.user_id))); }
+    async getDirectChat(_user, target) { return { state: this.friendFixture().friends.includes(target) ? "friends" : "message", chat_id: null }; }
     async getFriends() { const friends = this.fixturePeople(this.friendFixture().friends); return { friends, total: friends.length, next_cursor: null }; }
     async getPeopleRequests() {
         const f = this.friendFixture();
@@ -1305,7 +1313,7 @@ export class DemoAPI {
     async removeFriend(_user, id) { this.friendFixture().friends = this.friendFixture().friends.filter((v) => v !== id); this.saveFriendFixture(); }
     async dismissFriendSuggestion(_user, id) { this.friendFixture().dismissed.push(id); this.saveFriendFixture(); }
     async getBlockedProfiles() { return this.fixturePeople(this.friendFixture().blocked); }
-    async unblockUser(_user, id) { this.friendFixture().blocked = this.friendFixture().blocked.filter((v) => v !== id); this.saveFriendFixture(); }
+
     async getFriendReach() { return { available: true, school_contacts_only: this.friendFixture().reach, forced: false, locked_by_parent: false }; }
     async updateFriendReach(_user, value) { this.friendFixture().reach = value; this.saveFriendFixture(); return this.getFriendReach(); }
     async getMessageRequests() { return { available: true, from_anyone: this.friendFixture().messages, age_band: "teen", locked_by_parent: false }; }
@@ -1610,6 +1618,16 @@ export class DemoAPI {
         };
     }
 
+    async getActivitySummary() { return { enabled: true, activity_unread: 1, badge_total: 1, inbox: { votes: 0, tbhs: 0, asks: 0 } }; }
+    async getActivity() { return { enabled: true, items: [{ id: 1, kind: "aura_gifted", text: "Valid gifted you aura", detail: "Open your current balance", unread: true, anonymous: true, destination: { route: "profile_aura" }, latest_at: new Date().toISOString() }], next_cursor: null }; }
+    async markActivityRead() { return { enabled: true, activity_unread: 0, badge_total: 0, inbox: { votes: 0, tbhs: 0, asks: 0 } }; }
+
+    async getPublicAskContext() { return { is_active: true, recipient_display_name: "Maya Chen", max_length: 500, privacy_notice: "Your name is hidden. Keep it kind." }; }
+    async submitPublicAsk(_token, body) {
+        this.anonymousInbox.sent ||= [];
+        this.anonymousInbox.sent.unshift({ id: `sent-${crypto.randomUUID()}`, recipient_user_id: "classmate-1", recipient_available: true, recipient_display_name: "Maya Chen", recipient_username: "maya_c", question_body: body, created_at: new Date().toISOString(), answer_text: null });
+        return { accepted: true, message: "Your message was sent." };
+    }
     async getAnonymousInbox() {
         return structuredClone(this.anonymousInbox);
     }

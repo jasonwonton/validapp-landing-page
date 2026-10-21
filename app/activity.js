@@ -1,3 +1,4 @@
+import { userMessage } from "./user-message.js";
 export function createActivityView({ api, getUser, getConfig, escapeHTML: esc, getInboxEntries, inboxLocked, navigate, onSummary }) {
     const dialog = document.createElement("dialog");
     dialog.className = "modal friends-dialog";
@@ -9,7 +10,7 @@ export function createActivityView({ api, getUser, getConfig, escapeHTML: esc, g
         if (!dialog.open) return;
         const entries = getInboxEntries();
         dialog.innerHTML = `<div class="modal-heading"><h2>Notifications</h2><button class="icon-button" type="button" data-bell-close aria-label="Close notifications">×</button></div>
-            <div class="friends-tabs"><button type="button" data-bell-inbox>Open Inbox</button><button type="button" data-bell-asks>Ask Me</button><button type="button" data-bell-friends>Friend requests</button></div>
+            <div class="friends-tabs"><button type="button" data-bell-inbox>Open Inbox</button><button type="button" data-bell-asks>Ask Me</button>${getConfig()?.friends_enabled === true ? '<button type="button" data-bell-friends>Friend requests</button>' : ""}</div>
             <p role="status">${esc(error || (busy ? "Loading notifications…" : ""))}</p>${error ? '<button class="secondary-button" type="button" data-bell-retry>Try again</button>' : ""}
             <div class="notification-list" aria-busy="${busy}">${entries.map((item, index) => `<button class="notification-row" type="button" data-bell-entry="${index}"><strong>${esc(item.text)}</strong><small>${esc(item.detail || "")}</small></button>`).join("")}
             ${items.map((item) => `<button class="notification-row" type="button" data-activity-id="${item.id}"><strong>${item.unread ? "● " : ""}${esc(item.text)}</strong>${item.detail ? `<small>${esc(item.detail)}</small>` : ""}</button>`).join("")}
@@ -36,7 +37,7 @@ export function createActivityView({ api, getUser, getConfig, escapeHTML: esc, g
                 if (!current(id, generation)) return;
                 onSummary(result);
             }
-        } catch (failure) { if (current(id, generation)) error = failure.message || "Couldn't load notifications."; }
+        } catch (failure) { if (current(id, generation)) error = userMessage(failure, "Couldn't load notifications."); }
         finally { if (current(id, generation)) { busy = false; render(); } }
     }
     async function open() {

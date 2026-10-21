@@ -1,3 +1,4 @@
+import { loadChatDraft, saveChatDraft } from "./drafts.js";
 import { bindMessageActions, messageActionsMarkup } from './actions.js';
 import { HISTORY_MODES, canSaveMessage, historyVisible, createHistoryReceipts } from './history.js';
 import { viewOncePresentation } from './view-once.js';
@@ -217,7 +218,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     root.innerHTML = `
         <div class="chat-shell">
             <section class="chat-list-screen" data-chat-screen="list">
-                <header class="chat-page-header"><button class="chat-icon-button" type="button" data-focus-chat-search aria-label="Search chats" aria-expanded="false">${uiIcon('search')}</button><h1>Chats</h1><button class="chat-icon-button" type="button" data-open-notifications aria-label="Notifications">${uiIcon("bell")}<span data-bell-count></span></button>${getConfig()?.friends_enabled === true ? '<button class="text-button" type="button" data-open-friends>Add Friends</button>' : ""}<button class="chat-icon-button" type="button" data-new-chat aria-label="New chat">${uiIcon('compose')}</button></header>
+                <header class="chat-page-header"><button class="chat-icon-button" type="button" data-focus-chat-search aria-label="Search chats" aria-expanded="false">${uiIcon('search')}</button><h1>Chats</h1><div class="chat-header-actions"><button class="chat-icon-button" type="button" data-open-notifications aria-label="Notifications">${uiIcon("bell")}<span data-bell-count></span></button>${getConfig()?.friends_enabled === true ? `<button class="chat-icon-button" type="button" data-open-friends aria-label="Add Friends">${uiIcon("person-badge-plus")}<span data-friend-count></span></button>` : ""}<button class="chat-icon-button" type="button" data-new-chat aria-label="New chat">${uiIcon('compose')}</button></div></header>
                 <form class="chat-search-form hidden" role="search"><label><span aria-hidden="true">${uiIcon('search')}</span><input type="search" maxlength="100" placeholder="Search chats &amp; messages" aria-label="Search chats &amp; messages" autocomplete="off" enterkeyhint="search"><button type="button" class="chat-search-clear" data-clear-chat-search aria-label="Clear search" hidden>${uiIcon('close')}</button></label><button type="button" data-cancel-chat-search>Cancel</button></form>
                 <div class="chat-notification-nudge-slot" data-nudge-slot="inbox" hidden></div>
                 <div class="chat-list-status" role="status"></div>
@@ -549,7 +550,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     // A chat never locks (ChatMementoRevealPolicy): only friends' Mementos from
     // today wait for the viewer's own. The server's view_gate_locked is ignored
     // in rooms, as iOS ignores it.
-    const chatAccessUnavailable = () => false;
+    const chatAccessUnavailable = () => store.state.detail?.chat?.people_request_messages_held === true;
     const chatsEnabled = () => getConfig()?.enable_chats === true && getConfig()?.enable_web_chats === true;
     const storiesEnabled = () => getConfig()?.enable_stories === true && getConfig()?.enable_web_stories === true;
 
@@ -678,7 +679,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     });
     $(".chat-composer").addEventListener("submit", sendMessage);
     $(".chat-search-form").addEventListener("submit", searchChats);
-    $(".chat-composer textarea").addEventListener("input", () => { handleTypingInput(); resizeComposer(); });
+    $(".chat-composer textarea").addEventListener("input", () => { saveChatDraft(userId(), store.state.activeChatId, $(".chat-composer textarea").value); handleTypingInput(); resizeComposer(); });
     $(".chat-composer textarea").addEventListener("keydown", (event) => {
         // Hardware keyboards send with Enter (Shift+Enter adds a line); touch keyboards keep Return as a newline.
         if (event.key !== "Enter" || event.shiftKey || event.isComposing || !matchMedia("(hover: hover) and (pointer: fine)").matches) return;
@@ -1200,6 +1201,8 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         const savedAnchor = savedPosition && !savedPosition.bottom
             ? savedPosition.anchors.map(anchor => store.messages().find(item => item.id === anchor.key)).find(Boolean) : null;
         if (store.state.activeChatId !== String(chatId)) {
+            $(".chat-composer textarea").value = loadChatDraft(userId(), chatId);
+            resizeComposer();
             store.state.typingUserIds.clear();
             $(".chat-typing").classList.add("hidden");
             void historyReceipts?.leave(store.state.activeChatId);
@@ -1253,6 +1256,13 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             dailyLedgerEnabled() ? api.getChatDailyRow(userId(), chatId) : Promise.resolve(null),
         ]);
         if (generation !== roomGeneration || store.state.activeChatId !== String(chatId)) return;
+        if (detailResult.status === "rejected" && [403, 404].includes(detailResult.reason?.status)) {
+            store.replaceMessages(chatId, []);
+            store.state.chats = store.state.chats.filter((row) => String(row.id) !== String(chatId));
+            leaveRoom(); showChatList(); renderChatList();
+            showToast?.("This chat is unavailable.");
+            return;
+        }
         if (detailResult.status === "fulfilled") {
             store.state.detail = detailResult.value;
             store.upsertChat(detailResult.value.chat);
@@ -1313,9 +1323,23 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         const callsAvailable = calls.enabled()
             && acceptedCount >= 2
             && chat?.membership_status !== "invited"
-            && chat?.has_viewer_blocked_member !== true;
+            && chat?.has_viewer_blocked_member !== true
+            && chat?.friendship !== "ended"
+            && chat?.people_request_messages_held !== true;
         $(".chat-call-actions").classList.toggle("hidden", !callsAvailable);
         if (callsAvailable) calls.preload();
+        let note = $(".chat-friendship-note");
+        if (!note) { note = document.createElement("p"); note.className = "chat-friendship-note"; note.setAttribute("role", "status"); $(".chat-composer").before(note); }
+        note.textContent = chat?.people_request_messages_held === true ? "You can message them once they accept your request."
+            : chat?.friend_request === "outgoing" || chat?.friendship === "requested" ? "Pending · waiting for them to add you back."
+            : chat?.friendship === "ended" ? "You're no longer friends. Sending a message asks to be friends again." : "";
+        note.hidden = !note.textContent;
+        const held = chat?.people_request_messages_held === true;
+        $(".chat-composer textarea").disabled = held;
+        $(".chat-composer").querySelectorAll("button").forEach((button) => {
+            if (held && !button.disabled) { button.disabled = true; button.dataset.friendHoldDisabled = "true"; }
+            else if (!held && button.dataset.friendHoldDisabled) { button.disabled = false; delete button.dataset.friendHoldDisabled; }
+        });
     }
 
     // ChatRoomView+Chrome.pendingHeaderText: "Waiting on Maya" / "N invited".
@@ -1960,6 +1984,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             replyToMessageId = store.state.replyToMessageId;
             draftImageURL = sharedMementoDraft?.imageURL || null;
             textarea.value = "";
+            saveChatDraft(userId(), chatId, "");
             resizeComposer();
             store.state.replyToMessageId = null;
             clearSharedMementoDraft();
@@ -2116,19 +2141,22 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         $(".chat-person-search input").value = "";
         renderCreation();
         const current = creation;
-        const [classmates, contacts, blocked] = await Promise.allSettled([
+        $(".chat-create-status").textContent = "";
+        const [classmates, contacts, blocked, friends] = await Promise.allSettled([
             api.getClassmates(userId(), "", 500),
             addToCurrent ? Promise.resolve([]) : api.getAllContacts(userId()),
             api.getBlockedUsers ? api.getBlockedUsers(userId()) : Promise.resolve([]),
+            getConfig()?.friends_enabled === true && api.getFriends ? api.getFriends(userId(), "", 500) : Promise.resolve({ friends: [] }),
         ]);
         if (creation !== current) return;
         current.loading = false;
-        if (classmates.status === 'rejected' && contacts.status === 'rejected') {
-            $(".chat-create-status").textContent = userMessage(classmates.reason, "Couldn't load people.");
+        const failed = [classmates, contacts, friends].find(result => result.status === 'rejected');
+        if (failed) {
+            $(".chat-create-status").textContent = `${userMessage(failed.reason, "Couldn't load all people.")} Close and reopen New Chat to try again.`;
         }
         const classmateRows = classmates.status === 'fulfilled' ? (Array.isArray(classmates.value) ? classmates.value : classmates.value?.items || []) : [];
         const contactRows = contacts.status === 'fulfilled' && Array.isArray(contacts.value) ? contacts.value : [];
-        current.people = mergeCreationPeople(classmateRows, contactRows);
+        current.people = mergeChatPeople(classmateRows, contactRows, userId(), friends.status === "fulfilled" ? friends.value.friends || [] : []);
         current.contactsKnown = contacts.status === 'fulfilled' && contactRows.some(contact => contact.user_id);
         current.blocked = new Set((blocked.status === 'fulfilled' && Array.isArray(blocked.value) ? blocked.value : []).map(user => String(user.user_id || user.id || user.blocked_user_id)));
         renderCreation();
@@ -2219,8 +2247,8 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         const existingMembers = new Set(creation.mode === 'add' ? (store.state.detail?.members || []).map(member => String(member.user_id)) : []);
         const people = creation.people.filter(person => !existingMembers.has(person.id) && creationMatches([person.name, person.username || '', person.school || ''].join(' '), query));
         const byCloseness = (a, b) => b.mutual - a.mutual || a.name.localeCompare(b.name);
-        const friends = people.filter(person => person.contact).sort(byCloseness);
-        const school = people.filter(person => person.school_mate && !person.contact).sort(byCloseness);
+        const friends = people.filter(person => person.contact || person.friend).sort(byCloseness);
+        const school = people.filter(person => person.school_mate && !person.contact && !person.friend).sort(byCloseness);
         const groups = creation.mode === 'direct' ? creationGroups().filter(chat => creationMatches(chat.display_name, query)) : [];
         const partners = directPartnerIds();
         let html = '';
@@ -2324,7 +2352,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
                 return false;
             }
         }
-        const unknown = people.filter(person => !person.contact).map(person => person.name);
+        const unknown = people.filter(person => !person.contact && !person.friend).map(person => person.name);
         if (!people.length || (creation.contactsKnown && !unknown.length)) return true;
         feedback('warning');
         const unavailable = !creation.contactsKnown;
@@ -2348,6 +2376,13 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             if (creation.selected.length < 2) return;
             creation.step = 'details';
             return renderCreation();
+        }
+        if (creation.mode === "direct" && creation.selected.length === 1 && getConfig()?.friends_enabled === true) {
+            const person = selectedCreationPeople()[0];
+            const { openDirectDraft } = await import("./direct-draft.js");
+            return openDirectDraft({ api, getUser, targetId: person.id, name: person.first, escapeHTML: escapeChatHTML,
+                onOpen: async (chatId) => { const detail = await api.getChat(userId(), chatId); await finishCreation(detail.chat); },
+            });
         }
         if (!await reviewCreationPeople()) return;
         const current = creation;
@@ -2385,6 +2420,37 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         const current = creation;
         current.working = true;
         renderCreationBar();
+        if (getConfig()?.friends_enabled === true) {
+            const owner = userId(), reached = new Set(), failures = [], requestOnly = [];
+            const queue = [...current.selected];
+            const worker = async () => {
+                while (queue.length && creation === current && userId() === owner) {
+                    const personId = queue.shift();
+                    const roomId = current.requestIds.get(personId) || crypto.randomUUID(); current.requestIds.set(personId, roomId);
+                    const textId = current.textIds.get(personId) || crypto.randomUUID(); current.textIds.set(personId, textId);
+                    try { await api.createChat(owner, [personId], null, roomId, "new_chat", { body, client_request_id: textId }); reached.add(personId); }
+                    catch (error) {
+                        if (["chat_awaiting_acceptance", "chat_add_first", "friendship_ended"].includes(error.detail?.code)) {
+                            try { await api.sendFriendRequest(owner, personId); reached.add(personId); requestOnly.push(personId); }
+                            catch (failure) { failures.push(userMessage(failure, "Couldn't add this person.")); }
+                        } else failures.push(userMessage(error, "Couldn't send. Retry keeps the same request."));
+                    }
+                }
+            };
+            await Promise.all(Array.from({ length: Math.min(6, queue.length) }, worker));
+            for (const groupId of current.groups) {
+                const textId = current.textIds.get(groupId) || crypto.randomUUID(); current.textIds.set(groupId, textId);
+                try { await api.sendChatMessage(owner, groupId, { body, client_request_id: textId }); reached.add(groupId); }
+                catch (error) { failures.push(userMessage(error, "Couldn't send to this group.")); }
+            }
+            if (creation !== current || userId() !== owner) return;
+            current.selected = current.selected.filter((id) => !reached.has(id)); current.groups = current.groups.filter((id) => !reached.has(id)); current.working = false;
+            void loadChats({ quiet: true });
+            const summary = `Sent to ${reached.size - requestOnly.length}${requestOnly.length ? ` · ${requestOnly.length} request only` : ""}${failures.length ? ` · ${failures.length} couldn't be sent` : ""}`;
+            if (creationRecipientCount()) { renderCreation(); $(".chat-create-status").textContent = `${summary}. ${failures[0] || "Try again."}`; }
+            else { creation = null; showChatList(); showToast?.(summary); }
+            return;
+        }
         const started = new Map();
         await Promise.all(current.selected.map(async personId => {
             const requestId = current.requestIds.get(personId) || crypto.randomUUID();
@@ -2446,6 +2512,40 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         showScreen('invite');
         renderInvitation();
         if (isGroupChatSummary(chat)) void loadInvitationPeople();
+        else if (getConfig()?.friends_enabled === true && (chat.people_request === "added_you" || chat.friend_request === "incoming" || chat.friendship === "incoming")) void loadFriendRequestPreview();
+    }
+
+    async function loadFriendRequestPreview() {
+        const current = invitation, owner = userId();
+        if (!current || current.friendLoading) return;
+        current.friendLoading = true; current.friendError = ""; renderInvitation();
+        try {
+            const requests = await api.getPeopleRequests(owner);
+            if (invitation !== current || userId() !== owner) return;
+            const card = requests.incoming.find((item) => String(item.chat_id) === String(current.chat.id));
+            if (!card) throw new Error("This request is no longer available. Return to Chats to refresh.");
+            current.friendCard = card;
+            const held = card.messages_held === true || (card.messages_held == null && card.held);
+            const preview = held ? { held: true, messages: [] } : await api.getFriendRequestMessages(owner, card.user_id);
+            if (invitation !== current || userId() !== owner) return;
+            current.friendMessages = preview.held ? [] : preview.messages;
+            current.friendMessagesHeld = held || preview.held;
+        } catch (error) { if (invitation === current && userId() === owner) current.friendError = userMessage(error, "Couldn't load this request. Try again."); }
+        finally { if (invitation === current && userId() === owner) { current.friendLoading = false; renderInvitation(); } }
+    }
+
+    async function moderateFriendRequest(report = false) {
+        const current = invitation, owner = userId(), person = current?.friendCard;
+        if (!person || current.working) return;
+        if (!await confirmSheet({ title: report ? "Report and block this account?" : "Block this account?", confirmLabel: report ? "Report and block" : "Block", destructive: true })) return;
+        current.working = true; renderInvitation();
+        try {
+            if (report) await api.reportUser(owner, person.user_id);
+            else await api.blockUser(owner, person.user_id);
+            if (invitation !== current || userId() !== owner) return;
+            invitation = null; showChatList(); await loadChats({ quiet: true });
+            dispatchEvent(new CustomEvent("valid:people-changed"));
+        } catch (error) { if (invitation === current) { current.working = false; current.friendError = userMessage(error, "Couldn't update this request."); renderInvitation(); } }
     }
 
     async function loadInvitationPeople() {
@@ -2472,6 +2572,12 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         if (!invitation) { body.innerHTML = ''; return; }
         const { chat, working } = invitation;
         const inviter = invitedByDisplayName(chat);
+        if (getConfig()?.friends_enabled === true && !isGroupChatSummary(chat) && (chat.people_request === "added_you" || chat.friend_request === "incoming" || chat.friendship === "incoming")) {
+            const card = invitation.friendCard;
+            const warning = card?.held || card?.connection?.known === false;
+            body.innerHTML = `<div class="chat-invite-card"><h2>${escapeChatHTML(card?.first_name || inviter)} wants to be friends</h2>${card ? `<button class="secondary-button" type="button" data-open-user-profile="${escapeChatHTML(card.user_id)}">Open profile</button>` : ""}${warning ? `<p role="note">You may not know this person.${card.requester_is_adult ? " This account is an adult." : ""}</p>` : ""}${invitation.friendLoading ? '<p role="status">Loading request…</p>' : ""}${invitation.friendError ? `<p role="status">${escapeChatHTML(invitation.friendError)}</p><button class="secondary-button" type="button" data-friend-preview-retry>Try again</button>` : ""}<div class="chat-request-preview">${!invitation.friendMessagesHeld ? (invitation.friendMessages || []).map((message) => `<p>${escapeChatHTML(message.kind === "text" ? message.body || "" : `${message.view_once ? "View-once " : ""}${message.kind} · available after accepting`)}</p>`).join("") : '<p>Messages wait until this request is accepted.</p>'}</div><div class="chat-invite-actions"><button type="button" data-invite-decline ${working ? "disabled" : ""}>Decline</button><button type="button" data-invite-accept ${working || !card || invitation.friendLoading ? "disabled" : ""}>${working ? "Accepting…" : "Accept"}</button></div>${card ? '<button class="text-button" type="button" data-friend-preview-block>Block</button><button class="text-button" type="button" data-friend-preview-report>Report and block</button>' : ""}</div>`;
+            return;
+        }
         const opener = friendInvitationOpener(chat);
         if (opener) {
             body.innerHTML = `<div class="chat-invite-card friend">${invitationAvatar(chat)}<h2>${escapeChatHTML(opener === SAY_HI_WAVE ? `${inviter} said hi` : inviter)}</h2><p class="chat-invite-opener ${opener === SAY_HI_WAVE ? 'wave' : ''}">${escapeChatHTML(opener)}</p><div class="chat-invite-actions-stack"><button type="button" class="chat-invite-primary" data-wave-back ${working ? 'disabled' : ''}>${working ? 'Waving…' : `${SAY_HI_WAVE} Wave back`}</button><button type="button" class="chat-invite-secondary" data-invite-open ${working ? 'disabled' : ''}>Open chat</button><button type="button" class="chat-invite-decline-link" data-invite-decline ${working ? 'disabled' : ''}>Decline</button></div></div>`;
@@ -2525,6 +2631,7 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         if (isGroupChatSummary(current.chat) && !current.detail) await loadInvitationPeople();
         if (invitation !== current) return;
         if (isGroupChatSummary(current.chat) && !current.detail) return showToast?.("Couldn't verify everyone in this group. Try loading the people again before accepting.");
+        if (current.friendCard?.connection?.known === true && !current.friendCard.held) return acceptInvitation();
         const review = await reviewInvitationContacts();
         if (invitation !== current) return;
         if (review.unavailable || review.names.length) {
@@ -2552,7 +2659,8 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             if (invitation !== current) return;
             invitation = null;
             renderChatList();
-            await openChat(chat.id, { updateHistory: false, force: true });
+            await openChat(chat.id, { updateHistory: false, force: true, latest: true });
+            dispatchEvent(new CustomEvent("valid:people-changed"));
         } catch (error) {
             current.working = false;
             if (invitation === current) renderInvitation();
@@ -2660,13 +2768,16 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
     // Memento sending in its bubble (MainTabPresentations). A failure says so there.
     async function publishMemento(event) {
         event.preventDefault();
-        if (mementoPublishing) return;
+        // A queued submit may arrive after Send has closed/reset the camera.
+        // It must not begin a second queue write or leave publishing stuck.
+        if (mementoPublishing || !$('[data-memento-dialog]').open) return;
         if (mementoFromTab) return publishMementoToAudience();
         if (!selectedMementoFile || !store.state.activeChatId) {
             $(".memento-status").textContent = "Take a photo before sending your Memento.";
             return;
         }
         mementoPublishing = true;
+        const owner = userId();
         const chatId = String(store.state.activeChatId);
         const chatIds = [chatId];
         $(".memento-publish").disabled = true;
@@ -2694,7 +2805,12 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
             $(".memento-status").textContent = "This Memento could not be saved for a safe retry. Free some device storage and try again.";
             return;
         }
-        const previewURL = URL.createObjectURL(selectedMementoFile);
+        if (userId() !== owner) {
+            mementoPublishing = false;
+            await removeChatMediaOutbox(record.id).catch(() => null);
+            return;
+        }
+        const previewURL = URL.createObjectURL(record.file);
         const pendingId = `pending:memento:${requestId}`;
         const latest = Math.max(0, ...store.messages(chatId).map((message) => message.room_sequence));
         store.updateMessage(chatId, normalizeMessage({
@@ -4481,6 +4597,9 @@ export function createChatsView({ root, api, getUser, getConfig, presence, softH
         if (target.matches("[data-invite-open]")) return acceptInvitation();
         if (target.matches("[data-invite-accept]")) return reviewAndAcceptInvitation();
         if (target.matches("[data-invite-decline]")) return declineInvitation();
+        if (target.matches("[data-friend-preview-retry]")) return void loadFriendRequestPreview();
+        if (target.matches("[data-friend-preview-block]")) return void moderateFriendRequest(false);
+        if (target.matches("[data-friend-preview-report]")) return void moderateFriendRequest(true);
         if (target.matches("[data-invite-retry-people]")) return loadInvitationPeople();
         if (target.matches("[data-remind-invite]")) return remindInvite();
         if (target.dataset.searchChat) return openSearchResult(target.dataset.searchChat, target.dataset.searchMessage || null);

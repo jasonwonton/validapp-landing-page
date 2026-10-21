@@ -21,11 +21,19 @@
     "test:foundations": "node --test scripts/tests/media-url.test.mjs scripts/tests/user-message.test.mjs",
     "test:shell": "node --test scripts/tests/service-worker-shell.test.mjs scripts/tests/service-worker-media-cache.test.mjs",
     "test:play": "node --test scripts/tests/play-choices.test.mjs && playwright test tests/play-contacts.spec.js",
-    "test:attribution": "node --test scripts/tests/question-attribution.test.mjs && playwright test tests/anonymous-attribution.spec.js"
+    "test:attribution": "node --test scripts/tests/question-attribution.test.mjs && playwright test tests/anonymous-attribution.spec.js",
+    "lint": "eslint app/app.js app/api.js app/chat/index.js app/chat/outbox.js app/chat/people.js app/chat/activity-settings.js app/camera/send-to.js app/comments/index.js app/routes/feed.js app/routes/chats.js app/demo-api.js app/ui-icons.js app/ui-dialogs.js assets/add-link.js app/friends/index.js app/friends/model.js app/activity.js app/ask-compose.js app/parent-access.js app/parent-approval.js app/chat/direct-draft.js app/chat/drafts.js",
+    "typecheck": "tsc -p tsconfig.parity.json",
+    "test:unit": "node --test scripts/tests/*.test.mjs"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.62.1",
-    "esbuild": "^0.25.9"
+    "@types/qrcode": "^1.5.6",
+    "esbuild": "^0.25.9",
+    "eslint": "^10.13.0",
+    "globals": "^17.13.0",
+    "typescript": "^7.0.2"
   },
   "dependencies": {
     "livekit-client": "^2.22.2",

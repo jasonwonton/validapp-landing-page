@@ -27,6 +27,7 @@ test('inbox badges and TBH detail reactions stay consistent when returning', asy
 test('Ask Me reply opens as a full page and browser back returns to inbox', async ({ page }) => {
     await signIn(page);
     await page.locator('[data-inbox-filter="ask_me"]').click();
+    await page.getByRole('button', { name: 'Sent', exact: true }).click();
     await expect(page.locator('[data-anonymous-answer] .inbox-content-badge').first()).toHaveText('ASK ME');
     await page.locator('[data-anonymous-answer]').first().click();
     const reply = page.getByRole('dialog', { name: 'Reply', exact: true });

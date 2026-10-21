@@ -1,24 +1,39 @@
-.friends-dialog { width: min(660px, calc(100% - 24px)); max-height: calc(100dvh - 40px); overflow-y: auto; padding: 20px; }
+.friends-dialog { width: min(660px, calc(100% - 24px)); max-height: calc(100dvh - 40px); overflow-y: auto; padding: 20px; color:var(--ink); }
 .friends-dialog .modal-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; }
 .friends-dialog h2 { margin:0; }
-.friends-search-form { display:grid; grid-template-columns:1fr auto; gap:8px; margin:16px 0; }
+.friends-dialog .friends-search-form { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; margin:16px 0; padding:0; }
 .friends-search-form label { grid-column:1 / -1; }
 .friends-search-form input { min-width:0; }
 .friends-tabs { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; }
-.friends-tabs button { border:1px solid var(--line, #b5d0d0); border-radius:18px; padding:10px 12px; background:var(--card, white); color:inherit; min-height:44px; }
-.friends-tabs button[aria-pressed=true] { background:#176a70; color:white; }
-.friend-row { border-bottom:1px solid var(--line, #b5d0d0); padding:14px 0; }
+.friends-tabs button { border:1px solid var(--outline, #b5d0d0); border-radius:18px; padding:10px 12px; background:var(--white); color:inherit; min-height:44px; }
+.friends-tabs button[aria-pressed=true] { background:var(--dark-teal); color:var(--white); }
+.friend-row { border-bottom:1px solid var(--outline, #b5d0d0); padding:14px 0; }
 .friend-person { display:flex; gap:12px; align-items:center; border:0; background:transparent; color:inherit; padding:0; width:100%; text-align:left; min-height:48px; }
 .friend-person > span:last-child { display:grid; gap:4px; overflow-wrap:anywhere; }
 .friend-person small { display:block; }
 .friend-row-actions { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 0 60px; align-items:center; }
 .friend-row-actions button { min-height:44px; padding:10px 14px; }
-.friend-warning { color:#9a4d13; }
+.friend-warning { color:var(--danger-text); }
 .friend-setting { display:flex; justify-content:space-between; align-items:center; gap:16px; margin:16px 0; }
 .friend-setting span { display:grid; gap:8px; }
 .friend-setting input { flex-shrink:0; width:24px; height:24px; }
 .friend-link { overflow-wrap:anywhere; }
 [data-friend-qr] canvas { max-width:100%; height:auto; background:white; }
-@media (prefers-color-scheme: dark) { .friends-tabs button { background:#12383a; } .friend-warning { color:#f6bd83; } }
-.notification-row { display:grid; gap:6px; text-align:left; color:inherit; background:transparent; border:0; border-bottom:1px solid var(--line, #b5d0d0); padding:16px 6px; min-height:48px; width:100%; }
+.notification-row { display:grid; gap:6px; text-align:left; color:inherit; background:transparent; border:0; border-bottom:1px solid var(--outline, #b5d0d0); padding:16px 6px; min-height:48px; width:100%; }
 .notification-row small { overflow-wrap:anywhere; }
+.parent-approval-dialog video, .parent-approval-dialog [data-parent-preview] { display:block; width:100%; max-height:55dvh; object-fit:contain; margin:12px auto; }
+.parent-approval-dialog form { display:grid; gap:14px; }
+.parent-approval-dialog label { display:grid; gap:8px; }
+.parent-approval-dialog label.friend-setting { display:flex; }
+
+.chat-page-header { grid-template-columns:minmax(44px,1fr) auto minmax(44px,1fr); }
+.chat-header-actions { display:flex; justify-self:end; align-items:center; gap:0; }
+.chat-header-actions .chat-icon-button { position:relative; width:40px; min-width:40px; }
+.chat-header-actions [data-bell-count], .chat-header-actions [data-friend-count] { position:absolute; font-size:11px; right:0; top:0; }
+.profile-friend-actions { margin:16px 0; justify-content:center; }
+.chat-friendship-note { padding:8px 16px; margin:0; text-align:center; font-size:.8rem; background:var(--white); color:var(--muted); }
+
+.anonymous-sent-row { grid-template-columns:minmax(0,1fr); gap:8px; }
+.anonymous-sent-row > .text-button { justify-self:end; min-height:44px; }
+.anonymous-sent-row .friend-person > span:first-child { flex:0 0 48px; width:48px; height:48px; }
+.parent-view [data-parent-view-content] { display:grid; gap:12px; }

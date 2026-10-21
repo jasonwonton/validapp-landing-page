@@ -82,13 +82,13 @@ await build({
 });
 await rm(path.join(outputRoot, "app", "calls", "livekit-entry.js"), { force: true });
 
-await versionStaticAssets(outputRoot);
-
-console.log(`Static site packaged in ${path.relative(repositoryRoot, outputRoot)}/`);
-
 await build({
     entryPoints: [path.join(repositoryRoot, "app", "friends", "qr-entry.js")],
     outfile: path.join(outputRoot, "app", "friends", "qr.js"),
     bundle: true, format: "esm", target: ["es2020"], minify: true, legalComments: "none",
 });
 await rm(path.join(outputRoot, "app", "friends", "qr-entry.js"), { force: true });
+
+await versionStaticAssets(outputRoot);
+
+console.log(`Static site packaged in ${path.relative(repositoryRoot, outputRoot)}/`);

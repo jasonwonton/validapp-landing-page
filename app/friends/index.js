@@ -1,3 +1,5 @@
+import { userMessage } from "../user-message.js";
+import { confirmSheet } from "../ui-dialogs.js";
 import { relationshipFor, parseAddLink, suggestionDescription } from "./model.js";
 
 export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, avatarMarkup, openProfile, openChat, onChanged, showToast }) {
@@ -31,9 +33,10 @@ export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, av
 
     function row(person, { blocked = false, suggested = false } = {}) {
         const id = personId(person);
+        if (person.anonymous_sender === true) person = { user_id: id, first_name: "Anonymous sender", anonymous_sender: true };
         const state = blocked ? "blocked" : relation(person);
         const name = person.name || [person.first_name, person.last_name].filter(Boolean).join(" ") || person.username || "Valid user";
-        const description = suggested ? suggestionDescription(person) : person.username ? `@${person.username}` : person.school_name || "";
+        const description = suggested ? suggestionDescription(person) : [person.username ? `@${person.username}` : person.school_name || "", person.source_chat_name ? `From ${person.source_chat_name}` : ""].filter(Boolean).join(" · ");
         const warning = person.held || person.connection?.known === false
             ? `<small class="friend-warning">You may not know this person.${person.requester_is_adult ? " This account is an adult." : ""}</small>` : "";
         // Held request text must never enter the DOM, even if a stale response
@@ -115,12 +118,13 @@ export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, av
                     const map = new Map([...(data.friends?.friends || []), ...result.value.friends].map((item) => [personId(item), item]));
                     data.friends = { ...result.value, friends: [...map.values()] };
                 } else data[key] = result.value;
-            } else errors[key] = result.reason.message || "Couldn't load this section.";
+            } else errors[key] = userMessage(result.reason, "Couldn't load this section.");
         }
         errors.privacy = errors.reach || errors.messages;
         loading = false;
         render();
         onChanged?.();
+        if (query) await search();
     }
 
     async function search() {
@@ -139,7 +143,7 @@ export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, av
         if (results[0].status === "fulfilled" && results[0].value) people.set(personId(results[0].value), results[0].value);
         searchResults = [...people.values()];
         const failure = results.find((result) => result.status === "rejected" && result.reason.status !== 404);
-        searchError = failure && !searchResults.length ? failure.reason.message : "";
+        searchError = failure && !searchResults.length ? userMessage(failure.reason, "Couldn't search. Try again.") : "";
         searchLoading = false;
         render();
     }
@@ -154,9 +158,12 @@ export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, av
 
     async function act(action, id) {
         if (busy.has(id) || !owner || String(getUser()?.id) !== owner) return;
+        const account = owner, epoch = generation;
         const person = allPeople().find((p) => personId(p) === id);
         if (!person) return;
-        if (["remove", "block", "report"].includes(action) && !confirm(`${action === "remove" ? "Remove friend" : action === "block" ? "Block" : "Report and block"} ${person.first_name || "this account"}?`)) return;
+        if (["remove", "block", "report"].includes(action) && !await confirmSheet({ title: `${action === "remove" ? "Remove friend" : action === "block" ? "Block" : "Report and block"} ${person.first_name || "this account"}?`, confirmLabel: action === "remove" ? "Remove friend" : action === "block" ? "Block" : "Report", destructive: true })) return;
+        if (action === "accept" && (person.held || person.connection?.known === false) && !await confirmSheet({ title: `Do you know ${person.first_name || "this person"}?`, message: `Only accept people you know.${person.requester_is_adult ? " This account is an adult." : ""}`, confirmLabel: "Accept", cancelLabel: "Go back" })) return;
+        if (!alive(account, epoch)) return;
         if (action === "message") { dialog.close(); return openChat(person); }
         const mutations = {
             add: () => api.sendFriendRequest(owner, id, linkSource), accept: () => api.acceptFriendRequest(owner, id),
@@ -166,7 +173,6 @@ export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, av
             dismiss: () => api.dismissFriendSuggestion(owner, id),
         };
         if (!mutations[action]) return;
-        const account = owner;
         ++generation; // Retire reads started before this write.
         ++searchGeneration;
         busy.add(id); actionError = ""; render();
@@ -179,11 +185,10 @@ export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, av
             if (["block", "report"].includes(action)) searchResults = searchResults.filter((p) => personId(p) !== id);
             showToast(next === "requested" ? "Friend request sent" : next === "added" ? "You're friends" : action === "unblock" ? "Unblocked. Your previous friendship stays removed." : "Updated");
             await refresh();
-            if (query) await search();
             onChanged?.({ action, userId: id });
         } catch (error) {
             if (String(getUser()?.id) !== account || owner !== account) return;
-            actionError = error.message || "Couldn't update this person. Try again.";
+            actionError = userMessage(error, "Couldn't update this person. Try again.");
             // A timed out write may have committed; repair before another tap.
             await refresh();
         } finally { if (owner === account) { busy.delete(id); render(); } }
@@ -208,7 +213,7 @@ export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, av
                 const person = await api.resolveAddLink(id, username);
                 if (!alive(id, epoch)) return;
                 searchResults = [person]; searchError = "";
-            } catch (error) { if (alive(id, epoch)) { searchResults = []; searchError = error.message; } }
+            } catch (error) { if (alive(id, epoch)) { searchResults = []; searchError = userMessage(error, "This link is unavailable."); } }
             if (alive(id, epoch)) { searchLoading = false; render(); }
         }
     }
@@ -227,7 +232,7 @@ export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, av
             canvas.setAttribute("role", "img"); canvas.setAttribute("aria-label", "QR code for your Add me link");
             await toCanvas(canvas, link.url, { width: 240, margin: 2 });
             dialog.querySelector("[data-friend-qr]")?.append(canvas);
-        } catch (error) { if (alive(id, epoch)) { actionError = error.message; render(); } }
+        } catch (error) { if (alive(id, epoch)) { actionError = userMessage(error, "Couldn't complete this step. Try again."); render(); } }
     }
 
     async function shareLink() {
@@ -239,12 +244,13 @@ export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, av
             if (String(getUser()?.id) !== id || owner !== id) return;
             link = await api.updateAddLink(id, true);
             if (owner === id) await myCode();
-        } catch (error) { if (error.name !== "AbortError" && owner === id) { actionError = error.message; render(); } }
+        } catch (error) { if (error.name !== "AbortError" && owner === id) { actionError = userMessage(error, "Couldn't complete this step. Try again."); render(); } }
     }
 
     function clear() {
         ++generation; ++searchGeneration; clearTimeout(timer);
         owner = null; data = {}; errors = {}; searchResults = []; busy = new Set();
+        loading = false; searchLoading = false; searchError = ""; actionError = "";
         query = ""; link = null; linkSource = null; returnFromProfile = false;
         if (dialog.open) dialog.close();
         dialog.replaceChildren();
@@ -255,7 +261,16 @@ export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, av
         query = event.target.value; linkSource = null; ++searchGeneration;
         clearTimeout(timer); timer = setTimeout(search, 300);
     });
-    dialog.addEventListener("submit", (event) => { event.preventDefault(); clearTimeout(timer); void search(); });
+    dialog.addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (event.target.matches("[data-add-link-form]")) {
+            const username = parseAddLink(dialog.querySelector("#friendAddLink").value.trim());
+            if (username) void open({ username, source: "link" });
+            else { actionError = "Use a https://validapp.lol/add/username link."; render(); }
+            return;
+        }
+        clearTimeout(timer); void search();
+    });
     dialog.addEventListener("click", (event) => {
         const target = event.target.closest("button");
         if (!target || target.disabled) return;
@@ -272,27 +287,42 @@ export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, av
         if (target.matches("[data-my-code]")) return void myCode();
         if (target.matches("[data-share-add-link]")) return void shareLink();
         if (target.matches("[data-open-add-link]")) {
-            const input = prompt("Paste a Valid Add me link, including a link read by your camera's QR scanner:");
-            if (input === null) return;
-            const username = parseAddLink(input.trim());
-            if (username) void open({ username, source: "qr" });
-            else { actionError = "Use a https://validapp.lol/add/username link."; render(); }
+            dialog.querySelector(".friends-content").innerHTML = `<form data-add-link-form><label for="friendAddLink">Valid Add me link</label><input id="friendAddLink" type="url" required placeholder="https://validapp.lol/add/username" autocomplete="off"><p>Paste a link, or use your device's camera QR scanner and open the result in Valid.</p><button class="primary-button" type="submit">Open link</button></form>${typeof BarcodeDetector === "function" ? '<label>Read a QR image<input type="file" accept="image/*" data-friend-qr-file></label>' : ''}`;
+            dialog.querySelector("#friendAddLink").focus();
         }
     });
     dialog.addEventListener("change", async (event) => {
         const input = event.target;
+        if (input.matches("[data-friend-qr-file]")) {
+            const file = input.files?.[0], account = owner, epoch = generation;
+            if (!file) return;
+            try {
+                if (file.size > 8 * 1024 * 1024) throw new Error("Choose a QR image smaller than 8 MB.");
+                const bitmap = await createImageBitmap(file);
+                try {
+                    const codes = await new BarcodeDetector({ formats: ["qr_code"] }).detect(bitmap);
+                    const username = codes.map((code) => parseAddLink(code.rawValue)).find(Boolean);
+                    if (!username) throw new Error("No Valid Add me QR code was found. Paste the link instead.");
+                    if (alive(account, epoch)) await open({ username, source: "qr" });
+                } finally { bitmap.close(); }
+            } catch (error) { if (alive(account, epoch)) { actionError = userMessage(error, "Couldn't complete this step. Try again."); render(); } }
+            return;
+        }
         if (!input.matches("[data-friend-setting], [data-add-link-enabled]")) return;
-        const id = owner;
+        const id = owner, epoch = generation;
         if (busy.has("privacy")) return;
         busy.add("privacy"); input.disabled = true;
         try {
-            if (input.matches("[data-add-link-enabled]")) link = await api.updateAddLink(id, input.checked);
-            else if (input.dataset.friendSetting === "reach") data.reach = await api.updateFriendReach(id, input.checked);
-            else data.messages = await api.updateMessageRequests(id, input.checked);
-        } catch (error) { if (owner === id) actionError = error.message; }
+            const key = input.matches("[data-add-link-enabled]") ? "link" : input.dataset.friendSetting;
+            const result = key === "link" ? await api.updateAddLink(id, input.checked)
+                : key === "reach" ? await api.updateFriendReach(id, input.checked) : await api.updateMessageRequests(id, input.checked);
+            if (!alive(id, epoch)) return;
+            if (key === "link") link = result;
+            else data[key] = result;
+        } catch (error) { if (owner === id) actionError = userMessage(error, "Couldn't complete this step. Try again."); }
         finally { if (owner === id) { busy.delete("privacy"); await refresh(); } }
     });
     window.addEventListener("focus", () => { if (dialog.open && owner) void refresh(); });
     window.addEventListener("online", () => { if (dialog.open && owner) void refresh(); });
-    return { open, refresh, clear, relationship: relation, returnFromProfile() { if (!returnFromProfile) return false; returnFromProfile = false; if (owner && enabled()) { dialog.showModal(); render(); void refresh(); } return true; } };
+    return { open, refresh, clear, invalidate() { if (dialog.open) void refresh(); else { ++generation; data = {}; } }, relationship: relation, returnFromProfile() { if (!returnFromProfile) return false; returnFromProfile = false; if (owner && enabled()) { dialog.showModal(); render(); void refresh(); } return true; } };
 }
