@@ -73,9 +73,15 @@ test("a processing video waits, then plays its H.264 rendition", async ({ page }
         });
         const readyState = element.readyState;
         const before = element.currentTime;
-        await element.play();
-        await new Promise((resolve) => setTimeout(resolve, 400));
-        return { readyState, before, after: element.currentTime, width: element.videoWidth,
+        // The fixture is shorter than 400 ms and loops. Sampling at a fixed
+        // instant can land on its zero-time loop boundary despite playback.
+        const after = await new Promise((resolve, reject) => {
+            const timer = setTimeout(() => { element.removeEventListener('timeupdate', advanced); reject(new Error('Video did not advance')); }, 3000);
+            function advanced() { if (element.currentTime > before) { clearTimeout(timer); element.removeEventListener('timeupdate', advanced); resolve(element.currentTime); } }
+            element.addEventListener('timeupdate', advanced);
+            element.play().catch(reject);
+        });
+        return { readyState, before, after, width: element.videoWidth,
             h264: element.canPlayType('video/mp4; codecs="avc1.640028"') };
     });
     expect(playback.h264).not.toBe("");

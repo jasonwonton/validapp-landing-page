@@ -70,7 +70,7 @@ test("the generic api sentence yields to the caller's more specific fallback", (
 
 test("app surfaces never show a raw error.message", async () => {
     const { readFile } = await import("node:fs/promises");
-    const files = ["app/app.js", "app/chat/index.js", "app/chat/room-tools.js", "app/chat/sticker-maker.js", "app/calls/index.js", "app/stories/index.js", "app/api.js"];
+    const files = ["app/app.js", "app/friends/index.js", "app/activity.js", "app/parent-approval.js", "app/parent-access.js", "app/chat/index.js", "app/chat/room-tools.js", "app/chat/sticker-maker.js", "app/calls/index.js", "app/stories/index.js", "app/api.js"];
     for (const file of files) {
         const source = await readFile(new URL(`../../${file}`, import.meta.url), "utf8");
         const raw = source.split("\n").map((line, index) => [index + 1, line])

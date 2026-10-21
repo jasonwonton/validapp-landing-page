@@ -100,6 +100,7 @@ test("onboarding keeps every action reachable on compact phones", async ({ page 
     await expect(dialog.getByRole("listbox", { name: "Age" })).toBeVisible();
     await expect(dialog.locator('[data-signup-age="13"]')).toHaveCSS("font-family", /Jua/);
     await expect(dialog.getByRole("button", { name: "Get Started!" })).toBeInViewport();
+    await dialog.locator('[data-signup-age="16"]').click();
     await dialog.getByRole("button", { name: "Get Started!" }).click();
     await expect(dialog.getByRole("button", { name: "Choose Friends" })).toBeInViewport();
     await dialog.getByRole("button", { name: "Choose Friends" }).click();
@@ -146,6 +147,7 @@ test("onboarding keeps every action reachable on compact phones", async ({ page 
 
 test("signup school search lists, filters, and falls back from 50 nearby schools", async ({ page }) => {
     const dialog = await openSignup(page);
+    await dialog.locator('[data-signup-age="16"]').click();
     await dialog.getByRole("button", { name: "Get Started!" }).click();
     await dialog.getByRole("button", { name: "Choose Friends" }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();

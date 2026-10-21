@@ -105,6 +105,7 @@ export function createCommentsView(context) {
     let pendingCreate = null;
     let creating = false;
     let loading = false;
+    let createRevision = 0, reloadAfterCreate = false;
     const reactionBusy = new Set();
     let moderation = { notice: null, restriction: { is_restricted: false, expires_at: null } };
     let reactorState = { commentId: null, rows: [], hasMore: false, loading: false };
@@ -315,28 +316,37 @@ export function createCommentsView(context) {
         return entry;
     }
 
-    async function loadRoots({ append = false, quiet = false } = {}) {
+    function repairAfterCreate() {
+        if (creating || !reloadAfterCreate || !target) return;
+        reloadAfterCreate = false;
+        void loadRoots({ quiet: true, preserveStatus: true });
+    }
+
+    async function loadRoots({ append = false, quiet = false, preserveStatus = false } = {}) {
         const targetAtStart = target;
+        const revision = createRevision;
         loading = !append;
-        $("#commentsStatus").textContent = append ? "Loading older comments…" : "";
+        if (!preserveStatus) $("#commentsStatus").textContent = append ? "Loading older comments…" : "";
         if (!append && !quiet) render();
         try {
             const cursor = append ? roots.filter((comment) => !comment.pending).at(-1) : null;
             const page = await call("list", cursor, ROOT_PAGE_SIZE);
             if (target !== targetAtStart) return;
+            if (revision !== createRevision) { reloadAfterCreate = true; return; }
             const pending = roots.filter((comment) => comment.pending);
             roots = uniqueById(append ? [...roots, ...page] : [...pending, ...page]).slice(0, MAX_ROOTS);
             hasMoreRoots = page.length === ROOT_PAGE_SIZE && roots.length < MAX_ROOTS;
-            $("#commentsStatus").textContent = "";
+            if (!preserveStatus) $("#commentsStatus").textContent = "";
             storeThread();
         } catch (error) {
             if (target !== targetAtStart) return;
             // A thread already shown from the cache stays put instead of flashing an error.
-            if (!quiet) $("#commentsStatus").textContent = userMessage(error, "Could not load comments.");
+            if (!quiet && !preserveStatus) $("#commentsStatus").textContent = userMessage(error, "Could not load comments.");
         } finally {
             if (target === targetAtStart) {
                 loading = false;
                 render();
+                repairAfterCreate();
             }
         }
     }
@@ -421,6 +431,7 @@ export function createCommentsView(context) {
             visible_reply_count: 0, reaction_count: 0, reaction_summary: {},
         };
         creating = true;
+        ++createRevision;
         insertComment(optimistic);
         threadTarget.onCountChange?.(1);
         draft.value = "";
@@ -453,8 +464,11 @@ export function createCommentsView(context) {
             $("#commentsStatus").textContent = userMessage(error, "Could not post your comment. Try again.");
             render();
         } finally {
-            creating = false;
-            updateComposer();
+            if (target === threadTarget) {
+                creating = false;
+                updateComposer();
+                repairAfterCreate();
+            }
         }
     }
 
@@ -606,6 +620,7 @@ export function createCommentsView(context) {
     reactorsDialog.addEventListener("cancel", () => reactorsDialog.close());
 
     async function open(nextTarget, { commentId = null } = {}) {
+        ++createRevision; reloadAfterCreate = false; creating = false;
         target = nextTarget;
         roots = [];
         replies = new Map();
@@ -629,6 +644,7 @@ export function createCommentsView(context) {
     }
 
     function clear() {
+        ++createRevision; reloadAfterCreate = false;
         target = null;
         roots = [];
         replies = new Map();

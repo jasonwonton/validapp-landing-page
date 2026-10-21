@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "valid-web-";
-const CACHE_NAME = `${CACHE_PREFIX}v122`;
+const CACHE_NAME = `${CACHE_PREFIX}v123`;
 // Every module the startup graph imports statically must be listed here, or the
 // installed app cannot start offline; scripts/tests/service-worker-shell.test.mjs
 // walks the import graph and enforces it. Dynamic imports that need the network
@@ -9,6 +9,11 @@ const APP_SHELL = [
     "./styles.css",
     "./preferences.js",
     "./app.js",
+    "./activity.js",
+    "./ask-compose.js",
+    "./college-majors.js",
+    "./parent-approval.js",
+    "./parent-access.js",
     "./api.js",
     "./session-recovery.js",
     "./passkeys.js",
@@ -35,6 +40,10 @@ const APP_SHELL = [
     "./routes/play.js",
     "./routes/chats.js",
     "./routes/profile.js",
+    "./friends/index.js",
+    "./friends/model.js",
+    "./friends/styles.css",
+    "./friends/qr.js",
     "./chat/styles.css",
     "./chat/presence.js",
     "./chat/activity-settings.js",
@@ -68,6 +77,8 @@ const APP_SHELL = [
     "./question-attribution.js",
     "./notification-soft-prompt.js",
     "./chat/outbox.js",
+    "./chat/drafts.js",
+    "./chat/direct-draft.js",
     "./chat/thumbhash.js",
     "./chat/realtime.js",
     "./calls/service.js",
@@ -80,7 +91,8 @@ const APP_SHELL = [
     "../assets/AppIconV2.png",
     "../assets/pwa/icon-192.png",
     "../assets/pwa/icon-512.png",
-    "../assets/pwa/icon-maskable-512.png",
+    // The OS fetches this install-only maskable icon from the manifest. It
+    // isn't rendered by the offline app; keep room for actual offline flows.
     "../assets/valid_logo.png",
     "../assets/Jua-Latin.woff2",
 ];

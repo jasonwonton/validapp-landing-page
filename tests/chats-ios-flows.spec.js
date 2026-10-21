@@ -252,6 +252,9 @@ test("Call back and View N work from the inbox without opening the room", async 
             }
             return response;
         };
+        // A predictable permission preflight keeps the outcome from replacing
+        // End call halfway through a click on browsers without a microphone.
+        Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }) } });
         window.callLog = [];
         DemoAPI.prototype.startCall = async (_user, chatId) => { window.callLog.push(["start", chatId]); throw Object.assign(new Error("No calls in this test"), { status: 409 }); };
         const acknowledge = DemoAPI.prototype.acknowledgeMissedCall;
@@ -269,8 +272,9 @@ test("Call back and View N work from the inbox without opening the room", async 
     await expect(page).not.toHaveURL(/chat=chat-mateo/);
     await expect(page.locator('[data-chat-screen="room"]')).toBeHidden();
     const call = page.getByRole("dialog", { name: "Valid call" });
-    // Close the outcome, or end it while the browser still asks for the microphone.
-    await call.getByRole("button", { name: /^(Close|End call)$/ }).first().click();
+    await expect(call.locator('[data-call-status]')).toHaveText('Could not connect');
+    await expect.poll(() => page.evaluate(() => window.callLog)).toEqual(expect.arrayContaining([["start", "chat-mateo"]]));
+    await call.getByRole("button", { name: "Close", exact: true }).click();
     await expect(call).toBeHidden();
     const noah = page.locator(".chat-list .chat-row").filter({ hasText: "Noah Williams" });
     await noah.getByRole("button", { name: "View 1 unopened snap" }).click();

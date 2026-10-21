@@ -87,7 +87,10 @@ test('inbox has pending photo/video actions and Memento indicator; settings are 
  await page.getByRole('button',{name:/^sign in$/i}).click();
  await expect(page.locator('#feedList > article').first()).toHaveCSS('border-top-width','3px');
  await page.getByRole('button',{name:'Profile',exact:true}).click();
- await expect(page.locator('#privacySettings').getByRole('button',{name:'Activity Status',exact:true})).toBeVisible();
+ await page.locator('#privacyPageButton').click();
+ const privacy=page.getByRole('dialog',{name:'Privacy',exact:true});
+ await expect(privacy.getByRole('button',{name:'Activity Status',exact:true})).toBeVisible();
+ await privacy.getByRole('button',{name:'Back to settings',exact:true}).click();
  await page.getByRole('button',{name:'Chats',exact:true}).click();
  // iOS rows carry no Memento camera; the status line says what is new.
  await expect(page.locator('[data-list-key="chat-friends"] .chat-needs-memento')).toHaveCount(0);
@@ -95,6 +98,10 @@ test('inbox has pending photo/video actions and Memento indicator; settings are 
  await page.getByRole('button',{name:'View 1 unopened snap'}).click();
  await expect(page.getByRole('dialog',{name:'Chat media'})).toBeVisible();
  await page.getByRole('dialog',{name:'Chat media'}).getByRole('button',{name:'Close',exact:true}).click();
+ // The inbox's quick snap action stays in the inbox. Enter the room before
+ // checking its Memento toolbar (also absent on the unmodified v122 source).
+ await expect(page.locator('.chat-list')).toBeVisible();
+ await page.locator('[data-list-key="chat-noah"] .chat-row-main').click();
  await expect(page.locator('[data-open-memento-gallery] [data-ui-icon="memento"]')).toBeVisible();
 });
 

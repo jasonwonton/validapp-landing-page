@@ -1429,6 +1429,17 @@ body.play-active .play-actions { margin: 0; }
 .signup-grade-option strong { font-size: 1rem; }
 .signup-grade-option small { color: var(--ink); font-size: .72rem; }
 .signup-grade-option.selected { min-height: 85px; border-color: var(--outline); transform: scale(1.05); }
+.signup-grade-options.signup-major-options { grid-template-columns: minmax(0, 1fr); }
+.signup-major-options .signup-grade-option { display: flex; justify-content: space-between; text-align: left; padding: 12px 18px; min-height: 52px; font-size: 1rem; }
+.signup-major-options .signup-grade-option.selected { min-height: 60px; transform: scale(1.03); }
+.signup-major-search { width: 100%; text-align: left; }
+.signup-major-search input { margin-top: 6px; width: 100%; }
+.signup-grade-step.asking-major:not(.hidden) { grid-template-rows: auto auto minmax(0, 1fr) auto; align-content: stretch; overflow: hidden; }
+.signup-grade-step.asking-major h2 { font-size: 28px; line-height: 1.15; }
+.asking-major > .form-hint { font-size: 1.125rem; color: var(--ink); }
+.asking-major .signup-major-options { min-height: 0; grid-template-rows: auto minmax(0, 1fr) auto; align-items: stretch; overflow: hidden; }
+.signup-major-list { min-height: 0; display: grid; align-content: start; gap: 10px; overflow-y: auto; overscroll-behavior: contain; padding: 4px 8px 8px; }
+.signup-major-options [data-skip-signup-major] { min-height: 44px; }
 .signup-grade-step > .primary-button { width: min(100%, 460px); }
 .signup-terms { max-width: 420px; font-size: .9rem; text-align: center; }
 .signup-terms a { color: var(--dark-teal); text-underline-offset: 2px; }

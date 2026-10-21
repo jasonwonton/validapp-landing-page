@@ -29,10 +29,13 @@ test("settings follow iOS order: Appearance, one Settings card, Feedback, Sign o
     expect(at("feedbackButton")).toBeLessThan(at("profileSignOutButton"));
     const settings = page.locator("#privacySettings");
     await expect(settings.getByRole("heading", { name: "Settings" })).toBeVisible();
-    await expect(settings.locator(".settings-row strong")).toHaveText(["Notifications", "Activity Status", "Blocked Users"]);
+    await expect(settings.locator(".settings-row strong")).toHaveText(["Notifications", "Privacy"]);
     await expect(page.locator("#notificationStatusText")).toHaveText("All on");
     await expect(page.getByText("System settings")).toHaveCount(0);
-    await expect(page.getByText("Privacy & Safety")).toHaveCount(0);
+    await page.locator('#privacyPageButton').click();
+    const privacy = page.getByRole('dialog', { name: 'Privacy', exact: true });
+    await expect(privacy.locator('.settings-row:visible strong')).toHaveText(['Activity Status', 'Blocked Users']);
+    await privacy.getByRole('button', { name: 'Back to settings', exact: true }).click();
     // With a passkey there is no CTA, and Sign out needs no warning.
     await expect(page.locator("#addPasskeyButton")).toBeHidden();
 });

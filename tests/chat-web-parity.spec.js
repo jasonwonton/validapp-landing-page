@@ -72,6 +72,8 @@ test("a double-tapped send posts once, clears first, keeps focus and grows to fi
 });
 
 test("day separators, swipe-left time reveal and dated long-press footer", async ({ page }) => {
+    // Relative fixture messages must stay in today when this runs near midnight.
+    await page.clock.install({ time: new Date("2030-03-05T12:00:00") });
     await signIn(page);
     await withExtraMessages(page, { yesterdayFirst: true });
     await openNoah(page);

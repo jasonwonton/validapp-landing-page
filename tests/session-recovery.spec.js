@@ -53,6 +53,7 @@ test('missing cookie on an unsupported browser keeps the age screen and explains
     const dialog = page.locator('#signupDialog');
     await expect(dialog.getByRole('button', { name: 'Get Started!' })).toBeVisible();
     await expect(page.locator('#retrySessionButton')).toBeHidden();
+    await dialog.locator('[data-signup-age="16"]').click();
     await dialog.getByRole('button', { name: 'Get Started!' }).click();
     await expect(page.locator('#signupBrowserHelp')).toBeVisible();
     await expect(page.locator('#signupStatus')).toContainText('cannot use passkeys');

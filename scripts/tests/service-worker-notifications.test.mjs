@@ -221,12 +221,18 @@ test("no system notification for the chat the user is looking at", async () => {
     assert.equal(worker.shown.length, 0);
     assert.equal(page.messages[0].type, "VALID_PUSH_IN_ACTIVE_CHAT");
 
-    // Another chat, or the same chat in a background tab, still notifies.
+    // Another chat in the foreground reaches the existing in-app banner.
     await worker.push({ title: "Noah", body: "yo", type: "chat_message", url: "/app/?tab=chats&chat=c2", tag: "valid-chat-c2", data: { chat_id: "c2" } });
-    assert.equal(worker.shown.length, 1);
+    assert.equal(worker.shown.length, 0);
+    assert.equal(page.messages.at(-1).type, "VALID_PUSH_FOREGROUND");
+    assert.equal(new URL(page.messages.at(-1).payload.url).searchParams.get("chat"), "c2");
+    // A background page cannot display that banner: the system must notify.
+    page.focused = false;
+    page.visibilityState = "hidden";
     await worker.message({ type: "VALID_ACTIVE_CHAT", chatId: "c1", visible: false }, "a");
     await worker.push({ title: "Weekend Crew", body: "again", type: "chat_message", url: "/app/?tab=chats&chat=c1", data: { chat_id: "c1" } });
-    assert.equal(worker.shown.length, 2);
+    assert.equal(worker.shown.length, 1);
+    assert.equal(new URL(worker.shown[0].data.url).searchParams.get("chat"), "c1");
 });
 
 test("after the worker restarts, a focused client's URL still suppresses its chat", async () => {

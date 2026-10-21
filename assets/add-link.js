@@ -43,6 +43,8 @@
       open.href = `validapp://add/${state.username}`;
       open.textContent = `Already have Valid? Add ${state.firstName}`;
       open.hidden = false;
+      const web = document.querySelector('.al-web');
+      if (web) { web.href = `/app/?add=${encodeURIComponent(state.username)}`; web.textContent = `Add ${state.firstName} in your browser`; web.hidden = false; }
       note.textContent = `After you sign up, open this link again to add ${state.firstName}.`;
       return;
     }

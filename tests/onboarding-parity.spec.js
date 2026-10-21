@@ -23,8 +23,10 @@ test("the age screen is the signed-out root and sign-in is a sheet over it", asy
     const dialog = await openRoot(page);
     await expect(dialog.getByRole("heading", { name: "How old are you?" })).toHaveCount(0);
     await expect(dialog.getByText("By entering your age, you agree to our")).toBeVisible();
-    await expect(dialog.locator("[data-signup-age]")).toHaveCount(23);
-    await expect(dialog.locator('[data-signup-age="35"]')).toHaveCount(1);
+    await expect(dialog.locator("[data-signup-age]")).toHaveCount(45);
+    await expect(dialog.locator('[data-signup-age="55"]')).toHaveText("55+");
+    await expect(dialog.locator("#signupAge")).toHaveValue("");
+    await expect(dialog.locator('[data-signup-age="12"]')).toHaveText("< 13");
     await expect(dialog.getByRole("button", { name: "Get Started!" })).toBeVisible();
     await expect(page.getByText("Welcome Back")).toBeHidden();
 
@@ -48,6 +50,7 @@ test("Log in on the age screen starts the passkey prompt in the same tap", async
 
 test("new users go through the iOS sign-up order and land on Play", async ({ page }) => {
     const dialog = await openRoot(page);
+    await dialog.locator('[data-signup-age="16"]').click();
     await dialog.locator('[data-signup-age="16"]').click();
     await dialog.getByRole("button", { name: "Get Started!" }).click();
 
@@ -129,7 +132,8 @@ for (const [label, picked, error] of [
         }, { picked, error });
         const dialog = await openRoot(page);
         await dialog.locator('[data-signup-age="16"]').click();
-        await dialog.getByRole("button", { name: "Get Started!" }).click();
+        await dialog.locator('[data-signup-age="16"]').click();
+    await dialog.getByRole("button", { name: "Get Started!" }).click();
         if (process.env.SIGNUP_SHOTS === "1" && test.info().project.name === "android" && label.startsWith("only")) {
             await page.screenshot({ path: `${process.env.HOME}/Desktop/validapp-flows/shots/signup-friends/01-choose-friends.png` });
         }
@@ -148,6 +152,7 @@ test("a contact picker that fails to open falls back to the invite card with Con
     await page.addInitScript(() => { window.__demoContactPickerError = "SecurityError"; });
     const dialog = await openRoot(page);
     await dialog.locator('[data-signup-age="16"]').click();
+    await dialog.locator('[data-signup-age="16"]').click();
     await dialog.getByRole("button", { name: "Get Started!" }).click();
     await dialog.getByRole("button", { name: "Choose Friends" }).click();
     await expect(dialog.getByRole("button", { name: "Invite Friends" })).toBeVisible();
@@ -163,6 +168,7 @@ test("a contact picker that fails to open falls back to the invite card with Con
 test("browsers without a contact picker keep the friends card with an invite", async ({ page }) => {
     await page.addInitScript(() => { window.__demoNoContactPicker = true; });
     const dialog = await openRoot(page);
+    await dialog.locator('[data-signup-age="16"]').click();
     await dialog.getByRole("button", { name: "Get Started!" }).click();
     await expect(dialog.getByRole("heading", { name: "Pick a Couple Friends" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Invite Friends" })).toBeVisible();
@@ -173,6 +179,7 @@ test("browsers without a contact picker keep the friends card with an invite", a
 
 test("the school step searches first, falls back to ZIP, then adds a school with its grades", async ({ page }) => {
     const dialog = await openRoot(page);
+    await dialog.locator('[data-signup-age="16"]').click();
     await dialog.getByRole("button", { name: "Get Started!" }).click();
     await dialog.getByRole("button", { name: "Choose Friends" }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();
@@ -207,6 +214,7 @@ test("the school step searches first, falls back to ZIP, then adds a school with
 
 test("an existing number opens the sign-in sheet over sign-up", async ({ page }) => {
     const dialog = await openRoot(page);
+    await dialog.locator('[data-signup-age="16"]').click();
     await dialog.getByRole("button", { name: "Get Started!" }).click();
     await dialog.getByRole("button", { name: "Choose Friends" }).click();
     await dialog.getByRole("button", { name: "Continue" }).click();

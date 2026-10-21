@@ -89,7 +89,11 @@ test("Inbox filters match iOS All, Polls, TBHs, and Ask Me sections", async ({ p
 
     await filters.getByRole("button", { name: /Ask Me/ }).click();
     await expect(page.locator("#personalInboxDescription")).toHaveText("Private questions and replies from your Ask Me link.");
-    await expect(page.locator("[data-anonymous-question], [data-anonymous-answer]")).toHaveCount(3);
+    await expect(page.locator("[data-anonymous-question]")).toHaveCount(2);
+    await expect(page.locator("[data-anonymous-answer]")).toHaveCount(0);
+    await page.getByRole('button', { name: 'Sent', exact: true }).click();
+    await expect(page.locator("[data-anonymous-answer]")).toHaveCount(1);
+    await expect(page.locator("[data-anonymous-question]")).toHaveCount(0);
     await expect(page.locator("[data-feed-detail], [data-tbh-detail], [data-tbh-request]")).toHaveCount(0);
 
     await page.getByRole("button", { name: "School", exact: true }).click();

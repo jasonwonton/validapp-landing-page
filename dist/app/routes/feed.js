@@ -80,9 +80,15 @@ export function createFeedView(context) {
 
     function anonymousInboxRows() {
         if (state.feedType !== "personal" || !state.anonymousInbox || state.feedSearch.trim()) return [];
-        const answers = (state.anonymousInbox.answers || []).map((answer) => ({ key: `ask-answer:${answer.id}`, timestamp: answer.answered_at, html: `<button class="anonymous-reply-row" type="button" data-anonymous-answer="${escapeHTML(answer.id)}">${inboxAvatar(avatarMarkup({ first_name: answer.recipient_display_name, profile_picture_url: answer.recipient_profile_picture_url }, "anonymous-row-icon reply"), "ask")}<span class="anonymous-row-copy"><strong>${escapeHTML(answer.recipient_display_name)} replied to you</strong><span class="anonymous-row-message">${escapeHTML(answer.answer_text)}</span><span class="anonymous-row-meta"><span>Your message: ${escapeHTML(answer.question_body)}</span><time>${escapeHTML(relativeTime(answer.answered_at))}</time></span></span><span class="anonymous-row-state" aria-hidden="true">›</span></button>` }));
+        const sentIds = new Set((state.anonymousInbox.sent || []).map((item) => String(item.id)));
+        const answers = (state.anonymousInbox.answers || []).filter((item) => !sentIds.has(String(item.id))).map((answer) => ({ key: `ask-answer:${answer.id}`, timestamp: answer.answered_at, html: `<button class="anonymous-reply-row" type="button" data-anonymous-answer="${escapeHTML(answer.id)}">${inboxAvatar(avatarMarkup({ first_name: answer.recipient_display_name, profile_picture_url: answer.recipient_profile_picture_url }, "anonymous-row-icon reply"), "ask")}<span class="anonymous-row-copy"><strong>${escapeHTML(answer.recipient_display_name)} replied to you</strong><span class="anonymous-row-message">${escapeHTML(answer.answer_text)}</span><span class="anonymous-row-meta"><span>Your message: ${escapeHTML(answer.question_body)}</span><time>${escapeHTML(relativeTime(answer.answered_at))}</time></span></span><span class="anonymous-row-state" aria-hidden="true">›</span></button>` }));
         const questions = (state.anonymousInbox.questions || []).map((question) => ({ key: `ask-question:${question.id}`, timestamp: question.created_at, html: `<button class="anonymous-question-row ${question.opened_at ? "" : "unread"} ${question.status === "answered" ? "answered" : ""}" type="button" data-anonymous-question="${escapeHTML(question.id)}">${inboxAvatar('<span class="anonymous-row-icon" aria-hidden="true">?</span>', "ask")}<span class="anonymous-row-copy"><span class="anonymous-row-title"><strong>${escapeHTML(question.provenance_label)}</strong>${question.opened_at ? "" : `<span class="anonymous-new-pill">New</span>`}</span><span class="anonymous-row-message">${escapeHTML(question.body)}</span><span class="anonymous-row-meta"><span>${escapeHTML(question.source_platform ? `From ${question.source_platform[0].toUpperCase()}${question.source_platform.slice(1)}` : "Anonymous")}</span><time>${escapeHTML(relativeTime(question.created_at))}</time></span></span><span class="anonymous-row-state" aria-hidden="true">›</span></button>` }));
-        return [...answers, ...questions];
+        const sent = (state.anonymousInbox.sent || []).map((item) => ({
+            key: `ask-sent:${item.id}`, timestamp: item.created_at,
+            html: `<article class="anonymous-reply-row anonymous-sent-row"><button class="friend-person" type="button" data-anonymous-sent="${escapeHTML(item.id)}">${avatarMarkup(item.recipient_available === false ? { first_name: "?" } : { first_name: item.recipient_display_name, profile_picture_url: item.recipient_profile_picture_url }, "anonymous-row-icon reply")}<span><strong>To ${escapeHTML(item.recipient_available === false ? "an unavailable account" : item.recipient_display_name)}</strong><span>${escapeHTML(item.question_body)}</span><small>${item.answer_text ? `Reply: ${escapeHTML(item.answer_text)}` : "Sent anonymously"}</small></span></button>${item.recipient_available !== false && item.recipient_user_id ? `<button class="text-button" type="button" data-sent-recipient="${escapeHTML(item.id)}">Open profile</button>` : ""}</article>`,
+        }));
+        if (state.personalInboxFilter === "ask_me") return state.askBoxMode === "sent" ? [...sent, ...answers] : questions;
+        return [...sent, ...answers, ...questions];
     }
 
 
@@ -99,6 +105,8 @@ export function createFeedView(context) {
         if (!personalInboxFilters[state.personalInboxFilter] || hiddenFilters.has(state.personalInboxFilter)) state.personalInboxFilter = "all";
         $$('[data-inbox-filter]').forEach((button) => button.classList.toggle("hidden", hiddenFilters.has(button.dataset.inboxFilter)));
         const counts = personalInboxUnreadCounts();
+        $("#askInboxControls").classList.toggle("hidden", state.personalInboxFilter !== "ask_me");
+        $$('[data-ask-box]').forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.askBox === state.askBoxMode)));
         $$('[data-inbox-filter]').forEach((button) => {
             const filter = button.dataset.inboxFilter;
             const selected = filter === state.personalInboxFilter;
@@ -128,6 +136,8 @@ export function createFeedView(context) {
     // "New" (since this visit began) and "Earlier"; the divider holds still
     // until the user leaves the Inbox.
     function personalInboxSections(rows) {
+        // Sent is outgoing history; sending a question is not a new inbox item.
+        if (state.personalInboxFilter === "ask_me" && state.askBoxMode === "sent") return rows;
         const sections = [];
         const requests = state.tbhPendingRequests || [];
         if (tbhRequestsEnabled() && requests.length && ["all", "tbhs"].includes(state.personalInboxFilter)) {

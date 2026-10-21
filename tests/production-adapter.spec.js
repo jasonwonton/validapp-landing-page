@@ -82,7 +82,7 @@ test("local integration mode uses only the same-origin API proxy", async ({ page
         const { ValidAPI } = await import("/app/api.js");
         return new ValidAPI().baseURL;
     });
-    expect(baseURL).toBe("http://127.0.0.1:4173/api/v1");
+    expect(baseURL).toBe(new URL("/api/v1", page.url()).href);
 });
 
 test("real adapter preserves the released poll and TBH comment contracts", async ({ page }) => {
@@ -744,6 +744,8 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
         if (path === "/api/v1/users/21111111-1111-1111-1111-111111111111/profile") {
             return fulfill({ ...profile("Maya", 0), user_id: "21111111-1111-1111-1111-111111111111", last_name: "Chen", username: "maya_c", bio: "Student council and bad puns.", vote_count: 61 });
         }
+        if (/^\/api\/v1\/highschools\/\d+\/kind$/.test(path)) return fulfill({ school_id: Number(path.split('/')[4]), is_college: false });
+        if (path === "/api/v1/a/maya-contract/context") return fulfill({ is_active: true, recipient_display_name: "Maya Chen", recipient_username: "maya_c", max_length: 500, privacy_notice: "Your name stays hidden." });
         if (path === "/api/v1/users/21111111-1111-1111-1111-111111111111/ask-target") {
             const askTarget = { public_token: "maya-contract" };
             return fulfill(wrappedAskTarget ? { target: askTarget } : askTarget);
@@ -977,7 +979,7 @@ test("locked Feed shows received votes, vote-to-unlock, and notification activat
     await page.getByRole("button", { name: "Allow", exact: true }).click();
 
     await expect(notificationButton).toBeHidden();
-    expect(requests.filter((request) => request.path.endsWith("/web-push-subscriptions"))).toHaveLength(1);
+    await expect.poll(() => requests.filter((request) => request.path.endsWith("/web-push-subscriptions")).length).toBe(1);
 });
 
 test("allowed but unsubscribed browsers re-subscribe quietly once", async ({ page }) => {
@@ -1094,6 +1096,7 @@ test('signup detects Android embedded browsers before requesting SMS', async ({ 
     await page.addInitScript(() => Object.defineProperty(navigator, 'userAgent', { value: 'Android; wv) Chrome/110 Instagram' }));
     const requests = await interceptProductionAPI(page, { signup: true });
     const dialog = await startProductionSignup(page);
+    await dialog.locator('[data-signup-age="16"]').click();
     await dialog.getByRole('button', { name: 'Get Started!' }).click();
     await expect(page.locator('#signupStatus')).toContainText('Open Valid in Chrome');
     await expect(page.locator('#signupBrowserHelp')).toHaveAttribute('href', /intent:.*signup=1/);
@@ -1104,7 +1107,7 @@ test('signup detects Android embedded browsers before requesting SMS', async ({ 
 for (const sessionAvailable of [true, false]) test(`signup connection loss restores session=${sessionAvailable} without duplicate completion`, async ({ page }) => {
     await installCredentialStub(page, 'create');
     await installTurnstileStub(page);
-    await interceptProductionAPI(page, { signup: true });
+    const requests = await interceptProductionAPI(page, { signup: true });
     let completions = 0;
     await page.route(`${API_ORIGIN}/api/v1/auth/passkey/signup/complete`, route => { completions++; return route.abort('failed'); });
     await page.route(`${API_ORIGIN}/api/v1/auth/session`, route => route.fulfill({
@@ -1124,7 +1127,10 @@ for (const sessionAvailable of [true, false]) test(`signup connection loss resto
         await expect(page.locator('#signupStatus')).toContainText('account may already exist');
         await expect(dialog.getByRole('button', { name: 'Create passkey', exact: true })).toBeDisabled();
         await page.locator('#signupRecoverAccount').click();
-        await expect(page.getByRole('dialog', { name: 'Welcome Back' })).toBeVisible();
+        // Recover starts a new sign-in ceremony in the same user gesture.
+        // Assert its completed outcome rather than a sheet that can close at once.
+        await expect(page.locator('#appView')).toBeVisible();
+        expect(requests.filter(request => request.path === '/api/v1/auth/passkey/authenticate')).toHaveLength(1);
     }
     expect(completions).toBe(1);
 });
@@ -1334,8 +1340,11 @@ test("real adapter renders a classmate Ask Me link from the production response"
     await expect.poll(() => maya.locator("img").evaluate((image) => image.naturalWidth)).toBeGreaterThan(0);
     await maya.click();
     const classmateProfile = page.getByRole("dialog", { name: "Profile", exact: true });
-    await expect(classmateProfile.getByRole("link", { name: "Ask anonymously", exact: true })).toHaveAttribute("href", "../a/maya-contract");
+    await expect(classmateProfile.getByRole("button", { name: "Ask anonymously", exact: true })).toHaveAttribute("data-compose-profile-ask", "");
     expect(requests.some((request) => request.path.endsWith("21111111-1111-1111-1111-111111111111/ask-target"))).toBe(true);
+    await classmateProfile.getByRole("button", { name: "Ask anonymously", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Ask anonymously", exact: true }).getByLabel("Your question")).toBeVisible();
+    expect(requests.filter(request => request.path === "/api/v1/a/maya-contract/context")).toHaveLength(1);
 });
 
 test("classmate directory mirrors the iOS contact, photo, and weekly-vote order", async ({ page }) => {
@@ -1360,7 +1369,7 @@ test("classmate directory mirrors the iOS contact, photo, and weekly-vote order"
 
 test("real adapter accepts the deployed wrapped classmate Ask Me response", async ({ page }) => {
     await installCredentialStub(page, "get");
-    await interceptProductionAPI(page, { wrappedAskTarget: true });
+    const requests = await interceptProductionAPI(page, { wrappedAskTarget: true });
 
     await page.goto("/app/?signin=1");
     await page.getByRole("button", { name: /^sign in$/i }).click();
@@ -1370,8 +1379,11 @@ test("real adapter accepts the deployed wrapped classmate Ask Me response", asyn
     await directory.getByRole("button", { name: /Maya Chen/ }).click();
 
     await expect(page.getByRole("dialog", { name: "Profile", exact: true })
-        .getByRole("link", { name: "Ask anonymously", exact: true }))
-        .toHaveAttribute("href", "../a/maya-contract");
+        .getByRole("button", { name: "Ask anonymously", exact: true }))
+        .toHaveAttribute("data-compose-profile-ask", "");
+    await page.getByRole("dialog", { name: "Profile", exact: true }).getByRole("button", { name: "Ask anonymously", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Ask anonymously", exact: true }).getByLabel("Your question")).toBeVisible();
+    expect(requests.filter(request => request.path === "/api/v1/a/maya-contract/context")).toHaveLength(1);
 });
 
 test("Request a TBH uses full classmate rows with profile pictures", async ({ page }) => {

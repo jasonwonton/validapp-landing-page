@@ -1,15 +1,17 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const port = process.env.PLAYWRIGHT_PORT || "4173";
+
 export default defineConfig({
     testDir: "./tests",
     testIgnore: "**/deployed-origin.spec.js",
     fullyParallel: true,
     forbidOnly: true,
-    retries: process.env.CI ? 1 : 0,
+    retries: 0,
     workers: process.env.CI ? 1 : undefined,
     reporter: "list",
     use: {
-        baseURL: "http://127.0.0.1:4173",
+        baseURL: `http://127.0.0.1:${port}`,
         trace: "retain-on-failure",
     },
     projects: [
@@ -21,8 +23,8 @@ export default defineConfig({
         { name: "desktop-webkit", workers: 1, use: { ...devices["Desktop Safari"], serviceWorkers: "block" } },
     ],
     webServer: {
-        command: "python3 -m http.server 4173",
-        url: "http://127.0.0.1:4173/app/",
+        command: `python3 -m http.server ${port} --bind 127.0.0.1`,
+        url: `http://127.0.0.1:${port}/app/`,
         reuseExistingServer: true,
         stdout: "ignore",
         stderr: "ignore",

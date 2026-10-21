@@ -1,3 +1,4 @@
+import { clearChatDrafts } from "./drafts.js";
 const DATABASE_NAME = "six7-pwa";
 const DATABASE_VERSION = 2;
 const STORE_NAME = "chat-text-outbox";
@@ -349,6 +350,7 @@ export async function clearChatMediaOutbox(userId) {
 }
 
 export async function clearChatOutboxes(userId) {
+    clearChatDrafts(userId);
     await clearChatTextOutbox(userId);
     await clearChatMediaOutbox(userId);
 }

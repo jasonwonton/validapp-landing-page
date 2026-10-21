@@ -73,6 +73,17 @@ test("comment moderation notice can be acknowledged while restrictions remain au
 test("a lost create response retries with one stable comment request ID", async ({ page }) => {
     await signIn(page, "&commentfail=1");
     await page.getByRole("button", { name: "School", exact: true }).click();
+    await page.evaluate(async () => {
+        const { DemoAPI } = await import('/app/demo-api.js');
+        const original = DemoAPI.prototype.listPollComments;
+        let hold = true;
+        DemoAPI.prototype.listPollComments = async function (...args) {
+            const snapshot = await original.apply(this, args);
+            if (!hold) return snapshot;
+            hold = false;
+            return new Promise(resolve => { window.releaseCommentRoots = () => resolve(snapshot); });
+        };
+    });
     await openPollComments(page);
     const comments = page.getByRole("dialog", { name: "Comments" });
     const draft = comments.getByLabel("Add a comment");
@@ -80,6 +91,9 @@ test("a lost create response retries with one stable comment request ID", async 
     await comments.getByRole("button", { name: "Send", exact: true }).click();
     await expect(comments.locator("#commentsStatus")).toContainText("response was lost");
     await expect(draft).toHaveValue("Retry this comment exactly once.");
+    await page.evaluate(() => window.releaseCommentRoots());
+    await expect(comments.getByText("This one is so accurate.")).toBeVisible();
+    await expect(comments.locator("#commentsStatus")).toContainText("response was lost");
     await comments.getByRole("button", { name: "Send", exact: true }).click();
     await expect(comments.getByText("Retry this comment exactly once.")).toHaveCount(1);
     await expect(page.locator("#feedDetailDialog [data-comment-count]")).toHaveText("5");
