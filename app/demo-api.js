@@ -553,6 +553,10 @@ export class DemoAPI {
         return { status: "created", school };
     }
 
+    async getSchoolKind(schoolId) { return { school_id: schoolId, is_college: false }; }
+
+    async getMajors() { const { bundledMajorCatalog } = await import('./college-majors.js'); return bundledMajorCatalog; }
+
     async getNearbySchools(zipCode, limit = 50) {
         const names = [
             "Westview High School", "Central High School", "Lincoln High School", "Roosevelt High School",
@@ -1436,6 +1440,13 @@ export class DemoAPI {
 
     async updateBio(_userId, bio) {
         this.profile.bio = bio;
+        return { ...this.profile };
+    }
+
+    async updateMajor(_userId, major) {
+        const catalog = await this.getMajors();
+        const entry = [...catalog.majors, ...catalog.areas].find(row => row.key === major);
+        Object.assign(this.profile, { major, major_label: major === 'undeclared' ? null : entry?.label || null });
         return { ...this.profile };
     }
 

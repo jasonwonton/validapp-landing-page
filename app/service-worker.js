@@ -11,6 +11,7 @@ const APP_SHELL = [
     "./app.js",
     "./activity.js",
     "./ask-compose.js",
+    "./college-majors.js",
     "./parent-approval.js",
     "./parent-access.js",
     "./api.js",

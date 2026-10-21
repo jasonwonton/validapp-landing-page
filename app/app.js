@@ -15,6 +15,7 @@ import { answerPayload, buildChoicePool, canStartPlay, contactUploadPayload, sel
 import { ANONYMOUS_SUBMITTER_NAME, AUTHOR_ANONYMITY_HINT, feedQuestionAttribution, playQuestionAttribution } from "./question-attribution.js";
 import { askForNotifications, configureNotificationSoftPrompt } from "./notification-soft-prompt.js";
 import { cameraTabHint, createMementoDay } from "./camera/memento-day.js";
+import { bundledMajorCatalog } from "./college-majors.js";
 
 // The localhost-only demo fixtures load on demand so they never join the
 // production module graph or the service-worker shell.
@@ -340,6 +341,9 @@ const state = {
     signupStep: 0,
     signupNearbySchools: [],
     signupSelectedSchool: null,
+    signupMajor: null,
+    signupAskingMajor: false,
+    signupDidShowMajor: false,
     signupSchoolFallback: false,
     signupSchoolLookupGeneration: 0,
     signupPhoneVerified: false,
@@ -1669,7 +1673,7 @@ function renderProfilePanel() {
     if (!profile) return;
     const imageURL = api.assetURL(profile.profile_picture_url_medium || profile.profile_picture_url);
     const schoolName = currentProfileSchoolName();
-    const grade = formatGrade(profile.grade || "").replace(/^Grade\s+/i, "");
+    const grade = profileAcademicLabel(profile);
     const canChangeInformation = profile.can_change_information !== false;
     const streak = Math.max(0, Number(profile.current_streak || 0));
     const pendingPhoto = state.pendingProfilePhoto;
@@ -3008,7 +3012,7 @@ function renderClassmateProfile() {
         <h3>${escapeHTML(displayName(profile))}</h3>
         <div class="profile-handle">${profile.username ? `@${escapeHTML(profile.username)}` : "Valid classmate"}</div>
         ${profile.bio ? `<p class="profile-bio">${escapeHTML(profile.bio)}</p>` : ""}
-        ${profile.school_name && !profile.minimal_card ? `<div class="profile-school-meta"><span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-school.svg" alt=""><span>${escapeHTML(profile.school_name)}</span></span>${profile.grade ? `<span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-graduation-cap.svg" alt=""><span>${escapeHTML(formatGrade(profile.grade))}</span></span>` : ""}</div>` : ""}
+        ${profile.school_name && !profile.minimal_card ? `<div class="profile-school-meta"><span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-school.svg" alt=""><span>${escapeHTML(profile.school_name)}</span></span>${profileAcademicLabel(profile) ? `<span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-graduation-cap.svg" alt=""><span>${escapeHTML(profileAcademicLabel(profile))}</span></span>` : ""}</div>` : ""}
         ${profileFriendActions(profile)}
         ${state.selectedClassmateAskTarget?.public_token ? `<button class="primary-button classmate-ask-button" type="button" data-compose-profile-ask>${appSymbolMarkup("ask", "ask-me-symbol")}<span>Ask anonymously</span></button>` : ""}
         ${!profile.minimal_card ? `<div class="profile-stats-grid ${tbhRequestsEnabled() ? "" : "single"}">
@@ -3601,12 +3605,41 @@ function signupGraduationYear(gradeNumber, date = new Date()) {
     return academicYearEnd + (12 - gradeNumber);
 }
 
-function availableSignupGrades() {
-    const school = state.signupSelectedSchool;
+function gradesForSchool(school) {
+    if (school?.is_college === true) {
+        const now = new Date(), first = now.getFullYear() + (now.getMonth() >= 6 ? 1 : 0);
+        return Array.from({ length: 8 }, (_, index) => ({ name: `Class of ${first + index} (C/O ${first + index})`, label: `Class of ${first + index}`, classYear: first + index }));
+    }
     const minGrade = Number.isFinite(Number(school?.min_grade)) ? Number(school.min_grade) : 6;
     const maxGrade = Number.isFinite(Number(school?.max_grade)) ? Number(school.max_grade) : 12;
     const available = signupGradeCatalog.filter(({ gradeNumber }) => gradeNumber >= minGrade && gradeNumber <= maxGrade);
     return available.length ? available : signupGradeCatalog;
+}
+
+// The selected object and its revision own this lookup. A server grade
+// rejection retires it too, so a late kind answer cannot undo recovery.
+async function resolveSchoolKind(school, isCurrent, onChanged) {
+    const revision = school.kindRevision = (school.kindRevision || 0) + 1;
+    school.kindLoading = true; school.kindError = false; onChanged();
+    try {
+        const kind = await api.getSchoolKind(school.id ?? school.school_id);
+        if (!isCurrent() || school.kindRevision !== revision) return;
+        if (typeof kind.is_college !== "boolean") throw new Error("School kind unavailable");
+        school.is_college = kind.is_college;
+    } catch {
+        if (isCurrent() && school.kindRevision === revision) school.kindError = true;
+    } finally {
+        if (isCurrent() && school.kindRevision === revision) { school.kindLoading = false; onChanged(); }
+    }
+}
+
+function availableSignupGrades() { return gradesForSchool(state.signupSelectedSchool); }
+
+function gradeRejection(error) {
+    if (error.status !== 400) return null;
+    if (error.message?.startsWith("Graduation years are only for colleges")) return "school";
+    if (error.message === "Select a graduation year from the list.") return "year";
+    return null;
 }
 
 function selectSignupGrade(value) {
@@ -3616,20 +3649,62 @@ function selectSignupGrade(value) {
         option.classList.toggle("selected", selected);
         option.setAttribute("aria-checked", String(selected));
     });
-    $("#signupGradeContinue").disabled = !value;
+    $("#signupGradeContinue").disabled = !value || state.signupSelectedSchool?.kindLoading === true;
     $("#signupStatus").textContent = "";
 }
 
 function renderSignupGradeOptions() {
+    if (state.signupAskingMajor) { renderSignupMajorOptions(); return; }
+    $('[data-signup-step="3"]').classList.remove('asking-major');
+    $('#signupGradeContinue').classList.remove('hidden');
+    const school = state.signupSelectedSchool;
     const grades = availableSignupGrades();
+    const heading = $('[data-signup-step="3"] h2');
+    if (heading) heading.textContent = school?.is_college ? "When do you graduate?" : "What grade are you in?";
+    const hint = $('[data-signup-step="3"] .form-hint');
+    if (hint) hint.textContent = school?.is_college ? "Pick your class year." : "This will affect who shows up in your polls!";
     const currentGrade = $("#signupGrade").value;
     const currentGradeAvailable = grades.some(({ name }) => name === currentGrade);
-    $("#signupGradeOptions").innerHTML = grades.map(({ name, gradeNumber }) => {
+    $("#signupGradeOptions").classList.remove("signup-major-options");
+    $("#signupGradeOptions").setAttribute("aria-label", school?.is_college ? "Graduation year" : "Grade");
+    $("#signupGradeOptions").innerHTML = grades.map(({ name, classYear, gradeNumber }) => {
         const selected = currentGradeAvailable && name === currentGrade;
-        return `<button class="signup-grade-option ${selected ? "selected" : ""}" type="button" role="radio" aria-checked="${selected}" data-signup-grade="${escapeHTML(name)}"><span><strong>${escapeHTML(name)}</strong><small>C/O ${signupGraduationYear(gradeNumber)}</small></span></button>`;
+        return `<button class="signup-grade-option ${selected ? "selected" : ""}" type="button" role="radio" aria-label="${escapeHTML(classYear ? `Class of ${classYear}` : name)}" aria-checked="${selected}" data-signup-grade="${escapeHTML(name)}"><span><strong>${escapeHTML(classYear || name)}</strong><small>${classYear ? "Class of" : `C/O ${signupGraduationYear(gradeNumber)}`}</small></span></button>`;
     }).join("");
     if (!currentGradeAvailable) $("#signupGrade").value = "";
-    $("#signupGradeContinue").disabled = !currentGradeAvailable;
+    $("#signupGradeContinue").disabled = !currentGradeAvailable || school?.kindLoading === true;
+    if (school?.kindLoading) $("#signupGradeOptions").insertAdjacentHTML("beforeend", '<p role="status">Checking school…</p>');
+    if (school?.kindError) $("#signupGradeOptions").insertAdjacentHTML("beforeend", '<button class="secondary-button" type="button" data-retry-signup-kind>Retry school lookup</button>');
+}
+
+let majorCatalog = bundledMajorCatalog, majorCatalogLoaded = false, majorCatalogLoading = null;
+async function refreshMajorCatalog() {
+    if (majorCatalogLoaded) return;
+    if (majorCatalogLoading) return majorCatalogLoading;
+    majorCatalogLoading = (async () => {
+        try {
+            const fresh = await api.getMajors();
+            if (!Array.isArray(fresh?.majors) || !fresh.majors.length || !fresh.majors.every(row => typeof row.key === "string" && typeof row.label === "string" && typeof row.area === "string")) throw new Error("Major catalog unavailable");
+            majorCatalog = fresh; majorCatalogLoaded = true;
+        } catch { /* Keep the bundled catalog; the next visit retries. */ }
+        finally { majorCatalogLoading = null; if (state.signupAskingMajor) renderSignupMajorOptions(); if (state.profileEditor === "major") renderProfileMajorOptions(); }
+    })();
+    return majorCatalogLoading;
+}
+
+function renderSignupMajorOptions(query = $("#signupMajorSearch")?.value || "") {
+    $('[data-signup-step="3"]').classList.add('asking-major');
+    $('[data-signup-step="3"] h2').textContent = "What are you studying?";
+    $('[data-signup-step="3"] .form-hint').textContent = "Optional. Helps you see people in your classes!";
+    const options = $("#signupGradeOptions");
+    const focused = document.activeElement?.id === "signupMajorSearch", selection = $("#signupMajorSearch")?.selectionStart;
+    const search = query.trim().toLocaleLowerCase(), areas = new Map((majorCatalog.areas || []).map(row => [row.key, row.label]));
+    const majors = majorCatalog.majors.filter(row => !search || `${row.label} ${areas.get(row.area) || row.area}`.toLocaleLowerCase().includes(search));
+    options.classList.add("signup-major-options"); options.setAttribute("aria-label", "Major");
+    options.innerHTML = `<label class="signup-major-search">Search majors<input id="signupMajorSearch" type="search" placeholder="Search majors" value="${escapeHTML(query)}" autocomplete="off"></label><div class="signup-major-list">${majors.map(row => `<button class="signup-grade-option ${state.signupMajor === row.key ? "selected" : ""}" type="button" role="radio" aria-checked="${state.signupMajor === row.key}" data-signup-major="${escapeHTML(row.key)}">${escapeHTML(row.label)}${state.signupMajor === row.key ? '<span aria-hidden="true">✓</span>' : ""}</button>`).join("") || '<p role="status">No match. Try “Other”.</p>'}</div><button type="button" class="text-button" data-skip-signup-major>Skip</button>`;
+    $("#signupGradeContinue").disabled = !majorCatalog.majors.some(row => row.key === state.signupMajor);
+    $('#signupGradeContinue').classList.toggle('hidden', $('#signupGradeContinue').disabled);
+    if (focused) { $("#signupMajorSearch").focus({ preventScroll: true }); if (selection != null) $("#signupMajorSearch").setSelectionRange?.(selection, selection); }
 }
 
 function selectSignupGender(value) {
@@ -3816,6 +3891,7 @@ async function getSignupTurnstileToken(container = "#signupTurnstile") {
 function resetSignupSchoolPicker() {
     state.signupNearbySchools = [];
     state.signupSelectedSchool = null;
+    state.signupMajor = null; state.signupAskingMajor = false; state.signupDidShowMajor = false;
     state.signupSchoolLoading = false;
     state.signupZipLookups = 0;
     state.signupZipMode = null;
@@ -3939,7 +4015,9 @@ async function lookupSignupSchools(zipValue = $("#signupZip").value) {
 function selectSignupSchool(schoolId) {
     const school = state.signupNearbySchools.find((candidate) => String(candidate.id) === String(schoolId));
     if (!school) return;
-    state.signupSelectedSchool = school;
+    const selected = state.signupSelectedSchool = { ...school };
+    state.signupMajor = null; state.signupAskingMajor = false; state.signupDidShowMajor = false;
+    void resolveSchoolKind(selected, () => state.signupSelectedSchool === selected, renderSignupGradeOptions);
     $("#signupStatus").textContent = "";
     renderSignupGradeOptions();
     renderSignupSchoolStep();
@@ -4155,6 +4233,12 @@ function setSignupStep(index) {
 }
 
 function signupStepBack() {
+    if (state.signupStep === SIGNUP_STEP.grade && state.signupAskingMajor) {
+        state.signupAskingMajor = false; renderSignupGradeOptions(); return;
+    }
+    if (state.signupStep === SIGNUP_STEP.phone && state.signupDidShowMajor) {
+        state.signupAskingMajor = true; setSignupStep(SIGNUP_STEP.grade); return;
+    }
     let previous = state.signupStep - 1;
     // A verified number skips its code step on the way back.
     if (previous === SIGNUP_STEP.code && (state.signupPhoneVerified || demoMode)) previous = SIGNUP_STEP.phone;
@@ -4290,9 +4374,17 @@ async function advanceSignup(button) {
         $("#signupStatus").textContent = "Choose your school before continuing.";
         return;
     }
-    if (stepIndex === SIGNUP_STEP.grade && !$("#signupGrade").value) {
-        $("#signupStatus").textContent = "Choose your grade before continuing.";
-        return;
+    if (stepIndex === SIGNUP_STEP.grade) {
+        if (state.signupSelectedSchool?.kindLoading) return;
+        if (!availableSignupGrades().some(row => row.name === $("#signupGrade").value)) {
+            $("#signupStatus").textContent = "Choose your grade before continuing.";
+            return;
+        }
+        if (state.signupSelectedSchool?.is_college && !state.signupAskingMajor) {
+            state.signupAskingMajor = true; state.signupDidShowMajor = true;
+            renderSignupMajorOptions(""); void refreshMajorCatalog(); return;
+        }
+        state.signupAskingMajor = false;
     }
     if (stepIndex === SIGNUP_STEP.phone) {
         const phoneNumber = signupPhoneDigits($("#signupPhone").value);
@@ -4471,6 +4563,7 @@ async function createAccount(event) {
             grade: $("#signupGrade").value,
             username,
             profile_picture_filename: null,
+            ...(school.is_college && state.signupMajor ? { major: state.signupMajor } : {}),
             ...(Number($("#signupAge").value) < 13 && state.parentalApprovalToken ? { parental_approval_token: state.parentalApprovalToken } : {}),
         };
         let login;
@@ -4513,6 +4606,19 @@ async function createAccount(event) {
         }, 1500);
     } catch (error) {
         reportAuthFailure(error);
+        const gradeError = gradeRejection(error);
+        if (gradeError) {
+            if (state.signupSelectedSchool !== school) return;
+            school.kindRevision = (school.kindRevision || 0) + 1;
+            school.kindLoading = false;
+            state.signupMajor = null; state.signupAskingMajor = false; state.signupDidShowMajor = false;
+            if (gradeError === "school") school.is_college = false;
+            $("#signupGrade").value = "";
+            renderSignupGradeOptions();
+            setSignupStep(SIGNUP_STEP.grade);
+            $("#signupStatus").textContent = userMessage(error, "Choose a grade for this school before continuing.");
+            return;
+        }
         if (needsPhoneReverification(error)) {
             state.signupPhoneVerified = false;
             state.signupVerifiedPhone = null;
@@ -7417,6 +7523,47 @@ function profileOriginalInformation() {
     };
 }
 
+function profileAcademicLabel(profile) {
+    const label = profile.is_college !== false && profile.major !== 'undeclared' && !profile.minimal_card && profile.major_label;
+    const year = profile.grade?.match(/(?:C\/O\s+|Class of\s+)(\d{4})/i)?.[1];
+    return label ? `${label}${year ? ` · ’${year.slice(-2)}` : ''}` : formatGrade(profile.grade || '').replace(/^Grade\s+/i, '');
+}
+
+function ensureProfileMajorUI() {
+    if ($('[data-profile-editor="major"]')) return;
+    $('#profileEditorHub .profile-editor-rows').insertAdjacentHTML('beforeend', '<button class="profile-editor-row" type="button" data-profile-editor="major"><span class="profile-editor-row-icon" aria-hidden="true">🎓</span><span><small>Major</small><strong id="profileMajorValue"></strong></span><span aria-hidden="true">›</span></button>');
+    $('#profileForm').insertAdjacentHTML('beforeend', '<section class="profile-editor-panel hidden" data-profile-panel="major"><label>Search majors<input id="profileMajorSearch" type="search" placeholder="Search majors" autocomplete="off"></label><div id="profileMajorOptions" class="signup-grade-options signup-major-options" role="group" aria-label="Majors"></div><p id="profileMajorStatus" role="status"></p></section>');
+    $('#profileMajorSearch').addEventListener('input', renderProfileMajorOptions);
+}
+
+function renderProfileMajorOptions() {
+    if (!state.profileDraft || !$('#profileMajorOptions')) return;
+    const query = $('#profileMajorSearch').value.trim().toLocaleLowerCase();
+    const areas = new Map((majorCatalog.areas || []).map(row => [row.key, row.label]));
+    const majors = majorCatalog.majors.filter(row => !query || `${row.label} ${areas.get(row.area) || row.area}`.toLocaleLowerCase().includes(query));
+    const rows = [...(!query ? [{ key: '', label: 'Not set' }] : []), ...majors];
+    const busy = state.profileDraft.majorBusy;
+    $('#profileMajorOptions').innerHTML = rows.map(row => `<button type="button" class="signup-grade-option ${row.key === (state.profile?.major || '') ? 'selected' : ''}" data-profile-major="${escapeHTML(row.key)}" ${busy ? 'disabled' : ''}>${escapeHTML(row.label)}${row.key === (state.profile?.major || '') ? '<span aria-hidden="true">✓</span>' : ''}</button>`).join('') || '<p>No match. Try “Other”.</p>';
+    $('#profileMajorStatus').textContent = busy ? 'Saving…' : state.profileDraft.majorError || '';
+}
+
+async function saveProfileMajor(major) {
+    const draft = state.profileDraft, owner = api.user?.id;
+    if (!draft || !owner || draft.majorBusy) return;
+    if ((state.profile.major || null) === major) { setProfileEditor('hub'); return; }
+    draft.majorBusy = true; draft.majorError = ''; renderProfileMajorOptions();
+    try {
+        const updated = await api.updateMajor(owner, major);
+        if (api.user?.id !== owner) return;
+        for (const field of ['major', 'major_label', 'major_area', 'major_emoji']) state.profile[field] = updated[field] ?? null;
+        renderProfileHeader(); renderProfilePanel();
+        if (state.profileDraft === draft) { draft.majorBusy = false; if (state.profileEditor === 'major') setProfileEditor('hub'); }
+        showToast('Major updated');
+    } catch (error) {
+        if (api.user?.id === owner && state.profileDraft === draft) draft.majorError = userMessage(error, 'Could not update your major. Choose it again to retry.');
+    } finally { draft.majorBusy = false; if (api.user?.id === owner && state.profileDraft === draft && state.profileEditor === 'major') renderProfileMajorOptions(); }
+}
+
 // InformationEditSheet.swift: Boy / Girl / Non-binary, sent as male / female / non-binary.
 const PROFILE_GENDER_OPTIONS = [
     { value: "male", label: "Boy" },
@@ -7459,13 +7606,7 @@ function profileUsernameIsValid(draft = state.profileDraft) {
     return /^[a-z0-9_]{3,30}$/.test(draft?.username || "");
 }
 
-function availableProfileGrades() {
-    const school = state.profileDraft || {};
-    const minGrade = Number.isFinite(Number(school.min_grade)) ? Number(school.min_grade) : 6;
-    const maxGrade = Number.isFinite(Number(school.max_grade)) ? Number(school.max_grade) : 12;
-    const available = signupGradeCatalog.filter(({ gradeNumber }) => gradeNumber >= minGrade && gradeNumber <= maxGrade);
-    return available.length ? available : signupGradeCatalog;
-}
+function availableProfileGrades() { return gradesForSchool(state.profileDraft); }
 
 function profileGradeIsValid() {
     return availableProfileGrades().some(({ name }) => name === state.profileDraft?.grade);
@@ -7497,6 +7638,8 @@ function profileDraftIsValid() {
         && profileUsernameIsValid(draft)
         && usernameChecked
         && draft?.school_id != null
+        && draft.kindLoading !== true
+        && !draft.majorBusy
         && profileGradeIsValid()
         && profileGenderIsValid(draft)
     );
@@ -7529,7 +7672,14 @@ function renderProfileEditorHub() {
     setProfileBadge($("#profileSchoolBadge"), flags.school, draft.school_id == null);
     setProfileBadge($("#profileGradeBadge"), flags.grade, !profileGradeIsValid());
     setProfileBadge($("#profileGenderBadge"), flags.gender, !profileGenderIsValid(draft));
-    $$('[data-profile-editor]').forEach((button) => { button.disabled = informationLocked; });
+    const showMajor = draft.is_college === true || Boolean(state.profile?.major);
+    if (showMajor) ensureProfileMajorUI();
+    const majorRow = $('[data-profile-editor="major"]');
+    if (majorRow) {
+        majorRow.classList.toggle('hidden', !showMajor);
+        $('#profileMajorValue').textContent = state.profile?.major_label || majorCatalog.majors.find(row => row.key === state.profile?.major)?.label || 'Not set';
+    }
+    $$('[data-profile-editor]').forEach((button) => { button.disabled = draft.majorBusy || (button.dataset.profileEditor === 'major' ? String(draft.school_id) !== String(state.profile.school_id) : informationLocked); });
     const changeCount = profileChangedFieldCount();
     $("#profileReviewButton").textContent = changeCount === 1 ? "Review 1 change" : `Review ${changeCount} changes`;
     $("#profileReviewButton").disabled = !profileDraftIsValid();
@@ -7732,12 +7882,14 @@ function renderProfileGradeOptions() {
     const grades = availableProfileGrades();
     const selected = state.profileDraft?.grade || "";
     $("#profileGradeHint").textContent = state.profileDraft?.school_name
-        ? `Grades available at ${state.profileDraft.school_name}`
+        ? `${state.profileDraft?.is_college ? "Graduation years" : "Grades"} available at ${state.profileDraft.school_name}`
         : "Choose a school first.";
-    $("#profileGradeOptions").innerHTML = grades.map(({ name, gradeNumber }) => `<button class="signup-grade-option ${selected === name ? "selected" : ""}" type="button" role="radio" aria-checked="${selected === name}" data-profile-grade="${escapeHTML(name)}"><span><strong>${escapeHTML(name)}</strong><small>C/O ${signupGraduationYear(gradeNumber)}</small></span></button>`).join("");
+    $("#profileGradeOptions").innerHTML = grades.map(({ name, classYear, gradeNumber }) => `<button class="signup-grade-option ${selected === name ? "selected" : ""}" type="button" role="radio" aria-label="${escapeHTML(classYear ? `Class of ${classYear}` : name)}" aria-checked="${selected === name}" data-profile-grade="${escapeHTML(name)}"><span><strong>${escapeHTML(classYear || name)}</strong><small>${classYear ? "Class of" : `C/O ${signupGraduationYear(gradeNumber)}`}</small></span></button>`).join("");
     $("#profileGrade").value = selected;
     $("#profileGradeStatus").textContent = profileGradeIsValid() ? "" : "Choose a grade available at this school.";
-    $('[data-profile-done="grade"]').disabled = !profileGradeIsValid();
+    $('[data-profile-done="grade"]').disabled = !profileGradeIsValid() || state.profileDraft?.kindLoading === true;
+    if (state.profileDraft?.kindLoading) $("#profileGradeOptions").insertAdjacentHTML("beforeend", '<p role="status">Checking school…</p>');
+    if (state.profileDraft?.kindError) $("#profileGradeOptions").insertAdjacentHTML("beforeend", '<button class="secondary-button" type="button" data-retry-profile-kind>Retry school lookup</button>');
 }
 
 function renderProfileSchoolResults() {
@@ -7794,6 +7946,9 @@ function selectProfileSchool(school) {
     state.profileDraft.school_name = school.name || "";
     state.profileDraft.min_grade = school.min_grade;
     state.profileDraft.max_grade = school.max_grade;
+    state.profileDraft.is_college = school.is_college;
+    const draft = state.profileDraft, owner = api.user?.id, schoolId = draft.school_id;
+    void resolveSchoolKind(draft, () => state.profileDraft === draft && draft.school_id === schoolId && api.user?.id === owner, () => { if (state.profileEditor === "grade") renderProfileGradeOptions(); else renderProfileEditorHub(); });
     if (!profileGradeIsValid()) state.profileDraft.grade = "";
     setProfileEditor("hub");
 }
@@ -7835,15 +7990,17 @@ function renderProfileReview() {
 
 function setProfileEditor(editor) {
     if (!state.profileDraft) return;
+    if (editor === 'major') ensureProfileMajorUI();
     syncProfileDraftFromInputs();
     state.profileEditor = editor;
     $$('[data-profile-panel]').forEach((panel) => panel.classList.toggle("hidden", panel.dataset.profilePanel !== editor));
-    const titles = { hub: "Correct profile information", username: "Username", name: "Name", school: "School", grade: "Grade", gender: "Gender", review: "Review changes" };
+    const titles = { hub: "Correct profile information", username: "Username", name: "Name", school: "School", grade: "Grade", gender: "Gender", review: "Review changes", major: "Major" };
     $("#profileEditorTitle").textContent = titles[editor] || titles.hub;
     $("#profileEditorBack").classList.toggle("hidden", editor === "hub");
     $("#profileEditorCancel").classList.toggle("hidden", editor !== "hub");
     if (editor === "hub") renderProfileEditorHub();
     if (editor === "grade") renderProfileGradeOptions();
+    if (editor === 'major') { $('#profileMajorSearch').value = ''; renderProfileMajorOptions(); void refreshMajorCatalog(); }
     if (editor === "gender") renderProfileGenderOptions();
     if (editor === "review") renderProfileReview();
     const focusByEditor = { username: "#profileUsername", name: "#profileFirstName", school: "#profileSchoolZip" };
@@ -7870,6 +8027,9 @@ function openProfileDialog() {
     $("#profileGodModeStatus").classList.remove("is-neutral");
     setProfileEditor("hub");
     $("#profileDialog").showModal();
+    const draft = state.profileDraft, owner = api.user?.id;
+    draft.is_college = state.profile?.is_college;
+    void resolveSchoolKind(draft, () => state.profileDraft === draft && api.user?.id === owner, () => { if (state.profileEditor === "grade") renderProfileGradeOptions(); else if (state.profileEditor === "hub") renderProfileEditorHub(); });
     void refreshGodModeBilling();
 }
 
@@ -7916,6 +8076,7 @@ async function finishProfileUsername() {
 
 async function saveProfile(event) {
     event.preventDefault();
+    if (state.profileEditor === 'major') { $('#profileMajorSearch')?.blur(); return; }
     syncProfileDraftFromInputs();
     if (!profileDraftIsValid()) {
         setProfileEditor("hub");
@@ -10133,6 +10294,12 @@ function demoNotificationBridge() {
 configureNotificationSoftPrompt((demoMode && demoNotificationBridge()) || chatNotificationBridge);
 
 function bindEvents() {
+    $("#signupGradeOptions").addEventListener("input", event => {
+        if (event.target.id === "signupMajorSearch" && state.signupAskingMajor) renderSignupMajorOptions(event.target.value);
+    });
+    $("#signupGradeOptions").addEventListener("keydown", event => {
+        if (event.target.id === 'signupMajorSearch' && event.key === 'Enter' && !event.isComposing) { event.preventDefault(); event.target.blur(); }
+    });
     $("#passkeyButton").addEventListener("click", handlePasskeySignIn);
     $('#signupRecoverAccount').addEventListener('click', () => openSignInSheet({ startPasskey: true }));
     // "Already have an account? Log in" opens the sheet and, in the same tap,
@@ -10466,6 +10633,19 @@ function bindEvents() {
         if (recipient) {
             const sent = state.anonymousInbox?.sent?.find((item) => String(item.id) === recipient.dataset.sentRecipient);
             if (sent?.recipient_available !== false && sent?.recipient_user_id) void openClassmateProfile(sent.recipient_user_id, { user_id: sent.recipient_user_id, first_name: sent.recipient_display_name, username: sent.recipient_username, profile_picture_url: sent.recipient_profile_picture_url });
+        }
+        if (event.target.closest("[data-retry-signup-kind]")) {
+            const school = state.signupSelectedSchool;
+            if (school && !school.kindLoading) void resolveSchoolKind(school, () => state.signupSelectedSchool === school, renderSignupGradeOptions);
+        }
+        const major = event.target.closest("[data-signup-major]");
+        if (major && state.signupAskingMajor) { state.signupMajor = major.dataset.signupMajor; renderSignupMajorOptions(); }
+        if (event.target.closest("[data-skip-signup-major]") && state.signupAskingMajor) {
+            state.signupMajor = null; state.signupAskingMajor = false; setSignupStep(SIGNUP_STEP.phone);
+        }
+        if (event.target.closest("[data-retry-profile-kind]")) {
+            const draft = state.profileDraft, owner = api.user?.id;
+            if (draft && !draft.kindLoading) void resolveSchoolKind(draft, () => state.profileDraft === draft && api.user?.id === owner, renderProfileGradeOptions);
         }
         if (event.target.closest("[data-open-friends]")) void openFriends();
         const privacy = event.target.closest("[data-open-friend-privacy]");
@@ -10848,6 +11028,8 @@ function bindEvents() {
     $("#profileForm").addEventListener("click", (event) => {
         const editor = event.target.closest("[data-profile-editor]");
         if (editor) setProfileEditor(editor.dataset.profileEditor);
+        const major = event.target.closest('[data-profile-major]');
+        if (major) void saveProfileMajor(major.dataset.profileMajor || null);
         const school = event.target.closest("[data-profile-school]");
         if (school) selectProfileSchool(state.profileNearbySchools.find((candidate) => String(candidate.id) === String(school.dataset.profileSchool)));
         const grade = event.target.closest("[data-profile-grade]");
@@ -10862,7 +11044,7 @@ function bindEvents() {
             $(".profile-name-hint").classList.toggle("invalid", !profileNameIsValid());
             if (profileNameIsValid()) setProfileEditor("hub");
         }
-        if (done?.dataset.profileDone === "grade" && profileGradeIsValid()) setProfileEditor("hub");
+        if (done?.dataset.profileDone === "grade" && profileGradeIsValid() && !state.profileDraft?.kindLoading) setProfileEditor("hub");
         const gender = event.target.closest("[data-profile-gender]");
         if (gender && state.profileDraft) {
             state.profileDraft.gender = gender.dataset.profileGender;

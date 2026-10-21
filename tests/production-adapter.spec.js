@@ -744,6 +744,7 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
         if (path === "/api/v1/users/21111111-1111-1111-1111-111111111111/profile") {
             return fulfill({ ...profile("Maya", 0), user_id: "21111111-1111-1111-1111-111111111111", last_name: "Chen", username: "maya_c", bio: "Student council and bad puns.", vote_count: 61 });
         }
+        if (/^\/api\/v1\/highschools\/\d+\/kind$/.test(path)) return fulfill({ school_id: Number(path.split('/')[4]), is_college: false });
         if (path === "/api/v1/a/maya-contract/context") return fulfill({ is_active: true, recipient_display_name: "Maya Chen", recipient_username: "maya_c", max_length: 500, privacy_notice: "Your name stays hidden." });
         if (path === "/api/v1/users/21111111-1111-1111-1111-111111111111/ask-target") {
             const askTarget = { public_token: "maya-contract" };

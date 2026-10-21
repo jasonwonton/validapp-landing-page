@@ -322,6 +322,10 @@ export class ValidAPI {
         });
     }
 
+    getSchoolKind(schoolId) { return this.request(`/highschools/${encodeURIComponent(schoolId)}/kind`, { auth: false, timeoutMs: 1500 }); }
+
+    getMajors() { return this.request('/majors', { auth: false }); }
+
     getNearbySchools(zipCode, limit = 50) {
         const params = new URLSearchParams({ zip_code: zipCode, limit: String(Math.min(50, Math.max(1, limit))) });
         return this.request(`/highschools/nearby?${params}`, { auth: false });
@@ -795,6 +799,8 @@ export class ValidAPI {
             body: JSON.stringify({ bio }),
         });
     }
+
+    updateMajor(userId, major) { return this.request(`/users/${encodeURIComponent(userId)}/major`, { method: 'PUT', body: JSON.stringify({ major }) }); }
 
     submitFeedback(feedbackText, photo = null) {
         const formData = new FormData();

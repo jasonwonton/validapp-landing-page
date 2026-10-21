@@ -93,3 +93,18 @@ test('browser Back steps through Friends subpages and reconnect keeps the QR jou
     await page.goBack();
     await expect(friends.getByRole('heading', { name: 'Friends', exact: true })).toBeVisible();
 });
+test('the entire Classmates card padding opens its own profile', async ({ page }) => {
+    await signIn(page);
+    await page.getByRole('button', { name: 'Profile', exact: true }).click();
+    await page.getByRole('button', { name: 'Classmates', exact: true }).click();
+    const directory = page.getByRole('dialog', { name: 'Classmates', exact: true });
+    for (const [id, name, edge] of [['classmate-1', 'Maya Chen', 'left'], ['classmate-2', 'Noah Williams', 'right']]) {
+        const row = directory.locator(`[data-directory-classmate="${id}"]`);
+        const rect = await row.boundingBox();
+        await row.click({ position: { x: edge === 'left' ? 4 : rect.width - 4, y: 4 } });
+        const profile = page.getByRole('dialog', { name: 'Profile', exact: true });
+        await expect(profile.locator('#classmateProfileCard h3')).toHaveText(name);
+        await page.locator('#backToClassmatesButton').click();
+        await expect(directory).toBeVisible();
+    }
+});
