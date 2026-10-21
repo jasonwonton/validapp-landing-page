@@ -977,7 +977,7 @@ test("locked Feed shows received votes, vote-to-unlock, and notification activat
     await page.getByRole("button", { name: "Allow", exact: true }).click();
 
     await expect(notificationButton).toBeHidden();
-    expect(requests.filter((request) => request.path.endsWith("/web-push-subscriptions"))).toHaveLength(1);
+    await expect.poll(() => requests.filter((request) => request.path.endsWith("/web-push-subscriptions")).length).toBe(1);
 });
 
 test("allowed but unsubscribed browsers re-subscribe quietly once", async ({ page }) => {
@@ -1105,7 +1105,7 @@ test('signup detects Android embedded browsers before requesting SMS', async ({ 
 for (const sessionAvailable of [true, false]) test(`signup connection loss restores session=${sessionAvailable} without duplicate completion`, async ({ page }) => {
     await installCredentialStub(page, 'create');
     await installTurnstileStub(page);
-    await interceptProductionAPI(page, { signup: true });
+    const requests = await interceptProductionAPI(page, { signup: true });
     let completions = 0;
     await page.route(`${API_ORIGIN}/api/v1/auth/passkey/signup/complete`, route => { completions++; return route.abort('failed'); });
     await page.route(`${API_ORIGIN}/api/v1/auth/session`, route => route.fulfill({
@@ -1125,7 +1125,10 @@ for (const sessionAvailable of [true, false]) test(`signup connection loss resto
         await expect(page.locator('#signupStatus')).toContainText('account may already exist');
         await expect(dialog.getByRole('button', { name: 'Create passkey', exact: true })).toBeDisabled();
         await page.locator('#signupRecoverAccount').click();
-        await expect(page.getByRole('dialog', { name: 'Welcome Back' })).toBeVisible();
+        // Recover starts a new sign-in ceremony in the same user gesture.
+        // Assert its completed outcome rather than a sheet that can close at once.
+        await expect(page.locator('#appView')).toBeVisible();
+        expect(requests.filter(request => request.path === '/api/v1/auth/passkey/authenticate')).toHaveLength(1);
     }
     expect(completions).toBe(1);
 });

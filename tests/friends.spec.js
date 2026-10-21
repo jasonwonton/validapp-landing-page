@@ -145,6 +145,10 @@ test("blocking removes a friendship and opaque blocked rows never reveal a sende
     await expect(anonymous).toContainText("Anonymous sender");
     await expect(anonymous).not.toContainText("SECRET NAME");
     await expect(anonymous.locator('[src*="private.invalid"]')).toHaveCount(0);
+    await dialog.getByRole('button', { name: 'Back', exact: true }).click();
+    await dialog.getByLabel('Find people').fill('SECRET NAME');
+    await expect(dialog.locator('[data-friend-row="opaque-block"]')).toHaveCount(0);
+    await expect(dialog).toContainText('No matching people');
 });
 
 test("signed-out Add me deep link resumes after login and rejected links do not create requests", async ({ page }) => {
@@ -205,4 +209,24 @@ test('Friends stays readable and reachable at compact and desktop widths', async
         await dialog.getByRole('button', { name: 'Back', exact: true }).click();
         await dialog.getByRole('button', { name: 'Back', exact: true }).click();
     }
+});
+test('a pending relationship write prevents opening a stale profile', async ({ page }) => {
+    const dialog = await signIn(page);
+    await page.evaluate(async () => {
+        const { DemoAPI } = await import('/app/demo-api.js');
+        const send = DemoAPI.prototype.sendFriendRequest;
+        DemoAPI.prototype.sendFriendRequest = async function (...args) {
+            await new Promise(resolve => { window.finishFriendSend = resolve; });
+            return send.apply(this, args);
+        };
+    });
+    await row(dialog, 4).getByRole('button', { name: 'Add friend', exact: true }).click();
+    await expect(row(dialog, 4).locator('[data-friend-profile]')).toBeDisabled();
+    await expect(row(dialog, 4)).toContainText('Working…');
+    await page.evaluate(() => window.finishFriendSend());
+    await dialog.getByRole('button', { name: 'Friends', exact: true }).click();
+    await expect(row(dialog, 4)).toContainText('Requested');
+    await row(dialog, 4).locator('[data-friend-profile]').click();
+    const profile = page.getByRole('dialog', { name: 'Profile', exact: true });
+    await expect(profile.getByRole('button', { name: 'Requested', exact: true })).toBeDisabled();
 });

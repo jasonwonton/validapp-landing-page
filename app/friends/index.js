@@ -51,7 +51,7 @@ export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, av
         if (suggested && state === "none") actions += `<button class="friend-dismiss" type="button" data-friend-action="dismiss" data-person-id="${esc(id)}" aria-label="Dismiss suggestion" ${busy.has(id) ? "disabled" : ""}>×</button>`;
         if (extra) actions += `<div class="friend-more-wrap"><button class="friend-dismiss" type="button" data-friend-more="${esc(id)}" aria-label="More for ${esc(name)}" aria-expanded="${rowMenu === id}">${uiIcon("more")}</button>${rowMenu === id ? `<div class="friend-menu">${extra}</div>` : ""}</div>`;
         const avatar = `<span class="friend-avatar" aria-hidden="true">${avatarMarkup({ ...person, first_name: person.first_name || name.split(" ")[0], last_name: "" }, "row-avatar")}</span>`;
-        return `<article class="friend-row" data-friend-row="${esc(id)}"><button class="friend-person" type="button" data-friend-profile="${esc(id)}" ${blocked ? "disabled" : ""}>${avatar}<span><strong>${esc(name)}</strong>${description ? `<small>${esc(description)}</small>` : ""}${person.school_name ? `<small class="friend-school">${esc(person.school_name)}</small>` : ""}${warning}${preview ? `<small>${esc(preview)}</small>` : ""}</span></button><div class="friend-row-actions">${actions}</div></article>`;
+        return `<article class="friend-row" data-friend-row="${esc(id)}"><button class="friend-person" type="button" data-friend-profile="${esc(id)}" ${blocked || busy.has(id) ? "disabled" : ""}>${avatar}<span><strong>${esc(name)}</strong>${description ? `<small>${esc(description)}</small>` : ""}${person.school_name ? `<small class="friend-school">${esc(person.school_name)}</small>` : ""}${warning}${preview ? `<small>${esc(preview)}</small>` : ""}</span></button><div class="friend-row-actions">${actions}</div></article>`;
     }
     function section(key, rows, empty, options = {}) {
         if (errors[key]) return `<div class="friends-empty"><p>${esc(errors[key])}</p><button class="secondary-button" type="button" data-friends-retry>Try again</button></div>`;
@@ -144,9 +144,9 @@ export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, av
         const results = await Promise.allSettled([lookup, api.getClassmates(id, text, 50)]);
         if (!alive(id, epoch) || searchEpoch !== searchGeneration || query.trim() !== text) return;
         const normalized = text.toLocaleLowerCase().replace(/^@/, "");
-        const people = new Map(allPeople().filter(p => [p.name, p.first_name, p.last_name, p.username].filter(Boolean).join(" ").toLocaleLowerCase().includes(normalized)).map(p => [personId(p), p]));
-        if (results[1].status === "fulfilled") results[1].value.forEach((person) => people.set(personId(person), person));
-        if (results[0].status === "fulfilled" && results[0].value) people.set(personId(results[0].value), results[0].value);
+        const people = new Map(allPeople().filter(p => p.anonymous_sender !== true && !p.blocked_by_viewer && !data.blocked?.some(blocked => personId(blocked) === personId(p))).filter(p => [p.name, p.first_name, p.last_name, p.username].filter(Boolean).join(" ").toLocaleLowerCase().includes(normalized)).map(p => [personId(p), p]));
+        if (results[1].status === "fulfilled") results[1].value.filter(person => person.anonymous_sender !== true).forEach((person) => people.set(personId(person), person));
+        if (results[0].status === "fulfilled" && results[0].value && results[0].value.anonymous_sender !== true) people.set(personId(results[0].value), results[0].value);
         searchResults = [...people.values()];
         const failure = results.find((result) => result.status === "rejected" && result.reason.status !== 404);
         searchError = failure && !searchResults.length ? userMessage(failure.reason, "Couldn't search. Try again.") : "";

@@ -8619,6 +8619,7 @@ async function confirmQuestionRemoval() {
 }
 
 function openQuestionDialog({ section = "submit", submissionId = null } = {}) {
+    mountUIRoot($("#questionDialog"));
     $("#questionStatus").textContent = "";
     const maxLength = Math.max(3, Number(state.config?.max_custom_question_length ?? 280));
     $("#questionText").maxLength = maxLength;
