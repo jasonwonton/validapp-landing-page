@@ -82,7 +82,7 @@ test("local integration mode uses only the same-origin API proxy", async ({ page
         const { ValidAPI } = await import("/app/api.js");
         return new ValidAPI().baseURL;
     });
-    expect(baseURL).toBe("http://127.0.0.1:4173/api/v1");
+    expect(baseURL).toBe(new URL("/api/v1", page.url()).href);
 });
 
 test("real adapter preserves the released poll and TBH comment contracts", async ({ page }) => {
@@ -1094,6 +1094,7 @@ test('signup detects Android embedded browsers before requesting SMS', async ({ 
     await page.addInitScript(() => Object.defineProperty(navigator, 'userAgent', { value: 'Android; wv) Chrome/110 Instagram' }));
     const requests = await interceptProductionAPI(page, { signup: true });
     const dialog = await startProductionSignup(page);
+    await dialog.locator('[data-signup-age="16"]').click();
     await dialog.getByRole('button', { name: 'Get Started!' }).click();
     await expect(page.locator('#signupStatus')).toContainText('Open Valid in Chrome');
     await expect(page.locator('#signupBrowserHelp')).toHaveAttribute('href', /intent:.*signup=1/);
@@ -1334,7 +1335,7 @@ test("real adapter renders a classmate Ask Me link from the production response"
     await expect.poll(() => maya.locator("img").evaluate((image) => image.naturalWidth)).toBeGreaterThan(0);
     await maya.click();
     const classmateProfile = page.getByRole("dialog", { name: "Profile", exact: true });
-    await expect(classmateProfile.getByRole("link", { name: "Ask anonymously", exact: true })).toHaveAttribute("href", "../a/maya-contract");
+    await expect(classmateProfile.getByRole("button", { name: "Ask anonymously", exact: true })).toHaveAttribute("data-compose-profile-ask", "");
     expect(requests.some((request) => request.path.endsWith("21111111-1111-1111-1111-111111111111/ask-target"))).toBe(true);
 });
 
@@ -1370,8 +1371,8 @@ test("real adapter accepts the deployed wrapped classmate Ask Me response", asyn
     await directory.getByRole("button", { name: /Maya Chen/ }).click();
 
     await expect(page.getByRole("dialog", { name: "Profile", exact: true })
-        .getByRole("link", { name: "Ask anonymously", exact: true }))
-        .toHaveAttribute("href", "../a/maya-contract");
+        .getByRole("button", { name: "Ask anonymously", exact: true }))
+        .toHaveAttribute("data-compose-profile-ask", "");
 });
 
 test("Request a TBH uses full classmate rows with profile pictures", async ({ page }) => {

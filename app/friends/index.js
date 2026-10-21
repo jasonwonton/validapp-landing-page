@@ -1,16 +1,17 @@
+import { uiIcon } from "../ui-icons.js";
 import { userMessage } from "../user-message.js";
 import { confirmSheet } from "../ui-dialogs.js";
 import { relationshipFor, parseAddLink, suggestionDescription } from "./model.js";
 
 export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, avatarMarkup, openProfile, openChat, onChanged, showToast }) {
     const dialog = document.createElement("dialog");
-    dialog.className = "modal friends-dialog";
+    dialog.className = "modal friends-dialog parity-page friends-page";
     dialog.setAttribute("aria-label", "Add Friends");
     document.body.append(dialog);
     let owner = null;
     let generation = 0;
     let searchGeneration = 0;
-    let tab = "suggestions";
+    let tab = "friends";
     let query = "";
     let data = {};
     let errors = {};
@@ -24,74 +25,78 @@ export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, av
     let link = null;
     let linkSource = null;
     let returnFromProfile = false;
+    let page = "list", menu = false, rowMenu = null, privacyPage = null, privacyOnly = false, qrCanvas = null, linkDraft = "";
     const alive = (id, epoch) => String(getUser()?.id) === id && owner === id && generation === epoch;
     const enabled = () => getConfig()?.friends_enabled === true;
     const personId = (person) => String(person.user_id);
     const allPeople = () => [...(data.friends?.friends || []), ...(data.requests?.incoming || []), ...(data.requests?.outgoing || []), ...(data.suggestions?.suggestions || []), ...(data.classmates || []), ...(data.blocked || []), ...searchResults];
     const relation = (person) => relationshipFor(person, { friends: data.friends?.friends, incoming: data.requests?.incoming, outgoing: data.requests?.outgoing });
-    const button = (action, id, label, disabled = false) => `<button class="secondary-button" type="button" data-friend-action="${action}" data-person-id="${esc(id)}" ${disabled || busy.has(id) ? "disabled" : ""}>${busy.has(id) ? "Working…" : esc(label)}</button>`;
-
+    const button = (action, id, label, disabled = false, title = label) => `<button class="friend-pill ${action === "accept" ? "friend-pill-accept" : ""}" type="button" data-friend-action="${action}" data-person-id="${esc(id)}" aria-label="${esc(title)}" ${disabled || busy.has(id) ? "disabled" : ""}>${busy.has(id) ? "Working…" : `${["add", "message", "accept"].includes(action) ? uiIcon(action === "add" ? "person-add" : action === "message" ? "chat-pair-filled" : "check") : ""}${esc(label)}`}</button>`;
     function row(person, { blocked = false, suggested = false } = {}) {
         const id = personId(person);
         if (person.anonymous_sender === true) person = { user_id: id, first_name: "Anonymous sender", anonymous_sender: true };
         const state = blocked ? "blocked" : relation(person);
         const name = person.name || [person.first_name, person.last_name].filter(Boolean).join(" ") || person.username || "Valid user";
-        const description = suggested ? suggestionDescription(person) : [person.username ? `@${person.username}` : person.school_name || "", person.source_chat_name ? `From ${person.source_chat_name}` : ""].filter(Boolean).join(" · ");
         const warning = person.held || person.connection?.known === false
             ? `<small class="friend-warning">You may not know this person.${person.requester_is_adult ? " This account is an adult." : ""}</small>` : "";
-        // Held request text must never enter the DOM, even if a stale response
-        // accidentally still carries a preview field.
         const preview = person.messages_held === true || (person.messages_held == null && person.held) ? "" : person.latest_message_body || person.first_message_body || "";
-        let actions = "";
+        const description = suggested ? suggestionDescription(person) : person.username ? `@${person.username}` : "";
+        let actions = "", extra = "";
         if (state === "blocked") actions = button("unblock", id, "Unblock");
-        else if (state === "unavailable" || state === "self") actions = button("none", id, state === "self" ? "You" : "Unavailable", true);
-        else if (state === "added_you") actions = `${button("accept", id, "Accept")}${button("decline", id, "Decline")}`;
-        else if (state === "requested") actions = `<span class="friend-state">Pending</span>${button("cancel", id, "Cancel request")}`;
-        else if (state === "added") actions = `${button("message", id, "Message")}${button("remove", id, "Remove friend")}`;
-        else actions = button("add", id, "Add friend");
-        if (suggested && state === "none") actions += button("dismiss", id, "Dismiss suggestion");
-        return `<article class="friend-row" data-friend-row="${esc(id)}"><button class="friend-person" type="button" data-friend-profile="${esc(id)}" ${blocked ? "disabled" : ""}>${avatarMarkup(person, "row-avatar")}<span><strong>${esc(name)}</strong><small>${esc(description)}</small>${warning}${preview ? `<small>${esc(preview)}</small>` : ""}</span></button><div class="friend-row-actions">${actions}</div></article>`;
+        else if (state === "unavailable" || state === "self") actions = `<span class="friend-state">${state === "self" ? "You" : "Unavailable"}</span>`;
+        else if (state === "added_you") actions = `${button("accept", id, "Accept")}<button class="friend-dismiss" type="button" data-friend-action="decline" data-person-id="${esc(id)}" aria-label="Decline" ${busy.has(id) ? "disabled" : ""}>×</button>`;
+        else if (state === "requested") { actions = '<span class="friend-state">Requested</span>'; extra = button("cancel", id, "Cancel request"); }
+        else if (state === "added") { actions = button("message", id, "Chat", false, "Message"); extra = button("remove", id, "Remove friend"); }
+        else actions = button("add", id, "Add", false, "Add friend");
+        if (suggested && state === "none") actions += `<button class="friend-dismiss" type="button" data-friend-action="dismiss" data-person-id="${esc(id)}" aria-label="Dismiss suggestion" ${busy.has(id) ? "disabled" : ""}>×</button>`;
+        if (extra) actions += `<div class="friend-more-wrap"><button class="friend-dismiss" type="button" data-friend-more="${esc(id)}" aria-label="More for ${esc(name)}" aria-expanded="${rowMenu === id}">${uiIcon("more")}</button>${rowMenu === id ? `<div class="friend-menu">${extra}</div>` : ""}</div>`;
+        const avatar = `<span class="friend-avatar" aria-hidden="true">${avatarMarkup({ ...person, first_name: person.first_name || name.split(" ")[0], last_name: "" }, "row-avatar")}</span>`;
+        return `<article class="friend-row" data-friend-row="${esc(id)}"><button class="friend-person" type="button" data-friend-profile="${esc(id)}" ${blocked ? "disabled" : ""}>${avatar}<span><strong>${esc(name)}</strong>${description ? `<small>${esc(description)}</small>` : ""}${person.school_name ? `<small class="friend-school">${esc(person.school_name)}</small>` : ""}${warning}${preview ? `<small>${esc(preview)}</small>` : ""}</span></button><div class="friend-row-actions">${actions}</div></article>`;
     }
-
     function section(key, rows, empty, options = {}) {
-        if (errors[key]) return `<div class="empty-card"><p>${esc(errors[key])}</p><button class="secondary-button" type="button" data-friends-retry>Try again</button></div>`;
+        if (errors[key]) return `<div class="friends-empty"><p>${esc(errors[key])}</p><button class="secondary-button" type="button" data-friends-retry>Try again</button></div>`;
         if (!data[key]) return `<p role="status">${loading ? "Loading…" : "Open this section to load it."}</p>`;
-        return rows.length ? rows.map((person) => row(person, options)).join("") : `<div class="empty-card"><p>${esc(empty)}</p></div>`;
+        return rows.length ? rows.map((person) => row(person, options)).join("") : `<div class="friends-empty">${uiIcon("group")}<p>${esc(empty)}</p></div>`;
     }
-
+    const title = (text, count = null) => `<h3 class="friends-section-title">${text}${count != null ? `<span class="friends-count">${count}</span>` : ""}</h3>`;
     function render() {
         if (!dialog.open) return;
         const focused = document.activeElement;
         const selection = focused?.id === "friendsSearch" ? [focused.selectionStart, focused.selectionEnd] : null;
-        const tabs = [["suggestions", "Suggested"], ["classmates", "Classmates"], ["friends", "Friends"], ["requests", "Requests"], ["privacy", "Privacy"], ["blocked", "Blocked"]];
+        const isList = page === "list" && !["privacy", "blocked"].includes(tab);
         let content = "";
-        if (query) content = searchLoading ? `<p role="status">Searching…</p>` : searchError ? `<p role="status">${esc(searchError)}</p><button class="secondary-button" type="button" data-search-retry>Try again</button>` : searchResults.length ? searchResults.map((person) => row(person)).join("") : `<p>No matching people. Try an exact username or a classmate's name.</p>`;
-        else if (tab === "suggestions") content = section("suggestions", data.suggestions?.enabled === true ? data.suggestions.suggestions : [], data.suggestions?.enabled === false ? "Suggestions are not available right now. Find classmates or search by username." : "You're all caught up. Check classmates or search for someone.", { suggested: true });
-        else if (tab === "classmates") content = section("classmates", data.classmates || [], "No classmates are visible yet.");
-        else if (tab === "friends") content = `${section("friends", data.friends?.friends || [], "Your friends will appear here after a request is accepted.")}${data.friends?.next_cursor ? '<button class="secondary-button" type="button" data-friends-more>Load more friends</button>' : ""}`;
-        else if (tab === "requests") content = `<h3>Received</h3>${section("requests", data.requests?.incoming || [], "No incoming requests.")}<h3>Sent</h3>${section("requests", data.requests?.outgoing || [], "No pending requests.")}`;
-        else if (tab === "blocked") content = section("blocked", data.blocked || [], "No blocked accounts.", { blocked: true });
+        if (query && isList) content = searchLoading ? `<p role="status">Searching…</p>` : searchError ? `<p role="status">${esc(searchError)}</p><button class="secondary-button" type="button" data-search-retry>Try again</button>` : searchResults.length ? searchResults.map((person) => row(person)).join("") : `<div class="friends-empty">${uiIcon("text-search")}<p>No matching people.</p><small>Try an exact username or a classmate's name.</small></div>`;
+        else if (tab === "suggestions" && isList) content = `${section("suggestions", data.suggestions?.enabled === true ? data.suggestions.suggestions : [], data.suggestions?.enabled === false ? "Suggestions are not available right now." : "You're all caught up.", { suggested: true })}<button class="friends-disclosure" type="button" data-friends-tab="classmates"><span>Classmates</span><span aria-hidden="true">›</span></button>`;
+        else if (tab === "classmates" && isList) content = `${title("Classmates")}${section("classmates", data.classmates || [], "No classmates are visible yet.")}`;
+        else if (["friends", "requests"].includes(tab) && isList) {
+            const incoming = data.requests?.incoming || [], outgoing = data.requests?.outgoing || [];
+            content = `${incoming.length || errors.requests ? `${title("Requests", incoming.length)}${section("requests", incoming, "No incoming requests.")}` : ""}${title(`${data.friends?.total ?? data.friends?.friends.length ?? 0} ${(data.friends?.total ?? data.friends?.friends.length) === 1 ? "friend" : "friends"}`)}${section("friends", data.friends?.friends || [], "Your friends will appear here after a request is accepted.")}${data.friends?.next_cursor ? '<button class="secondary-button" type="button" data-friends-more>Load more friends</button>' : ""}${outgoing.length ? `${title("Sent requests", outgoing.length)}${section("requests", outgoing, "No pending requests.")}` : ""}`;
+        } else if (tab === "blocked") content = section("blocked", data.blocked || [], "No blocked accounts.", { blocked: true });
         else if (tab === "privacy") content = privacyMarkup();
-        dialog.innerHTML = `<div class="modal-heading"><h2>Add Friends</h2><button class="icon-button" type="button" data-friends-close aria-label="Close Add Friends">×</button></div>
-            <form class="friends-search-form" role="search"><label for="friendsSearch">Find people</label><input id="friendsSearch" type="search" maxlength="64" placeholder="${data.requests?.can_add_people === false ? "Search classmates" : "Username or classmate name"}" autocomplete="off" value="${esc(query)}"><button type="submit" class="secondary-button">Search</button></form>
-            <div class="friends-tabs" role="group" aria-label="Friends sections">${tabs.map(([key, name]) => `<button type="button" data-friends-tab="${key}" aria-pressed="${!query && tab === key}">${name}${key === "requests" && data.requests?.incoming.length ? ` (${data.requests.incoming.length})` : ""}</button>`).join("")}</div>
-            ${getConfig()?.add_links_enabled === true ? '<button class="text-button" type="button" data-my-code>My link & QR code</button><button class="text-button" type="button" data-open-add-link>Open a link or QR code</button>' : ""}
-            <p class="status-message" role="status">${esc(actionError)}</p><div class="friends-content" aria-busy="${loading || searchLoading}">${content}</div>`;
+        if (page === "code") content = codeMarkup();
+        if (page === "link") content = linkMarkup();
+        const heading = isList ? "Friends" : tab === "blocked" ? "Blocked accounts" : tab === "privacy" ? privacyPage === "reach" ? "Who can add you" : privacyPage === "messages" ? "Who can message you" : "Privacy" : page === "code" ? "My code" : "Add by link";
+        dialog.innerHTML = `<header class="parity-page-header"><button class="parity-back" type="button" ${isList ? 'data-friends-close aria-label="Close Add Friends"' : 'data-friends-back aria-label="Back"'}>‹</button><h2>${heading}</h2><div class="parity-header-actions">${isList && getConfig()?.add_links_enabled === true ? `<button class="parity-icon-button" type="button" data-my-code aria-label="My link & QR code">${uiIcon("qr-code")}</button>` : ""}${isList ? `<button class="parity-icon-button" type="button" data-friends-menu aria-label="Friends options" aria-expanded="${menu}">${uiIcon("more")}</button>` : ""}</div></header>
+            ${menu ? `<nav class="friend-menu friends-options" aria-label="Friends options"><button type="button" data-friends-tab="privacy">Privacy</button><button type="button" data-friends-tab="blocked">Blocked</button>${getConfig()?.add_links_enabled === true ? '<button type="button" data-open-add-link>Open a link or QR code</button>' : ""}</nav>` : ""}
+            ${isList ? `<form class="friends-search-form" role="search"><button type="submit" aria-label="Search">${uiIcon("text-search")}</button><input id="friendsSearch" aria-label="Find people" type="search" maxlength="64" placeholder="Search people by name or @username" autocomplete="off" value="${esc(query)}"></form><div class="friends-tabs" role="group" aria-label="Friends sections"><button type="button" data-friends-tab="friends" aria-pressed="${["friends", "requests"].includes(tab)}">Friends${data.requests?.incoming.length ? `<span class="friends-count" aria-hidden="true">${data.requests.incoming.length}</span>` : ""}</button>${data.suggestions?.enabled !== false ? `<button type="button" data-friends-tab="suggestions" aria-pressed="${["suggestions", "classmates"].includes(tab)}">Suggested</button>` : `<button type="button" data-friends-tab="classmates" aria-pressed="${tab === "classmates"}">Classmates</button>`}</div>` : ""}
+            <p class="status-message parity-status" role="status">${esc(actionError)}</p><div class="friends-content parity-page-content" aria-busy="${loading || searchLoading}">${content}</div>`;
+        if (page === "code" && qrCanvas) dialog.querySelector("[data-friend-qr]")?.append(qrCanvas);
         if (selection) {
             const input = dialog.querySelector("#friendsSearch");
-            input.focus({ preventScroll: true });
-            // type=search supports selection in all supported engines.
-            input.setSelectionRange?.(...selection);
+            input?.focus({ preventScroll: true });
+            input?.setSelectionRange?.(...selection);
         }
     }
-
     function privacyMarkup() {
         if (errors.privacy) return `<p>${esc(errors.privacy)}</p><button type="button" data-friends-retry>Try again</button>`;
         if (!data.reach || !data.messages) return '<p role="status">Loading privacy settings…</p>';
-        const reach = data.reach, messages = data.messages;
-        const locked = reach.forced || reach.locked_by_parent;
-        return `<h3>Who can add you</h3>${reach.available || locked ? `<label class="friend-setting"><span><strong>School and contacts only</strong><small>${locked ? "This protection is required or managed by your parent." : "Only your school and contacts can find and add you. This also limits who you can add."}</small></span><input type="checkbox" data-friend-setting="reach" ${reach.school_contacts_only ? "checked" : ""} ${locked || !reach.available || busy.has("privacy") ? "disabled" : ""}></label>` : '<p>Adding people is unavailable for this account.</p>'}
-        <h3>Messaging</h3>${messages.available || messages.locked_by_parent ? `<label class="friend-setting"><span><strong>Message requests from anyone</strong><small>${messages.locked_by_parent ? "Managed by your parent." : "Messages from people you don't know wait in Requests. Server age and safety restrictions still apply."}</small></span><input type="checkbox" data-friend-setting="messages" ${messages.from_anyone ? "checked" : ""} ${messages.locked_by_parent || !messages.available || busy.has("privacy") ? "disabled" : ""}></label>` : '<p>Message requests from strangers are unavailable for this account.</p>'}`;
+        const reach = data.reach, messages = data.messages, locked = reach.forced || reach.locked_by_parent;
+        if (!privacyPage) return `<div class="parity-settings-card"><button class="parity-setting-row" type="button" data-privacy-page="reach">${uiIcon("person-add")}<span><strong>Who can add you</strong><small>${reach.school_contacts_only ? "School & contacts" : "Anyone"}</small></span><span aria-hidden="true">›</span></button><button class="parity-setting-row" type="button" data-privacy-page="messages">${uiIcon("chat-pair")}<span><strong>Who can message you</strong><small>${messages.from_anyone ? "Anyone" : "People you know"}</small></span><span aria-hidden="true">›</span></button></div>`;
+        const isReach = privacyPage === "reach", value = isReach ? reach.school_contacts_only : messages.from_anyone, disabled = isReach ? locked || !reach.available : messages.locked_by_parent || !messages.available;
+        const choices = isReach ? [[false, "Everyone", "Anyone with your username can add you, even from other schools"], [true, "School & contacts", "Only people from your school or your contacts can find and add you"]] : [[false, "People you know", "Anyone else has to wait until you accept their friend request"], [true, "Anyone who adds you", "People you don't know can send a message with their friend request"]];
+        const notes = isReach ? ["Contacts are people whose number you saved, or who saved yours.", "With School & contacts, you can only add people from your school and contacts, too.", "Changing this doesn't remove anyone. Friends you have stay friends."] : ["People you know go to your school, are saved in your contacts, share a friend with you, or have chatted with you.", "Adults you don't know can never message you first.", "Blocked people can never message you."];
+        return `<div class="parity-settings-card" role="radiogroup" aria-label="${isReach ? "Who can add you" : "Who can message you"}">${choices.map(([checked, label, detail]) => `<label class="parity-choice"><span><strong>${label}</strong><small>${detail}</small></span><input type="radio" name="friend-privacy" data-friend-setting="${isReach ? "reach" : "messages"}" value="${checked}" ${value === checked ? "checked" : ""} ${disabled || busy.has("privacy") ? "disabled" : ""}></label>`).join("")}${disabled ? '<p class="parity-locked-note">This protection is required or managed by your parent.</p>' : ""}</div><div class="parity-choice-notes">${notes.map(note => `<p>${note}</p>`).join("")}</div>`;
+
     }
 
     async function refresh({ more = false } = {}) {
@@ -138,7 +143,8 @@ export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, av
             ? api.lookupPerson(id, text.replace(/^@/, "")) : Promise.resolve(null);
         const results = await Promise.allSettled([lookup, api.getClassmates(id, text, 50)]);
         if (!alive(id, epoch) || searchEpoch !== searchGeneration || query.trim() !== text) return;
-        const people = new Map();
+        const normalized = text.toLocaleLowerCase().replace(/^@/, "");
+        const people = new Map(allPeople().filter(p => [p.name, p.first_name, p.last_name, p.username].filter(Boolean).join(" ").toLocaleLowerCase().includes(normalized)).map(p => [personId(p), p]));
         if (results[1].status === "fulfilled") results[1].value.forEach((person) => people.set(personId(person), person));
         if (results[0].status === "fulfilled" && results[0].value) people.set(personId(results[0].value), results[0].value);
         searchResults = [...people.values()];
@@ -194,11 +200,11 @@ export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, av
         } finally { if (owner === account) { busy.delete(id); render(); } }
     }
 
-    async function open({ section: requested = "suggestions", username = null, source = "link", person = null } = {}) {
+    async function open({ section: requested = "friends", username = null, source = "link", person = null, privacy = null, returnToSettings = false } = {}) {
         if (!enabled() || !getUser()?.id) return;
         const id = String(getUser().id);
         if (owner !== id) clear();
-        owner = id; tab = requested; query = ""; actionError = "";
+        owner = id; tab = requested; page = "list"; menu = false; rowMenu = null; privacyPage = privacy; privacyOnly = returnToSettings; query = ""; actionError = "";
         if (!dialog.open) dialog.showModal();
         render();
         await refresh();
@@ -218,20 +224,28 @@ export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, av
         }
     }
 
+    function codeMarkup() {
+        if (!link?.available) return '<p role="status">Loading your code…</p>';
+        return `<div class="friend-code-card"><h3>${esc(getUser()?.first_name || "Your Valid")}</h3><div data-friend-qr></div><p>Scan to add me on Valid</p><p class="friend-link">${esc(link.url)}</p><button class="primary-button" type="button" data-share-add-link>Share link</button><label class="friend-setting">Link enabled<input type="checkbox" data-add-link-enabled ${link.enabled ? "checked" : ""}></label><p data-add-link-status role="status">${link.enabled ? "Your link is active." : "Your link is off. A completed share turns it on."}</p></div>`;
+    }
+    function linkMarkup() {
+        return `<form data-add-link-form><label for="friendAddLink">Valid Add me link</label><input id="friendAddLink" type="url" required value="${esc(linkDraft)}" placeholder="https://validapp.lol/add/username" autocomplete="off"><p>Paste a link, or use your device's camera QR scanner and open the result in Valid.</p><button class="primary-button" type="submit">Open link</button></form>${typeof BarcodeDetector === "function" ? '<label>Read a QR image<input type="file" accept="image/*" data-friend-qr-file></label>' : ''}`;
+    }
     async function myCode() {
         const id = owner, epoch = generation;
+        page = "code"; menu = false; render();
         try {
             const response = await api.getAddLink(id);
-            if (!alive(id, epoch) || !dialog.open) return;
+            if (!alive(id, epoch) || !dialog.open || page !== "code") return;
             link = response;
             if (!link.available || !link.url) { actionError = "An Add me link is unavailable for this account."; render(); return; }
-            dialog.querySelector(".friends-content").innerHTML = `<h3>My link & QR code</h3><p>People can use this link to request to be friends.</p><div data-friend-qr></div><p class="friend-link">${esc(link.url)}</p><button class="primary-button" type="button" data-share-add-link>Share link</button><label class="friend-setting">Link enabled<input type="checkbox" data-add-link-enabled ${link.enabled ? "checked" : ""}></label><p data-add-link-status role="status">${link.enabled ? "Your link is active." : "Your link is off. A completed share turns it on."}</p>`;
             const { toCanvas } = await import("./qr.js");
-            if (!alive(id, epoch) || !dialog.open) return;
+            if (!alive(id, epoch) || !dialog.open || page !== "code") return;
             const canvas = document.createElement("canvas");
             canvas.setAttribute("role", "img"); canvas.setAttribute("aria-label", "QR code for your Add me link");
             await toCanvas(canvas, link.url, { width: 240, margin: 2 });
-            dialog.querySelector("[data-friend-qr]")?.append(canvas);
+            if (!alive(id, epoch) || !dialog.open || page !== "code") return;
+            qrCanvas = canvas; render();
         } catch (error) { if (alive(id, epoch)) { actionError = userMessage(error, "Couldn't complete this step. Try again."); render(); } }
     }
 
@@ -249,7 +263,7 @@ export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, av
 
     function clear() {
         ++generation; ++searchGeneration; clearTimeout(timer);
-        owner = null; data = {}; errors = {}; searchResults = []; busy = new Set();
+        owner = null; data = {}; errors = {}; qrCanvas = null; linkDraft = ""; searchResults = []; busy = new Set();
         loading = false; searchLoading = false; searchError = ""; actionError = "";
         query = ""; link = null; linkSource = null; returnFromProfile = false;
         if (dialog.open) dialog.close();
@@ -257,6 +271,7 @@ export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, av
     }
 
     dialog.addEventListener("input", (event) => {
+        if (event.target.id === "friendAddLink") { linkDraft = event.target.value; return; }
         if (event.target.id !== "friendsSearch") return;
         query = event.target.value; linkSource = null; ++searchGeneration;
         clearTimeout(timer); timer = setTimeout(search, 300);
@@ -271,11 +286,24 @@ export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, av
         }
         clearTimeout(timer); void search();
     });
+    function back() {
+        if (privacyOnly) return dialog.close();
+        if (privacyPage) privacyPage = null;
+        else { page = "list"; tab = "friends"; }
+        actionError = ""; render();
+    }
+    dialog.addEventListener("cancel", event => {
+        if (!privacyOnly && (page !== "list" || ["privacy", "blocked"].includes(tab))) { event.preventDefault(); back(); }
+    });
     dialog.addEventListener("click", (event) => {
         const target = event.target.closest("button");
         if (!target || target.disabled) return;
         if (target.matches("[data-friends-close]")) return dialog.close();
-        if (target.dataset.friendsTab) { tab = target.dataset.friendsTab; query = ""; ++searchGeneration; clearTimeout(timer); render(); return void refresh(); }
+        if (target.matches("[data-friends-menu]")) { menu = !menu; render(); return; }
+        if (target.dataset.friendMore) { rowMenu = rowMenu === target.dataset.friendMore ? null : target.dataset.friendMore; render(); return; }
+        if (target.dataset.privacyPage) { privacyPage = target.dataset.privacyPage; render(); return; }
+        if (target.matches("[data-friends-back]")) return back();
+        if (target.dataset.friendsTab) { page = "list"; menu = false; rowMenu = null; privacyPage = null; tab = target.dataset.friendsTab; query = ""; ++searchGeneration; clearTimeout(timer); render(); return void refresh(); }
         if (target.matches("[data-friends-retry]")) return void refresh();
         if (target.matches("[data-search-retry]")) return void search();
         if (target.matches("[data-friends-more]")) return void refresh({ more: true });
@@ -287,7 +315,7 @@ export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, av
         if (target.matches("[data-my-code]")) return void myCode();
         if (target.matches("[data-share-add-link]")) return void shareLink();
         if (target.matches("[data-open-add-link]")) {
-            dialog.querySelector(".friends-content").innerHTML = `<form data-add-link-form><label for="friendAddLink">Valid Add me link</label><input id="friendAddLink" type="url" required placeholder="https://validapp.lol/add/username" autocomplete="off"><p>Paste a link, or use your device's camera QR scanner and open the result in Valid.</p><button class="primary-button" type="submit">Open link</button></form>${typeof BarcodeDetector === "function" ? '<label>Read a QR image<input type="file" accept="image/*" data-friend-qr-file></label>' : ''}`;
+            page = "link"; menu = false; render();
             dialog.querySelector("#friendAddLink").focus();
         }
     });
@@ -311,15 +339,18 @@ export function createFriendsView({ api, getUser, getConfig, escapeHTML: esc, av
         if (!input.matches("[data-friend-setting], [data-add-link-enabled]")) return;
         const id = owner, epoch = generation;
         if (busy.has("privacy")) return;
-        busy.add("privacy"); input.disabled = true;
+        const previousReach = data.reach, previousMessages = data.messages;
+        if (input.dataset.friendSetting === "reach") data.reach = { ...data.reach, school_contacts_only: input.value === "true" };
+        if (input.dataset.friendSetting === "messages") data.messages = { ...data.messages, from_anyone: input.value === "true" };
+        busy.add("privacy"); input.disabled = true; actionError = ""; render();
         try {
             const key = input.matches("[data-add-link-enabled]") ? "link" : input.dataset.friendSetting;
             const result = key === "link" ? await api.updateAddLink(id, input.checked)
-                : key === "reach" ? await api.updateFriendReach(id, input.checked) : await api.updateMessageRequests(id, input.checked);
+                : key === "reach" ? await api.updateFriendReach(id, input.value === "true") : await api.updateMessageRequests(id, input.value === "true");
             if (!alive(id, epoch)) return;
             if (key === "link") link = result;
             else data[key] = result;
-        } catch (error) { if (owner === id) actionError = userMessage(error, "Couldn't complete this step. Try again."); }
+        } catch (error) { if (owner === id) { data.reach = previousReach; data.messages = previousMessages; actionError = userMessage(error, "Couldn't complete this step. Try again."); } }
         finally { if (owner === id) { busy.delete("privacy"); await refresh(); } }
     });
     window.addEventListener("focus", () => { if (dialog.open && owner) void refresh(); });

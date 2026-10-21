@@ -73,11 +73,13 @@ test('an old privacy write cannot replace the next account settings', async ({ p
         await window.fixtureFriends.open({ section: 'privacy' });
     });
     const dialog = page.getByRole('dialog', { name: 'Add Friends', exact: true });
-    await dialog.getByRole('checkbox', { name: /School and contacts only/ }).check();
+    await dialog.getByRole('button', { name: /Who can add you/ }).click();
+    await dialog.getByRole('radio', { name: /^School & contacts/ }).check();
     await expect.poll(() => page.evaluate(() => typeof window.releasePrivacy)).toBe('function');
     await page.evaluate(async () => { window.fixtureFriends.clear(); window.fixtureOwner = 'B'; await window.fixtureFriends.open({ section: 'privacy' }); window.releasePrivacy(); });
-    await expect(dialog.getByRole('checkbox', { name: /School and contacts only/ })).not.toBeChecked();
-    await expect(dialog.getByRole('checkbox', { name: /School and contacts only/ })).toBeEnabled();
+    await dialog.getByRole('button', { name: /Who can add you/ }).click();
+    await expect(dialog.getByRole('radio', { name: /^School & contacts/ })).not.toBeChecked();
+    await expect(dialog.getByRole('radio', { name: /^School & contacts/ })).toBeEnabled();
 });
 
 test('first-message retry survives reload with the same body and two request IDs', async ({ page }) => {

@@ -8,8 +8,7 @@ async function profile(page) {
 
 test('native settings grouping, theme buttons and stacked account actions', async ({page}) => {
     await profile(page);
-    await expect(page.locator('#privacySettings #activityStatusButton')).toBeVisible();
-    await expect(page.locator('#privacySettings #blockedUsersButton')).toBeVisible();
+    await expect(page.locator('#privacySettings .settings-row strong')).toHaveText(['Notifications', 'Privacy']);
     await expect(page.getByRole('button', {name:'Use system appearance'})).toHaveAttribute('aria-pressed','true');
     await page.getByRole('button', {name:'Use dark appearance'}).click();
     await expect(page.locator('#appearanceHint')).toHaveText('This choice stays on until you change it.');
@@ -17,6 +16,7 @@ test('native settings grouping, theme buttons and stacked account actions', asyn
     expect(bounds[1].y).toBeGreaterThan(bounds[0].bottom);
     expect(bounds[1].x).toBe(bounds[0].x);
     expect(bounds[1].width).toBe(bounds[0].width);
+    await page.locator('#privacyPageButton').click();
     await page.locator('#blockedUsersButton').click();
     await expect(page.getByRole('dialog', {name:'Blocked Users',exact:true})).toContainText('No blocked users');
     await page.getByRole('button',{name:'Back to profile'}).click();
@@ -31,6 +31,7 @@ test('blocked-user management confirms, retains failures, and removes only succe
         DemoAPI.prototype.getBlockedUsers=async()=>[{user_id:'blocked-1',first_name:'Maya',last_name:'Chen'},{user_id:'blocked-2',first_name:'Noah',last_name:'Williams'}];
         DemoAPI.prototype.unblockUser=async(user,id)=>{unblocks.push(id);if(failUnblock)throw Error('offline');};
     });
+    await page.locator('#privacyPageButton').click();
     await page.locator('#blockedUsersButton').click();
     const dialog=page.getByRole('dialog',{name:'Blocked Users',exact:true});
     await dialog.getByRole('button',{name:'Unblock Maya Chen'}).click();

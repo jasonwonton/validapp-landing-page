@@ -136,6 +136,8 @@ export function createFeedView(context) {
     // "New" (since this visit began) and "Earlier"; the divider holds still
     // until the user leaves the Inbox.
     function personalInboxSections(rows) {
+        // Sent is outgoing history; sending a question is not a new inbox item.
+        if (state.personalInboxFilter === "ask_me" && state.askBoxMode === "sent") return rows;
         const sections = [];
         const requests = state.tbhPendingRequests || [];
         if (tbhRequestsEnabled() && requests.length && ["all", "tbhs"].includes(state.personalInboxFilter)) {

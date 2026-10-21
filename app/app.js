@@ -498,7 +498,8 @@ function mountUIRoot(root) {
 }
 
 function initializeParkedUI() {
-    document.querySelectorAll("#anonymousAnswerDetailDialog").forEach(parkUIRoot);
+    // Keep inactive question fields out of the initial shell, as with lazy dialogs.
+    document.querySelectorAll("#anonymousAnswerDetailDialog, #questionDialog").forEach(parkUIRoot);
     document.querySelectorAll("dialog:not(#deleteAccountDialog):not(#signInDialog)").forEach((dialog) => {
         dialog.addEventListener("close", () => requestAnimationFrame(() => {
             if (!dialog.open) parkUIRoot(dialog);
@@ -983,6 +984,12 @@ function closeDetailScreen(screen, { fromHistory = false } = {}) {
     }
     state.detailReturnFocus?.focus?.({ preventScroll: true });
     state.detailReturnFocus = null;
+    void activityViewPromise?.then(view => {
+        // Pop and restore the underlying tab before reopening the bell. A
+        // modal opened during the traversal would be closed by tab cleanup.
+        if (state.historyTraversalPending) window.addEventListener("popstate", () => queueMicrotask(() => view.returnFromDetail(screen.id)), { once: true });
+        else view.returnFromDetail(screen.id);
+    }).catch(() => null);
     if (!fromHistory && history.state?.detail === screen.id) {
         // A sheet opened over this screen (e.g. a report) may still own the top
         // entry if it closed in the same task: pop both, or the landing entry
@@ -1017,14 +1024,14 @@ function prepareActivityView() {
         api, getUser: () => api.user, getConfig: () => state.config, escapeHTML,
         inboxLocked: isFeedVoteLocked,
         getInboxEntries: () => [
-            ...(state.anonymousInbox?.questions || []).slice(0, 15).map((item) => ({ text: "Anonymous question", detail: item.body, destination: { route: "ask_question", id: item.id } })),
-            ...(state.anonymousInbox?.answers || []).slice(0, 15).map((item) => ({ text: `${item.recipient_display_name} replied`, detail: item.answer_text, destination: { route: "ask_answer", id: item.id } })),
-            ...(state.anonymousInbox?.sent || []).filter((item) => item.answer_text && !state.anonymousInbox.answers?.some((answer) => String(answer.id) === String(item.id))).slice(0, 15).map((item) => ({ text: `${item.recipient_available === false ? "An account" : item.recipient_display_name} replied`, detail: item.answer_text, destination: { route: "ask_sent", id: item.id } })),
-            ...(!isFeedVoteLocked() ? state.personalFeedItems.slice(0, 15).map((item) => ({ text: item.question_text, detail: "Open poll", destination: { route: "poll", question_answer_id: item.question_answer_id } })) : []),
-            ...state.tbhPendingRequests.slice(0, 15).map((item) => ({ text: `${item.requester_first_name} requested a TBH`, destination: { route: "tbh_request", id: item.id } })),
-            ...state.tbhInboxItems.slice(0, 15).map((item) => ({ text: `${item.author_first_name || "Someone"} sent you a TBH`, detail: "Open TBH", destination: { route: "tbh", tbh_response_id: item.id } })),
+            ...(state.anonymousInbox?.questions || []).slice(0, 15).map((item) => ({ timestamp: item.created_at, text: "Anonymous question", detail: item.body, destination: { route: "ask_question", id: item.id } })),
+            ...(state.anonymousInbox?.answers || []).slice(0, 15).map((item) => ({ timestamp: item.created_at, text: `${item.recipient_available === false ? "An account" : item.recipient_display_name} replied`, detail: item.answer_text, destination: { route: "ask_answer", id: item.id } })),
+            ...(state.anonymousInbox?.sent || []).filter((item) => item.answer_text && !state.anonymousInbox.answers?.some((answer) => String(answer.id) === String(item.id))).slice(0, 15).map((item) => ({ timestamp: item.created_at, text: `${item.recipient_available === false ? "An account" : item.recipient_display_name} replied`, detail: item.answer_text, destination: { route: "ask_sent", id: item.id } })),
+            ...(!isFeedVoteLocked() ? state.personalFeedItems.slice(0, 15).map((item) => ({ timestamp: item.created_at, text: item.question_text, detail: "Open poll", destination: { route: "poll", question_answer_id: item.question_answer_id } })) : []),
+            ...state.tbhPendingRequests.slice(0, 15).map((item) => ({ timestamp: item.created_at, text: `${item.requester_first_name} requested a TBH`, destination: { route: "tbh_request", id: item.id } })),
+            ...state.tbhInboxItems.slice(0, 15).map((item) => ({ timestamp: item.created_at, text: `${item.author_first_name || "Someone"} sent you a TBH`, detail: "Open TBH", destination: { route: "tbh", tbh_response_id: item.id } })),
         ],
-        navigate: navigateActivityDestination,
+        navigate: async destination => { await navigateActivityDestination(destination); return $(".detail-screen:not(.hidden)")?.id; },
         onSummary: (summary) => {
             $$("[data-bell-count]").forEach((badge) => { badge.textContent = summary.enabled && summary.badge_total ? ` ${Math.min(99, summary.badge_total)}` : ""; });
         },
@@ -1677,6 +1684,7 @@ function renderProfilePanel() {
         ${hasProfilePhoto ? "" : '<p class="profile-photo-warning">\u26a0\ufe0f Users without profile pictures receive less votes.</p>'}
         <h3>${escapeHTML(displayName(profile))}</h3>
         <div class="profile-identity-line"><span class="profile-handle">@${escapeHTML(profile.username || "valid")}</span>${streak ? `<span class="profile-streak ${profile.streak_needs_activity ? "needs-activity" : ""}" aria-label="${streak} day streak">${uiIcon("fire")} ${streak}</span>` : ""}</div>
+        ${state.config?.friends_enabled === true ? `<button class="profile-friends-entry" type="button" data-open-friends>${uiIcon("person-add")}<span>Friends</span><span aria-hidden="true">›</span></button>` : ""}
         <button class="profile-bio-button ${profile.bio ? "" : "empty"}" type="button" data-edit-bio>${profile.bio ? escapeHTML(profile.bio) : '<span>Add bio</span><span class="profile-add-bio-icon" aria-hidden="true">+</span>'}</button>
         ${(schoolName || grade) ? `<div class="profile-school-meta">${schoolName ? `<span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-school.svg" alt=""><span>${escapeHTML(schoolName)}</span></span>` : ""}${grade ? `<span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-graduation-cap.svg" alt=""><span>${escapeHTML(grade)}</span></span>` : ""}</div>` : ""}
         <button class="profile-information-inline" type="button" data-edit-profile>
@@ -2946,9 +2954,9 @@ function profileFriendActions(profile) {
         : profile.can_add === false ? ["unavailable", "Unavailable"]
         : relation === "added" ? ["message", "Chat"]
         : relation === "added_you" ? ["accept", "Accept friend request"]
-        : relation === "requested" ? ["cancel", "Cancel request"]
+        : relation === "requested" ? ["requested", "Requested"]
         : relation === "none" ? ["add", "Add friend"] : ["options", "Friend options"];
-    return `<div class="friend-row-actions profile-friend-actions"><button class="primary-button" type="button" data-profile-friend-action="${primary[0]}" ${busy || primary[0] === "unavailable" ? "disabled" : ""}>${busy ? "Updating…" : primary[1]}</button>${relation === "requested" ? '<span>Pending</span>' : ""}${relation === "added" ? `<button class="secondary-button" type="button" data-profile-friend-action="remove" ${busy ? "disabled" : ""}>Remove friend</button>` : relation === "added_you" ? `<button class="secondary-button" type="button" data-profile-friend-action="decline" ${busy ? "disabled" : ""}>Decline</button>` : ""}</div>`;
+    return `<div class="profile-friend-actions"><button class="primary-button" type="button" data-profile-friend-action="${primary[0]}" ${busy || ["unavailable", "requested"].includes(primary[0]) ? "disabled" : ""}>${busy ? "Updating…" : primary[1]}</button>${relation === "added_you" ? `<button class="text-button" type="button" data-profile-friend-action="decline" ${busy ? "disabled" : ""}>Decline</button>` : ""}</div>`;
 }
 async function actOnProfileFriend(action) {
     const person = state.selectedClassmateProfile, owner = api.user?.id;
@@ -2990,6 +2998,11 @@ async function actOnProfileFriend(action) {
 function renderClassmateProfile() {
     const profile = state.selectedClassmateProfile;
     if (!profile) return;
+    $("#classmateProfileDialog").classList.toggle("friend-profile-page", state.config?.friends_enabled === true);
+    const menu = $("#classmateProfileDialog .detail-overflow-menu");
+    menu.querySelectorAll("[data-profile-friend-action]").forEach(button => button.remove());
+    const friendOption = profile.friend_relation === "added" ? ["remove", "Remove friend"] : profile.friend_relation === "requested" ? ["cancel", "Cancel request"] : null;
+    if (state.config?.friends_enabled === true && friendOption) menu.insertAdjacentHTML("afterbegin", `<button type="button" role="menuitem" data-profile-friend-action="${friendOption[0]}">${friendOption[1]}</button>`);
     $("#classmateProfileCard").innerHTML = `<article class="full-profile-card classmate-profile-card">
         <span class="full-profile-avatar">${profileImageMarkup(profile, [profile.profile_picture_url_medium, profile.profile_picture_url])}</span>
         <h3>${escapeHTML(displayName(profile))}</h3>
@@ -10454,7 +10467,10 @@ function bindEvents() {
             if (sent?.recipient_available !== false && sent?.recipient_user_id) void openClassmateProfile(sent.recipient_user_id, { user_id: sent.recipient_user_id, first_name: sent.recipient_display_name, username: sent.recipient_username, profile_picture_url: sent.recipient_profile_picture_url });
         }
         if (event.target.closest("[data-open-friends]")) void openFriends();
-        if (event.target.closest("[data-open-friend-privacy]")) void openFriends({ section: "privacy" });
+        const privacy = event.target.closest("[data-open-friend-privacy]");
+        if (privacy) void openFriends({ section: "privacy", privacy: privacy.dataset.openFriendPrivacy, returnToSettings: true });
+        if (event.target.closest("#privacyPageButton")) { mountUIRoot($("#privacyPageDialog")); $("#privacyPageDialog").showModal(); }
+        if (event.target.closest("[data-close-privacy-page]")) $("#privacyPageDialog").close();
         if (!event.target.closest(".detail-overflow")) closeDetailActionMenus();
     });
     mementoDay.subscribe(renderCameraTab);

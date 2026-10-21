@@ -222,8 +222,8 @@ test("classmate browsing, targeted boost, and TBH use the same iOS-style rows", 
 
     await directoryRow.click();
     const classmateProfile = page.getByRole("dialog", { name: "Profile", exact: true });
-    const askButton = classmateProfile.getByRole("link", { name: "Ask anonymously", exact: true });
-    await expect(askButton).toHaveAttribute("href", "../a/demo-maya_c");
+    const askButton = classmateProfile.getByRole("button", { name: "Ask anonymously", exact: true });
+    await expect(askButton).toHaveAttribute("data-compose-profile-ask", "");
     await expect(askButton).toHaveCSS("border-top-width", "3px");
     await expect(askButton).toHaveCSS("box-shadow", "rgb(0, 0, 0) 4px 5px 0px 0px");
     expect(await askButton.evaluate((button) => button.nextElementSibling?.matches(".profile-stats-grid"))).toBe(true);

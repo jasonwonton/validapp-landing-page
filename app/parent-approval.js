@@ -11,7 +11,7 @@ export function forgetApprovalReceipt() { try { localStorage.removeItem(RECEIPT_
 
 export async function openParentApproval({ api, age, deviceId, escapeHTML: esc, resume = false }) {
     const dialog = document.createElement("dialog");
-    dialog.className = "modal friends-dialog parent-approval-dialog";
+    dialog.className = "modal friends-dialog parity-page parent-approval-dialog";
     dialog.setAttribute("aria-label", "Parent permission");
     let token = resume ? savedApprovalReceipt()?.token : null;
     let policy, stream = null, photo = null, previewURL = null, closed = false, busy = false, submitted = false, cameraEpoch = 0, codeTimer = null, phoneRequired = false;
@@ -47,7 +47,7 @@ export async function openParentApproval({ api, age, deviceId, escapeHTML: esc, 
             dialog.querySelector("[data-parent-capture]").disabled = false; status("");
         } catch (error) { if (cameraGeneration !== cameraEpoch) return; status(error.name === "NotAllowedError" ? "Camera access was denied. Allow it in browser settings, then try again." : userMessage(error, "The camera could not start. Try again.")); }
     }
-    dialog.innerHTML = '<div class="modal-heading"><h2>Parent permission</h2><button class="icon-button" type="button" data-parent-close aria-label="Back to age selection">×</button></div><div data-parent-content></div><p role="status"></p>';
+    dialog.innerHTML = '<header class="parity-page-header"><button class="parity-back" type="button" data-parent-close aria-label="Back to age selection">‹</button><h2>Parent permission</h2><span></span></header><div class="parity-page-content" data-parent-content></div><p class="parity-status" role="status"></p>';
     document.body.append(dialog); dialog.showModal();
     dialog.addEventListener("close", () => { closed = true; stopCamera(); clearInterval(codeTimer); if (previewURL) URL.revokeObjectURL(previewURL); photo = null; dialog.remove(); resolve(submitted ? token : null); }, { once: true });
     dialog.addEventListener("click", async (event) => {

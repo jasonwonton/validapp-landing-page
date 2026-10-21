@@ -181,6 +181,8 @@ test("browsing a non-friend creates nothing; first-message retry keeps both requ
 
 test("Ask Me composer sends on Enter once and returns to Sent", async ({ page }) => {
     await signIn(page);
+    await expect(page.locator('[data-inbox-count="ask_me"]')).toHaveText("1");
+    const unreadBefore = await page.locator('[data-inbox-filter="ask_me"]').innerText();
     await page.getByRole("button", { name: "Profile", exact: true }).click();
     await page.locator('#profilePanel [data-open-friends]').click();
     const friends = page.getByRole("dialog", { name: "Add Friends", exact: true });
@@ -191,7 +193,7 @@ test("Ask Me composer sends on Enter once and returns to Sent", async ({ page })
     const composer = page.getByRole("dialog", { name: "Ask anonymously", exact: true });
     await composer.getByLabel("Your question").fill("What made you smile today?");
     await composer.getByLabel("Your question").press("Enter");
-    await expect(composer).toContainText("Question sent");
+    await expect(composer).toContainText("Message sent");
     await composer.getByRole("button", { name: "Open Sent", exact: true }).click();
     await expect(composer).toBeHidden();
     await expect(page.locator('[data-anonymous-sent]')).toHaveCount(1);
@@ -199,6 +201,8 @@ test("Ask Me composer sends on Enter once and returns to Sent", async ({ page })
     await expect(page.getByRole("button", { name: "Feed", exact: true })).toHaveAttribute("aria-current", "page");
     await expect(page.locator('[data-anonymous-sent]')).toContainText("What made you smile today?");
     expect((await page.locator('[data-anonymous-sent]').boundingBox()).width).toBeGreaterThan(240);
+    await expect(page.locator('[data-inbox-filter="ask_me"]')).toHaveText(unreadBefore);
+    await expect(page.locator('#feedList .inbox-section-header')).toHaveCount(0);
 });
 
 test("parent settings, unlink decisions, withdrawal and reports stay inside the parent capability", async ({ page }) => {
@@ -223,8 +227,11 @@ test("parent settings, unlink decisions, withdrawal and reports stay inside the 
     });
     const parent = page.getByRole('dialog', { name: 'Parent view', exact: true });
     await parent.getByRole('button', { name: 'Settings', exact: true }).click();
-    await parent.getByRole('checkbox', { name: 'Who can add them: school and contacts only', exact: true }).check();
-    await expect(parent.getByRole('checkbox', { name: 'Who can add them: school and contacts only', exact: true })).toBeEnabled();
+    await parent.getByRole('button', { name: /Who can add them/ }).click();
+    await parent.getByRole('radio', { name: /^School & contacts/ }).check();
+    await expect(parent.getByRole('radio', { name: /^School & contacts/ })).toBeEnabled();
+    await parent.getByRole('button', { name: 'Back to settings', exact: true }).click();
+    await parent.getByRole('button', { name: 'Parent view options', exact: true }).click();
     await parent.getByRole('button', { name: 'What Valid collects', exact: true }).click();
     await expect(parent).toContainText('Phone numbers only when contacts are allowed');
     await parent.getByRole('button', { name: 'Back to settings', exact: true }).click();
@@ -239,7 +246,9 @@ test("parent settings, unlink decisions, withdrawal and reports stay inside the 
     await expect(parent).toContainText('Report sent');
     await parent.getByRole('combobox', { name: 'Child', exact: true }).selectOption('young');
     await parent.getByRole('button', { name: 'Settings', exact: true }).click();
-    await expect(parent.getByRole('checkbox', { name: 'Who can add them: school and contacts only', exact: true })).toHaveCount(0);
+    await expect(parent.locator('[data-parent-privacy]')).toHaveCount(0);
+    await parent.getByRole('button', { name: 'Parent view options', exact: true }).click();
+    await parent.getByRole('button', { name: 'Parent permission', exact: true }).click();
     await parent.getByRole('checkbox', { name: 'Also request deletion of the account and personal information', exact: true }).check();
     await parent.getByRole('button', { name: 'Withdraw permission', exact: true }).click();
     await expect(page.locator('.ui-sheet')).toContainText('cannot be undone');

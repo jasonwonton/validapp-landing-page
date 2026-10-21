@@ -1,10 +1,11 @@
+import { uiIcon } from "./ui-icons.js";
 import { userMessage } from "./user-message.js";
 import { confirmSheet, startCodeResendCountdown } from "./ui-dialogs.js";
 export async function openParentLink({ api, getUser, escapeHTML: esc }) {
     const userId = getUser()?.id;
     if (!userId) return;
-    const dialog = document.createElement("dialog"); dialog.className = "modal friends-dialog"; dialog.setAttribute("aria-label", "Parent access");
-    dialog.innerHTML = '<div class="modal-heading"><h2>Parent access</h2><button class="icon-button" type="button" data-parent-link-close aria-label="Close parent access">×</button></div><div data-parent-link-content></div><p role="status">Loading…</p>';
+    const dialog = document.createElement("dialog"); dialog.className = "modal friends-dialog parity-page parent-link-page"; dialog.setAttribute("aria-label", "Parent access");
+    dialog.innerHTML = '<header class="parity-page-header"><button class="parity-back" type="button" data-parent-link-close aria-label="Close parent access">‹</button><h2>Parent access</h2><span></span></header><div class="parity-page-content" data-parent-link-content></div><p class="parity-status" role="status">Loading…</p>';
     document.body.append(dialog); dialog.showModal();
     let busy = false, generation = 0, codeTimer = null, savedStatus = null;
     const current = () => dialog.isConnected && dialog.open && getUser()?.id === userId;
@@ -70,9 +71,9 @@ export async function openParentLink({ api, getUser, escapeHTML: esc }) {
 // child session, localStorage, the chat outbox, or the service worker.
 export function openParentView({ api, token, escapeHTML: esc, onClose }) {
     if (!/^parentv1_/.test(token || "")) throw new Error("Invalid parent access response.");
-    const dialog = document.createElement("dialog"); dialog.className = "modal friends-dialog parent-view"; dialog.setAttribute("aria-label", "Parent view");
-    dialog.innerHTML = '<div class="modal-heading"><h2>Parent view</h2><button class="text-button" type="button" data-parent-logout>Log out</button></div><p>You’re signed in as a parent. Chats and feed are read only. Parent settings and safety reports use your own access.</p><label>Child<select data-parent-child></select></label><div class="friends-tabs" role="group" aria-label="Parent view sections"><button type="button" data-parent-tab="chats" aria-pressed="true">Chats</button><button type="button" data-parent-tab="feed" aria-pressed="false">Feed</button><button type="button" data-parent-tab="settings" aria-pressed="false">Settings</button></div><div data-parent-view-content></div><p role="status">Loading…</p>';
-    let activeToken = token, childId = null, childRows = [], tab = "chats", scope = "school", epoch = 0, closed = false, working = false, messageCursor = null, feedCursor = null, activeChat = null;
+    const dialog = document.createElement("dialog"); dialog.className = "modal friends-dialog parity-page parent-view"; dialog.setAttribute("aria-label", "Parent view");
+    dialog.innerHTML = `<header class="parent-view-header"><span class="parent-child-avatar" aria-hidden="true"></span><div><small>Parent view</small><strong data-parent-name>Your child's Valid</strong><select data-parent-child aria-label="Child"></select></div><button class="parity-icon-button" type="button" data-parent-options aria-label="Parent view options" aria-expanded="false">${uiIcon("more")}</button></header><nav class="friend-menu parent-options hidden" aria-label="Parent view options"><button type="button" data-parent-refresh>Refresh</button><button type="button" data-parent-permission>Parent permission</button><button type="button" data-parent-notice>What Valid collects</button><button type="button" data-parent-logout>Log out</button></nav><div data-parent-view-content class="parity-page-content"></div><p class="parity-status" role="status">Loading…</p><nav class="parent-tab-bar" aria-label="Parent view sections">${[["chats", "Chats", "tab-chats"], ["feed", "Feed", "tab-feed"], ["settings", "Settings", "settings"]].map(([key, name, icon]) => `<button type="button" data-parent-tab="${key}" aria-label="${name}" aria-pressed="${key === "chats"}">${uiIcon(icon)}<span>${name}</span></button>`).join("")}</nav>`;
+    let activeToken = token, childId = null, childRows = [], tab = "chats", scope = "school", epoch = 0, closed = false, working = false, messageCursor = null, feedCursor = null, activeChat = null, privacyPage = null;
     const content = dialog.querySelector("[data-parent-view-content]"), status = dialog.querySelector("[role=status]");
     const call = (path, options = {}) => api.request(path, { ...options, auth: false, headers: { "X-Parent-Access-Token": activeToken }, credentials: "omit" });
     const current = (generation) => !closed && epoch === generation;
@@ -83,25 +84,35 @@ export function openParentView({ api, token, escapeHTML: esc, onClose }) {
     function settings() {
         const row = child();
         if (!row) return;
-        const controls = [
-            ["school_contacts_only", "Who can add them: school and contacts only"],
-            ["message_requests_from_anyone", "Message requests from anyone"],
-            ["activity_status_enabled", "Show activity status"],
-        ];
-        content.innerHTML = `<h3>Parent settings</h3>${row.scope === "contacts" ? `<p>Safer settings lock these choices for your child while linked.</p>${controls.filter(([key]) => typeof row[key] === "boolean").map(([key, label]) => `<label class="friend-setting"><span>${label}</span><input type="checkbox" data-parent-setting="${key}" ${row[key] ? "checked" : ""}></label>`).join("")}<button class="secondary-button" type="button" data-parent-notice>What Valid collects</button>` : ""}
-            ${row.unlink_requested ? '<p>Your child asked to stop sharing. Sharing continues until you approve.</p><button class="secondary-button" type="button" data-parent-unlink-answer="approve">Approve unlinking</button><button class="secondary-button" type="button" data-parent-unlink-answer="keep">Keep sharing</button>' : ""}
-            ${row.permission_status && row.permission_status !== "linked" ? `<p>Parent permission: ${esc(row.permission_status)}. Withdrawing permission pauses the account.</p><label class="friend-setting"><span>Also request deletion of the account and personal information</span><input type="checkbox" data-parent-delete></label><button class="secondary-button" type="button" data-parent-withdraw ${row.permission_status === "withdrawn" ? "disabled" : ""}>Withdraw permission</button>` : ""}<a href="mailto:support@validapp.lol">Review information or get help</a>`;
+        const name = esc(row.first_name || "Your child");
+        if (privacyPage) {
+            const isReach = privacyPage === "school_contacts_only", value = row[privacyPage];
+            const choices = isReach ? [[false, "Everyone", `Anyone with ${name}'s username can add them, even from other schools`], [true, "School & contacts", "Only people from their school or their contacts can find and add them"]] : [[false, `People ${name} knows`, `Anyone else has to wait until ${name} accepts their friend request`], [true, `Anyone who adds ${name}`, `People ${name} doesn't know can send a message with their friend request`]];
+            const notes = isReach ? [`Contacts are people whose number ${name} saved, or who saved theirs.`, `With School & contacts, ${name} can only add people from their school and contacts, too.`, `Changing this doesn't remove anyone. ${name}'s friends stay friends.`, `If you pick School & contacts, ${name} can't change it while you're linked.`] : [`People ${name} knows go to their school, are saved in their contacts, share a friend with them, or have chatted with them.`, `Adults ${name} doesn't know can never message them first.`, "Blocked people can never message them.", `If you pick People ${name} knows, ${name} can't change it while you're linked.`];
+            content.innerHTML = `<div class="parent-section-heading"><button class="parity-back" type="button" data-parent-settings-back aria-label="Back to settings">‹</button><h3>${isReach ? "Who can add them" : "Who can message them"}</h3><span></span></div><div class="parity-settings-card" role="radiogroup" aria-label="${isReach ? "Who can add them" : "Who can message them"}">${choices.map(([checked, label, detail]) => `<label class="parity-choice"><span><strong>${label}</strong><small>${detail}</small></span><input type="radio" name="parent-privacy" data-parent-setting="${privacyPage}" value="${checked}" ${value === checked ? "checked" : ""}></label>`).join("")}</div><div class="parity-choice-notes">${notes.map(note => `<p>${note}</p>`).join("")}</div>`;
+            status.textContent = ""; return;
+        }
+        content.innerHTML = `<h3 class="parent-page-title">Settings</h3>${row.unlink_requested ? `<section class="parent-setting-section"><h4>Unlink request</h4><div class="parity-settings-card"><p>${name} asked to stop sharing. Sharing continues until you approve.</p><button class="secondary-button" type="button" data-parent-unlink-answer="approve">Approve unlinking</button><button class="secondary-button" type="button" data-parent-unlink-answer="keep">Keep sharing</button></div></section>` : ""}
+            ${row.scope === "contacts" ? `<section class="parent-setting-section"><h4>${name}'s privacy</h4><div class="parity-settings-card">${typeof row.school_contacts_only === "boolean" ? `<button class="parity-setting-row" type="button" data-parent-privacy="school_contacts_only">${uiIcon("person-add")}<span><strong>Who can add them</strong><small>${row.school_contacts_only ? "School & contacts" : "Anyone"}</small></span><span aria-hidden="true">›</span></button>` : ""}${typeof row.message_requests_from_anyone === "boolean" ? `<button class="parity-setting-row" type="button" data-parent-privacy="message_requests_from_anyone">${uiIcon("chat-pair")}<span><strong>Who can message them</strong><small>${row.message_requests_from_anyone ? `Anyone who adds ${name}` : `People ${name} knows`}</small></span><span aria-hidden="true">›</span></button>` : ""}${typeof row.activity_status_enabled === "boolean" ? `<label class="parity-setting-row">${uiIcon("activity")}<span><strong>Show activity status</strong><small>People in their chats see when they're active</small></span><input class="parity-switch" type="checkbox" data-parent-setting="activity_status_enabled" ${row.activity_status_enabled ? "checked" : ""}></label>` : ""}</div><p class="parent-setting-note">When you pick the safer option, ${name} can't change it while you're linked.</p></section>` : ""}
+            <section class="parent-setting-section"><h4>Sharing</h4><div class="parity-settings-card"><div class="parity-setting-row">${uiIcon("group")}<span><strong>${name} shares their account with you</strong></span></div></div></section><button class="parent-sign-out" type="button" data-parent-logout>Sign out of parent view</button>`;
         status.textContent = "";
+    }
+    function permission() {
+        const row = child();
+        content.innerHTML = `<div class="parent-section-heading"><button class="parity-back" type="button" data-parent-settings-back aria-label="Back to settings">‹</button><h3>Parent permission</h3><span></span></div><div class="parity-settings-card"><p>Parent permission: ${esc(row?.permission_status || "linked")}.</p>${row?.permission_status && row.permission_status !== "linked" ? '<p>Withdrawing permission pauses the account.</p><label class="parity-choice"><span>Also request deletion of the account and personal information</span><input type="checkbox" data-parent-delete></label><button class="secondary-button" type="button" data-parent-withdraw>Withdraw permission</button>' : '<p>You can manage sharing and privacy in Settings.</p>'}<a href="mailto:support@validapp.lol">Review information or get help</a></div>`;
+        const withdraw = content.querySelector("[data-parent-withdraw]"); if (withdraw) withdraw.disabled = row?.permission_status === "withdrawn";
     }
     async function load() {
         if (!childId) return;
+        dialog.querySelector("[data-parent-name]").textContent = `${child()?.first_name || "Your child"}'s Valid`;
+        dialog.querySelector(".parent-child-avatar").textContent = (child()?.first_name || "?").slice(0, 1);
         const generation = ++epoch; status.textContent = "Loading…"; content.replaceChildren();
         dialog.querySelectorAll("[data-parent-tab]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.parentTab === tab)));
         if (tab === "settings") { settings(); return; }
         try {
             const response = tab === "chats" ? await call(`${endpoint()}/chats`) : await call(`${endpoint()}/feed?${new URLSearchParams({ scope, ...(feedCursor || {}) })}`);
             if (!current(generation)) return;
-            if (tab === "chats") content.innerHTML = response.chats.map((chat) => `<button class="notification-row" type="button" data-parent-chat="${esc(chat.id)}"><strong>${esc(chat.name)}</strong><small>${esc(chat.preview || "Open text messages")}</small></button>`).join("") || '<p>No chats are available in your parent access scope.</p>';
+            if (tab === "chats") content.innerHTML = `<h3 class="parent-page-title">Chats</h3><p class="parent-setting-note">Read only · Photos and videos stay private</p>` + (response.chats.map((chat) => `<button class="notification-row" type="button" data-parent-chat="${esc(chat.id)}"><strong>${esc(chat.name)}</strong><small>${esc(chat.preview || "Open text messages")}</small></button>`).join("") || '<div class="friends-empty"><p>No chats yet</p><small>Chats shared with you will appear here.</small></div>');
             else {
                 content.innerHTML = `<div class="friends-tabs"><button type="button" data-parent-scope="school" aria-pressed="${scope === "school"}">School</button><button type="button" data-parent-scope="personal" aria-pressed="${scope === "personal"}">Personal</button></div>${response.items.map((item) => `<article class="empty-card"><strong>${esc(item.question_text || "Poll")}</strong><p>${esc(item.voted_for_name || item.contact_name || "")}</p>${reportButton("feed_item", item.question_answer_id)}</article>`).join("") || "<p>No feed items.</p>"}${response.next_timestamp && response.next_id ? '<button class="secondary-button" type="button" data-parent-feed-more>Older polls</button>' : ""}`;
                 feedCursor = response.next_timestamp && response.next_id ? { before_ts: response.next_timestamp, before_id: String(response.next_id) } : null;
@@ -121,6 +132,13 @@ export function openParentView({ api, token, escapeHTML: esc, onClose }) {
     }
     dialog.addEventListener("click", async (event) => {
         const button = event.target.closest("button"); if (!button || button.disabled) return;
+        if (button.matches("[data-parent-options]")) { const options = dialog.querySelector(".parent-options"); options.classList.toggle("hidden"); button.setAttribute("aria-expanded", String(!options.classList.contains("hidden"))); return; }
+        dialog.querySelector(".parent-options").classList.add("hidden");
+        dialog.querySelector("[data-parent-options]").setAttribute("aria-expanded", "false");
+        if (button.matches("[data-parent-refresh]")) return void children();
+        if (button.matches("[data-parent-permission]")) { permission(); return; }
+        if (button.dataset.parentPrivacy) { privacyPage = button.dataset.parentPrivacy; settings(); return; }
+        if (button.matches("[data-parent-settings-back]")) { privacyPage = null; tab = "settings"; settings(); return; }
         if (button.matches("[data-parent-logout]")) {
             await call("/parent-access/logout", { method: "POST" }).catch(() => null); dialog.close(); return;
         }
@@ -145,12 +163,12 @@ export function openParentView({ api, token, escapeHTML: esc, onClose }) {
             working = true; button.disabled = true;
             try {
                 await write(`${base}/${withdraw ? "withdraw" : "unlink"}`, withdraw ? { request_deletion: deletion } : { approve });
-                if (current(generation)) { tab = "settings"; await children(selected); }
+                if (current(generation)) { tab = "settings"; await children(selected); if (withdraw && childId === selected) permission(); }
             } catch (error) { if (current(generation)) status.textContent = userMessage(error, "Couldn't update parent access. Refresh before trying again."); }
             finally { working = false; if (button.isConnected) button.disabled = false; }
             return;
         }
-        if (button.dataset.parentTab) { tab = button.dataset.parentTab; activeChat = null; feedCursor = null; void load(); }
+        if (button.dataset.parentTab) { privacyPage = null; tab = button.dataset.parentTab; activeChat = null; feedCursor = null; void load(); }
         if (button.dataset.parentScope) { scope = button.dataset.parentScope; feedCursor = null; void load(); }
         if (button.dataset.parentChat) void messages(button.dataset.parentChat);
         if (button.matches("[data-parent-messages-more]")) void messages(activeChat, true);
@@ -164,12 +182,12 @@ export function openParentView({ api, token, escapeHTML: esc, onClose }) {
         if (working || row?.scope !== "contacts") return;
         const options = { school_contacts_only: ["friend-reach", "school_contacts_only"], message_requests_from_anyone: ["message-requests", "from_anyone"], activity_status_enabled: ["activity-status", "enabled"] };
         const [path, field] = options[key];
-        working = true; input.disabled = true; status.textContent = "Saving…";
+        working = true; dialog.querySelectorAll("[data-parent-setting]").forEach(control => { control.disabled = true; }); status.textContent = "Saving…";
         try {
-            const result = await write(`${endpoint()}/${path}`, { [field]: input.checked }, "PUT");
+            const result = await write(`${endpoint()}/${path}`, { [field]: input.type === "radio" ? input.value === "true" : input.checked }, "PUT");
             if (current(generation) && selected === childId) { row[key] = result[field]; settings(); }
-        } catch (error) { if (current(generation)) { input.checked = row[key]; status.textContent = userMessage(error, "Couldn't save this setting. Try again."); } }
-        finally { working = false; if (input.isConnected) input.disabled = false; }
+        } catch (error) { if (current(generation)) { settings(); status.textContent = userMessage(error, "Couldn't save this setting. Try again."); } }
+        finally { working = false; if (current(generation)) dialog.querySelectorAll("[data-parent-setting]").forEach(control => { control.disabled = false; }); }
     });
     dialog.addEventListener("submit", async (event) => {
         if (!event.target.matches("[data-parent-report-form]")) return;
@@ -182,7 +200,7 @@ export function openParentView({ api, token, escapeHTML: esc, onClose }) {
         } catch (error) { if (current(generation)) status.textContent = userMessage(error, "Couldn't send this report. Try again."); }
         finally { working = false; if (button.isConnected) button.disabled = false; }
     });
-    dialog.querySelector("select").addEventListener("change", (event) => { childId = event.target.value; feedCursor = null; messageCursor = null; void load(); });
+    dialog.querySelector("select").addEventListener("change", (event) => { childId = event.target.value; privacyPage = null; feedCursor = null; messageCursor = null; void load(); });
     dialog.addEventListener("cancel", (event) => event.preventDefault());
     dialog.addEventListener("close", () => { closed = true; ++epoch; activeToken = null; content.replaceChildren(); dialog.remove(); onClose?.(); }, { once: true });
     document.body.append(dialog); dialog.showModal();
@@ -194,7 +212,12 @@ export function openParentView({ api, token, escapeHTML: esc, onClose }) {
         childRows = result.children;
         dialog.querySelector("select").innerHTML = result.children.map((child) => `<option value="${esc(child.user_id)}">${esc([child.first_name, child.last_name].filter(Boolean).join(" "))}</option>`).join("");
         childId = result.children.find(row => row.user_id === preferred)?.user_id || result.children[0]?.user_id;
-        if (childId) dialog.querySelector("select").value = childId;
+        if (childId) {
+            dialog.querySelector("select").value = childId;
+            dialog.querySelector("select").hidden = childRows.length <= 1;
+            dialog.querySelector("[data-parent-name]").textContent = `${child()?.first_name || "Your child"}'s Valid`;
+            dialog.querySelector(".parent-child-avatar").textContent = (child()?.first_name || "?").slice(0, 1);
+        }
         if (childId) void load(); else status.textContent = "No linked accounts are available.";
       }).catch((error) => { if (current(generation)) { status.textContent = userMessage(error, "Couldn't load parent access. Try again."); content.innerHTML = '<button class="secondary-button" type="button" data-parent-children-retry>Try again</button>'; } });
     }
