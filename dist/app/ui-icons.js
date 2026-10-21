@@ -2,6 +2,9 @@
 // Portable drawings for the same semantic symbols used by MainTabView.
 // Keep every silhouette inside the 24-point grid (including its stroke).
 const paths = {
+    'person-add': '<circle cx="9" cy="7" r="4"/><path d="M2 21v-2a7 7 0 0 1 12-5M19 12v8M15 16h8"/>',
+    'qr-code': '<path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM20 14h1v3M14 20v1h3M20 20h1v1"/>',
+    'settings': '<path d="m9 3-.8 2.7-2.7.7L3 5.8l-1 3 2.2 1.6v3.2L2 15.2l1 3 2.5-.6 2.7.7L9 21h4l.8-2.7 2.7-.7 2.5.6 1-3-2.2-1.6v-3.2L20 8.8l-1-3-2.5.6-2.7-.7L13 3Z"/><circle cx="11" cy="12" r="3"/>',
     bookmark: '<path d="M6 3h12v19l-6-4-6 4Z"/>',
     'bookmark-slash': '<path d="m3 3 18 18M8 3h10v12M6 8v14l6-4 6 4"/>',
     trash: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',
@@ -29,6 +32,7 @@ const paths = {
     camera: '<path d="M8 5h8l2 3h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2h2Z"/><circle cx="12" cy="14" r="4"/>',
     flip: '<path d="M4 9a8 8 0 0 1 13-4l3 3M20 3v5h-5M20 15a8 8 0 0 1-13 4l-3-3M4 21v-5h5"/>',
     chat: '<path d="M4 4h16v12H9l-5 4z"/><path d="M8 8h8M8 12h5"/>',
+    bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M10 21h4"/>',
     compose: '<path d="M10 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-6M10 14l1-4L19 2l3 3-8 8Z"/>',
     search: '<circle cx="10" cy="10" r="6.5"/><path d="m15 15 6 6"/>',
     next: '<path d="m9 4 8 8-8 8"/>',

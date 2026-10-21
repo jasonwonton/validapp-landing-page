@@ -98,7 +98,7 @@ export class ValidAPI {
             const retry = !recover && this.baseURL === `${window.location.origin}/api/v1`
                 && ['GET', 'HEAD', 'OPTIONS'].includes((options.method || 'GET').toUpperCase());
             ({ response, payload } = await fetchSessionRequest(`${this.baseURL}${path}`, {
-                ...fetchOptions, headers, credentials: "include",
+                ...fetchOptions, headers, credentials: options.credentials || "include",
             }, { fetcher, retry, signal: options.signal, timeoutMs: options.timeoutMs || 15000 }));
         } catch (error) {
             if (options.signal?.aborted) throw error;
@@ -115,6 +115,9 @@ export class ValidAPI {
             throw failure;
         }
 
+        if (options.auth !== false && requestRevision !== this.sessionRevision) {
+            throw new APIError("Your account changed. Open this screen again.", 409, { code: "session_changed" });
+        }
         const contentType = response.headers.get("content-type") || "";
         if (!response.ok) {
             let sessionInvalid = false;
@@ -170,6 +173,10 @@ export class ValidAPI {
             throw failure;
         }
 
+        if (options.auth !== false && !["GET", "HEAD"].includes((options.method || "GET").toUpperCase())
+            && /\/(?:blocks\/|reports\/users\/|friends\/|people\/requests)/.test(path)) {
+            window.dispatchEvent(new CustomEvent("valid:people-changed", { detail: { owner: this.user?.id } }));
+        }
         return includeResponseHeaders ? { data: payload, headers: response.headers } : payload;
     }
 
@@ -566,12 +573,57 @@ export class ValidAPI {
         return this.request(`/users/${userId}/blocks/${blockedUserId}`, { method: "POST" });
     }
 
-    getBlockedUsers(userId) {
-        return this.request(`/users/${userId}/blocks/profiles`);
+    getBlockedUsers(userId) { return this.request(`/users/${userId}/blocks/profiles`); }
+
+    getFriends(userId, cursor = "", limit = 100) {
+        const params = new URLSearchParams({ limit: String(Math.max(1, Math.min(500, limit))) });
+        if (cursor) params.set("cursor", cursor);
+        return this.request(`/users/${userId}/friends?${params}`);
     }
 
-    unblockUser(userId, blockedUserId) {
-        return this.request(`/users/${userId}/blocks/${blockedUserId}`, { method: "DELETE" });
+    getFriendSuggestions(userId) { return this.request(`/users/${userId}/friends/suggestions`); }
+    getPeopleRequests(userId) { return this.request(`/users/${userId}/people/requests`); }
+    getFriendRequestMessages(userId, requesterId) { return this.request(`/users/${userId}/people/requests/${encodeURIComponent(requesterId)}/messages`); }
+    lookupPerson(userId, username) {
+        return this.request(`/users/${userId}/people/lookup?${new URLSearchParams({ username })}`);
+    }
+    sendFriendRequest(userId, targetId, source = null) {
+        return this.request(`/users/${userId}/people/requests`, { method: "POST", body: JSON.stringify({
+            user_id: targetId, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+            ...(source ? { source } : {}),
+        }) });
+    }
+    acceptFriendRequest(userId, targetId) {
+        return this.request(`/users/${userId}/people/requests/${targetId}/accept`, { method: "POST" });
+    }
+    declineFriendRequest(userId, targetId) {
+        return this.request(`/users/${userId}/people/requests/${targetId}/ignore`, { method: "POST" });
+    }
+    cancelFriendRequest(userId, targetId) {
+        return this.request(`/users/${userId}/people/requests/${targetId}`, { method: "DELETE" });
+    }
+    removeFriend(userId, targetId) {
+        return this.request(`/users/${userId}/friends/${targetId}`, { method: "DELETE" });
+    }
+    dismissFriendSuggestion(userId, targetId) {
+        return this.request(`/users/${userId}/friends/suggestions/${targetId}/dismiss`, { method: "POST" });
+    }
+    getBlockedProfiles(userId) { return this.request(`/users/${userId}/blocks/profiles`); }
+    unblockUser(userId, targetId) { return this.request(`/users/${userId}/blocks/${targetId}`, { method: "DELETE" }); }
+    getFriendReach(userId) { return this.request(`/users/${userId}/friend-reach`); }
+    updateFriendReach(userId, schoolContactsOnly) {
+        return this.request(`/users/${userId}/friend-reach`, { method: "PUT", body: JSON.stringify({ school_contacts_only: schoolContactsOnly }) });
+    }
+    getMessageRequests(userId) { return this.request(`/users/${userId}/message-requests`); }
+    updateMessageRequests(userId, fromAnyone) {
+        return this.request(`/users/${userId}/message-requests`, { method: "PUT", body: JSON.stringify({ from_anyone: fromAnyone }) });
+    }
+    getAddLink(userId) { return this.request(`/users/${userId}/add-link`); }
+    updateAddLink(userId, enabled) {
+        return this.request(`/users/${userId}/add-link`, { method: "PUT", body: JSON.stringify({ enabled }) });
+    }
+    resolveAddLink(userId, username) {
+        return this.request(`/users/${userId}/add-link/resolve?${new URLSearchParams({ username })}`);
     }
 
     getPlayQuestions(userId) {
@@ -853,11 +905,25 @@ export class ValidAPI {
         });
     }
 
-    getAnonymousInbox(userId, limit = 30, offset = 0) {
-        const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    getPublicAskContext(publicToken) { return this.request(`/a/${encodeURIComponent(publicToken)}/context`); }
+    submitPublicAsk(publicToken, body, senderNonce) {
+        return this.request(`/a/${encodeURIComponent(publicToken)}`, { method: "POST", body: JSON.stringify({ body, sender_nonce: senderNonce }) });
+    }
+
+    getAnonymousInbox(userId, limit = 30, offset = 0, cursor = {}) {
+        const params = new URLSearchParams({ limit: String(limit), offset: String(offset), include_sent: "true", ...cursor });
         return this.request(`/users/${userId}/anonymous-inbox?${params}`);
     }
 
+    getActivity(userId, cursor = "") {
+        const params = new URLSearchParams({ limit: "30" });
+        if (cursor) params.set("cursor", cursor);
+        return this.request(`/users/${userId}/activity?${params}`);
+    }
+    getActivitySummary(userId) { return this.request(`/users/${userId}/activity/summary`); }
+    markActivityRead(userId, payload) {
+        return this.request(`/users/${userId}/activity/read`, { method: "POST", body: JSON.stringify(payload) });
+    }
     getTbhRequestTargets(userId, search = "") {
         const params = new URLSearchParams();
         if (search.trim()) params.set("search", search.trim());
@@ -1015,7 +1081,8 @@ export class ValidAPI {
         return this.request(`/users/${userId}/chats-unread-count`);
     }
 
-    createChat(userId, memberUserIds, name = null, clientRequestId = crypto.randomUUID(), createdFrom = null) {
+    getDirectChat(userId, targetId) { return this.request(`/users/${userId}/direct-chats/${encodeURIComponent(targetId)}`); }
+    createChat(userId, memberUserIds, name = null, clientRequestId = crypto.randomUUID(), createdFrom = null, initialMessage = null) {
         return this.request(`/users/${userId}/chats`, {
             method: "POST",
             body: JSON.stringify({
@@ -1024,6 +1091,7 @@ export class ValidAPI {
                 client_request_id: clientRequestId,
                 timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
                 ...(createdFrom ? { created_from: createdFrom } : {}),
+                ...(initialMessage ? { initial_message: initialMessage } : {}),
             }),
         });
     }

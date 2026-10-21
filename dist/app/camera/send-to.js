@@ -300,11 +300,12 @@ export function openSendTo({
             }
             return rows;
         };
-        const [chats, classmates, contacts, blocked] = await Promise.allSettled([
+        const [chats, classmates, contacts, blocked, friends] = await Promise.allSettled([
             loadChats(),
             allowsChats || allowsStory ? api.getClassmates(userId, "", 500) : Promise.resolve([]),
             allowsChats && api.getAllContacts ? api.getAllContacts(userId) : Promise.resolve([]),
             api.getBlockedUsers ? api.getBlockedUsers(userId) : Promise.resolve([]),
+            allowsChats && config?.friends_enabled === true && api.getFriends ? api.getFriends(userId, "", 500) : Promise.resolve({ friends: [] }),
         ]);
         state.loading = false;
         state.blocked = new Set((blocked.status === "fulfilled" && Array.isArray(blocked.value) ? blocked.value : []).map((user) => String(user.user_id || user.id || user.blocked_user_id)));
@@ -322,7 +323,7 @@ export function openSendTo({
                 .map((chat) => String((chat.member_previews || []).find((member) => String(member.user_id) !== String(userId))?.user_id || "")).filter(Boolean));
             const contactRows = contacts.status === "fulfilled" && Array.isArray(contacts.value) ? contacts.value : [];
             // People with no one-to-one chat yet: contacts first, then classmates, then mutuals.
-            state.people = mergeChatPeople(classmateRows, contactRows, userId)
+            state.people = mergeChatPeople(classmateRows, contactRows, userId, friends.status === "fulfilled" ? friends.value.friends || [] : [])
                 .filter((person) => !partners.has(person.id) && !state.blocked.has(person.id))
                 .sort((a, b) => Number(b.contact) - Number(a.contact) || Number(b.school_mate) - Number(a.school_mate)
                     || b.mutual - a.mutual || a.name.localeCompare(b.name));

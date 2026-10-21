@@ -8,7 +8,7 @@ import { createRealtimeList } from "./realtime-list.js";
 import { activateRoute, preloadRoute } from "./routes/route-loader.js";
 import { clearRuntimeStyles, setRuntimeStyles } from "./runtime-style.js";
 import { configureMediaFallback, imageCandidates, installMediaImageFallback, mediaImageMarkup, setMediaImageSource } from "./media-url.js";
-import { choiceSheet, confirmReasonSheet, confirmSheet } from "./ui-dialogs.js";
+import { choiceSheet, confirmReasonSheet, confirmSheet, startCodeResendCountdown } from "./ui-dialogs.js";
 import { showToast } from "./toast.js";
 import { userMessage } from "./user-message.js";
 import { answerPayload, buildChoicePool, canStartPlay, contactUploadPayload, selectPlayChoices, summarizeContactSync } from "./play-choices.js";
@@ -317,6 +317,7 @@ const state = {
     askStoryFile: null,
     askStoryShareURL: null,
     anonymousInbox: null,
+    askBoxMode: "received",
     selectedAnonymousQuestionId: null,
     anonymousInboxGeneration: 0,
     topQuestionsWeekly: null,
@@ -436,6 +437,8 @@ async function refreshConfig({ force = false } = {}) {
             configRefreshedAt = Date.now();
             const before = state.config || {};
             state.config = { ...before, ...fresh };
+            $$("[data-open-friends], [data-open-friend-privacy]").forEach((button) => button.classList.toggle("hidden", state.config.friends_enabled !== true));
+            if (state.config.friends_enabled !== true) void friendsViewPromise?.then((view) => view.clear()).catch(() => null);
             const changed = ["enable_web_comments", "enable_stories", "enable_web_stories", "enable_tbh_requests", "enable_web_media_ingest"]
                 .some((key) => before[key] !== state.config[key]);
             if (changed && document.body.classList.contains("authenticated")) {
@@ -495,7 +498,8 @@ function mountUIRoot(root) {
 }
 
 function initializeParkedUI() {
-    document.querySelectorAll("#anonymousAnswerDetailDialog").forEach(parkUIRoot);
+    // Keep inactive question fields out of the initial shell, as with lazy dialogs.
+    document.querySelectorAll("#anonymousAnswerDetailDialog, #questionDialog").forEach(parkUIRoot);
     document.querySelectorAll("dialog:not(#deleteAccountDialog):not(#signInDialog)").forEach((dialog) => {
         dialog.addEventListener("close", () => requestAnimationFrame(() => {
             if (!dialog.open) parkUIRoot(dialog);
@@ -969,6 +973,7 @@ function openDetailScreen(screen, { historyMode = "push" } = {}) {
 
 function closeDetailScreen(screen, { fromHistory = false } = {}) {
     closeDetailActionMenus();
+    if (screen.id === "classmateProfileDialog") ++state.classmateProfileGeneration;
     screen.classList.add("hidden");
     if (!$(".detail-screen:not(.hidden)")) {
         document.body.classList.remove("detail-screen-open");
@@ -979,6 +984,12 @@ function closeDetailScreen(screen, { fromHistory = false } = {}) {
     }
     state.detailReturnFocus?.focus?.({ preventScroll: true });
     state.detailReturnFocus = null;
+    void activityViewPromise?.then(view => {
+        // Pop and restore the underlying tab before reopening the bell. A
+        // modal opened during the traversal would be closed by tab cleanup.
+        if (state.historyTraversalPending) window.addEventListener("popstate", () => queueMicrotask(() => view.returnFromDetail(screen.id)), { once: true });
+        else view.returnFromDetail(screen.id);
+    }).catch(() => null);
     if (!fromHistory && history.state?.detail === screen.id) {
         // A sheet opened over this screen (e.g. a report) may still own the top
         // entry if it closed in the same task: pop both, or the landing entry
@@ -1007,6 +1018,119 @@ function toggleDetailActionMenu(button) {
     button.setAttribute("aria-expanded", String(willOpen));
 }
 
+let activityViewPromise = null, activityLoadAttempts = 0;
+function prepareActivityView() {
+    activityViewPromise ||= (activityLoadAttempts++ ? import(new URL(`./activity.js?retry=${activityLoadAttempts}`, import.meta.url).href) : import("./activity.js")).then(({ createActivityView }) => createActivityView({
+        api, getUser: () => api.user, getConfig: () => state.config, escapeHTML,
+        inboxLocked: isFeedVoteLocked,
+        getInboxEntries: () => [
+            ...(state.anonymousInbox?.questions || []).slice(0, 15).map((item) => ({ timestamp: item.created_at, text: "Anonymous question", detail: item.body, destination: { route: "ask_question", id: item.id } })),
+            ...(state.anonymousInbox?.answers || []).slice(0, 15).map((item) => ({ timestamp: item.created_at, text: `${item.recipient_available === false ? "An account" : item.recipient_display_name} replied`, detail: item.answer_text, destination: { route: "ask_answer", id: item.id } })),
+            ...(state.anonymousInbox?.sent || []).filter((item) => item.answer_text && !state.anonymousInbox.answers?.some((answer) => String(answer.id) === String(item.id))).slice(0, 15).map((item) => ({ timestamp: item.created_at, text: `${item.recipient_available === false ? "An account" : item.recipient_display_name} replied`, detail: item.answer_text, destination: { route: "ask_sent", id: item.id } })),
+            ...(!isFeedVoteLocked() ? state.personalFeedItems.slice(0, 15).map((item) => ({ timestamp: item.created_at, text: item.question_text, detail: "Open poll", destination: { route: "poll", question_answer_id: item.question_answer_id } })) : []),
+            ...state.tbhPendingRequests.slice(0, 15).map((item) => ({ timestamp: item.created_at, text: `${item.requester_first_name} requested a TBH`, destination: { route: "tbh_request", id: item.id } })),
+            ...state.tbhInboxItems.slice(0, 15).map((item) => ({ timestamp: item.created_at, text: `${item.author_first_name || "Someone"} sent you a TBH`, detail: "Open TBH", destination: { route: "tbh", tbh_response_id: item.id } })),
+        ],
+        navigate: async destination => { await navigateActivityDestination(destination); return $(".detail-screen:not(.hidden)")?.id; },
+        onSummary: (summary) => {
+            $$("[data-bell-count]").forEach((badge) => { badge.textContent = summary.enabled && summary.badge_total ? ` ${Math.min(99, summary.badge_total)}` : ""; });
+        },
+    })).catch(error => { activityViewPromise = null; throw error; });
+    return activityViewPromise;
+}
+async function openNotifications() {
+    const owner = api.user?.id;
+    if (!owner) return;
+    try { const view = await prepareActivityView(); if (api.user?.id === owner) await view.open(); }
+    catch { if (api.user?.id === owner) showToast("Notifications couldn't open. Reconnect, then try again."); }
+}
+async function navigateActivityDestination(destination) {
+    if (!api.user?.id) return;
+    const route = destination.route;
+    if (route === "friends") return openFriends({ section: "requests" });
+    if (["profile_aura", "boost_again", "target_back", "free_week_reveal"].includes(route)) { switchPanel("profile"); await loadProfilePanel({ force: true }); return; }
+    if (["my_questions", "question_approved"].includes(route)) { switchPanel("profile"); openQuestionDialog({ section: "history" }); return; }
+    if (route === "camera_filter") { switchPanel("chats"); showToast("Your camera filter is ready."); return; }
+    switchPanel("feed");
+    if (route === "story" || route === "story_viewers") {
+        const url = new URL(location.href); url.searchParams.set("story", destination.story_id);
+        history.replaceState(history.state, "", `${url.pathname}${url.search}`);
+        await (await prepareFeedView()).refreshStories?.(); return;
+    }
+    if (route === "ask_question") { await loadAnonymousInbox(); openAnonymousQuestionDialog(destination.id); return; }
+    if (route === "ask_answer") { await loadAnonymousInbox(); openAnonymousAnswerDialog(destination.id); return; }
+    if (route === "ask_sent") { await loadAnonymousInbox(); openAnonymousAnswerDialog(destination.id, true); return; }
+    if (route === "tbh_request") { await loadTbhContent(); openTbhComposer(destination.id); return; }
+    if (route === "poll" && destination.question_answer_id) {
+        if (isFeedVoteLocked()) { showToast("Play to unlock your polls."); return; }
+        const id = destination.question_answer_id;
+        if (!state.feedItems.some((item) => String(item.question_answer_id) === String(id))) {
+            try { const item = await api.getFeedItem(api.user.id, id); commitFeedItems([item]); } catch (error) { showToast(userMessage(error, "This is unavailable. Please try again.")); return; }
+        }
+        openFeedDetail(id);
+        if (destination.comment_id && commentsEnabled()) await openCommentsForTarget("poll", id, { commentId: destination.comment_id });
+        return;
+    }
+    if (route === "tbh" && destination.tbh_response_id) {
+        await loadTbhContent();
+        const id = destination.tbh_response_id;
+        const kind = state.tbhInboxItems.some((item) => String(item.id) === String(id)) ? "received" : state.tbhSentItems.some((item) => String(item.id) === String(id)) ? "sent" : "school";
+        await openTbhDetail(`${kind}:${id}`); return;
+    }
+    state.feedType = "personal";
+    state.personalInboxFilter = ["all", "polls", "tbhs", "ask_me"].includes(destination.filter) ? destination.filter : "all";
+    await loadFeed(true);
+}
+
+let friendsViewPromise = null, friendsLoadAttempts = 0;
+let sessionGeneration = 0;
+function prepareFriendsView() {
+    // Browsers retain a failed module-map entry. A later explicit retry needs
+    // a fresh URL in this same immutable release, without reloading the app.
+    friendsViewPromise ||= (friendsLoadAttempts++ ? import(new URL(`./friends/index.js?retry=${friendsLoadAttempts}`, import.meta.url).href) : import("./friends/index.js")).then(({ createFriendsView }) => createFriendsView({
+        api, getUser: () => api.user, getConfig: () => state.config,
+        escapeHTML, avatarMarkup, showToast,
+        openProfile: (person) => openClassmateProfile(person.user_id, person),
+        openChat: async (person) => {
+            const owner = api.user?.id;
+            try {
+                const chat = await api.createChat(owner, [person.user_id]);
+                if (api.user?.id !== owner) return;
+                switchPanel("chats");
+                const route = await preloadRoute("chats");
+                await activatePanelRoute("chats");
+                await route.openChat?.(chat.id);
+            } catch (error) { if (api.user?.id === owner) showToast(userMessage(error, "This is unavailable. Please try again.")); }
+        },
+        onChanged: (change) => {
+            if (!change?.action) return;
+            state.classmateDirectory = null;
+            if (["block", "report"].includes(change.action)) {
+                state.classmates = state.classmates.filter((p) => String(p.user_id) !== change.userId);
+                state.choicesByQuestion.clear();
+                clearCachedAppState();
+                void loadFeed(true);
+            }
+            void preloadRoute("chats").then((route) => route.refresh?.()).catch(() => null);
+        },
+    })).catch(error => { friendsViewPromise = null; throw error; });
+    return friendsViewPromise;
+}
+async function openFriends(options = {}) {
+    if (!api.user?.id || state.config?.friends_enabled !== true) return;
+    const owner = api.user.id;
+    try { const view = await prepareFriendsView(); if (api.user?.id === owner) await view.open(options); }
+    catch { if (api.user?.id === owner) showToast("Add Friends couldn't open. Reconnect, then try again."); }
+}
+
+window.addEventListener("valid:people-changed", (event) => {
+    if (!api.user?.id || event.detail?.owner && event.detail.owner !== api.user.id) return;
+    state.classmateDirectory = null;
+    state.choicesByQuestion.clear();
+    void friendsViewPromise?.then((view) => view.invalidate()).catch(() => null);
+    void preloadRoute("chats").then((route) => route.refresh?.()).catch(() => null);
+});
+
 function showSignedOut(message = "") {
     weeklyGameGeneration++;
     weeklyGame?.close();
@@ -1015,6 +1139,14 @@ function showSignedOut(message = "") {
     document.querySelector("#playInviteDialog")?.close();
     void presenceLifecycle?.stop();
     document.querySelectorAll(".activity-settings-dialog").forEach(dialog => dialog.close());
+    ++sessionGeneration;
+    ++state.classmateProfileGeneration;
+    void friendsViewPromise?.then((view) => view.clear()).catch(() => null);
+    void activityViewPromise?.then((view) => view.clear()).catch(() => null);
+    $$("[data-open-friends], [data-open-friend-privacy], [data-open-parent-link]").forEach((button) => button.classList.add("hidden"));
+    $$("dialog[open]").forEach((dialog) => dialog.close());
+    $$(".detail-screen").forEach((screen) => screen.classList.add("hidden"));
+    document.body.classList.remove("detail-screen-open");
     clearInterval(state.playLockTimer);
     state.playLockTimer = state.playLockTick = null;
     stopStripeCheckoutPolling();
@@ -1053,6 +1185,8 @@ function showAuthView() {
 async function showSignedIn() {
     sessionRestorePending = false;
     hideSessionRecovery();
+    const generation = ++sessionGeneration;
+    const owner = api.user?.id;
     $("#authView").classList.add("hidden");
     hideLaunchSplash();
     try { localStorage.setItem(PRIOR_SESSION_KEY, "1"); } catch (_) { /* First-visit detection falls back to the installation id. */ }
@@ -1095,12 +1229,18 @@ async function showSignedIn() {
                 enable_web_comments: false,
             })),
         ]);
+        if (generation !== sessionGeneration || api.user?.id !== owner) return;
         api.user = { ...api.user, ...currentUser };
         state.profile = profile;
+        if (typeof api.request === "function") void api.request("/parent-approvals/my-status").then((parent) => {
+            if (generation !== sessionGeneration || api.user?.id !== owner) return;
+            $("[data-open-parent-link]").classList.toggle("hidden", !(parent.can_link || parent.monitoring));
+        }).catch(() => null);
         state.classmatesStatus = classmatesStatus;
         state.config = config;
         // The Feed may have activated before config arrived: build Stories now.
         void feedView?.refreshStories?.();
+        $$("[data-open-friends], [data-open-friend-privacy]").forEach((button) => button.classList.toggle("hidden", config.friends_enabled !== true));
         const chatsEnabled = config.enable_chats === true && config.enable_web_chats === true;
         if (chatsEnabled && !chatPresence) {
             const { createChatPresence, bindPresenceLifecycle } = await import('./chat/presence.js');
@@ -1140,11 +1280,19 @@ async function showSignedIn() {
         initializeAppNavigation();
         void refreshBanner({ force: true });
         refreshWebPushStatus({ sync: true });
+        void prepareActivityView().then((view) => view.summary()).catch(() => null);
         if (!isFeedVoteLocked()) await loadFeed(true);
         await handleNotificationRoute();
         await handleGodModeManagementRoute();
+        const addUsername = new URL(location.href).searchParams.get("add");
+        if (addUsername && config.friends_enabled === true && config.add_links_enabled === true) {
+            await openFriends({ username: addUsername });
+            const url = new URL(location.href); url.searchParams.delete("add");
+            history.replaceState(history.state, "", `${url.pathname}${url.search}`);
+        }
         if (api.user?.deletion_requested_at) showPendingDeletion();
         void deferredAccountState.then(([askAccess, askSafetyNotices, askSafetyNoticeHistory, passkeyStatus]) => {
+            if (generation !== sessionGeneration || api.user?.id !== owner) return;
             state.askAccess = askAccess;
             state.askSafetyNotices = askSafetyNotices;
             state.askSafetyNoticeHistory = askSafetyNoticeHistory;
@@ -1224,6 +1372,12 @@ async function handleNotificationRoute() {
         // question_approved: iOS opens the school-question history from Profile.
         switchPanel("profile");
         openQuestionDialog({ section: "history", submissionId: params.get("submission_id") });
+    } else if (["people_request", "people_request_accepted"].includes(notification)) {
+        await openFriends({ section: "requests" });
+    } else if (notification === "activity") {
+        await openNotifications();
+    } else if (notification === "inbox") {
+        await openAskInboxFromPush(params);
     } else if (notification === "comment_moderation_notice") {
         switchPanel("feed");
         await showCommentModerationNotice();
@@ -1232,10 +1386,6 @@ async function handleNotificationRoute() {
         switchPanel("feed");
     } else if (notification === "feed") {
         switchPanel("feed");
-    } else if (notification === "inbox") {
-        // anonymous_question_received / _answered: the Ask Me inbox, or the
-        // question or answer itself when the link names one.
-        await openAskInboxFromPush(params);
     } else if (notification === "tbh_request") {
         switchPanel("feed");
         await loadTbhContent();
@@ -1278,6 +1428,7 @@ async function handleNotificationRoute() {
         }
     }
     params.delete("notification");
+    params.delete("anonymous_question_id");
     params.delete("tbh_request_id");
     params.delete("tbh_response_id");
     params.delete("question_answer_id");
@@ -1533,6 +1684,7 @@ function renderProfilePanel() {
         ${hasProfilePhoto ? "" : '<p class="profile-photo-warning">\u26a0\ufe0f Users without profile pictures receive less votes.</p>'}
         <h3>${escapeHTML(displayName(profile))}</h3>
         <div class="profile-identity-line"><span class="profile-handle">@${escapeHTML(profile.username || "valid")}</span>${streak ? `<span class="profile-streak ${profile.streak_needs_activity ? "needs-activity" : ""}" aria-label="${streak} day streak">${uiIcon("fire")} ${streak}</span>` : ""}</div>
+        ${state.config?.friends_enabled === true ? `<button class="profile-friends-entry" type="button" data-open-friends>${uiIcon("person-add")}<span>Friends</span><span aria-hidden="true">›</span></button>` : ""}
         <button class="profile-bio-button ${profile.bio ? "" : "empty"}" type="button" data-edit-bio>${profile.bio ? escapeHTML(profile.bio) : '<span>Add bio</span><span class="profile-add-bio-icon" aria-hidden="true">+</span>'}</button>
         ${(schoolName || grade) ? `<div class="profile-school-meta">${schoolName ? `<span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-school.svg" alt=""><span>${escapeHTML(schoolName)}</span></span>` : ""}${grade ? `<span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-graduation-cap.svg" alt=""><span>${escapeHTML(grade)}</span></span>` : ""}</div>` : ""}
         <button class="profile-information-inline" type="button" data-edit-profile>
@@ -2752,7 +2904,7 @@ async function openTargetedBoostPicker() {
 
 function renderClassmateDirectory() {
     const query = $("#classmateDirectorySearch").value.trim().toLowerCase();
-    renderClassmatePickerList($("#classmateDirectoryList"), sortClassmatesLikeIOS(state.classmateDirectory), {
+    renderClassmatePickerList($("#classmateDirectoryList"), sortClassmatesLikeIOS(state.classmateDirectory?.filter((person) => !state.classmateDirectoryAskOnly || person.ask_link_active)), {
         query,
         emptyMessage: query ? "No matching classmates." : "No classmates are visible yet.",
         rowOptions: (classmate) => ({
@@ -2767,7 +2919,10 @@ function updateClassmateDirectoryHeading(count = null) {
     $("#classmateDirectoryTitle").textContent = Number.isFinite(count) ? `Classmates (${count})` : "Classmates";
 }
 
-async function openClassmateDirectory() {
+async function openClassmateDirectory({ askOnly = false } = {}) {
+    const owner = api.user?.id;
+    const epoch = state.classmateDirectoryGeneration = (state.classmateDirectoryGeneration || 0) + 1;
+    state.classmateDirectoryAskOnly = askOnly;
     const dialog = $("#classmateDirectoryDialog");
     $("#classmateDirectorySearch").value = "";
     updateClassmateDirectoryHeading(state.classmateDirectory?.length ?? null);
@@ -2779,7 +2934,9 @@ async function openClassmateDirectory() {
     });
     if (state.classmateDirectory) return;
     try {
-        state.classmateDirectory = await api.getClassmates(api.user.id, "", 500);
+        const classmates = await api.getClassmates(owner, "", 500);
+        if (api.user?.id !== owner || epoch !== state.classmateDirectoryGeneration || !dialog.open) return;
+        state.classmateDirectory = classmates;
         writeAppCache("classmates", state.classmateDirectory);
         updateClassmateDirectoryHeading(state.classmateDirectory.length);
         $("#classmateDirectoryStatus").textContent = "";
@@ -2789,20 +2946,75 @@ async function openClassmateDirectory() {
     }
 }
 
+function profileFriendActions(profile) {
+    if (state.config?.friends_enabled !== true) return "";
+    const relation = profile.friend_relation;
+    const busy = state.profileFriendBusy;
+    const primary = profile.blocked_by_viewer ? ["unblock", "Unblock"]
+        : profile.can_add === false ? ["unavailable", "Unavailable"]
+        : relation === "added" ? ["message", "Chat"]
+        : relation === "added_you" ? ["accept", "Accept friend request"]
+        : relation === "requested" ? ["requested", "Requested"]
+        : relation === "none" ? ["add", "Add friend"] : ["options", "Friend options"];
+    return `<div class="profile-friend-actions"><button class="primary-button" type="button" data-profile-friend-action="${primary[0]}" ${busy || ["unavailable", "requested"].includes(primary[0]) ? "disabled" : ""}>${busy ? "Updating…" : primary[1]}</button>${relation === "added_you" ? `<button class="text-button" type="button" data-profile-friend-action="decline" ${busy ? "disabled" : ""}>Decline</button>` : ""}</div>`;
+}
+async function actOnProfileFriend(action) {
+    const person = state.selectedClassmateProfile, owner = api.user?.id;
+    if (!person || !owner || state.profileFriendBusy || state.config?.friends_enabled !== true) return;
+    if (action === "options") { closeDetailScreen($("#classmateProfileDialog")); return openFriends({ person }); }
+    if (action === "message") {
+        try {
+            const chat = await api.createChat(owner, [person.user_id]);
+            if (api.user?.id !== owner) return;
+            closeDetailScreen($("#classmateProfileDialog")); switchPanel("chats");
+            await activatePanelRoute("chats"); await (await preloadRoute("chats")).openChat?.(chat.id);
+        } catch (error) { if (api.user?.id === owner) $("#classmateProfileStatus").textContent = userMessage(error, "Couldn't open chat."); }
+        return;
+    }
+    const methods = { add: "sendFriendRequest", accept: "acceptFriendRequest", decline: "declineFriendRequest", cancel: "cancelFriendRequest", remove: "removeFriend", unblock: "unblockUser" };
+    if (!methods[action]) return;
+    if (["remove", "unblock"].includes(action) && !await confirmSheet({ title: action === "remove" ? "Remove friend?" : "Unblock this account?", message: action === "unblock" ? "Unblocking does not restore your previous friendship." : "Your chat history stays. A future message asks to be friends again.", confirmLabel: action === "remove" ? "Remove friend" : "Unblock", destructive: action === "remove" })) return;
+    if (action === "accept" && person.friendUnknown && !await confirmSheet({ title: "Do you know this person?", message: "Only accept friend requests from people you know.", confirmLabel: "Accept", cancelLabel: "Go back" })) return;
+    if (api.user?.id !== owner || state.selectedClassmateProfile !== person) return;
+    state.profileFriendBusy = true; renderClassmateProfile();
+    try {
+        const result = await api[methods[action]](owner, person.friend_target_id || person.user_id);
+        if (api.user?.id !== owner || state.selectedClassmateProfile !== person) return;
+        person.friend_relation = result?.relation || (action === "accept" ? "added" : "none");
+        if (action === "unblock") {
+            person.blocked_by_viewer = false; person.can_add = false;
+            try {
+                const fresh = await api.getProfile(person.user_id);
+                if (api.user?.id !== owner || state.selectedClassmateProfile !== person) return;
+                Object.assign(person, fresh, { can_add: fresh.can_add });
+            } catch { /* Keep actions unavailable until the profile can be checked again. */ }
+        }
+        showToast(person.friend_relation === "requested" ? "Friend request sent" : person.friend_relation === "added" ? "You're friends" : "Updated");
+        dispatchEvent(new CustomEvent("valid:people-changed"));
+    } catch (error) { if (api.user?.id === owner && state.selectedClassmateProfile === person) $("#classmateProfileStatus").textContent = userMessage(error, "Couldn't update this relationship. Reopen to check its current state."); }
+    finally { state.profileFriendBusy = false; if (api.user?.id === owner && state.selectedClassmateProfile === person) renderClassmateProfile(); }
+}
+
 function renderClassmateProfile() {
     const profile = state.selectedClassmateProfile;
     if (!profile) return;
+    $("#classmateProfileDialog").classList.toggle("friend-profile-page", state.config?.friends_enabled === true);
+    const menu = $("#classmateProfileDialog .detail-overflow-menu");
+    menu.querySelectorAll("[data-profile-friend-action]").forEach(button => button.remove());
+    const friendOption = profile.friend_relation === "added" ? ["remove", "Remove friend"] : profile.friend_relation === "requested" ? ["cancel", "Cancel request"] : null;
+    if (state.config?.friends_enabled === true && friendOption) menu.insertAdjacentHTML("afterbegin", `<button type="button" role="menuitem" data-profile-friend-action="${friendOption[0]}">${friendOption[1]}</button>`);
     $("#classmateProfileCard").innerHTML = `<article class="full-profile-card classmate-profile-card">
         <span class="full-profile-avatar">${profileImageMarkup(profile, [profile.profile_picture_url_medium, profile.profile_picture_url])}</span>
         <h3>${escapeHTML(displayName(profile))}</h3>
         <div class="profile-handle">${profile.username ? `@${escapeHTML(profile.username)}` : "Valid classmate"}</div>
         ${profile.bio ? `<p class="profile-bio">${escapeHTML(profile.bio)}</p>` : ""}
-        <div class="profile-school-meta"><span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-school.svg" alt=""><span>${escapeHTML(profile.school_name || state.profile?.school_name || "Your school")}</span></span>${profile.grade ? `<span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-graduation-cap.svg" alt=""><span>${escapeHTML(formatGrade(profile.grade))}</span></span>` : ""}</div>
-        ${state.selectedClassmateAskTarget?.public_token ? `<a class="primary-button classmate-ask-button" href="../a/${encodeURIComponent(state.selectedClassmateAskTarget.public_token)}">${appSymbolMarkup("ask", "ask-me-symbol")}<span>Ask anonymously</span></a>` : ""}
-        <div class="profile-stats-grid ${tbhRequestsEnabled() ? "" : "single"}">
+        ${profile.school_name && !profile.minimal_card ? `<div class="profile-school-meta"><span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-school.svg" alt=""><span>${escapeHTML(profile.school_name)}</span></span>${profile.grade ? `<span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-graduation-cap.svg" alt=""><span>${escapeHTML(formatGrade(profile.grade))}</span></span>` : ""}</div>` : ""}
+        ${profileFriendActions(profile)}
+        ${state.selectedClassmateAskTarget?.public_token ? `<button class="primary-button classmate-ask-button" type="button" data-compose-profile-ask>${appSymbolMarkup("ask", "ask-me-symbol")}<span>Ask anonymously</span></button>` : ""}
+        ${!profile.minimal_card ? `<div class="profile-stats-grid ${tbhRequestsEnabled() ? "" : "single"}">
             <div class="profile-stat-card"><strong><span class="heart">${uiIcon("heart")}</span>${Number(profile.vote_count || 0).toLocaleString()}</strong><span>Votes Received</span></div>
             ${tbhRequestsEnabled() ? `<div class="profile-stat-card"><strong>${appSymbolMarkup("tbh", "profile-stat-symbol tbh-stat-symbol")}${Number(profile.tbh_unique_requester_count || 0).toLocaleString()}</strong><span>TBH Requests</span></div>` : ""}
-        </div>
+        </div>` : ""}
     </article>`;
     if (state.selectedClassmateTopQuestionsWeekly === null) {
         $("#classmateWeeklyPolls").innerHTML = '<div class="profile-poll-empty">Loading...</div>';
@@ -2816,46 +3028,81 @@ function renderClassmateProfile() {
     }
 }
 
-async function openClassmateProfile(userId) {
-    const preview = [...(state.classmateDirectory || []), ...(state.classmates || [])]
+async function openClassmateProfile(userId, suppliedPreview = null) {
+    const owner = api.user?.id;
+    const preview = suppliedPreview || [...(state.classmateDirectory || []), ...(state.classmates || [])]
         .find((classmate) => String(classmate.user_id) === String(userId));
     if (!preview) return;
     const generation = ++state.classmateProfileGeneration;
     state.classmateProfileReturnToDirectory = $("#classmateDirectoryDialog").open;
     if (state.classmateProfileReturnToDirectory) $("#classmateDirectoryDialog").close();
-    state.selectedClassmateProfile = preview;
+    state.selectedClassmateProfile = { user_id: userId, first_name: preview.first_name, username: preview.username, profile_picture_url: preview.profile_picture_url, minimal_card: true };
+    state.profileFriendBusy = false;
     state.selectedClassmateAskTarget = null;
     state.selectedClassmateTopQuestionsWeekly = null;
     state.selectedClassmateTopQuestionsAllTime = null;
     renderClassmateProfile();
     $("#classmateProfileStatus").textContent = "Loading profile...";
     openDetailScreen($("#classmateProfileDialog"));
-    const requests = await Promise.allSettled([
-        api.getProfile(userId),
-        api.getTopQuestions(userId, "weekly", 10),
-        api.getTopQuestions(userId, "all_time", 3),
-        api.getProfileAskTarget(userId),
-    ]);
-    if (generation !== state.classmateProfileGeneration) return;
-    if (requests[0].status === "fulfilled") state.selectedClassmateProfile = requests[0].value;
-    if (requests[1].status === "fulfilled") state.selectedClassmateTopQuestionsWeekly = requests[1].value;
-    else state.selectedClassmateTopQuestionsWeekly = [];
-    if (requests[2].status === "fulfilled") state.selectedClassmateTopQuestionsAllTime = requests[2].value;
-    else state.selectedClassmateTopQuestionsAllTime = [];
-    if (requests[3].status === "fulfilled") {
-        const askTargetResponse = requests[3].value;
-        const askTarget = askTargetResponse?.target || askTargetResponse;
-        state.selectedClassmateAskTarget = typeof askTarget?.public_token === "string" && askTarget.public_token.trim()
-            ? askTarget
-            : null;
+    try {
+        const profile = await api.getProfile(userId);
+        if (generation !== state.classmateProfileGeneration || api.user?.id !== owner) return;
+        state.selectedClassmateProfile = profile;
+        if (state.config?.friends_enabled === true && profile.username && !profile.blocked_by_viewer && profile.can_add !== false) {
+            try {
+                const relation = await api.lookupPerson(owner, profile.username);
+                if (generation !== state.classmateProfileGeneration || api.user?.id !== owner) return;
+                profile.friend_relation = relation.relation;
+                profile.friendUnknown = relation.held || relation.connection?.known === false;
+                // Use the server's per-viewer opaque target when provided.
+                profile.friend_target_id = relation.user_id;
+            } catch { /* Under-13 and parent policy can disallow username lookup; options still uses eligible account IDs. */ }
+        }
+        renderClassmateProfile();
+        const optional = await Promise.allSettled([
+            !profile.minimal_card && profile.can_add !== false ? api.getTopQuestions(userId, "weekly", 10) : Promise.resolve([]),
+            !profile.minimal_card && profile.can_add !== false ? api.getTopQuestions(userId, "all_time", 3) : Promise.resolve([]),
+            profile.can_add !== false ? api.getProfileAskTarget(userId) : Promise.resolve(null),
+        ]);
+        if (generation !== state.classmateProfileGeneration || api.user?.id !== owner) return;
+        state.selectedClassmateTopQuestionsWeekly = optional[0].status === "fulfilled" ? optional[0].value : [];
+        state.selectedClassmateTopQuestionsAllTime = optional[1].status === "fulfilled" ? optional[1].value : [];
+        const ask = optional[2].status === "fulfilled" ? optional[2].value?.target || optional[2].value : null;
+        state.selectedClassmateAskTarget = ask?.public_token ? ask : null;
+        $("#classmateProfileStatus").textContent = optional.slice(0, 2).some((result) => result.status === "rejected")
+            ? "Some profile details couldn't load. Reopen to retry." : "";
+        renderClassmateProfile();
+    } catch (error) {
+        if (generation !== state.classmateProfileGeneration || api.user?.id !== owner) return;
+        state.selectedClassmateProfile = null;
+        $("#classmateProfileCard").replaceChildren();
+        $("#classmateWeeklyPolls").replaceChildren();
+        $("#classmateAllTimePolls").replaceChildren();
+        $("#classmateProfileStatus").textContent = userMessage(error, "This profile is unavailable. Go back and try again.");
     }
-    $("#classmateProfileStatus").textContent = requests[0].status === "rejected"
-        ? userMessage(requests[0].reason, "Could not load this profile.")
-        : "";
-    renderClassmateProfile();
+}
+
+async function composeSelectedProfileAsk() {
+    const owner = api.user?.id, publicToken = state.selectedClassmateAskTarget?.public_token;
+    const generation = state.classmateProfileGeneration;
+    if (!owner || !publicToken) return;
+    const { openAskComposer } = await import("./ask-compose.js");
+    if (api.user?.id !== owner || generation !== state.classmateProfileGeneration || $("#classmateProfileDialog").classList.contains("hidden")) return;
+    await openAskComposer({
+        api, getUser: () => api.user, publicToken, escapeHTML, avatarMarkup,
+        onSent: () => { if (api.user?.id === owner) void loadAnonymousInbox(); },
+        onCheckSent: async () => {
+            if (api.user?.id !== owner) return;
+            closeVisibleDetailScreens({ fromHistory: true });
+            switchPanel("feed", { historyMode: "replace" });
+            state.feedType = "personal"; state.personalInboxFilter = "ask_me"; state.askBoxMode = "sent";
+            await loadAnonymousInbox();
+        },
+    });
 }
 
 function backToClassmates() {
+    ++state.classmateProfileGeneration;
     closeDetailScreen($("#classmateProfileDialog"));
     if (state.classmateProfileReturnToDirectory) {
         renderClassmateDirectory();
@@ -2863,10 +3110,12 @@ function backToClassmates() {
         requestAnimationFrame(() => document.activeElement?.closest?.("#classmateDirectoryDialog") && document.activeElement.blur());
     }
     state.classmateProfileReturnToDirectory = false;
+    void friendsViewPromise?.then((view) => view.returnFromProfile()).catch(() => null);
 }
 
 async function moderateSelectedClassmate(action) {
     const profile = state.selectedClassmateProfile;
+    const owner = api.user?.id;
     if (!profile?.user_id) return;
     const verb = action === "block" ? "block" : "report";
     if (!await confirmSheet({
@@ -2875,18 +3124,22 @@ async function moderateSelectedClassmate(action) {
         confirmLabel: verb === "block" ? "Block" : "Report",
         destructive: true,
     })) return;
+    if (!owner || api.user?.id !== owner || state.selectedClassmateProfile !== profile) return;
     $("#classmateProfileStatus").textContent = verb === "block" ? "Blocking profile…" : "Sending report…";
     try {
         if (verb === "block") {
-            await api.blockUser(api.user.id, profile.user_id);
+            await api.blockUser(owner, profile.user_id);
+            if (api.user?.id !== owner || state.selectedClassmateProfile !== profile) return;
             state.classmateDirectory = (state.classmateDirectory || []).filter((item) => String(item.user_id) !== String(profile.user_id));
             closeDetailScreen($("#classmateProfileDialog"));
             showToast("Profile blocked");
         } else {
-            await api.reportUser(api.user.id, profile.user_id);
+            await api.reportUser(owner, profile.user_id);
+            if (api.user?.id !== owner || state.selectedClassmateProfile !== profile) return;
             $("#classmateProfileStatus").textContent = "Report sent. Thank you for helping keep Valid safe.";
         }
     } catch (error) {
+        if (api.user?.id !== owner || state.selectedClassmateProfile !== profile) return;
         $("#classmateProfileStatus").textContent = friendlyErrorMessage(error, `Could not ${verb} this profile.`);
     }
 }
@@ -3158,6 +3411,7 @@ function showSignInSection(section) {
     $("#signInPhoneSection").classList.toggle("hidden", section !== "phone");
     $("#signInCodeSection").classList.toggle("hidden", section !== "code");
     if (section === "phone") {
+        state.parentSignIn = false;
         $("#signInPhoneStatus").textContent = "";
         $("#signInSendCode").disabled = signupPhoneDigits($("#signInPhone").value).length !== 10;
         setTimeout(() => $("#signInPhone").focus({ preventScroll: true }), 400);
@@ -3183,7 +3437,9 @@ async function sendSignInCode(button = $("#signInSendCode")) {
     status.textContent = "";
     try {
         const turnstileToken = await getSignupTurnstileToken("#signInTurnstile");
-        const session = await api.requestLoginVerification(phoneNumber, turnstileToken);
+        const session = state.parentSignIn
+            ? await api.request("/parent-access/request", { auth: false, credentials: "omit", method: "POST", body: JSON.stringify({ phone_number: phoneNumber }) })
+            : await api.requestLoginVerification(phoneNumber, turnstileToken);
         resetSignupTurnstile();
         state.signInPhone = phoneNumber;
         if ($("#signInCodeSection").classList.contains("hidden")) showSignInSection("code");
@@ -3191,6 +3447,16 @@ async function sendSignInCode(button = $("#signInSendCode")) {
         startResendCountdown($("#signInResend"), session?.resend_available_at, "signInResendTimer");
     } catch (error) {
         if (error.status === 404) {
+            try {
+                const policy = typeof api.request === "function" ? await api.request("/parent-approvals/policy", { auth: false }) : { enabled: false };
+                if (policy.enabled === true) {
+                    const parentSession = await api.request("/parent-access/request", { auth: false, credentials: "omit", method: "POST", body: JSON.stringify({ phone_number: phoneNumber }) });
+                    state.parentSignIn = true; state.signInPhone = phoneNumber;
+                    showSignInSection("code");
+                    startResendCountdown($("#signInResend"), parentSession.resend_available_at, "signInResendTimer");
+                    return;
+                }
+            } catch (parentError) { status.textContent = userMessage(parentError, "Couldn't request parent sign-in."); return; }
             await showNumberNotSignedUp(phoneNumber);
             return;
         }
@@ -3209,6 +3475,16 @@ async function verifySignInCode() {
     setButtonLoading(button, true, "Signing in...");
     $("#signInCodeStatus").textContent = "";
     try {
+        if (state.parentSignIn) {
+            const result = await api.request("/parent-access/confirm", { auth: false, credentials: "omit", method: "POST", body: JSON.stringify({ phone_number: state.signInPhone, code }) });
+            const approved = await confirmSheet({ title: "You're signing in as a parent", message: "You can read the permitted chats and feed of your linked child. Voting, posting and messaging are unavailable.", confirmLabel: "Open parent view", cancelLabel: "Use a different number" });
+            if (!approved) { showSignInSection("phone"); return; }
+            closeSignedOutRoot();
+            const { openParentView } = await import("./parent-access.js");
+            openParentView({ api, token: result.access_token, escapeHTML, onClose: () => showSignedOutRoot({ signIn: true }) });
+            state.signInPhone = null; state.parentSignIn = false;
+            return;
+        }
         const login = await api.confirmLoginVerification(state.signInPhone, code);
         api.saveSession(login);
         state.signInPhone = null;
@@ -3243,16 +3519,7 @@ async function showNumberNotSignedUp(phoneNumber) {
 // Resend Code / Resend in Ns, from the server's resend time (30 s by default).
 function startResendCountdown(button, availableAt, timerKey) {
     clearInterval(state[timerKey]);
-    const parsed = Date.parse(availableAt || "");
-    const readyAt = Number.isFinite(parsed) ? parsed : Date.now() + 30_000;
-    const tick = () => {
-        const seconds = Math.max(0, Math.ceil((readyAt - Date.now()) / 1000));
-        button.disabled = seconds > 0;
-        button.textContent = seconds > 0 ? `Resend in ${seconds}s` : "Resend Code";
-        if (!seconds) clearInterval(state[timerKey]);
-    };
-    tick();
-    state[timerKey] = setInterval(tick, 1000);
+    state[timerKey] = startCodeResendCountdown(button, availableAt);
 }
 
 // Sign-in (passkey or text code) from the age screen lands on Play after the
@@ -3312,8 +3579,9 @@ const signupGradeCatalog = [
 ];
 
 // AgeWheelPicker.ages: 13...35.
-const SIGNUP_MIN_AGE = 13;
-const SIGNUP_MAX_AGE = 35;
+const SIGNUP_MIN_AGE = 12;
+const SIGNUP_MAX_AGE = 55;
+const SIGNUP_AGES = [null, ...Array.from({ length: 44 }, (_, index) => index + 12)];
 // OnboardingFlowView order.
 const SIGNUP_STEP = Object.freeze({
     age: 0, contacts: 1, school: 2, grade: 3, phone: 4, code: 5, firstName: 6,
@@ -3321,16 +3589,11 @@ const SIGNUP_STEP = Object.freeze({
 });
 
 function selectSignupAge(value, { scroll = true, smooth = false } = {}) {
-    const age = Math.max(SIGNUP_MIN_AGE, Math.min(SIGNUP_MAX_AGE, Number(value) || SIGNUP_MIN_AGE));
-    $("#signupAge").value = String(age);
-    $("#signupAgeValue").textContent = String(age);
-    $$('[data-signup-age]').forEach((option) => {
-        const selected = Number(option.dataset.signupAge) === age;
-        option.setAttribute("aria-selected", String(selected));
-    });
-    if (scroll) {
-        $("#signupAgeWheel").scrollTo({ top: (age - 13) * 40, behavior: smooth ? "smooth" : "auto" });
-    }
+    const age = value === "" || value == null ? null : Math.max(SIGNUP_MIN_AGE, Math.min(SIGNUP_MAX_AGE, Number(value) || SIGNUP_MIN_AGE));
+    $("#signupAge").value = age == null ? "" : String(age);
+    $("#signupAgeValue").textContent = age == null ? "Choose your age" : age === 12 ? "< 13" : age === 55 ? "55+" : String(age);
+    $$('[data-signup-age]').forEach((option) => option.setAttribute("aria-selected", String(option.dataset.signupAge === $("#signupAge").value)));
+    if (scroll) $("#signupAgeWheel").scrollTo({ top: Math.max(0, SIGNUP_AGES.indexOf(age)) * 40, behavior: smooth ? "smooth" : "auto" });
 }
 
 function signupGraduationYear(gradeNumber, date = new Date()) {
@@ -3419,7 +3682,9 @@ function openSignupDialog() {
     $("#signupUsernameStatus").replaceChildren();
     $("#signupPasskeyExplainer").classList.remove("hidden");
     $("#signupPasskeyDone").classList.add("hidden");
-    selectSignupAge($("#signupAge").value || SIGNUP_MIN_AGE, { scroll: false });
+    state.parentalApprovalToken = null;
+    selectSignupAge("", { scroll: false });
+    void import("./parent-approval.js").then(({ savedApprovalReceipt }) => { $("[data-check-parent-receipt]").hidden = !savedApprovalReceipt(); });
     renderSignupGradeOptions();
     setSignupStep(SIGNUP_STEP.age);
     $("#signupDialog").showModal();
@@ -3999,6 +4264,14 @@ async function advanceSignup(button) {
         if (invalid) return invalid.reportValidity();
     }
     if (stepIndex === SIGNUP_STEP.age) {
+        const age = $("#signupAge").value;
+        if (!age) { $("#signupStatus").textContent = "Choose your age to continue."; return; }
+        if (Number(age) < 13 && !state.parentalApprovalToken) {
+            const { openParentApproval } = await import("./parent-approval.js");
+            const token = await openParentApproval({ api, age: Number(age), deviceId: deviceInstallationId(), escapeHTML });
+            if (!token || state.signupStep !== SIGNUP_STEP.age || $("#signupAge").value !== age) return;
+            state.parentalApprovalToken = token;
+        }
         if (!demoMode) {
             try {
                 await checkPasskeyEnvironment();
@@ -4198,6 +4471,7 @@ async function createAccount(event) {
             grade: $("#signupGrade").value,
             username,
             profile_picture_filename: null,
+            ...(Number($("#signupAge").value) < 13 && state.parentalApprovalToken ? { parental_approval_token: state.parentalApprovalToken } : {}),
         };
         let login;
         if (demoMode) {
@@ -4218,6 +4492,11 @@ async function createAccount(event) {
             });
         }
         api.saveSession(login);
+        if (state.parentalApprovalToken) {
+            const { savedApprovalReceipt, forgetApprovalReceipt } = await import("./parent-approval.js");
+            if (savedApprovalReceipt()?.token === state.parentalApprovalToken) forgetApprovalReceipt();
+            state.parentalApprovalToken = null;
+        }
         state.signupAccountCreated = true;
         state.inviteToken = null;
         try { sessionStorage.removeItem(INVITE_TOKEN_KEY); } catch (_) { /* Nothing stored. */ }
@@ -5343,26 +5622,44 @@ function renderAnonymousInbox() {
     renderFeed();
 }
 
-function openAnonymousAnswerDialog(answerId) {
-    const answer = state.anonymousInbox?.answers?.find((item) => String(item.id) === String(answerId));
+function openAnonymousAnswerDialog(answerId, sent = false) {
+    const answer = (sent ? state.anonymousInbox?.sent : state.anonymousInbox?.answers)?.find((item) => String(item.id) === String(answerId));
     if (!answer) return;
-    const avatarURL = api.assetURL(answer.recipient_profile_picture_url);
+    const available = answer.recipient_available !== false;
+    const name = available ? answer.recipient_display_name : "An unavailable account";
+    const username = available ? answer.recipient_username : "";
+    const avatarURL = available ? api.assetURL(answer.recipient_profile_picture_url) : "";
     $("#anonymousAnswerRecipient").innerHTML = `${avatarMarkup({
-        first_name: answer.recipient_display_name,
-        username: answer.recipient_username,
+        first_name: name,
+        username,
         profile_picture_url: avatarURL,
-    }, "anonymous-answer-avatar")}<span><strong>${escapeHTML(answer.recipient_display_name)} replied to you</strong><small>@${escapeHTML(answer.recipient_username)}</small></span>`;
+    }, "anonymous-answer-avatar")}<span><strong>${escapeHTML(name)}${answer.answer_text ? " replied to you" : " · Sent anonymously"}</strong>${username ? `<small>@${escapeHTML(username)}</small>` : ""}</span>`;
     $("#anonymousOriginalMessage").textContent = answer.question_body;
-    $("#anonymousReceivedReply").textContent = answer.answer_text;
-    $("#anonymousAnswerReceivedAt").textContent = relativeTime(answer.answered_at);
+    $("#anonymousReceivedReply").textContent = answer.answer_text || "No reply yet.";
+    $("#anonymousAnswerReceivedAt").textContent = relativeTime(answer.answered_at || answer.created_at);
     openDetailScreen($("#anonymousAnswerDetailDialog"));
 }
 
-async function loadAnonymousInbox() {
+async function loadAnonymousInbox({ more = false } = {}) {
     const generation = ++state.anonymousInboxGeneration;
     try {
-        state.anonymousInbox = await api.getAnonymousInbox(api.user.id, 30, 0);
-        if (generation !== state.anonymousInboxGeneration || state.feedType !== "personal") return;
+        const owner = api.user?.id;
+        const cursor = {};
+        if (more && state.anonymousInbox) {
+            for (const [key, dateField, prefix] of [["questions", "created_at", "question"], ["answers", "answered_at", "answer"], ["sent", "created_at", "sent"]]) {
+                const last = state.anonymousInbox[key]?.at(-1);
+                if (last) { cursor[`${prefix}_before_${dateField}`] = last[dateField]; cursor[`${prefix}_before_id`] = last.id; }
+            }
+        }
+        const inbox = await api.getAnonymousInbox(owner, 30, 0, cursor);
+        if (generation !== state.anonymousInboxGeneration || state.feedType !== "personal" || api.user?.id !== owner) return;
+        if (more && state.anonymousInbox) {
+            for (const key of ["questions", "answers", "sent"]) {
+                const rows = new Map([...(state.anonymousInbox[key] || []), ...(inbox[key] || [])].map((row) => [String(row.id), row]));
+                state.anonymousInbox[key] = [...rows.values()].slice(-200);
+            }
+        } else state.anonymousInbox = inbox;
+        $("[data-ask-more]").disabled = !["questions", "answers", "sent"].some((key) => inbox[key]?.length === 30);
         renderAnonymousInbox();
     } catch (error) {
         if (generation !== state.anonymousInboxGeneration || state.feedType !== "personal") return;
@@ -5522,6 +5819,9 @@ async function answerAnonymousQuestion(event) {
     const answerText = $("#anonymousAnswerText").value.trim().split(/\s+/).join(" ");
     if (!answerText) return;
     const button = $("#anonymousAnswerButton");
+    if (button.getAttribute("aria-busy") === "true") return;
+    button.setAttribute("aria-busy", "true");
+    let succeeded = false;
     setButtonLoading(button, true, "Sending reply…");
     $("#anonymousAnswerStatus").textContent = "";
     try {
@@ -5539,6 +5839,7 @@ async function answerAnonymousQuestion(event) {
         }
         renderAnonymousInbox();
         renderAnonymousQuestionDialog();
+        succeeded = true;
         const confirmationButton = $("#anonymousAnswerButton");
         confirmationButton.textContent = "✓ Reply sent";
         clearTimeout(answerAnonymousQuestion.confirmationTimer);
@@ -5550,7 +5851,10 @@ async function answerAnonymousQuestion(event) {
     } catch (error) {
         $("#anonymousAnswerStatus").textContent = userMessage(error, "Could not answer this question.");
     } finally {
+        button.setAttribute("aria-busy", "false");
+        setButtonLoading(button, false);
         updateAnonymousAnswerButton();
+        if (succeeded) button.textContent = "✓ Reply sent";
     }
 }
 
@@ -5705,12 +6009,8 @@ function openGiveTbhSheet() {
 
 // FeedItemRow.openSchoolProfile: a classmate's avatar or name opens their profile.
 async function openFeedRowProfile(userId) {
-    const known = () => [...(state.classmateDirectory || []), ...(state.classmates || [])].some((classmate) => String(classmate.user_id) === String(userId));
-    if (!known() && !state.classmateDirectory) {
-        try { state.classmateDirectory = await api.getClassmates(api.user.id, "", 500); } catch (_) { /* Answered below. */ }
-    }
-    if (!known()) return showToast("This person doesn’t have an available profile yet.");
-    await openClassmateProfile(userId);
+    if (!api.user?.id || !userId) return;
+    await openClassmateProfile(userId, { user_id: userId, first_name: "Valid user" });
 }
 
 // Kinds: selection | light | medium | heavy | success | warning | error (preferences.js).
@@ -8319,6 +8619,7 @@ async function confirmQuestionRemoval() {
 }
 
 function openQuestionDialog({ section = "submit", submissionId = null } = {}) {
+    mountUIRoot($("#questionDialog"));
     $("#questionStatus").textContent = "";
     const maxLength = Math.max(3, Number(state.config?.max_custom_question_length ?? 280));
     $("#questionText").maxLength = maxLength;
@@ -9964,7 +10265,7 @@ function bindEvents() {
                 signupAgeScrollFrame = null;
                 return;
             }
-            const age = SIGNUP_MIN_AGE + Math.round(wheel.scrollTop / 40);
+            const age = SIGNUP_AGES[Math.max(0, Math.min(SIGNUP_AGES.length - 1, Math.round(wheel.scrollTop / 40)))];
             selectSignupAge(age, { scroll: false });
             signupAgeScrollFrame = null;
         });
@@ -9973,7 +10274,8 @@ function bindEvents() {
         if (!['ArrowUp', 'ArrowDown'].includes(event.key)) return;
         event.preventDefault();
         const direction = event.key === 'ArrowDown' ? 1 : -1;
-        selectSignupAge(Number($("#signupAge").value) + direction);
+        const current = $("#signupAge").value ? Number($("#signupAge").value) : null;
+        selectSignupAge(SIGNUP_AGES[Math.max(0, Math.min(SIGNUP_AGES.length - 1, SIGNUP_AGES.indexOf(current) + direction))]);
     });
     $("#signupDialog").addEventListener("cancel", (event) => {
         // The age screen is the signed-out root: Escape never closes it.
@@ -9981,6 +10283,12 @@ function bindEvents() {
         if (state.signupStep > SIGNUP_STEP.age && !$(".signup-back-button").classList.contains("hidden")) signupStepBack();
     });
     $("#signupDialog").addEventListener("click", (event) => {
+        if (event.target.closest("[data-check-parent-receipt]")) {
+            void import("./parent-approval.js").then(async ({ openParentApproval }) => {
+                const token = await openParentApproval({ api, age: 12, deviceId: deviceInstallationId(), escapeHTML, resume: true });
+                if (token && state.signupStep === SIGNUP_STEP.age) { state.parentalApprovalToken = token; selectSignupAge(12); setSignupStep(SIGNUP_STEP.contacts); }
+            });
+        }
         const age = event.target.closest("[data-signup-age]");
         // Commit the exact tapped age immediately. A smooth scroll can continue
         // after the user advances and overwrite the hidden value mid-signup.
@@ -10144,6 +10452,26 @@ function bindEvents() {
         if (share) shareAnonymousAnswer(share.dataset.shareAnonymous);
     });
     document.addEventListener("click", (event) => {
+        const namedProfile = event.target.closest("[data-open-user-profile]");
+        if (namedProfile) void openFeedRowProfile(namedProfile.dataset.openUserProfile);
+        if (event.target.closest("[data-open-parent-link]")) void import("./parent-access.js").then(({ openParentLink }) => openParentLink({ api, getUser: () => api.user, escapeHTML }));
+        if (event.target.closest("[data-open-notifications]")) void openNotifications();
+        const askBox = event.target.closest("[data-ask-box]");
+        if (askBox) { state.askBoxMode = askBox.dataset.askBox; renderFeed(); }
+        if (event.target.closest("[data-ask-more]")) void loadAnonymousInbox({ more: true });
+        if (event.target.closest("[data-ask-classmates]")) void openClassmateDirectory({ askOnly: true });
+        const sentAsk = event.target.closest("[data-anonymous-sent]");
+        if (sentAsk) openAnonymousAnswerDialog(sentAsk.dataset.anonymousSent, true);
+        const recipient = event.target.closest("[data-sent-recipient]");
+        if (recipient) {
+            const sent = state.anonymousInbox?.sent?.find((item) => String(item.id) === recipient.dataset.sentRecipient);
+            if (sent?.recipient_available !== false && sent?.recipient_user_id) void openClassmateProfile(sent.recipient_user_id, { user_id: sent.recipient_user_id, first_name: sent.recipient_display_name, username: sent.recipient_username, profile_picture_url: sent.recipient_profile_picture_url });
+        }
+        if (event.target.closest("[data-open-friends]")) void openFriends();
+        const privacy = event.target.closest("[data-open-friend-privacy]");
+        if (privacy) void openFriends({ section: "privacy", privacy: privacy.dataset.openFriendPrivacy, returnToSettings: true });
+        if (event.target.closest("#privacyPageButton")) { mountUIRoot($("#privacyPageDialog")); $("#privacyPageDialog").showModal(); }
+        if (event.target.closest("[data-close-privacy-page]")) $("#privacyPageDialog").close();
         if (!event.target.closest(".detail-overflow")) closeDetailActionMenus();
     });
     mementoDay.subscribe(renderCameraTab);
@@ -10392,6 +10720,17 @@ function bindEvents() {
         if (classmate) openClassmateProfile(classmate.dataset.directoryClassmate);
     });
     $("#classmateProfileDialog").addEventListener("click", (event) => {
+        if (event.target.closest("[data-compose-profile-ask]") && state.selectedClassmateAskTarget?.public_token) {
+            void composeSelectedProfileAsk().catch(() => showToast("Ask Me couldn’t open. Reconnect, then try again.")); return;
+        }
+        const friendAction = event.target.closest("[data-profile-friend-action]");
+        if (friendAction) { void actOnProfileFriend(friendAction.dataset.profileFriendAction); return; }
+        if (event.target.closest("[data-profile-friend-options]")) {
+            const person = state.selectedClassmateProfile;
+            closeDetailScreen($("#classmateProfileDialog"));
+            void openFriends({ person });
+            return;
+        }
         const menuButton = event.target.closest("[data-toggle-classmate-menu]");
         if (menuButton) toggleDetailActionMenu(menuButton);
         if (event.target.closest("[data-report-classmate]")) { closeDetailActionMenus(); moderateSelectedClassmate("report"); }

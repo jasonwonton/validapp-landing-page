@@ -36,6 +36,14 @@ for (const [size, viewport] of [['mobile', { width: 390, height: 844 }], ['deskt
     await friends.locator('[data-friend-profile="classmate-1"]').click();
     const profile = page.getByRole('dialog', { name: 'Profile', exact: true });
     await profile.getByRole('button', { name: 'Ask anonymously', exact: true }).waitFor(); await shot('after-peer-profile');
+    await page.evaluate(async () => {
+        const { DemoAPI } = await import('/app/demo-api.js');
+        const context = DemoAPI.prototype.getPublicAskContext;
+        DemoAPI.prototype.getPublicAskContext = async function (...args) {
+            const recipient = await this.getProfile('classmate-1');
+            return { ...await context.apply(this, args), recipient_username: 'maya_c', recipient_profile_picture_url: recipient.profile_picture_url };
+        };
+    });
     await profile.getByRole('button', { name: 'Ask anonymously', exact: true }).click();
     const composer = page.getByRole('dialog', { name: 'Ask anonymously', exact: true });
     await composer.getByLabel('Your question').fill('What made you smile today?'); await shot('after-ask-compose');

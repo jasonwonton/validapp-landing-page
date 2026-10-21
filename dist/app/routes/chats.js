@@ -20,3 +20,5 @@ export function refresh() {
 export function beforeSessionEnd() {
     return view?.beforeSessionEnd();
 }
+
+export function openChat(chatId) { return view?.openChat(chatId); }

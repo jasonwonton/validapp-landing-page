@@ -744,6 +744,7 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
         if (path === "/api/v1/users/21111111-1111-1111-1111-111111111111/profile") {
             return fulfill({ ...profile("Maya", 0), user_id: "21111111-1111-1111-1111-111111111111", last_name: "Chen", username: "maya_c", bio: "Student council and bad puns.", vote_count: 61 });
         }
+        if (path === "/api/v1/a/maya-contract/context") return fulfill({ is_active: true, recipient_display_name: "Maya Chen", recipient_username: "maya_c", max_length: 500, privacy_notice: "Your name stays hidden." });
         if (path === "/api/v1/users/21111111-1111-1111-1111-111111111111/ask-target") {
             const askTarget = { public_token: "maya-contract" };
             return fulfill(wrappedAskTarget ? { target: askTarget } : askTarget);
@@ -1340,6 +1341,9 @@ test("real adapter renders a classmate Ask Me link from the production response"
     const classmateProfile = page.getByRole("dialog", { name: "Profile", exact: true });
     await expect(classmateProfile.getByRole("button", { name: "Ask anonymously", exact: true })).toHaveAttribute("data-compose-profile-ask", "");
     expect(requests.some((request) => request.path.endsWith("21111111-1111-1111-1111-111111111111/ask-target"))).toBe(true);
+    await classmateProfile.getByRole("button", { name: "Ask anonymously", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Ask anonymously", exact: true }).getByLabel("Your question")).toBeVisible();
+    expect(requests.filter(request => request.path === "/api/v1/a/maya-contract/context")).toHaveLength(1);
 });
 
 test("classmate directory mirrors the iOS contact, photo, and weekly-vote order", async ({ page }) => {
@@ -1364,7 +1368,7 @@ test("classmate directory mirrors the iOS contact, photo, and weekly-vote order"
 
 test("real adapter accepts the deployed wrapped classmate Ask Me response", async ({ page }) => {
     await installCredentialStub(page, "get");
-    await interceptProductionAPI(page, { wrappedAskTarget: true });
+    const requests = await interceptProductionAPI(page, { wrappedAskTarget: true });
 
     await page.goto("/app/?signin=1");
     await page.getByRole("button", { name: /^sign in$/i }).click();
@@ -1376,6 +1380,9 @@ test("real adapter accepts the deployed wrapped classmate Ask Me response", asyn
     await expect(page.getByRole("dialog", { name: "Profile", exact: true })
         .getByRole("button", { name: "Ask anonymously", exact: true }))
         .toHaveAttribute("data-compose-profile-ask", "");
+    await page.getByRole("dialog", { name: "Profile", exact: true }).getByRole("button", { name: "Ask anonymously", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Ask anonymously", exact: true }).getByLabel("Your question")).toBeVisible();
+    expect(requests.filter(request => request.path === "/api/v1/a/maya-contract/context")).toHaveLength(1);
 });
 
 test("Request a TBH uses full classmate rows with profile pictures", async ({ page }) => {

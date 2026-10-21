@@ -1,0 +1,79 @@
+diff --git a/ios/Six7/Six7Tests/FriendsSentRequestsPreviewTests.swift b/ios/Six7/Six7Tests/FriendsSentRequestsPreviewTests.swift
+index 5567f8db4..5add81c72 100644
+--- a/ios/Six7/Six7Tests/FriendsSentRequestsPreviewTests.swift
++++ b/ios/Six7/Six7Tests/FriendsSentRequestsPreviewTests.swift
+@@ -61,7 +61,7 @@ final class FriendsSentRequestsPreviewTests: XCTestCase {
+         window.overrideUserInterfaceStyle = style
+         window.rootViewController = host
+         window.makeKeyAndVisible()
+-        try await Task.sleep(for: .milliseconds(350))
++        try await Task.sleep(for: .milliseconds(1800))
+         host.view.layoutIfNeeded()
+         let format = UIGraphicsImageRendererFormat()
+         format.scale = 3
+@@ -72,6 +72,28 @@ final class FriendsSentRequestsPreviewTests: XCTestCase {
+         return image
+     }
+ 
++    func testPWAComparisonPages() async throws {
++        let viewer = UUID(), source = FakeFriendsDataSource(), peopleSource = FakePeopleDataSource()
++        source.page = FriendsPage(friends: Self.friends.map { FriendCard(person: $0) }, total: 2)
++        source.suggested = FriendSuggestions(enabled: true, suggestions: [
++            FriendSuggestion(person: Self.person("Sofia Rivera", "sofiar"), reason: "grade", label: "Your grade")
++        ])
++        let sent = Self.sent.map { PeopleRequestCard(person: $0) }
++        peopleSource.onRequests = { PeopleRequests(canAddPeople: true, incoming: [], outgoing: sent) }
++        let people = AddPeopleModel(userId: viewer, data: peopleSource, friendsData: source)
++        await people.refreshRequests()
++        let stores = RecordingChatInboxStores()
++        defer { withExtendedLifetime(stores) {} }
++        let inbox = ChatInboxModel(data: FakeChatInboxDataSource(), stores: stores.stores)
++        let folder = URL(fileURLWithPath: "/tmp/pwa-native-visuals")
++        for (name, segment) in [("friends", FriendsModel.Segment.friends), ("suggested", .suggested)] {
++            let image = try await render(NavigationStack {
++                FriendsView(userId: viewer, people: people, initialSegment: segment, data: source, inbox: inbox, onOpenChat: { _ in })
++            }, size: CGSize(width: 390, height: 844), style: .light)
++            try XCTUnwrap(image.pngData()).write(to: folder.appendingPathComponent("native-\(name).png"))
++        }
++    }
++
+     func testFriendsSentRequestsAndGroupChipPreview() async throws {
+         let pageSize = CGSize(width: 390, height: 470)
+         let chipSize = CGSize(width: 390, height: 56)
+diff --git a/ios/Six7/Six7Tests/PrivacySettingsRenderTests.swift b/ios/Six7/Six7Tests/PrivacySettingsRenderTests.swift
+index d88d084e5..a0567f820 100644
+--- a/ios/Six7/Six7Tests/PrivacySettingsRenderTests.swift
++++ b/ios/Six7/Six7Tests/PrivacySettingsRenderTests.swift
+@@ -635,6 +635,14 @@ final class PrivacySettingsRenderTests: XCTestCase {
+     /// The fixture's 13–17 account as linking leaves it (school and
+     /// contacts on, accepting first on, activity shown); `strict` hides
+     /// activity too, `relaxed` turns the first two off.
++    func testPWAParentChoiceReference() async throws {
++        let (model, _) = await parentModel()
++        let image = try await capture(NavigationStack {
++            ParentPrivacyChoiceView(model: model, childId: ParentFlowFixtureData.child.id, setting: .friendReach)
++        }, style: .light)
++        try write(image, name: "parent-choice-pwa-light")
++    }
++
+     private func parentModel(
+         strict: Bool = false, relaxed: Bool = false, unlink: Bool = false
+     ) async -> (ParentAccessModel, ParentFlowFixtureData) {
+@@ -839,7 +847,7 @@ final class PrivacySettingsRenderTests: XCTestCase {
+         )
+         let previous = scene.windows.first(where: \.isKeyWindow)
+         let window = UIWindow(windowScene: scene)
+-        window.frame = CGRect(x: 0, y: 0, width: 390, height: 1500)
++        window.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+         window.overrideUserInterfaceStyle = style
+         let host = UIHostingController(rootView: view)
+         window.rootViewController = host
+@@ -861,7 +869,7 @@ final class PrivacySettingsRenderTests: XCTestCase {
+             if case .freezeSavingIndicator = motion, !animationFrozen {
+                 guard let readySince, ContinuousClock.now - readySince >= .milliseconds(400),
+                       host.view.window === window, host.view.bounds.width == 390,
+-                      host.view.bounds.height == 1500 else { continue }
++                      host.view.bounds.height == 844 else { continue }
+                 // Indefinite ProgressView motion cannot produce identical frames.
+                 // Pause only this retired-after-capture host once saving/layout
+                 // are ready; retain the same stable-frame check and 4s deadline.

@@ -9,7 +9,7 @@ export async function openActivitySettings({ api, userId, presence }) {
     const toggle = dialog.querySelector('input'), status = dialog.querySelector('[role="status"]'), retry = dialog.querySelector('[data-retry]');
     const current = () => dialog.isConnected && api.user?.id === userId;
     const valid = response => typeof response?.enabled === 'boolean';
-    let confirmed = null;
+    let confirmed = null, locked = false;
     async function load() {
         retry.hidden = true;
         toggle.disabled = true;
@@ -19,9 +19,10 @@ export async function openActivitySettings({ api, userId, presence }) {
             if (!current()) return;
             if (!valid(response)) throw new Error();
             confirmed = response.enabled;
+            locked = response.locked_by_parent === true;
             toggle.checked = confirmed;
-            toggle.disabled = false;
-            status.textContent = '';
+            toggle.disabled = locked;
+            status.textContent = locked ? 'Managed by your parent.' : '';
         } catch (_) {
             if (!current()) return;
             status.textContent = 'Activity status couldn’t be loaded. Please try again.';
@@ -38,6 +39,7 @@ export async function openActivitySettings({ api, userId, presence }) {
             if (!current()) return;
             if (!valid(response)) throw new Error();
             confirmed = response.enabled;
+            locked = response.locked_by_parent === true;
             toggle.checked = confirmed;
             status.textContent = confirmed ? 'Activity status is on.' : 'Activity status is off.';
         } catch (_) {
@@ -48,15 +50,16 @@ export async function openActivitySettings({ api, userId, presence }) {
                 if (!current()) return;
                 if (!valid(response)) throw new Error();
                 confirmed = response.enabled;
+                locked = response.locked_by_parent === true;
                 toggle.checked = confirmed;
-                status.textContent = 'Showing your current setting. The change couldn’t be confirmed.';
+                status.textContent = locked ? 'Managed by your parent.' : 'Showing your current setting. The change couldn’t be confirmed.';
             } catch (_) {
                 confirmed = null;
                 status.textContent = 'Your setting couldn’t be confirmed. Please try again.';
                 retry.hidden = false;
             }
         } finally {
-            if (current()) { toggle.disabled = confirmed == null; presence.invalidate(); }
+            if (current()) { toggle.disabled = confirmed == null || locked; presence.invalidate(); }
         }
     });
     retry.addEventListener('click', load);

@@ -1,0 +1,3402 @@
+{
+  "scope": "Local affected PWA suites. Latest result per test title, file and browser; repeat runs do not inflate totals. Exploratory failures are preserved below.",
+  "generatedAt": "2026-10-21T08:31:18.296Z",
+  "sources": {
+    "ios": "799025a63dfe9550792c3ad647faf7736aed0d18",
+    "pwaBase": "218440ac535cd2d4493c865787498f9fc0a477e0",
+    "pwaLive": "64ee7e5e3ad7201c696a7b9ac73934419d16e981",
+    "implementationCommit": "0c2d21d9b8b602dceb1a96742c1f92891573b544"
+  },
+  "browserProjects": [
+    "android",
+    "desktop",
+    "desktop-firefox",
+    "desktop-webkit"
+  ],
+  "testCommand": "PLAYWRIGHT_PORT=4186 npx playwright test <affected specs> --workers=2 --reporter=json",
+  "retries": 0,
+  "totals": {
+    "passed": 2369,
+    "skipped": 47,
+    "failed": 0,
+    "flaky": 0
+  },
+  "latestPerSpec": [
+    {
+      "spec": "anonymous-attribution.spec.js",
+      "passed": 20,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "app-shell.spec.js",
+      "passed": 70,
+      "skipped": 18,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "app-update-prompt.spec.js",
+      "passed": 6,
+      "skipped": 6,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "aura-boost-notifications.spec.js",
+      "passed": 8,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "auth-reliability.spec.js",
+      "passed": 64,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "call-history.spec.js",
+      "passed": 4,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "call-push.spec.js",
+      "passed": 4,
+      "skipped": 4,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "calls.spec.js",
+      "passed": 104,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "camera-effects.spec.js",
+      "passed": 16,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "camera-parity.spec.js",
+      "passed": 64,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "camera-send-to.spec.js",
+      "passed": 20,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "chat-actions.spec.js",
+      "passed": 20,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "chat-api-contract.spec.js",
+      "passed": 40,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "chat-camera-native.spec.js",
+      "passed": 18,
+      "skipped": 2,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "chat-composer-polish.spec.js",
+      "passed": 20,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "chat-ios-hierarchy.spec.js",
+      "passed": 32,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "chat-media-stable.spec.js",
+      "passed": 4,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "chat-notification-nudge.spec.js",
+      "passed": 24,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "chat-outbox.spec.js",
+      "passed": 16,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "chat-parity-followup.spec.js",
+      "passed": 28,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "chat-play-command.spec.js",
+      "passed": 16,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "chat-presence.spec.js",
+      "passed": 20,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "chat-realtime.spec.js",
+      "passed": 4,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "chat-recovery.spec.js",
+      "passed": 8,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "chat-scrolling.spec.js",
+      "passed": 44,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "chat-video-processing.spec.js",
+      "passed": 8,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "chat-web-parity.spec.js",
+      "passed": 48,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "chat-windowing.spec.js",
+      "passed": 20,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "chats-ios-flows.spec.js",
+      "passed": 48,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "chats-mementos.spec.js",
+      "passed": 120,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "classmate-appearance.spec.js",
+      "passed": 24,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "comments.spec.js",
+      "passed": 28,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "config-refresh-camera.spec.js",
+      "passed": 14,
+      "skipped": 2,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "core-flows.spec.js",
+      "passed": 175,
+      "skipped": 5,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "csp-runtime.spec.js",
+      "passed": 8,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "feed-play-parity.spec.js",
+      "passed": 76,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "feed-sender.spec.js",
+      "passed": 12,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "followup-polish.spec.js",
+      "passed": 42,
+      "skipped": 6,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "foundations.spec.js",
+      "passed": 26,
+      "skipped": 2,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "friends-contract.spec.js",
+      "passed": 24,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "friends.spec.js",
+      "passed": 40,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "inbox-ios-parity.spec.js",
+      "passed": 32,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "live-camera.spec.js",
+      "passed": 28,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "memento-gate-appearance.spec.js",
+      "passed": 20,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "navfeed-ios-flows.spec.js",
+      "passed": 44,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "onboarding-parity.spec.js",
+      "passed": 84,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "parity-16039.spec.js",
+      "passed": 48,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "parity-ui.spec.js",
+      "passed": 16,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "play-contacts.spec.js",
+      "passed": 24,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "play-flow-parity.spec.js",
+      "passed": 52,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "poll-detail-appearance.spec.js",
+      "passed": 48,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "poll-share-recovery.spec.js",
+      "passed": 20,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "preferences.spec.js",
+      "passed": 20,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "production-adapter.spec.js",
+      "passed": 140,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "profile-editor-icons.spec.js",
+      "passed": 4,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "profile-ios-flows.spec.js",
+      "passed": 52,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "profile-settings-parity.spec.js",
+      "passed": 12,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "pwa-polish.spec.js",
+      "passed": 92,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "recent-conversations.spec.js",
+      "passed": 8,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "service-worker-update.spec.js",
+      "passed": 2,
+      "skipped": 2,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "session-recovery.spec.js",
+      "passed": 28,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "sticker-maker.spec.js",
+      "passed": 20,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "stories.spec.js",
+      "passed": 88,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "subscription-management.spec.js",
+      "passed": 12,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "tbh-reactions.spec.js",
+      "passed": 28,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "turnstile.spec.js",
+      "passed": 12,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "vault.spec.js",
+      "passed": 36,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "voice-gestures.spec.js",
+      "passed": 12,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    }
+  ],
+  "remainingFailures": [],
+  "skips": [
+    {
+      "file": "app-shell.spec.js",
+      "title": "the chat room and composer fill the real screen while the layout viewport is stale",
+      "project": "desktop",
+      "reasons": [
+        "Needs a phone-sized touch viewport and Chromium CDP"
+      ]
+    },
+    {
+      "file": "app-shell.spec.js",
+      "title": "the chat room and composer fill the real screen while the layout viewport is stale",
+      "project": "desktop-firefox",
+      "reasons": [
+        "Needs a phone-sized touch viewport and Chromium CDP"
+      ]
+    },
+    {
+      "file": "app-shell.spec.js",
+      "title": "the chat room and composer fill the real screen while the layout viewport is stale",
+      "project": "desktop-webkit",
+      "reasons": [
+        "Needs a phone-sized touch viewport and Chromium CDP"
+      ]
+    },
+    {
+      "file": "app-shell.spec.js",
+      "title": "the tab bar returns to the screen bottom when WebKit leaves the layout viewport short after the keyboard closes",
+      "project": "desktop",
+      "reasons": [
+        "Needs a phone-sized touch viewport and Chromium CDP"
+      ]
+    },
+    {
+      "file": "app-shell.spec.js",
+      "title": "returning to the app re-checks a stale layout viewport",
+      "project": "desktop",
+      "reasons": [
+        "Needs a phone-sized touch viewport and Chromium CDP"
+      ]
+    },
+    {
+      "file": "app-shell.spec.js",
+      "title": "a healthy installed app never shifts the tab bar, even when the screen is taller than the page",
+      "project": "desktop",
+      "reasons": [
+        "Needs a phone-sized touch viewport and Chromium CDP"
+      ]
+    },
+    {
+      "file": "app-shell.spec.js",
+      "title": "a browser tab never shifts the tab bar",
+      "project": "desktop",
+      "reasons": [
+        "Needs a phone-sized touch viewport and Chromium CDP"
+      ]
+    },
+    {
+      "file": "app-shell.spec.js",
+      "title": "the tab bar returns to the screen bottom when WebKit leaves the layout viewport short after the keyboard closes",
+      "project": "desktop-firefox",
+      "reasons": [
+        "Needs a phone-sized touch viewport and Chromium CDP"
+      ]
+    },
+    {
+      "file": "app-shell.spec.js",
+      "title": "returning to the app re-checks a stale layout viewport",
+      "project": "desktop-firefox",
+      "reasons": [
+        "Needs a phone-sized touch viewport and Chromium CDP"
+      ]
+    },
+    {
+      "file": "app-shell.spec.js",
+      "title": "a healthy installed app never shifts the tab bar, even when the screen is taller than the page",
+      "project": "desktop-firefox",
+      "reasons": [
+        "Needs a phone-sized touch viewport and Chromium CDP"
+      ]
+    },
+    {
+      "file": "app-shell.spec.js",
+      "title": "a browser tab never shifts the tab bar",
+      "project": "desktop-firefox",
+      "reasons": [
+        "Needs a phone-sized touch viewport and Chromium CDP"
+      ]
+    },
+    {
+      "file": "app-shell.spec.js",
+      "title": "the tab bar returns to the screen bottom when WebKit leaves the layout viewport short after the keyboard closes",
+      "project": "desktop-webkit",
+      "reasons": [
+        "Needs a phone-sized touch viewport and Chromium CDP"
+      ]
+    },
+    {
+      "file": "app-shell.spec.js",
+      "title": "returning to the app re-checks a stale layout viewport",
+      "project": "desktop-webkit",
+      "reasons": [
+        "Needs a phone-sized touch viewport and Chromium CDP"
+      ]
+    },
+    {
+      "file": "app-shell.spec.js",
+      "title": "a healthy installed app never shifts the tab bar, even when the screen is taller than the page",
+      "project": "desktop-webkit",
+      "reasons": [
+        "Needs a phone-sized touch viewport and Chromium CDP"
+      ]
+    },
+    {
+      "file": "app-shell.spec.js",
+      "title": "a browser tab never shifts the tab bar",
+      "project": "desktop-webkit",
+      "reasons": [
+        "Needs a phone-sized touch viewport and Chromium CDP"
+      ]
+    },
+    {
+      "file": "app-shell.spec.js",
+      "title": "an edge swipe follows the finger and pops the detail screen",
+      "project": "desktop",
+      "reasons": [
+        "Touch gesture"
+      ]
+    },
+    {
+      "file": "app-shell.spec.js",
+      "title": "an edge swipe follows the finger and pops the detail screen",
+      "project": "desktop-firefox",
+      "reasons": [
+        "Touch gesture"
+      ]
+    },
+    {
+      "file": "app-shell.spec.js",
+      "title": "an edge swipe follows the finger and pops the detail screen",
+      "project": "desktop-webkit",
+      "reasons": [
+        "Touch gesture"
+      ]
+    },
+    {
+      "file": "app-update-prompt.spec.js",
+      "title": "Update stays tappable over an open sheet and reloads onto the new version",
+      "project": "desktop-firefox",
+      "reasons": [
+        "Service-worker lifecycle automation is intentionally Chromium-only"
+      ]
+    },
+    {
+      "file": "app-update-prompt.spec.js",
+      "title": "a worker that ignores SKIP_WAITING never leaves the button stuck",
+      "project": "desktop-firefox",
+      "reasons": [
+        "Service-worker lifecycle automation is intentionally Chromium-only"
+      ]
+    },
+    {
+      "file": "app-update-prompt.spec.js",
+      "title": "a cold start with a waiting worker applies it without the prompt",
+      "project": "desktop-firefox",
+      "reasons": [
+        "Service-worker lifecycle automation is intentionally Chromium-only"
+      ]
+    },
+    {
+      "file": "app-update-prompt.spec.js",
+      "title": "Update stays tappable over an open sheet and reloads onto the new version",
+      "project": "desktop-webkit",
+      "reasons": [
+        "Service-worker lifecycle automation is intentionally Chromium-only"
+      ]
+    },
+    {
+      "file": "app-update-prompt.spec.js",
+      "title": "a worker that ignores SKIP_WAITING never leaves the button stuck",
+      "project": "desktop-webkit",
+      "reasons": [
+        "Service-worker lifecycle automation is intentionally Chromium-only"
+      ]
+    },
+    {
+      "file": "app-update-prompt.spec.js",
+      "title": "a cold start with a waiting worker applies it without the prompt",
+      "project": "desktop-webkit",
+      "reasons": [
+        "Service-worker lifecycle automation is intentionally Chromium-only"
+      ]
+    },
+    {
+      "file": "call-push.spec.js",
+      "title": "with Valid closed, a call push rings with Answer/Decline and call_ended retires it",
+      "project": "desktop-firefox",
+      "reasons": [
+        "CDP push delivery is Chromium-only"
+      ]
+    },
+    {
+      "file": "call-push.spec.js",
+      "title": "with Valid on screen, the page rings instead of a system notification",
+      "project": "desktop-firefox",
+      "reasons": [
+        "CDP push delivery is Chromium-only"
+      ]
+    },
+    {
+      "file": "call-push.spec.js",
+      "title": "with Valid closed, a call push rings with Answer/Decline and call_ended retires it",
+      "project": "desktop-webkit",
+      "reasons": [
+        "CDP push delivery is Chromium-only"
+      ]
+    },
+    {
+      "file": "call-push.spec.js",
+      "title": "with Valid on screen, the page rings instead of a system notification",
+      "project": "desktop-webkit",
+      "reasons": [
+        "CDP push delivery is Chromium-only"
+      ]
+    },
+    {
+      "file": "chat-camera-native.spec.js",
+      "title": "chat camera opens immediately, single shutter reviews, retakes and sends only once",
+      "project": "desktop-firefox",
+      "reasons": [
+        "Synthetic hardware capture is Chromium-only; fallback and late permission are tested on every engine."
+      ]
+    },
+    {
+      "file": "chat-camera-native.spec.js",
+      "title": "chat camera opens immediately, single shutter reviews, retakes and sends only once",
+      "project": "desktop-webkit",
+      "reasons": [
+        "Synthetic hardware capture is Chromium-only; fallback and late permission are tested on every engine."
+      ]
+    },
+    {
+      "file": "config-refresh-camera.spec.js",
+      "title": "the chat camera is requested inside the tap, before the camera module loads",
+      "project": "desktop-firefox",
+      "reasons": [
+        "fake media stream"
+      ]
+    },
+    {
+      "file": "config-refresh-camera.spec.js",
+      "title": "the chat camera is requested inside the tap, before the camera module loads",
+      "project": "desktop-webkit",
+      "reasons": [
+        "fake media stream"
+      ]
+    },
+    {
+      "file": "core-flows.spec.js",
+      "title": "Android modals present as draggable bottom sheets",
+      "project": "desktop",
+      "reasons": [
+        "Android-only presentation behavior"
+      ]
+    },
+    {
+      "file": "core-flows.spec.js",
+      "title": "installed Chromium shell opens a previously unvisited Chats overlay journey offline",
+      "project": "desktop-firefox",
+      "reasons": [
+        "Service workers are intentionally blocked in this project"
+      ]
+    },
+    {
+      "file": "core-flows.spec.js",
+      "title": "Android modals present as draggable bottom sheets",
+      "project": "desktop-firefox",
+      "reasons": [
+        "Android-only presentation behavior"
+      ]
+    },
+    {
+      "file": "core-flows.spec.js",
+      "title": "installed Chromium shell opens a previously unvisited Chats overlay journey offline",
+      "project": "desktop-webkit",
+      "reasons": [
+        "Service workers are intentionally blocked in this project"
+      ]
+    },
+    {
+      "file": "core-flows.spec.js",
+      "title": "Android modals present as draggable bottom sheets",
+      "project": "desktop-webkit",
+      "reasons": [
+        "Android-only presentation behavior"
+      ]
+    },
+    {
+      "file": "followup-polish.spec.js",
+      "title": "follows the finger over the list, cancels below the threshold, and pops like Back past it",
+      "project": "desktop",
+      "reasons": [
+        "touch + Android edge gesture"
+      ]
+    },
+    {
+      "file": "followup-polish.spec.js",
+      "title": "a fast flick completes even when short",
+      "project": "desktop",
+      "reasons": [
+        "touch + Android edge gesture"
+      ]
+    },
+    {
+      "file": "followup-polish.spec.js",
+      "title": "follows the finger over the list, cancels below the threshold, and pops like Back past it",
+      "project": "desktop-firefox",
+      "reasons": [
+        "touch + Android edge gesture"
+      ]
+    },
+    {
+      "file": "followup-polish.spec.js",
+      "title": "a fast flick completes even when short",
+      "project": "desktop-firefox",
+      "reasons": [
+        "touch + Android edge gesture"
+      ]
+    },
+    {
+      "file": "followup-polish.spec.js",
+      "title": "follows the finger over the list, cancels below the threshold, and pops like Back past it",
+      "project": "desktop-webkit",
+      "reasons": [
+        "touch + Android edge gesture"
+      ]
+    },
+    {
+      "file": "followup-polish.spec.js",
+      "title": "a fast flick completes even when short",
+      "project": "desktop-webkit",
+      "reasons": [
+        "touch + Android edge gesture"
+      ]
+    },
+    {
+      "file": "foundations.spec.js",
+      "title": "a status-bar scrim fades content under the iPhone clock when signed in",
+      "project": "desktop-firefox",
+      "reasons": [
+        "Safe-area insets can only be emulated through Chromium's DevTools protocol"
+      ]
+    },
+    {
+      "file": "foundations.spec.js",
+      "title": "a status-bar scrim fades content under the iPhone clock when signed in",
+      "project": "desktop-webkit",
+      "reasons": [
+        "Safe-area insets can only be emulated through Chromium's DevTools protocol"
+      ]
+    },
+    {
+      "file": "service-worker-update.spec.js",
+      "title": "a waiting worker upgrades and rolls back without losing a pending send",
+      "project": "desktop-firefox",
+      "reasons": [
+        "Service-worker lifecycle automation is intentionally Chromium-only"
+      ]
+    },
+    {
+      "file": "service-worker-update.spec.js",
+      "title": "a waiting worker upgrades and rolls back without losing a pending send",
+      "project": "desktop-webkit",
+      "reasons": [
+        "Service-worker lifecycle automation is intentionally Chromium-only"
+      ]
+    }
+  ],
+  "runs": [
+    {
+      "report": "pwa-parity-anonymous-attribution.spec.js.json",
+      "at": "2026-10-21T07:19:12.583Z",
+      "stats": {
+        "startTime": "2026-10-21T07:19:12.583Z",
+        "duration": 15296.525,
+        "expected": 20,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-app-shell.spec.js.json",
+      "at": "2026-10-21T07:19:28.354Z",
+      "stats": {
+        "startTime": "2026-10-21T07:19:28.354Z",
+        "duration": 44714.014,
+        "expected": 70,
+        "skipped": 18,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-app-update-prompt.spec.js.json",
+      "at": "2026-10-21T07:20:13.560Z",
+      "stats": {
+        "startTime": "2026-10-21T07:20:13.560Z",
+        "duration": 8152.679999999999,
+        "expected": 0,
+        "skipped": 6,
+        "unexpected": 6,
+        "flaky": 0
+      },
+      "failures": [
+        {
+          "file": "app-update-prompt.spec.js",
+          "title": "Update stays tappable over an open sheet and reloads onto the new version",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(received).toContain(expected) // indexOf\n\nExpected substring: \"content=\\\"web-v123\\\"\"\nReceived string:    \"<!DOCTYPE html>\n<html lang=\\\"en\\\">\n<head>\n    <meta charset=\\\"UTF-8\\\">\n    <meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1, viewport-fit=cover, interactive-wi"
+          ]
+        },
+        {
+          "file": "app-update-prompt.spec.js",
+          "title": "a worker that ignores SKIP_WAITING never leaves the button stuck",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(received).toContain(expected) // indexOf\n\nExpected substring: \"content=\\\"web-v123\\\"\"\nReceived string:    \"<!DOCTYPE html>\n<html lang=\\\"en\\\">\n<head>\n    <meta charset=\\\"UTF-8\\\">\n    <meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1, viewport-fit=cover, interactive-wi"
+          ]
+        },
+        {
+          "file": "app-update-prompt.spec.js",
+          "title": "a cold start with a waiting worker applies it without the prompt",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(received).toContain(expected) // indexOf\n\nExpected substring: \"content=\\\"web-v123\\\"\"\nReceived string:    \"<!DOCTYPE html>\n<html lang=\\\"en\\\">\n<head>\n    <meta charset=\\\"UTF-8\\\">\n    <meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1, viewport-fit=cover, interactive-wi"
+          ]
+        },
+        {
+          "file": "app-update-prompt.spec.js",
+          "title": "Update stays tappable over an open sheet and reloads onto the new version",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(received).toContain(expected) // indexOf\n\nExpected substring: \"content=\\\"web-v123\\\"\"\nReceived string:    \"<!DOCTYPE html>\n<html lang=\\\"en\\\">\n<head>\n    <meta charset=\\\"UTF-8\\\">\n    <meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1, viewport-fit=cover, interactive-wi"
+          ]
+        },
+        {
+          "file": "app-update-prompt.spec.js",
+          "title": "a worker that ignores SKIP_WAITING never leaves the button stuck",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(received).toContain(expected) // indexOf\n\nExpected substring: \"content=\\\"web-v123\\\"\"\nReceived string:    \"<!DOCTYPE html>\n<html lang=\\\"en\\\">\n<head>\n    <meta charset=\\\"UTF-8\\\">\n    <meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1, viewport-fit=cover, interactive-wi"
+          ]
+        },
+        {
+          "file": "app-update-prompt.spec.js",
+          "title": "a cold start with a waiting worker applies it without the prompt",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(received).toContain(expected) // indexOf\n\nExpected substring: \"content=\\\"web-v123\\\"\"\nReceived string:    \"<!DOCTYPE html>\n<html lang=\\\"en\\\">\n<head>\n    <meta charset=\\\"UTF-8\\\">\n    <meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1, viewport-fit=cover, interactive-wi"
+          ]
+        }
+      ]
+    },
+    {
+      "report": "pwa-parity-aura-boost-notifications.spec.js.json",
+      "at": "2026-10-21T07:20:22.237Z",
+      "stats": {
+        "startTime": "2026-10-21T07:20:22.237Z",
+        "duration": 8629.779,
+        "expected": 8,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-auth-reliability.spec.js.json",
+      "at": "2026-10-21T07:20:31.347Z",
+      "stats": {
+        "startTime": "2026-10-21T07:20:31.347Z",
+        "duration": 11406.839,
+        "expected": 64,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-call-history.spec.js.json",
+      "at": "2026-10-21T07:20:43.269Z",
+      "stats": {
+        "startTime": "2026-10-21T07:20:43.269Z",
+        "duration": 474.73,
+        "expected": 4,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-call-push.spec.js.json",
+      "at": "2026-10-21T07:20:44.151Z",
+      "stats": {
+        "startTime": "2026-10-21T07:20:44.151Z",
+        "duration": 2312.994,
+        "expected": 4,
+        "skipped": 4,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-calls.spec.js.json",
+      "at": "2026-10-21T07:20:46.862Z",
+      "stats": {
+        "startTime": "2026-10-21T07:20:46.862Z",
+        "duration": 37258.019,
+        "expected": 104,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-camera-effects.spec.js.json",
+      "at": "2026-10-21T07:21:24.689Z",
+      "stats": {
+        "startTime": "2026-10-21T07:21:24.689Z",
+        "duration": 21616.389,
+        "expected": 16,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-camera-parity.spec.js.json",
+      "at": "2026-10-21T07:21:47.289Z",
+      "stats": {
+        "startTime": "2026-10-21T07:21:47.289Z",
+        "duration": 82909,
+        "expected": 64,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-camera-send-to.spec.js.json",
+      "at": "2026-10-21T07:23:10.745Z",
+      "stats": {
+        "startTime": "2026-10-21T07:23:10.745Z",
+        "duration": 31721.307,
+        "expected": 20,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-chat-actions.spec.js.json",
+      "at": "2026-10-21T07:23:42.928Z",
+      "stats": {
+        "startTime": "2026-10-21T07:23:42.928Z",
+        "duration": 35711.795,
+        "expected": 20,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-chat-api-contract.spec.js.json",
+      "at": "2026-10-21T07:24:19.241Z",
+      "stats": {
+        "startTime": "2026-10-21T07:24:19.241Z",
+        "duration": 15026.303,
+        "expected": 40,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-chat-camera-native.spec.js.json",
+      "at": "2026-10-21T07:24:35.050Z",
+      "stats": {
+        "startTime": "2026-10-21T07:24:35.050Z",
+        "duration": 19340.933,
+        "expected": 18,
+        "skipped": 2,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-chat-composer-polish.spec.js.json",
+      "at": "2026-10-21T07:24:55.254Z",
+      "stats": {
+        "startTime": "2026-10-21T07:24:55.254Z",
+        "duration": 20675.764000000003,
+        "expected": 20,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-chat-ios-hierarchy.spec.js.json",
+      "at": "2026-10-21T07:25:16.460Z",
+      "stats": {
+        "startTime": "2026-10-21T07:25:16.460Z",
+        "duration": 34888.713,
+        "expected": 32,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-chat-media-stable.spec.js.json",
+      "at": "2026-10-21T07:25:52.198Z",
+      "stats": {
+        "startTime": "2026-10-21T07:25:52.198Z",
+        "duration": 10951.268,
+        "expected": 4,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-chat-notification-nudge.spec.js.json",
+      "at": "2026-10-21T07:26:04.025Z",
+      "stats": {
+        "startTime": "2026-10-21T07:26:04.025Z",
+        "duration": 20898.901,
+        "expected": 24,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-chat-outbox.spec.js.json",
+      "at": "2026-10-21T07:26:25.545Z",
+      "stats": {
+        "startTime": "2026-10-21T07:26:25.545Z",
+        "duration": 10689.44,
+        "expected": 16,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-chat-parity-followup.spec.js.json",
+      "at": "2026-10-21T07:26:36.816Z",
+      "stats": {
+        "startTime": "2026-10-21T07:26:36.816Z",
+        "duration": 76905.93400000001,
+        "expected": 24,
+        "skipped": 0,
+        "unexpected": 4,
+        "flaky": 0
+      },
+      "failures": [
+        {
+          "file": "chat-parity-followup.spec.js",
+          "title": "inbox has pending photo/video actions and Memento indicator; settings are grouped and feed outlined",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: locator('[data-open-memento-gallery] [data-ui-icon=\"memento\"]')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for locator('[data-open-memento-gallery] [data-ui-ic"
+          ]
+        },
+        {
+          "file": "chat-parity-followup.spec.js",
+          "title": "inbox has pending photo/video actions and Memento indicator; settings are grouped and feed outlined",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: locator('[data-open-memento-gallery] [data-ui-icon=\"memento\"]')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for locator('[data-open-memento-gallery] [data-ui-ic"
+          ]
+        },
+        {
+          "file": "chat-parity-followup.spec.js",
+          "title": "inbox has pending photo/video actions and Memento indicator; settings are grouped and feed outlined",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: locator('[data-open-memento-gallery] [data-ui-icon=\"memento\"]')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for locator('[data-open-memento-gallery] [data-ui-ic"
+          ]
+        },
+        {
+          "file": "chat-parity-followup.spec.js",
+          "title": "inbox has pending photo/video actions and Memento indicator; settings are grouped and feed outlined",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: locator('[data-open-memento-gallery] [data-ui-icon=\"memento\"]')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for locator('[data-open-memento-gallery] [data-ui-ic"
+          ]
+        }
+      ]
+    },
+    {
+      "report": "pwa-parity-chat-play-command.spec.js.json",
+      "at": "2026-10-21T07:27:54.957Z",
+      "stats": {
+        "startTime": "2026-10-21T07:27:54.957Z",
+        "duration": 19732.698,
+        "expected": 16,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-chat-presence.spec.js.json",
+      "at": "2026-10-21T07:28:16.367Z",
+      "stats": {
+        "startTime": "2026-10-21T07:28:16.367Z",
+        "duration": 38749.151,
+        "expected": 20,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-chat-realtime.spec.js.json",
+      "at": "2026-10-21T07:28:55.507Z",
+      "stats": {
+        "startTime": "2026-10-21T07:28:55.507Z",
+        "duration": 2699.0130000000004,
+        "expected": 4,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-chat-recovery.spec.js.json",
+      "at": "2026-10-21T07:28:58.582Z",
+      "stats": {
+        "startTime": "2026-10-21T07:28:58.582Z",
+        "duration": 9078.373,
+        "expected": 8,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-chat-scrolling.spec.js.json",
+      "at": "2026-10-21T07:29:08.034Z",
+      "stats": {
+        "startTime": "2026-10-21T07:29:08.034Z",
+        "duration": 24181.784,
+        "expected": 44,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-chat-video-processing.spec.js.json",
+      "at": "2026-10-21T07:29:32.691Z",
+      "stats": {
+        "startTime": "2026-10-21T07:29:32.691Z",
+        "duration": 26644.955,
+        "expected": 7,
+        "skipped": 0,
+        "unexpected": 1,
+        "flaky": 0
+      },
+      "failures": [
+        {
+          "file": "chat-video-processing.spec.js",
+          "title": "a processing video waits, then plays its H.264 rendition",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(received).toBeGreaterThan(expected)\n\nExpected: > 0\nReceived:   0\n\n  82 |     expect(playback.readyState).toBeGreaterThanOrEqual(3);\n  83 |     expect(playback.width).toBeGreaterThan(0);\n> 84 |     expect(playback.after).toBeGreaterThan(playback.before);\n     |                          "
+          ]
+        }
+      ]
+    },
+    {
+      "report": "pwa-parity-chat-web-parity.spec.js.json",
+      "at": "2026-10-21T07:29:59.812Z",
+      "stats": {
+        "startTime": "2026-10-21T07:29:59.812Z",
+        "duration": 74470.75499999999,
+        "expected": 44,
+        "skipped": 0,
+        "unexpected": 4,
+        "flaky": 0
+      },
+      "failures": [
+        {
+          "file": "chat-web-parity.spec.js",
+          "title": "day separators, swipe-left time reveal and dated long-press footer",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toContainText(expected) failed\n\nLocator: locator('.chat-day-separator').nth(1)\nExpected substring: \"Today\"\nReceived string:    \"Yesterday 11:10 PM\"\nTimeout: 5000ms\n\nCall log:\n  - Expect \"toContainText\" with timeout 5000ms\n  - waiting for locator('.chat-day-separator').nth(1)\n "
+          ]
+        },
+        {
+          "file": "chat-web-parity.spec.js",
+          "title": "day separators, swipe-left time reveal and dated long-press footer",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toContainText(expected) failed\n\nLocator: locator('.chat-day-separator').nth(1)\nExpected substring: \"Today\"\nReceived string:    \"Yesterday 11:10 PM\"\nTimeout: 5000ms\n\nCall log:\n  - Expect \"toContainText\" with timeout 5000ms\n  - waiting for locator('.chat-day-separator').nth(1)\n "
+          ]
+        },
+        {
+          "file": "chat-web-parity.spec.js",
+          "title": "day separators, swipe-left time reveal and dated long-press footer",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toContainText(expected) failed\n\nLocator: locator('.chat-day-separator').nth(1)\nExpected substring: \"Today\"\nReceived string:    \"Yesterday 11:10 PM\"\nTimeout: 5000ms\n\nCall log:\n  - Expect \"toContainText\" with timeout 5000ms\n  - waiting for locator('.chat-day-separator').nth(1)\n "
+          ]
+        },
+        {
+          "file": "chat-web-parity.spec.js",
+          "title": "day separators, swipe-left time reveal and dated long-press footer",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toContainText(expected) failed\n\nLocator: locator('.chat-day-separator').nth(1)\nExpected substring: \"Today\"\nReceived string:    \"Yesterday 11:10 PM\"\nTimeout: 5000ms\n\nCall log:\n  - Expect \"toContainText\" with timeout 5000ms\n  - waiting for locator('.chat-day-separator').nth(1)\n "
+          ]
+        }
+      ]
+    },
+    {
+      "report": "pwa-parity-chat-windowing.spec.js.json",
+      "at": "2026-10-21T07:31:14.768Z",
+      "stats": {
+        "startTime": "2026-10-21T07:31:14.768Z",
+        "duration": 12810.147,
+        "expected": 20,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-chats-ios-flows.spec.js.json",
+      "at": "2026-10-21T07:31:28.120Z",
+      "stats": {
+        "startTime": "2026-10-21T07:31:28.120Z",
+        "duration": 56820.315,
+        "expected": 47,
+        "skipped": 0,
+        "unexpected": 1,
+        "flaky": 0
+      },
+      "failures": [
+        {
+          "file": "chats-ios-flows.spec.js",
+          "title": "Call back and View N work from the inbox without opening the room",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Test timeout of 30000ms exceeded.",
+            "Error: locator.click: Test timeout of 30000ms exceeded.\nCall log:\n  - waiting for getByRole('dialog', { name: 'Valid call' }).getByRole('button', { name: /^(Close|End call)$/ }).first()\n    - locator resolved to <button type=\"button\" class=\"call-hangup\" data-call-hangup=\"\" aria-label=\"End call\">…</b"
+          ]
+        }
+      ]
+    },
+    {
+      "report": "pwa-parity-chats-mementos.spec.js.json",
+      "at": "2026-10-21T07:32:26.521Z",
+      "stats": {
+        "startTime": "2026-10-21T07:32:26.521Z",
+        "duration": 119816.272,
+        "expected": 120,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-classmate-appearance.spec.js.json",
+      "at": "2026-10-21T07:34:27.607Z",
+      "stats": {
+        "startTime": "2026-10-21T07:34:27.607Z",
+        "duration": 32236.927,
+        "expected": 24,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-comments.spec.js.json",
+      "at": "2026-10-21T07:35:00.480Z",
+      "stats": {
+        "startTime": "2026-10-21T07:35:00.480Z",
+        "duration": 33196.948,
+        "expected": 27,
+        "skipped": 0,
+        "unexpected": 1,
+        "flaky": 0
+      },
+      "failures": [
+        {
+          "file": "comments.spec.js",
+          "title": "a lost create response retries with one stable comment request ID",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toContainText(expected) failed\n\nLocator: getByRole('dialog', { name: 'Comments' }).locator('#commentsStatus')\nExpected substring: \"response was lost\"\nReceived string:    \"\"\nTimeout: 5000ms\n\nCall log:\n  - Expect \"toContainText\" with timeout 5000ms\n  - waiting for getByRole('dia"
+          ]
+        }
+      ]
+    },
+    {
+      "report": "pwa-parity-config-refresh-camera.spec.js.json",
+      "at": "2026-10-21T07:35:34.314Z",
+      "stats": {
+        "startTime": "2026-10-21T07:35:34.314Z",
+        "duration": 13002.469000000001,
+        "expected": 14,
+        "skipped": 2,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-core-flows.spec.js.json",
+      "at": "2026-10-21T07:35:47.852Z",
+      "stats": {
+        "startTime": "2026-10-21T07:35:47.852Z",
+        "duration": 300367.132,
+        "expected": 163,
+        "skipped": 5,
+        "unexpected": 12,
+        "flaky": 0
+      },
+      "failures": [
+        {
+          "file": "core-flows.spec.js",
+          "title": "onboarding keeps every action reachable on compact phones",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeInViewport() failed\n\nLocator: locator('#signupDialog').getByRole('button', { name: 'Choose Friends' })\nExpected: in viewport\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeInViewport\" with timeout 5000ms\n  - waiting for locator('#signupDialog').getB"
+          ]
+        },
+        {
+          "file": "core-flows.spec.js",
+          "title": "signup school search lists, filters, and falls back from 50 nearby schools",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Test timeout of 30000ms exceeded.",
+            "Error: locator.click: Test timeout of 30000ms exceeded.\nCall log:\n  - waiting for locator('#signupDialog').getByRole('button', { name: 'Choose Friends' })\n\n\n  148 |     const dialog = await openSignup(page);\n  149 |     await dialog.getByRole(\"button\", { name: \"Get Started!\" }).click();\n> 150 |     "
+          ]
+        },
+        {
+          "file": "core-flows.spec.js",
+          "title": "anonymous inbox supports private answers and safety controls",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: locator('#anonymousQuestionDialog').getByRole('button', { name: '✓ Reply sent' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for locator('#anonymousQuestionDia"
+          ]
+        },
+        {
+          "file": "core-flows.spec.js",
+          "title": "onboarding keeps every action reachable on compact phones",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeInViewport() failed\n\nLocator: locator('#signupDialog').getByRole('button', { name: 'Choose Friends' })\nExpected: in viewport\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeInViewport\" with timeout 5000ms\n  - waiting for locator('#signupDialog').getB"
+          ]
+        },
+        {
+          "file": "core-flows.spec.js",
+          "title": "signup school search lists, filters, and falls back from 50 nearby schools",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Test timeout of 30000ms exceeded.",
+            "Error: locator.click: Test timeout of 30000ms exceeded.\nCall log:\n  - waiting for locator('#signupDialog').getByRole('button', { name: 'Choose Friends' })\n\n\n  148 |     const dialog = await openSignup(page);\n  149 |     await dialog.getByRole(\"button\", { name: \"Get Started!\" }).click();\n> 150 |     "
+          ]
+        },
+        {
+          "file": "core-flows.spec.js",
+          "title": "anonymous inbox supports private answers and safety controls",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: locator('#anonymousQuestionDialog').getByRole('button', { name: '✓ Reply sent' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for locator('#anonymousQuestionDia"
+          ]
+        },
+        {
+          "file": "core-flows.spec.js",
+          "title": "onboarding keeps every action reachable on compact phones",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeInViewport() failed\n\nLocator: locator('#signupDialog').getByRole('button', { name: 'Choose Friends' })\nExpected: in viewport\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeInViewport\" with timeout 5000ms\n  - waiting for locator('#signupDialog').getB"
+          ]
+        },
+        {
+          "file": "core-flows.spec.js",
+          "title": "signup school search lists, filters, and falls back from 50 nearby schools",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Test timeout of 30000ms exceeded.",
+            "Error: locator.click: Test timeout of 30000ms exceeded.\nCall log:\n  - waiting for locator('#signupDialog').getByRole('button', { name: 'Choose Friends' })\n\n\n  148 |     const dialog = await openSignup(page);\n  149 |     await dialog.getByRole(\"button\", { name: \"Get Started!\" }).click();\n> 150 |     "
+          ]
+        },
+        {
+          "file": "core-flows.spec.js",
+          "title": "anonymous inbox supports private answers and safety controls",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: locator('#anonymousQuestionDialog').getByRole('button', { name: '✓ Reply sent' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for locator('#anonymousQuestionDia"
+          ]
+        },
+        {
+          "file": "core-flows.spec.js",
+          "title": "onboarding keeps every action reachable on compact phones",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeInViewport() failed\n\nLocator: locator('#signupDialog').getByRole('button', { name: 'Choose Friends' })\nExpected: in viewport\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeInViewport\" with timeout 5000ms\n  - waiting for locator('#signupDialog').getB"
+          ]
+        },
+        {
+          "file": "core-flows.spec.js",
+          "title": "signup school search lists, filters, and falls back from 50 nearby schools",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Test timeout of 30000ms exceeded.",
+            "Error: locator.click: Test timeout of 30000ms exceeded.\nCall log:\n  - waiting for locator('#signupDialog').getByRole('button', { name: 'Choose Friends' })\n\n\n  148 |     const dialog = await openSignup(page);\n  149 |     await dialog.getByRole(\"button\", { name: \"Get Started!\" }).click();\n> 150 |     "
+          ]
+        },
+        {
+          "file": "core-flows.spec.js",
+          "title": "anonymous inbox supports private answers and safety controls",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: locator('#anonymousQuestionDialog').getByRole('button', { name: '✓ Reply sent' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for locator('#anonymousQuestionDia"
+          ]
+        }
+      ]
+    },
+    {
+      "report": "pwa-parity-csp-runtime.spec.js.json",
+      "at": "2026-10-21T07:40:48.716Z",
+      "stats": {
+        "startTime": "2026-10-21T07:40:48.716Z",
+        "duration": 6929.152,
+        "expected": 8,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-feed-play-parity.spec.js.json",
+      "at": "2026-10-21T07:40:56.064Z",
+      "stats": {
+        "startTime": "2026-10-21T07:40:56.064Z",
+        "duration": 86109.96100000001,
+        "expected": 76,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-feed-sender.spec.js.json",
+      "at": "2026-10-21T07:42:22.664Z",
+      "stats": {
+        "startTime": "2026-10-21T07:42:22.664Z",
+        "duration": 8078.278,
+        "expected": 12,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-followup-polish.spec.js.json",
+      "at": "2026-10-21T07:42:31.145Z",
+      "stats": {
+        "startTime": "2026-10-21T07:42:31.145Z",
+        "duration": 53514.373999999996,
+        "expected": 42,
+        "skipped": 6,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-foundations.spec.js.json",
+      "at": "2026-10-21T07:43:25.120Z",
+      "stats": {
+        "startTime": "2026-10-21T07:43:25.120Z",
+        "duration": 20243.618,
+        "expected": 26,
+        "skipped": 2,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-inbox-ios-parity.spec.js.json",
+      "at": "2026-10-21T07:43:45.731Z",
+      "stats": {
+        "startTime": "2026-10-21T07:43:45.731Z",
+        "duration": 30002.133,
+        "expected": 32,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-live-camera.spec.js.json",
+      "at": "2026-10-21T07:44:16.226Z",
+      "stats": {
+        "startTime": "2026-10-21T07:44:16.226Z",
+        "duration": 30382.557,
+        "expected": 27,
+        "skipped": 0,
+        "unexpected": 1,
+        "flaky": 0
+      },
+      "failures": [
+        {
+          "file": "live-camera.spec.js",
+          "title": "send queues at once, guards repeat submits and shows a failure in the chat",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: getByRole('button', { name: 'Take a Memento' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for getByRole('button', { name: 'Take a Memento' })\n\n\n  144 |     aw"
+          ]
+        }
+      ]
+    },
+    {
+      "report": "pwa-parity-memento-gate-appearance.spec.js.json",
+      "at": "2026-10-21T07:44:47.151Z",
+      "stats": {
+        "startTime": "2026-10-21T07:44:47.151Z",
+        "duration": 15095.009,
+        "expected": 20,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-navfeed-ios-flows.spec.js.json",
+      "at": "2026-10-21T07:45:02.740Z",
+      "stats": {
+        "startTime": "2026-10-21T07:45:02.740Z",
+        "duration": 39981.967000000004,
+        "expected": 44,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-onboarding-parity.spec.js.json",
+      "at": "2026-10-21T07:45:44.164Z",
+      "stats": {
+        "startTime": "2026-10-21T07:45:44.164Z",
+        "duration": 69483.29400000001,
+        "expected": 84,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-play-contacts.spec.js.json",
+      "at": "2026-10-21T07:46:54.402Z",
+      "stats": {
+        "startTime": "2026-10-21T07:46:54.402Z",
+        "duration": 23910.388000000003,
+        "expected": 24,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-social-closeout.json",
+      "at": "2026-10-21T07:47:05.164Z",
+      "stats": {
+        "startTime": "2026-10-21T07:47:05.164Z",
+        "duration": 106417.834,
+        "expected": 104,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-play-flow-parity.spec.js.json",
+      "at": "2026-10-21T07:47:19.221Z",
+      "stats": {
+        "startTime": "2026-10-21T07:47:19.221Z",
+        "duration": 161810.791,
+        "expected": 52,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-media-closeout.json",
+      "at": "2026-10-21T07:48:59.988Z",
+      "stats": {
+        "startTime": "2026-10-21T07:48:59.988Z",
+        "duration": 143637.508,
+        "expected": 148,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-update-closeout.json",
+      "at": "2026-10-21T07:49:58.784Z",
+      "stats": {
+        "startTime": "2026-10-21T07:49:58.784Z",
+        "duration": 60118.202,
+        "expected": 8,
+        "skipped": 8,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-poll-detail-appearance.spec.js.json",
+      "at": "2026-10-21T07:50:01.780Z",
+      "stats": {
+        "startTime": "2026-10-21T07:50:01.780Z",
+        "duration": 38038.563,
+        "expected": 48,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-poll-share-recovery.spec.js.json",
+      "at": "2026-10-21T07:50:41.073Z",
+      "stats": {
+        "startTime": "2026-10-21T07:50:41.073Z",
+        "duration": 25820.832000000002,
+        "expected": 20,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-preferences.spec.js.json",
+      "at": "2026-10-21T07:51:07.500Z",
+      "stats": {
+        "startTime": "2026-10-21T07:51:07.500Z",
+        "duration": 19442.464,
+        "expected": 20,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-production-adapter.spec.js.json",
+      "at": "2026-10-21T07:51:28.526Z",
+      "stats": {
+        "startTime": "2026-10-21T07:51:28.526Z",
+        "duration": 189129.802,
+        "expected": 121,
+        "skipped": 0,
+        "unexpected": 19,
+        "flaky": 0
+      },
+      "failures": [
+        {
+          "file": "production-adapter.spec.js",
+          "title": "local integration mode uses only the same-origin API proxy",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(received).toBe(expected) // Object.is equality\n\nExpected: \"http://127.0.0.1:4173/api/v1\"\nReceived: \"http://127.0.0.1:4186/api/v1\"\n\n  83 |         return new ValidAPI().baseURL;\n  84 |     });\n> 85 |     expect(baseURL).toBe(\"http://127.0.0.1:4173/api/v1\");\n     |                     ^\n"
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "signup detects Android embedded browsers before requesting SMS",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toContainText(expected) failed\n\nLocator: locator('#signupStatus')\nExpected substring: \"Open Valid in Chrome\"\nReceived string:    \"Choose your age to continue.\"\nTimeout: 5000ms\n\nCall log:\n  - Expect \"toContainText\" with timeout 5000ms\n  - waiting for locator('#signupStatus')\n  "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "real adapter renders a classmate Ask Me link from the production response",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toHaveAttribute(expected) failed\n\nLocator: getByRole('dialog', { name: 'Profile', exact: true }).getByRole('link', { name: 'Ask anonymously', exact: true })\nExpected: \"../a/maya-contract\"\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toHaveAttribute\" with "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "real adapter accepts the deployed wrapped classmate Ask Me response",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toHaveAttribute(expected) failed\n\nLocator: getByRole('dialog', { name: 'Profile', exact: true }).getByRole('link', { name: 'Ask anonymously', exact: true })\nExpected: \"../a/maya-contract\"\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toHaveAttribute\" with "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "local integration mode uses only the same-origin API proxy",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(received).toBe(expected) // Object.is equality\n\nExpected: \"http://127.0.0.1:4173/api/v1\"\nReceived: \"http://127.0.0.1:4186/api/v1\"\n\n  83 |         return new ValidAPI().baseURL;\n  84 |     });\n> 85 |     expect(baseURL).toBe(\"http://127.0.0.1:4173/api/v1\");\n     |                     ^\n"
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "locked Feed shows received votes, vote-to-unlock, and notification activation",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(received).toHaveLength(expected)\n\nExpected length: 1\nReceived length: 0\nReceived array:  []\n\n  978 |\n  979 |     await expect(notificationButton).toBeHidden();\n> 980 |     expect(requests.filter((request) => request.path.endsWith(\"/web-push-subscriptions\"))).toHaveLength(1);\n      |   "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "signup detects Android embedded browsers before requesting SMS",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toContainText(expected) failed\n\nLocator: locator('#signupStatus')\nExpected substring: \"Open Valid in Chrome\"\nReceived string:    \"Choose your age to continue.\"\nTimeout: 5000ms\n\nCall log:\n  - Expect \"toContainText\" with timeout 5000ms\n  - waiting for locator('#signupStatus')\n  "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "real adapter renders a classmate Ask Me link from the production response",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toHaveAttribute(expected) failed\n\nLocator: getByRole('dialog', { name: 'Profile', exact: true }).getByRole('link', { name: 'Ask anonymously', exact: true })\nExpected: \"../a/maya-contract\"\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toHaveAttribute\" with "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "real adapter accepts the deployed wrapped classmate Ask Me response",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toHaveAttribute(expected) failed\n\nLocator: getByRole('dialog', { name: 'Profile', exact: true }).getByRole('link', { name: 'Ask anonymously', exact: true })\nExpected: \"../a/maya-contract\"\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toHaveAttribute\" with "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "local integration mode uses only the same-origin API proxy",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(received).toBe(expected) // Object.is equality\n\nExpected: \"http://127.0.0.1:4173/api/v1\"\nReceived: \"http://127.0.0.1:4186/api/v1\"\n\n  83 |         return new ValidAPI().baseURL;\n  84 |     });\n> 85 |     expect(baseURL).toBe(\"http://127.0.0.1:4173/api/v1\");\n     |                     ^\n"
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "signup detects Android embedded browsers before requesting SMS",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toContainText(expected) failed\n\nLocator: locator('#signupStatus')\nExpected substring: \"Open Valid in Chrome\"\nReceived string:    \"Choose your age to continue.\"\nTimeout: 5000ms\n\nCall log:\n  - Expect \"toContainText\" with timeout 5000ms\n  - waiting for locator('#signupStatus')\n  "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "signup connection loss restores session=false without duplicate completion",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: getByRole('dialog', { name: 'Welcome Back' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for getByRole('dialog', { name: 'Welcome Back' })\n\n\n  1125 |         a"
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "real adapter renders a classmate Ask Me link from the production response",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toHaveAttribute(expected) failed\n\nLocator: getByRole('dialog', { name: 'Profile', exact: true }).getByRole('link', { name: 'Ask anonymously', exact: true })\nExpected: \"../a/maya-contract\"\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toHaveAttribute\" with "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "real adapter accepts the deployed wrapped classmate Ask Me response",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toHaveAttribute(expected) failed\n\nLocator: getByRole('dialog', { name: 'Profile', exact: true }).getByRole('link', { name: 'Ask anonymously', exact: true })\nExpected: \"../a/maya-contract\"\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toHaveAttribute\" with "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "local integration mode uses only the same-origin API proxy",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(received).toBe(expected) // Object.is equality\n\nExpected: \"http://127.0.0.1:4173/api/v1\"\nReceived: \"http://127.0.0.1:4186/api/v1\"\n\n  83 |         return new ValidAPI().baseURL;\n  84 |     });\n> 85 |     expect(baseURL).toBe(\"http://127.0.0.1:4173/api/v1\");\n     |                     ^\n"
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "signup detects Android embedded browsers before requesting SMS",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toContainText(expected) failed\n\nLocator: locator('#signupStatus')\nExpected substring: \"Open Valid in Chrome\"\nReceived string:    \"Choose your age to continue.\"\nTimeout: 5000ms\n\nCall log:\n  - Expect \"toContainText\" with timeout 5000ms\n  - waiting for locator('#signupStatus')\n  "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "signup connection loss restores session=false without duplicate completion",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: getByRole('dialog', { name: 'Welcome Back' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for getByRole('dialog', { name: 'Welcome Back' })\n\n\n  1125 |         a"
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "real adapter renders a classmate Ask Me link from the production response",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toHaveAttribute(expected) failed\n\nLocator: getByRole('dialog', { name: 'Profile', exact: true }).getByRole('link', { name: 'Ask anonymously', exact: true })\nExpected: \"../a/maya-contract\"\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toHaveAttribute\" with "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "real adapter accepts the deployed wrapped classmate Ask Me response",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toHaveAttribute(expected) failed\n\nLocator: getByRole('dialog', { name: 'Profile', exact: true }).getByRole('link', { name: 'Ask anonymously', exact: true })\nExpected: \"../a/maya-contract\"\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toHaveAttribute\" with "
+          ]
+        }
+      ]
+    },
+    {
+      "report": "pwa-auth-core-closeout.json",
+      "at": "2026-10-21T07:53:24.589Z",
+      "stats": {
+        "startTime": "2026-10-21T07:53:24.589Z",
+        "duration": 211648.445,
+        "expected": 239,
+        "skipped": 5,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-profile-editor-icons.spec.js.json",
+      "at": "2026-10-21T07:54:38.289Z",
+      "stats": {
+        "startTime": "2026-10-21T07:54:38.289Z",
+        "duration": 4183.027,
+        "expected": 4,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-profile-ios-flows.spec.js.json",
+      "at": "2026-10-21T07:54:42.895Z",
+      "stats": {
+        "startTime": "2026-10-21T07:54:42.895Z",
+        "duration": 65285.668000000005,
+        "expected": 48,
+        "skipped": 0,
+        "unexpected": 4,
+        "flaky": 0
+      },
+      "failures": [
+        {
+          "file": "profile-ios-flows.spec.js",
+          "title": "settings follow iOS order: Appearance, one Settings card, Feedback, Sign out",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toHaveText(expected) failed\n\nLocator: locator('#privacySettings').locator('.settings-row strong')\nTimeout: 5000ms\n- Expected  - 0\n+ Received  + 3\n\n  Array [\n    \"Notifications\",\n+   \"Parent access\",\n    \"Activity Status\",\n    \"Blocked Users\",\n+   \"Add Friends\",\n+   \"Privacy & "
+          ]
+        },
+        {
+          "file": "profile-ios-flows.spec.js",
+          "title": "settings follow iOS order: Appearance, one Settings card, Feedback, Sign out",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toHaveText(expected) failed\n\nLocator: locator('#privacySettings').locator('.settings-row strong')\nTimeout: 5000ms\n- Expected  - 0\n+ Received  + 3\n\n  Array [\n    \"Notifications\",\n+   \"Parent access\",\n    \"Activity Status\",\n    \"Blocked Users\",\n+   \"Add Friends\",\n+   \"Privacy & "
+          ]
+        },
+        {
+          "file": "profile-ios-flows.spec.js",
+          "title": "settings follow iOS order: Appearance, one Settings card, Feedback, Sign out",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toHaveText(expected) failed\n\nLocator: locator('#privacySettings').locator('.settings-row strong')\nTimeout: 5000ms\n- Expected  - 0\n+ Received  + 3\n\n  Array [\n    \"Notifications\",\n+   \"Parent access\",\n    \"Activity Status\",\n    \"Blocked Users\",\n+   \"Add Friends\",\n+   \"Privacy & "
+          ]
+        },
+        {
+          "file": "profile-ios-flows.spec.js",
+          "title": "settings follow iOS order: Appearance, one Settings card, Feedback, Sign out",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toHaveText(expected) failed\n\nLocator: locator('#privacySettings').locator('.settings-row strong')\nTimeout: 5000ms\n- Expected  - 0\n+ Received  + 3\n\n  Array [\n    \"Notifications\",\n+   \"Parent access\",\n    \"Activity Status\",\n    \"Blocked Users\",\n+   \"Add Friends\",\n+   \"Privacy & "
+          ]
+        }
+      ]
+    },
+    {
+      "report": "pwa-parity-profile-settings-parity.spec.js.json",
+      "at": "2026-10-21T07:55:48.706Z",
+      "stats": {
+        "startTime": "2026-10-21T07:55:48.706Z",
+        "duration": 10954.314999999999,
+        "expected": 12,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-pwa-polish.spec.js.json",
+      "at": "2026-10-21T07:56:00.167Z",
+      "stats": {
+        "startTime": "2026-10-21T07:56:00.167Z",
+        "duration": 76746.50799999999,
+        "expected": 84,
+        "skipped": 0,
+        "unexpected": 8,
+        "flaky": 0
+      },
+      "failures": [
+        {
+          "file": "pwa-polish.spec.js",
+          "title": "initial shell parks inactive dialogs until first use",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(received).toBeLessThanOrEqual(expected)\n\nExpected: <= 454\nReceived:    507\n\n  17 |     // parity release parks two more sheets (add school, friends) and the\n  18 |     // session recovery card replaces the sign-in card.\n> 19 |     expect(shell.elements).toBeLessThanOrEqual(454);\n     |"
+          ]
+        },
+        {
+          "file": "pwa-polish.spec.js",
+          "title": "classmate browsing, targeted boost, and TBH use the same iOS-style rows",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toHaveAttribute(expected) failed\n\nLocator: getByRole('dialog', { name: 'Profile', exact: true }).getByRole('link', { name: 'Ask anonymously', exact: true })\nExpected: \"../a/demo-maya_c\"\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toHaveAttribute\" with ti"
+          ]
+        },
+        {
+          "file": "pwa-polish.spec.js",
+          "title": "initial shell parks inactive dialogs until first use",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(received).toBeLessThanOrEqual(expected)\n\nExpected: <= 454\nReceived:    507\n\n  17 |     // parity release parks two more sheets (add school, friends) and the\n  18 |     // session recovery card replaces the sign-in card.\n> 19 |     expect(shell.elements).toBeLessThanOrEqual(454);\n     |"
+          ]
+        },
+        {
+          "file": "pwa-polish.spec.js",
+          "title": "classmate browsing, targeted boost, and TBH use the same iOS-style rows",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toHaveAttribute(expected) failed\n\nLocator: getByRole('dialog', { name: 'Profile', exact: true }).getByRole('link', { name: 'Ask anonymously', exact: true })\nExpected: \"../a/demo-maya_c\"\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toHaveAttribute\" with ti"
+          ]
+        },
+        {
+          "file": "pwa-polish.spec.js",
+          "title": "initial shell parks inactive dialogs until first use",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(received).toBeLessThanOrEqual(expected)\n\nExpected: <= 454\nReceived:    507\n\n  17 |     // parity release parks two more sheets (add school, friends) and the\n  18 |     // session recovery card replaces the sign-in card.\n> 19 |     expect(shell.elements).toBeLessThanOrEqual(454);\n     |"
+          ]
+        },
+        {
+          "file": "pwa-polish.spec.js",
+          "title": "classmate browsing, targeted boost, and TBH use the same iOS-style rows",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toHaveAttribute(expected) failed\n\nLocator: getByRole('dialog', { name: 'Profile', exact: true }).getByRole('link', { name: 'Ask anonymously', exact: true })\nExpected: \"../a/demo-maya_c\"\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toHaveAttribute\" with ti"
+          ]
+        },
+        {
+          "file": "pwa-polish.spec.js",
+          "title": "initial shell parks inactive dialogs until first use",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(received).toBeLessThanOrEqual(expected)\n\nExpected: <= 454\nReceived:    507\n\n  17 |     // parity release parks two more sheets (add school, friends) and the\n  18 |     // session recovery card replaces the sign-in card.\n> 19 |     expect(shell.elements).toBeLessThanOrEqual(454);\n     |"
+          ]
+        },
+        {
+          "file": "pwa-polish.spec.js",
+          "title": "classmate browsing, targeted boost, and TBH use the same iOS-style rows",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toHaveAttribute(expected) failed\n\nLocator: getByRole('dialog', { name: 'Profile', exact: true }).getByRole('link', { name: 'Ask anonymously', exact: true })\nExpected: \"../a/demo-maya_c\"\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toHaveAttribute\" with ti"
+          ]
+        }
+      ]
+    },
+    {
+      "report": "pwa-parity-recent-conversations.spec.js.json",
+      "at": "2026-10-21T07:57:17.463Z",
+      "stats": {
+        "startTime": "2026-10-21T07:57:17.463Z",
+        "duration": 4221.871999999999,
+        "expected": 8,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-service-worker-update.spec.js.json",
+      "at": "2026-10-21T07:57:22.061Z",
+      "stats": {
+        "startTime": "2026-10-21T07:57:22.061Z",
+        "duration": 10124.446,
+        "expected": 2,
+        "skipped": 2,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-session-recovery.spec.js.json",
+      "at": "2026-10-21T07:57:32.575Z",
+      "stats": {
+        "startTime": "2026-10-21T07:57:32.575Z",
+        "duration": 22975.746,
+        "expected": 24,
+        "skipped": 0,
+        "unexpected": 4,
+        "flaky": 0
+      },
+      "failures": [
+        {
+          "file": "session-recovery.spec.js",
+          "title": "missing cookie on an unsupported browser keeps the age screen and explains on Get Started",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator:  locator('#signupBrowserHelp')\nExpected: visible\nReceived: hidden\nTimeout:  5000ms\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for locator('#signupBrowserHelp')\n    14 × locator resolved to <a id=\"signupBrowserHelp\" class="
+          ]
+        },
+        {
+          "file": "session-recovery.spec.js",
+          "title": "missing cookie on an unsupported browser keeps the age screen and explains on Get Started",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator:  locator('#signupBrowserHelp')\nExpected: visible\nReceived: hidden\nTimeout:  5000ms\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for locator('#signupBrowserHelp')\n    14 × locator resolved to <a id=\"signupBrowserHelp\" class="
+          ]
+        },
+        {
+          "file": "session-recovery.spec.js",
+          "title": "missing cookie on an unsupported browser keeps the age screen and explains on Get Started",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator:  locator('#signupBrowserHelp')\nExpected: visible\nReceived: hidden\nTimeout:  5000ms\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for locator('#signupBrowserHelp')\n    14 × locator resolved to <a id=\"signupBrowserHelp\" class="
+          ]
+        },
+        {
+          "file": "session-recovery.spec.js",
+          "title": "missing cookie on an unsupported browser keeps the age screen and explains on Get Started",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator:  locator('#signupBrowserHelp')\nExpected: visible\nReceived: hidden\nTimeout:  5000ms\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for locator('#signupBrowserHelp')\n    14 × locator resolved to <a id=\"signupBrowserHelp\" class="
+          ]
+        }
+      ]
+    },
+    {
+      "report": "pwa-parity-sticker-maker.spec.js.json",
+      "at": "2026-10-21T07:57:56.048Z",
+      "stats": {
+        "startTime": "2026-10-21T07:57:56.048Z",
+        "duration": 18526.472,
+        "expected": 20,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-stories.spec.js.json",
+      "at": "2026-10-21T07:58:15.049Z",
+      "stats": {
+        "startTime": "2026-10-21T07:58:15.049Z",
+        "duration": 111578.709,
+        "expected": 88,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-subscription-management.spec.js.json",
+      "at": "2026-10-21T08:00:07.119Z",
+      "stats": {
+        "startTime": "2026-10-21T08:00:07.119Z",
+        "duration": 10668.829,
+        "expected": 12,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-tbh-reactions.spec.js.json",
+      "at": "2026-10-21T08:00:18.263Z",
+      "stats": {
+        "startTime": "2026-10-21T08:00:18.263Z",
+        "duration": 36548.798,
+        "expected": 24,
+        "skipped": 0,
+        "unexpected": 4,
+        "flaky": 0
+      },
+      "failures": [
+        {
+          "file": "tbh-reactions.spec.js",
+          "title": "Inbox filters match iOS All, Polls, TBHs, and Ask Me sections",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toHaveCount(expected) failed\n\nLocator:  locator('[data-anonymous-question], [data-anonymous-answer]')\nExpected: 3\nReceived: 2\nTimeout:  5000ms\n\nCall log:\n  - Expect \"toHaveCount\" with timeout 5000ms\n  - waiting for locator('[data-anonymous-question], [data-anonymous-answer]')\n"
+          ]
+        },
+        {
+          "file": "tbh-reactions.spec.js",
+          "title": "Inbox filters match iOS All, Polls, TBHs, and Ask Me sections",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toHaveCount(expected) failed\n\nLocator:  locator('[data-anonymous-question], [data-anonymous-answer]')\nExpected: 3\nReceived: 2\nTimeout:  5000ms\n\nCall log:\n  - Expect \"toHaveCount\" with timeout 5000ms\n  - waiting for locator('[data-anonymous-question], [data-anonymous-answer]')\n"
+          ]
+        },
+        {
+          "file": "tbh-reactions.spec.js",
+          "title": "Inbox filters match iOS All, Polls, TBHs, and Ask Me sections",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toHaveCount(expected) failed\n\nLocator:  locator('[data-anonymous-question], [data-anonymous-answer]')\nExpected: 3\nReceived: 2\nTimeout:  5000ms\n\nCall log:\n  - Expect \"toHaveCount\" with timeout 5000ms\n  - waiting for locator('[data-anonymous-question], [data-anonymous-answer]')\n"
+          ]
+        },
+        {
+          "file": "tbh-reactions.spec.js",
+          "title": "Inbox filters match iOS All, Polls, TBHs, and Ask Me sections",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toHaveCount(expected) failed\n\nLocator:  locator('[data-anonymous-question], [data-anonymous-answer]')\nExpected: 3\nReceived: 2\nTimeout:  5000ms\n\nCall log:\n  - Expect \"toHaveCount\" with timeout 5000ms\n  - waiting for locator('[data-anonymous-question], [data-anonymous-answer]')\n"
+          ]
+        }
+      ]
+    },
+    {
+      "report": "pwa-parity-turnstile.spec.js.json",
+      "at": "2026-10-21T08:00:55.294Z",
+      "stats": {
+        "startTime": "2026-10-21T08:00:55.294Z",
+        "duration": 65294.316,
+        "expected": 8,
+        "skipped": 0,
+        "unexpected": 4,
+        "flaky": 0
+      },
+      "failures": [
+        {
+          "file": "turnstile.spec.js",
+          "title": "signup exchanges a browser challenge token before sending SMS",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Test timeout of 30000ms exceeded.",
+            "Error: locator.click: Test timeout of 30000ms exceeded.\nCall log:\n  - waiting for getByRole('dialog').getByRole('button', { name: 'Continue' })\n\n\n  138 |     await dialog.getByRole(\"button\", { name: \"Get Started!\" }).click();\n  139 |     // No contact picker in this browser: the friends card offers "
+          ]
+        },
+        {
+          "file": "turnstile.spec.js",
+          "title": "signup exchanges a browser challenge token before sending SMS",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Test timeout of 30000ms exceeded.",
+            "Error: locator.click: Test timeout of 30000ms exceeded.\nCall log:\n  - waiting for getByRole('dialog').getByRole('button', { name: 'Continue' })\n\n\n  138 |     await dialog.getByRole(\"button\", { name: \"Get Started!\" }).click();\n  139 |     // No contact picker in this browser: the friends card offers "
+          ]
+        },
+        {
+          "file": "turnstile.spec.js",
+          "title": "signup exchanges a browser challenge token before sending SMS",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Test timeout of 30000ms exceeded.",
+            "Error: locator.click: Test timeout of 30000ms exceeded.\nCall log:\n  - waiting for getByRole('dialog').getByRole('button', { name: 'Continue' })\n\n\n  138 |     await dialog.getByRole(\"button\", { name: \"Get Started!\" }).click();\n  139 |     // No contact picker in this browser: the friends card offers "
+          ]
+        },
+        {
+          "file": "turnstile.spec.js",
+          "title": "signup exchanges a browser challenge token before sending SMS",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Test timeout of 30000ms exceeded.",
+            "Error: locator.click: Test timeout of 30000ms exceeded.\nCall log:\n  - waiting for getByRole('dialog').getByRole('button', { name: 'Continue' })\n\n\n  138 |     await dialog.getByRole(\"button\", { name: \"Get Started!\" }).click();\n  139 |     // No contact picker in this browser: the friends card offers "
+          ]
+        }
+      ]
+    },
+    {
+      "report": "pwa-parity-vault.spec.js.json",
+      "at": "2026-10-21T08:02:01.080Z",
+      "stats": {
+        "startTime": "2026-10-21T08:02:01.080Z",
+        "duration": 52950.533,
+        "expected": 36,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-parity-voice-gestures.spec.js.json",
+      "at": "2026-10-21T08:02:54.539Z",
+      "stats": {
+        "startTime": "2026-10-21T08:02:54.539Z",
+        "duration": 14280.338,
+        "expected": 12,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-ui-final.json",
+      "at": "2026-10-21T08:12:57.935Z",
+      "stats": {
+        "startTime": "2026-10-21T08:12:57.935Z",
+        "duration": 611975.605,
+        "expected": 453,
+        "skipped": 0,
+        "unexpected": 19,
+        "flaky": 0
+      },
+      "failures": [
+        {
+          "file": "production-adapter.spec.js",
+          "title": "locked Feed shows received votes, vote-to-unlock, and notification activation",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(received).toHaveLength(expected)\n\nExpected length: 1\nReceived length: 0\nReceived array:  []\n\n  978 |\n  979 |     await expect(notificationButton).toBeHidden();\n> 980 |     expect(requests.filter((request) => request.path.endsWith(\"/web-push-subscriptions\"))).toHaveLength(1);\n      |   "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "real adapter submits a Play vote and multipart school question",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Test timeout of 30000ms exceeded.",
+            "Error: locator.fill: Test timeout of 30000ms exceeded.\nCall log:\n  - waiting for getByRole('dialog', { name: 'School Questions' }).getByLabel('What should your school vote on?')\n\n\n  1184 |     await page.getByRole(\"button\", { name: /Submit a school question/i }).click();\n  1185 |     const dialog = "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "question approval deep link opens the exact submission history and deactivates through the released contract",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: getByRole('dialog', { name: 'School Questions' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for getByRole('dialog', { name: 'School Questions' })\n\n\n  1212 |\n "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "ambiguous question retries reuse one idempotency key and never double-charge",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Test timeout of 30000ms exceeded.",
+            "Error: locator.fill: Test timeout of 30000ms exceeded.\nCall log:\n  - waiting for getByRole('dialog', { name: 'School Questions' }).getByLabel('What should your school vote on?')\n\n\n  1438 |     await page.getByRole(\"button\", { name: /Submit a school question/i }).click();\n  1439 |     const dialog = "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "real adapter submits a Play vote and multipart school question",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Test timeout of 30000ms exceeded.",
+            "Error: locator.fill: Test timeout of 30000ms exceeded.\nCall log:\n  - waiting for getByRole('dialog', { name: 'School Questions' }).getByLabel('What should your school vote on?')\n\n\n  1184 |     await page.getByRole(\"button\", { name: /Submit a school question/i }).click();\n  1185 |     const dialog = "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "question approval deep link opens the exact submission history and deactivates through the released contract",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: getByRole('dialog', { name: 'School Questions' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for getByRole('dialog', { name: 'School Questions' })\n\n\n  1212 |\n "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "ambiguous question retries reuse one idempotency key and never double-charge",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Test timeout of 30000ms exceeded.",
+            "Error: locator.fill: Test timeout of 30000ms exceeded.\nCall log:\n  - waiting for getByRole('dialog', { name: 'School Questions' }).getByLabel('What should your school vote on?')\n\n\n  1438 |     await page.getByRole(\"button\", { name: /Submit a school question/i }).click();\n  1439 |     const dialog = "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "signup connection loss restores session=false without duplicate completion",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: getByRole('dialog', { name: 'Welcome Back' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for getByRole('dialog', { name: 'Welcome Back' })\n\n\n  1126 |         a"
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "real adapter submits a Play vote and multipart school question",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Test timeout of 30000ms exceeded.",
+            "Error: locator.fill: Test timeout of 30000ms exceeded.\nCall log:\n  - waiting for getByRole('dialog', { name: 'School Questions' }).getByLabel('What should your school vote on?')\n\n\n  1184 |     await page.getByRole(\"button\", { name: /Submit a school question/i }).click();\n  1185 |     const dialog = "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "question approval deep link opens the exact submission history and deactivates through the released contract",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: getByRole('dialog', { name: 'School Questions' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for getByRole('dialog', { name: 'School Questions' })\n\n\n  1212 |\n "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "ambiguous question retries reuse one idempotency key and never double-charge",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Test timeout of 30000ms exceeded.",
+            "Error: locator.fill: Test timeout of 30000ms exceeded.\nCall log:\n  - waiting for getByRole('dialog', { name: 'School Questions' }).getByLabel('What should your school vote on?')\n\n\n  1438 |     await page.getByRole(\"button\", { name: /Submit a school question/i }).click();\n  1439 |     const dialog = "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "signup connection loss restores session=false without duplicate completion",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: getByRole('dialog', { name: 'Welcome Back' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for getByRole('dialog', { name: 'Welcome Back' })\n\n\n  1126 |         a"
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "real adapter submits a Play vote and multipart school question",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Test timeout of 30000ms exceeded.",
+            "Error: locator.fill: Test timeout of 30000ms exceeded.\nCall log:\n  - waiting for getByRole('dialog', { name: 'School Questions' }).getByLabel('What should your school vote on?')\n\n\n  1184 |     await page.getByRole(\"button\", { name: /Submit a school question/i }).click();\n  1185 |     const dialog = "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "question approval deep link opens the exact submission history and deactivates through the released contract",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: getByRole('dialog', { name: 'School Questions' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for getByRole('dialog', { name: 'School Questions' })\n\n\n  1212 |\n "
+          ]
+        },
+        {
+          "file": "production-adapter.spec.js",
+          "title": "ambiguous question retries reuse one idempotency key and never double-charge",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Test timeout of 30000ms exceeded.",
+            "Error: locator.fill: Test timeout of 30000ms exceeded.\nCall log:\n  - waiting for getByRole('dialog', { name: 'School Questions' }).getByLabel('What should your school vote on?')\n\n\n  1438 |     await page.getByRole(\"button\", { name: /Submit a school question/i }).click();\n  1439 |     const dialog = "
+          ]
+        },
+        {
+          "file": "pwa-polish.spec.js",
+          "title": "school question artwork can be positioned and adjusted again",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Test timeout of 30000ms exceeded.",
+            "Error: locator.setInputFiles: Test timeout of 30000ms exceeded.\nCall log:\n  - waiting for getByRole('dialog', { name: 'School Questions' }).getByLabel('Artwork')\n\n\n  468 |     await page.getByRole(\"button\", { name: /Submit a school question for/i }).click();\n  469 |     const question = page.getByRo"
+          ]
+        },
+        {
+          "file": "pwa-polish.spec.js",
+          "title": "school question artwork can be positioned and adjusted again",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Test timeout of 30000ms exceeded.",
+            "Error: locator.setInputFiles: Test timeout of 30000ms exceeded.\nCall log:\n  - waiting for getByRole('dialog', { name: 'School Questions' }).getByLabel('Artwork')\n\n\n  468 |     await page.getByRole(\"button\", { name: /Submit a school question for/i }).click();\n  469 |     const question = page.getByRo"
+          ]
+        },
+        {
+          "file": "pwa-polish.spec.js",
+          "title": "school question artwork can be positioned and adjusted again",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Test timeout of 30000ms exceeded.",
+            "Error: locator.setInputFiles: Test timeout of 30000ms exceeded.\nCall log:\n  - waiting for getByRole('dialog', { name: 'School Questions' }).getByLabel('Artwork')\n\n\n  468 |     await page.getByRole(\"button\", { name: /Submit a school question for/i }).click();\n  469 |     const question = page.getByRo"
+          ]
+        },
+        {
+          "file": "pwa-polish.spec.js",
+          "title": "school question artwork can be positioned and adjusted again",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Test timeout of 30000ms exceeded.",
+            "Error: locator.setInputFiles: Test timeout of 30000ms exceeded.\nCall log:\n  - waiting for getByRole('dialog', { name: 'School Questions' }).getByLabel('Artwork')\n\n\n  468 |     await page.getByRole(\"button\", { name: /Submit a school question for/i }).click();\n  469 |     const question = page.getByRo"
+          ]
+        }
+      ]
+    },
+    {
+      "report": "pwa-ui-geometry-final.json",
+      "at": "2026-10-21T08:15:55.901Z",
+      "stats": {
+        "startTime": "2026-10-21T08:15:55.901Z",
+        "duration": 18468.263,
+        "expected": 12,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-navigation-final.json",
+      "at": "2026-10-21T08:18:05.451Z",
+      "stats": {
+        "startTime": "2026-10-21T08:18:05.451Z",
+        "duration": 52371.116,
+        "expected": 59,
+        "skipped": 0,
+        "unexpected": 1,
+        "flaky": 0
+      },
+      "failures": [
+        {
+          "file": "parity-16039.spec.js",
+          "title": "Ask Me composer sends on Enter once and returns to Sent",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toHaveText(expected) failed\n\nLocator:  locator('[data-inbox-filter=\"ask_me\"]')\nExpected: \"\"\nReceived: \"1\"\nTimeout:  5000ms\n\nCall log:\n  - Expect \"toHaveText\" with timeout 5000ms\n  - waiting for locator('[data-inbox-filter=\"ask_me\"]')\n    14 × locator resolved to <button type=\""
+          ]
+        }
+      ]
+    },
+    {
+      "report": "pwa-ui-core-final.json",
+      "at": "2026-10-21T08:19:15.502Z",
+      "stats": {
+        "startTime": "2026-10-21T08:19:15.502Z",
+        "duration": 275770.618,
+        "expected": 179,
+        "skipped": 13,
+        "unexpected": 4,
+        "flaky": 0
+      },
+      "failures": [
+        {
+          "file": "core-flows.spec.js",
+          "title": "profile exposes iOS-style editing, ask link, purchases, invites, and sign out",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: getByRole('dialog', { name: 'School Questions' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for getByRole('dialog', { name: 'School Questions' })\n\n\n  872 |   "
+          ]
+        },
+        {
+          "file": "core-flows.spec.js",
+          "title": "profile exposes iOS-style editing, ask link, purchases, invites, and sign out",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: getByRole('dialog', { name: 'School Questions' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for getByRole('dialog', { name: 'School Questions' })\n\n\n  872 |   "
+          ]
+        },
+        {
+          "file": "core-flows.spec.js",
+          "title": "profile exposes iOS-style editing, ask link, purchases, invites, and sign out",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: getByRole('dialog', { name: 'School Questions' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for getByRole('dialog', { name: 'School Questions' })\n\n\n  872 |   "
+          ]
+        },
+        {
+          "file": "core-flows.spec.js",
+          "title": "profile exposes iOS-style editing, ask link, purchases, invites, and sign out",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: getByRole('dialog', { name: 'School Questions' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for getByRole('dialog', { name: 'School Questions' })\n\n\n  872 |   "
+          ]
+        }
+      ]
+    },
+    {
+      "report": "pwa-ask-final.json",
+      "at": "2026-10-21T08:19:54.791Z",
+      "stats": {
+        "startTime": "2026-10-21T08:19:54.791Z",
+        "duration": 8361.573,
+        "expected": 4,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-friends-final.json",
+      "at": "2026-10-21T08:20:35.156Z",
+      "stats": {
+        "startTime": "2026-10-21T08:20:35.156Z",
+        "duration": 63685.054,
+        "expected": 72,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-ui-navigation-final.json",
+      "at": "2026-10-21T08:21:19.122Z",
+      "stats": {
+        "startTime": "2026-10-21T08:21:19.122Z",
+        "duration": 19088.398,
+        "expected": 16,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-chat-final.json",
+      "at": "2026-10-21T08:23:02.281Z",
+      "stats": {
+        "startTime": "2026-10-21T08:23:02.281Z",
+        "duration": 230675.36000000002,
+        "expected": 156,
+        "skipped": 0,
+        "unexpected": 4,
+        "flaky": 0
+      },
+      "failures": [
+        {
+          "file": "chat-parity-followup.spec.js",
+          "title": "inbox has pending photo/video actions and Memento indicator; settings are grouped and feed outlined",
+          "project": "android",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: locator('#privacySettings').getByRole('button', { name: 'Activity Status', exact: true })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for locator('#privacySetti"
+          ]
+        },
+        {
+          "file": "chat-parity-followup.spec.js",
+          "title": "inbox has pending photo/video actions and Memento indicator; settings are grouped and feed outlined",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: locator('#privacySettings').getByRole('button', { name: 'Activity Status', exact: true })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for locator('#privacySetti"
+          ]
+        },
+        {
+          "file": "chat-parity-followup.spec.js",
+          "title": "inbox has pending photo/video actions and Memento indicator; settings are grouped and feed outlined",
+          "project": "desktop-firefox",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: locator('#privacySettings').getByRole('button', { name: 'Activity Status', exact: true })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for locator('#privacySetti"
+          ]
+        },
+        {
+          "file": "chat-parity-followup.spec.js",
+          "title": "inbox has pending photo/video actions and Memento indicator; settings are grouped and feed outlined",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toBeVisible() failed\n\nLocator: locator('#privacySettings').getByRole('button', { name: 'Activity Status', exact: true })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for locator('#privacySetti"
+          ]
+        }
+      ]
+    },
+    {
+      "report": "pwa-profile-final.json",
+      "at": "2026-10-21T08:24:31.649Z",
+      "stats": {
+        "startTime": "2026-10-21T08:24:31.649Z",
+        "duration": 8817.251999999999,
+        "expected": 4,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-submission-final.json",
+      "at": "2026-10-21T08:24:31.649Z",
+      "stats": {
+        "startTime": "2026-10-21T08:24:31.649Z",
+        "duration": 203017.205,
+        "expected": 232,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-friend-privacy-final.json",
+      "at": "2026-10-21T08:26:07.331Z",
+      "stats": {
+        "startTime": "2026-10-21T08:26:07.331Z",
+        "duration": 47756.015999999996,
+        "expected": 36,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-pending-final.json",
+      "at": "2026-10-21T08:27:05.519Z",
+      "stats": {
+        "startTime": "2026-10-21T08:27:05.519Z",
+        "duration": 5353.528,
+        "expected": 4,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-chat-final-fixed.json",
+      "at": "2026-10-21T08:28:09.224Z",
+      "stats": {
+        "startTime": "2026-10-21T08:28:09.224Z",
+        "duration": 66139.271,
+        "expected": 28,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-ask-avatar-final.json",
+      "at": "2026-10-21T08:29:53.559Z",
+      "stats": {
+        "startTime": "2026-10-21T08:29:53.559Z",
+        "duration": 22082.018,
+        "expected": 4,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-ask-contract-final.json",
+      "at": "2026-10-21T08:30:42.131Z",
+      "stats": {
+        "startTime": "2026-10-21T08:30:42.131Z",
+        "duration": 18486.493,
+        "expected": 8,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    }
+  ],
+  "checks": [
+    {
+      "command": "npm run lint",
+      "status": "passed",
+      "scope": "Changed authored application modules"
+    },
+    {
+      "command": "npm run typecheck",
+      "status": "passed",
+      "scope": "New friendship model and scoped draft JSDoc contracts; not the entire legacy JS application"
+    },
+    {
+      "command": "npm run test:unit",
+      "status": "passed",
+      "passed": 174,
+      "skipped": 0
+    },
+    {
+      "command": "npm run test:ui-runtime",
+      "status": "passed"
+    },
+    {
+      "command": "npm run test:static-origin",
+      "status": "passed",
+      "passed": 5
+    },
+    {
+      "command": "npm run build",
+      "status": "passed",
+      "appVersion": "web-v123",
+      "release": "c456da578d828d5bba3d"
+    },
+    {
+      "command": "npm run test:performance",
+      "status": "passed",
+      "shellEstimateBytes": 775617,
+      "unchangedBudgetBytes": 915000
+    }
+  ],
+  "nativeReferences": {
+    "commit": "799025a63dfe9550792c3ad647faf7736aed0d18",
+    "runtime": "iOS 26.1",
+    "viewportPoints": {
+      "width": 390,
+      "height": 844
+    },
+    "kind": "Production SwiftUI views in test-only hosting fixtures, not a release archive or physical phone",
+    "fixturePatch": "native-reference-fixtures.patch",
+    "physicalDeviceTest": false,
+    "simulator": "Owned throwaway simulator deleted after capture",
+    "selectedRenderTests": [
+      "PrivacySettingsRenderTests/testParentsSettingsTab",
+      "PrivacySettingsRenderTests/testWhoCanAddYouAdultDefault",
+      "PrivacySettingsRenderTests/testPWAParentChoiceReference",
+      "FriendsSentRequestsPreviewTests/testPWAComparisonPages"
+    ]
+  },
+  "screenshots": [
+    {
+      "file": "screenshots/parity/ios/friends-native.png",
+      "sha256": "d186edbaaa74371264e9fde0401c00efa161e41a79790c2f95837bcc2124e763"
+    },
+    {
+      "file": "screenshots/parity/ios/parent-add-privacy-native.png",
+      "sha256": "59d4477fa34a83ffebd0deed5f569a019ac7748069f7b83611735126262e1a5b"
+    },
+    {
+      "file": "screenshots/parity/ios/parent-settings-native.png",
+      "sha256": "779d6dd219652114c574629af58cf358e7832b377dc7b9d3573e2556b5865c0e"
+    },
+    {
+      "file": "screenshots/parity/ios/suggested-native.png",
+      "sha256": "cceabec21a7268c15f2c74bc62e58de89a020539c05435379867d0b47e2ae6e9"
+    }
+  ],
+  "repairs": [
+    "Explicit age fixture selection preserves all signup policy and API assertions.",
+    "API origin assertion follows the configured local fixture port.",
+    "Settings and Ask Me assertions follow the native Privacy and in-app composer navigation; adapter tests verify the exact public Ask token request.",
+    "Notification and signup recovery tests wait for completed backend registration/sign-in, not transient UI.",
+    "Native row layout and history checks assert full-page geometry, inline actions, parent locks, QR reconnection and returning to the bell.",
+    "Fixed comment stale-read outcome loss, a Memento duplicate-submit/publishing race, and question lazy mounting; original exploratory failures remain in runs.",
+    "Five-repeat WebKit Memento regression: 2 failures before the fix, 5/5 passed after."
+  ]
+}
