@@ -121,4 +121,14 @@ for (const [size, viewport] of [['mobile', { width: 390, height: 844 }], ['deskt
     await collegePage.screenshot({ path: `${out}after-college-major-${size}.png`, scale: 'css', animations: 'disabled' });
     await collegePage.close();
 }
+// Capture the review composites only after explicitly selecting each flow.
+// Navigating to a hash alone does not reload an already-open browser document.
+const comparisonPage = await browser.newPage({ viewport: { width: 1320, height: 1100 } });
+await comparisonPage.goto(`${origin}/screenshots/parity/comparison.html`);
+for (const [flow, name] of [['friends', 'friends'], ['parent', 'parent'], ['privacy', 'privacy']]) {
+    await comparisonPage.locator(`[data-flow="${flow}"]`).click();
+    await comparisonPage.locator(`[data-flow="${flow}"][aria-pressed="true"]`).waitFor();
+    await comparisonPage.evaluate(async () => { await document.fonts.ready; await Promise.all([...document.images].map(img => img.decode())); });
+    await comparisonPage.screenshot({ path: `${out}side-by-side-${name}.png`, fullPage: true, scale: 'css', animations: 'disabled' });
+}
 await browser.close();
