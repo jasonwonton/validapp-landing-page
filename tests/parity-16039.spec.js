@@ -183,6 +183,11 @@ test("Ask Me composer sends on Enter once and returns to Sent", async ({ page })
     await signIn(page);
     await expect(page.locator('[data-inbox-count="ask_me"]')).toHaveText("1");
     const unreadBefore = await page.locator('[data-inbox-filter="ask_me"]').innerText();
+    await page.evaluate(async () => {
+        const { DemoAPI } = await import('/app/demo-api.js');
+        const context = DemoAPI.prototype.getPublicAskContext;
+        DemoAPI.prototype.getPublicAskContext = async function (...args) { return { ...await context.apply(this, args), recipient_username: 'maya_c', recipient_profile_picture_url: `${location.origin}/assets/valid_logo.png` }; };
+    });
     await page.getByRole("button", { name: "Profile", exact: true }).click();
     await page.locator('#profilePanel [data-open-friends]').click();
     const friends = page.getByRole("dialog", { name: "Add Friends", exact: true });
@@ -191,6 +196,8 @@ test("Ask Me composer sends on Enter once and returns to Sent", async ({ page })
     const profile = page.getByRole("dialog", { name: "Profile", exact: true });
     await profile.getByRole("button", { name: "Ask anonymously", exact: true }).click();
     const composer = page.getByRole("dialog", { name: "Ask anonymously", exact: true });
+    await expect(composer.locator('.ask-compose-avatar img')).toBeVisible();
+    await expect(composer).toContainText('@maya_c');
     await composer.getByLabel("Your question").fill("What made you smile today?");
     await composer.getByLabel("Your question").press("Enter");
     await expect(composer).toContainText("Message sent");

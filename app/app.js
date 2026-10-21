@@ -3089,7 +3089,7 @@ async function composeSelectedProfileAsk() {
     const { openAskComposer } = await import("./ask-compose.js");
     if (api.user?.id !== owner || generation !== state.classmateProfileGeneration || $("#classmateProfileDialog").classList.contains("hidden")) return;
     await openAskComposer({
-        api, getUser: () => api.user, publicToken, escapeHTML,
+        api, getUser: () => api.user, publicToken, escapeHTML, avatarMarkup,
         onSent: () => { if (api.user?.id === owner) void loadAnonymousInbox(); },
         onCheckSent: async () => {
             if (api.user?.id !== owner) return;
