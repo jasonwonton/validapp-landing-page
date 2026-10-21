@@ -1,0 +1,168 @@
+/* Live camera controls and the photo review editor. Loaded on first camera use. */
+
+/* Live camera. Elements positioned at runtime (setRuntimeStyles) must not get
+   left/top/size/opacity here: this sheet loads last and would win. */
+.live-camera-stage { touch-action: none; -webkit-user-select: none; user-select: none; }
+.live-camera-stage .live-camera-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.live-camera-stage .live-camera-overlay[hidden], .live-camera-stage [hidden] { display: none; }
+.live-camera-focus { position: absolute; z-index: 3; width: 64px; height: 64px; margin: -32px 0 0 -32px; border: 1.5px solid #fff; border-radius: 12px; box-shadow: 0 0 3px rgba(0,0,0,.35); pointer-events: none; opacity: 0; }
+.live-camera-focus.active { animation: live-camera-focus .9s ease-out both; }
+@keyframes live-camera-focus { 0% { transform: scale(1.18); opacity: 1; } 22% { transform: scale(1); opacity: 1; } 61% { opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
+.live-camera-flash, .live-camera-zoom { position: absolute; z-index: 4; display: grid; place-items: center; min-width: 44px; height: 44px; padding: 0; border: 0; border-radius: 22px; background: rgba(0,0,0,.42); color: #fff; }
+.live-camera-flash { top: 12px; right: 12px; width: 44px; }
+.live-camera-flash .ui-icon { width: 22px; height: 22px; }
+.live-camera-flash small { position: absolute; right: 7px; bottom: 6px; font: 800 10px/1 system-ui, sans-serif; }
+.live-camera-flash.lit { color: #ffd60a; }
+.live-camera-zoom { left: 50%; bottom: 14px; transform: translateX(-50%); padding: 0 12px; font: 700 14px/1 system-ui, sans-serif; }
+.live-camera-timer { position: absolute; z-index: 4; top: 14px; left: 50%; transform: translateX(-50%); padding: 6px 12px; border-radius: 999px; background: rgba(0,0,0,.55); color: #fff; font: 600 14px/1.2 system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+.live-camera-shutter-wrap { position: relative; display: grid; place-items: center; }
+.live-camera-controls .camera-shutter { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.live-camera-controls .camera-shutter span { transition: transform .2s ease, border-radius .2s ease, background-color .2s ease; }
+.live-camera.is-pressing .camera-shutter span { transform: scale(.92); }
+.live-camera.is-recording .camera-shutter span { background: #ff3b30; transform: scale(.88); }
+.live-camera.is-record-locked .camera-shutter span { border-radius: 22%; transform: scale(.52); }
+.live-camera-lock { position: absolute; top: 50%; right: calc(100% + 30px); width: 44px; height: 44px; margin-top: -22px; display: grid; place-items: center; border-radius: 50%; background: rgba(0,0,0,.7); color: #fff; pointer-events: none; }
+.live-camera-lock[hidden] { display: none; }
+.live-camera-lock::before { content: ""; position: absolute; right: -14px; top: 50%; width: 7px; height: 7px; margin-top: -4px; border-left: 2px solid rgba(255,255,255,.8); border-bottom: 2px solid rgba(255,255,255,.8); transform: rotate(45deg); }
+.live-camera-controls .recording-hidden { visibility: hidden; }
+.live-camera-screen-flash { position: fixed; inset: 0; z-index: 2147483000; background: #fff; }
+.live-camera-screen-flash[hidden] { display: none; }
+
+/* Review stage: the photo's own frame, letterboxed inside the preview. */
+.chat-camera-sheet:has(.review-stage) .chat-media-form > header { display: none; }
+.chat-camera-sheet:has(.review-stage) .chat-media-form { grid-template-rows: minmax(0, 1fr); }
+/* The review is black around the photo in both themes, as on iOS. */
+:root .chat-camera-sheet .chat-media-preview:has(> .review-stage) { background: #000; border-radius: 0; }
+.chat-media-preview > .review-stage { position: absolute; overflow: hidden; background: #000; touch-action: none; -webkit-user-select: none; user-select: none; }
+.review-stage > canvas, .chat-camera-sheet .chat-media-preview .review-stage > video { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+.review-stage > canvas[hidden] { display: none; }
+.review-stage > .review-photo:focus-visible { outline: 3px solid #fff; outline-offset: -3px; }
+.review-drawing { pointer-events: none; }
+.review-guides i { position: absolute; z-index: 2; background: var(--peach); box-shadow: 0 0 1px rgba(0,0,0,.35); pointer-events: none; }
+.review-guides i[hidden] { display: none; }
+.review-guide-v { top: 0; bottom: 0; left: 50%; width: 1.5px; margin-left: -.75px; }
+.review-guide-h { left: 0; right: 0; top: 50%; height: 1.5px; margin-top: -.75px; }
+/* No box of its own, so taps between captions reach the photo in every engine. */
+.review-captions { display: contents; }
+.review-caption { position: absolute; z-index: 3; left: 0; right: 0; box-sizing: border-box; width: 100%; margin: 0; padding: 4px 14px; border: 0; border-radius: 0; background: rgba(0,0,0,.42); box-shadow: 0 2px 4px rgba(0,0,0,.35); color: #fff; font-family: inherit; font-size: 21px; font-weight: 500; line-height: 1.3; text-align: center; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; pointer-events: auto; touch-action: none; cursor: grab; }
+.review-caption:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+.review-caption-editor { display: block; resize: none; min-height: 36px; caret-color: var(--peach); cursor: text; outline: none; }
+.review-filter-name { position: absolute; z-index: 4; left: 0; right: 0; top: 50%; margin: 0; transform: translateY(-50%); color: #fff; font-size: 22px; font-weight: 900; text-align: center; text-shadow: 0 1px 6px rgba(0,0,0,.45); opacity: 0; pointer-events: none; }
+.review-filter-name.show { animation: review-filter-flash 1.37s both; }
+@keyframes review-filter-flash { 0% { opacity: 0; animation-timing-function: ease-out; } 8.76% { opacity: 1; animation-timing-function: linear; } 74.45% { opacity: 1; animation-timing-function: ease-in; } 100% { opacity: 0; } }
+.review-duration { position: absolute; z-index: 4; top: 12px; left: 50%; transform: translateX(-50%); padding: 5px 10px; border-radius: 999px; background: rgba(0,0,0,.55); color: #fff; font: 600 13px/1.2 system-ui, sans-serif; pointer-events: none; }
+.review-duration[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) {
+    .review-filter-name.show { animation-name: review-filter-flash-reduced; }
+    .live-camera-focus.active { animation-name: live-camera-focus-reduced; }
+}
+@keyframes review-filter-flash-reduced { 0%, 74% { opacity: 1; } 75%, 100% { opacity: 0; } }
+@keyframes live-camera-focus-reduced { 0%, 60% { opacity: 1; } 61%, 100% { opacity: 0; } }
+
+/* Tool column down the right edge, lined up with the close button (iOS CameraReviewEditingTools). */
+.chat-review-tools { position: absolute; z-index: 5; top: 64px; right: 10px; bottom: 88px; display: flex; flex-direction: column; align-items: center; gap: 8px; overflow-y: auto; scrollbar-width: none; pointer-events: none; }
+.chat-review-tools > *, .review-draw-tools > * { pointer-events: auto; }
+.chat-review-tools button { flex: 0 0 auto; width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: rgba(0,0,0,.42); color: #fff; font-size: 16px; font-weight: 700; }
+.chat-review-tools button[hidden], .review-draw-tools[hidden] { display: none; }
+.chat-review-tools .ui-icon { width: 23px; height: 23px; }
+.chat-review-tools [data-photo-stickers] { color: #ffb15e; }
+.chat-review-tools .native-sticker-icon { width: 23px; height: 23px; }
+.chat-review-tools [data-photo-draw][aria-pressed="true"] { background: var(--peach); color: var(--on-peach); }
+.chat-review-tools.is-drawing > button:not([data-photo-draw]) { display: none; }
+.review-draw-tools { display: flex; flex-direction: column; align-items: center; gap: 0; }
+.chat-review-tools .review-swatch, .chat-review-tools .review-brush { background: transparent; border-radius: 12px; }
+.review-swatch span { width: 22px; height: 22px; border: 1px solid #fff; border-radius: 50%; box-shadow: 0 0 2px rgba(0,0,0,.45); }
+.review-swatch.selected span { border-width: 3px; }
+.review-brush { position: relative; }
+.review-brush::before { content: ""; position: absolute; width: 28px; height: 28px; border-radius: 50%; background: rgba(0,0,0,.42); }
+.review-brush.selected::before { background: rgba(255,255,255,.3); }
+.review-brush span { position: relative; border-radius: 50%; background: #fff; }
+.chat-review-tools .review-draw-action:disabled { opacity: .4; }
+.chat-review-tools .review-draw-action .ui-icon { width: 17px; height: 17px; }
+.chat-media-editor .chat-media-send-count { position: absolute; z-index: 4; right: 84px; bottom: 30px; margin: 0; padding: 6px 10px; border-radius: 999px; background: rgba(0,0,0,.55); color: #fff; font-size: 13px; }
+.chat-media-editor .chat-media-send-count[hidden] { display: none; }
+.chat-media-editor [data-cancel-chat-upload] { position: absolute; z-index: 6; left: 50%; bottom: 96px; transform: translateX(-50%); min-height: 44px; padding: 0 18px; border: 2px solid #fff; border-radius: 999px; background: rgba(0,0,0,.6); color: #fff; font-size: 15px; }
+.chat-media-editor [data-cancel-chat-upload][hidden] { display: none; }
+
+/* Full-screen camera (iOS ChatMediaCaptureView / DailyMomentCameraView): the
+   preview fills the sheet edge to edge, under the status bar and home
+   indicator, and every control floats over it. */
+.chat-sheet.is-capturing .live-camera { position: absolute; inset: 0; z-index: 1; display: block; padding: 0; }
+.chat-sheet.is-capturing .live-camera[hidden] { display: none; }
+.chat-sheet.is-capturing .live-camera-stage { position: absolute; inset: 0; width: 100%; height: 100%; aspect-ratio: auto; place-self: stretch; margin: 0; border-radius: 0; background: #000; }
+.chat-sheet.is-capturing .live-camera-stage::after { content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none; background: linear-gradient(to bottom, rgba(0,0,0,.58), transparent 18%, transparent 64%, rgba(0,0,0,.72)); }
+.chat-sheet.is-capturing .live-camera-flash { top: max(10px, env(safe-area-inset-top)); right: 74px; width: 46px; height: 46px; border-radius: 23px; background: rgba(0,0,0,.52); }
+.chat-sheet.is-capturing .live-camera-timer { top: calc(max(10px, env(safe-area-inset-top)) + 8px); }
+.chat-sheet.is-capturing .live-camera-inset { top: calc(env(safe-area-inset-top) + 112px); right: 16px; width: min(34%, 150px); z-index: 3; border: 3px solid #fff; border-radius: 20px; }
+.chat-sheet.is-capturing .live-camera-controls { position: absolute; left: 0; right: 0; bottom: calc(max(12px, env(safe-area-inset-bottom)) + 20px); z-index: 5; grid-template-columns: 82px 1fr 82px; gap: 0; padding: 0 18px; }
+.chat-sheet.is-capturing .live-camera-controls [data-camera-library] { width: 54px; height: 54px; border-radius: 16px; background: rgba(0,0,0,.52); }
+.live-camera-flip { position: absolute; z-index: 4; top: max(10px, env(safe-area-inset-top)); right: 18px; width: 46px; height: 46px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: rgba(0,0,0,.52); color: #fff; }
+.live-camera-flip:disabled { opacity: .4; }
+.live-camera-flip .ui-icon { width: 22px; height: 22px; }
+.chat-sheet.is-capturing .live-camera-hint { position: absolute; left: 0; right: 0; bottom: max(8px, env(safe-area-inset-bottom)); z-index: 5; margin: 0; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+.chat-sheet.is-capturing .live-camera-alternatives { position: absolute; left: 12px; right: 12px; bottom: calc(max(12px, env(safe-area-inset-bottom)) + 116px); z-index: 5; }
+.chat-sheet.is-capturing .live-camera-message:not(:empty) { z-index: 5; }
+/* Lens carousel and zoom pill sit above the capture bar, as on iOS. */
+.chat-sheet.is-capturing .live-camera .lens-carousel-slot { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 116px); z-index: 4; padding: 0; background: none; }
+.chat-sheet.is-capturing .live-camera-zoom { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 222px); z-index: 4; min-width: 44px; height: 36px; background: rgba(0,0,0,.55); }
+.chat-sheet.is-capturing .live-camera-stage:not(:has(.lens-carousel-slot:not([hidden]))) .live-camera-zoom { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 124px); }
+.live-camera-flip.recording-hidden { visibility: hidden; }
+
+/* Send to (CaptureSendSheet, SendToRecipientList, MementoAudiencePicker). */
+.send-to-sheet { width: min(100%, 560px); max-width: 100vw; height: min(94dvh, 900px); max-height: 94dvh; margin: auto auto 0; padding: 0; border: 0; border-radius: 22px 22px 0 0; background: var(--aqua); color: var(--ink); overflow: hidden; }
+.send-to-sheet[open] { animation: send-to-enter .26s cubic-bezier(.2,.8,.2,1); }
+.send-to-sheet::backdrop { background: rgba(0,0,0,.45); }
+@keyframes send-to-enter { from { transform: translateY(40px); opacity: .4; } to { transform: none; opacity: 1; } }
+.send-to-content { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.send-to-header { display: grid; grid-template-columns: 80px minmax(0, 1fr) 80px; align-items: center; min-height: 52px; padding: 6px 12px 0; }
+.send-to-header h2 { margin: 0; font-size: 18px; text-align: center; }
+.send-to-cancel { min-height: 44px; padding: 0 4px; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 17px; text-align: left; cursor: pointer; }
+.send-to-cancel:disabled { opacity: .45; }
+.send-to-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 6px 16px 16px; }
+.send-to-search { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 10px 0 4px; padding: 0 12px; border-radius: 12px; background: rgba(var(--surface-rgb), .9); color: var(--muted); }
+.send-to-search .ui-icon { width: 18px; height: 18px; }
+.send-to-search input { flex: 1; min-width: 0; height: 44px; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 16px; outline: none; }
+.send-to-search button[hidden] { display: none; }
+.send-to-search input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; display: none; }
+.send-to-search button { width: 32px; height: 32px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); }
+.send-to-section header { display: flex; align-items: baseline; justify-content: space-between; margin: 16px 2px 8px; }
+.send-to-section h3 { margin: 0; font-size: 15px; color: var(--muted); }
+.send-to-select-all { padding: 4px 2px; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 15px; text-decoration: underline; cursor: pointer; }
+.send-to-row { width: 100%; min-height: 72px; display: flex; align-items: center; gap: 12px; margin: 0 0 8px; padding: 10px 14px 10px 12px; border: 1px solid rgba(0,0,0,.12); border-radius: 19px; background: rgb(var(--surface-rgb)); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.send-to-row.selected { padding: 9px 13px 9px 11px; border: 2px solid var(--dark-teal); background: color-mix(in srgb, var(--peach) 45%, rgb(var(--surface-rgb))); }
+.send-to-row:disabled:not(.selected) { opacity: .45; cursor: default; }
+.send-to-avatar { width: 48px; height: 48px; flex: 0 0 48px; display: grid; place-items: center; overflow: hidden; border: 2px solid var(--outline); border-radius: 50%; background: var(--peach); color: var(--on-peach); font-size: 20px; }
+.send-to-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.send-to-story-icon { border: 0; background: #fff; color: var(--peach); }
+.send-to-story-icon .ui-icon { width: 30px; height: 30px; }
+.send-to-row-copy { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.send-to-row-copy strong { overflow: hidden; font-size: 17px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.send-to-row-copy small { overflow: hidden; color: var(--muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.send-to-row .chat-moment-streak { flex: 0 0 auto; }
+.send-to-mark { width: 26px; height: 26px; flex: 0 0 26px; color: rgba(0,0,0,.28); }
+.send-to-mark.selected { color: var(--dark-teal); }
+.send-to-mark .ui-icon { width: 26px; height: 26px; }
+.send-to-tag-row { width: 100%; min-height: 52px; display: flex; align-items: center; gap: 10px; margin: -2px 0 8px; padding: 0 14px; border: 1px solid rgba(0,0,0,.12); border-radius: 16px; background: rgb(var(--surface-rgb)); color: var(--ink); font: inherit; font-size: 16px; cursor: pointer; }
+.send-to-tag-row span { flex: 1; text-align: left; }
+.send-to-tag-row .ui-icon { width: 22px; height: 22px; }
+.send-to-tag-row .ui-icon:last-child { width: 16px; height: 16px; color: var(--muted); }
+.send-to-empty, .send-to-cap, .story-tags-prompt { margin: 18px 0; color: var(--muted); text-align: center; }
+.send-to-cap { margin: 8px 0 0; font-size: 14px; }
+.send-to-bar { display: grid; gap: 6px; padding: 10px 16px max(14px, env(safe-area-inset-bottom)); border-top: 1px solid rgba(0,0,0,.08); background: var(--aqua); }
+.send-to-summary, .send-to-caption { margin: 0; overflow: hidden; color: var(--muted); font-size: 14px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.send-to-summary[hidden], .send-to-caption[hidden] { display: none; }
+.send-to-send { width: 100%; min-height: 56px; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 0 10px 0 22px; border: 2px solid #000; border-radius: 28px; background: var(--peach); color: var(--on-peach); box-shadow: 0 4px 0 #000; font: inherit; font-size: 19px; cursor: pointer; }
+.send-to-send:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 #000; }
+.send-to-send:disabled { border-color: rgba(0,0,0,.25); background: #c9d3d3; color: rgba(0,0,0,.5); box-shadow: none; cursor: default; }
+/* The title centres on the pill: a spacer as wide as the arrow disc on its left. */
+.send-to-send-title { flex: 1; overflow: hidden; padding-left: 48px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.send-to-send { padding: 0 10px; }
+.send-to-send-disc { width: 36px; height: 36px; flex: 0 0 36px; display: grid; place-items: center; border-radius: 50%; background: #000; color: #fff; }
+.send-to-send:disabled .send-to-send-disc { background: rgba(0,0,0,.35); }
+.send-to-send-disc .ui-icon { width: 18px; height: 18px; stroke-width: 3; }
+:root[data-theme="dark"] .send-to-row, :root[data-theme="dark"] .send-to-tag-row { border-color: rgba(245,251,251,.18); }
+:root[data-theme="dark"] .send-to-mark { color: rgba(245,251,251,.35); }
+:root[data-theme="dark"] .send-to-mark.selected, :root[data-theme="dark"] .send-to-row.selected { --check-ink: #000; }
+:root[data-theme="dark"] .send-to-mark.selected { color: var(--peach); }
+:root[data-theme="dark"] .send-to-row.selected { border-color: var(--peach); background: color-mix(in srgb, var(--peach) 30%, rgb(var(--surface-rgb))); }
+@media (prefers-reduced-motion: reduce) { .send-to-sheet[open] { animation: none; } }

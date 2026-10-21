@@ -1,11 +1,13 @@
 {
   "scope": "Local affected PWA suites. Latest result per test title, file and browser; repeat runs do not inflate totals. Exploratory failures are preserved below.",
-  "generatedAt": "2026-10-21T08:31:18.296Z",
+  "generatedAt": "2026-10-21T09:00:45.684Z",
   "sources": {
-    "ios": "799025a63dfe9550792c3ad647faf7736aed0d18",
+    "ios": "a16cf16d7c23098d1f05c4dcc58b5deb9daf9708",
     "pwaBase": "218440ac535cd2d4493c865787498f9fc0a477e0",
     "pwaLive": "64ee7e5e3ad7201c696a7b9ac73934419d16e981",
-    "implementationCommit": "0c2d21d9b8b602dceb1a96742c1f92891573b544"
+    "iosInitial": "799025a63dfe9550792c3ad647faf7736aed0d18",
+    "iosHeadCheckedAt": "2026-10-21T08:43:00Z",
+    "iosQualification": "PR #736 remains draft; parity reference, not an approved archive"
   },
   "browserProjects": [
     "android",
@@ -16,7 +18,7 @@
   "testCommand": "PLAYWRIGHT_PORT=4186 npx playwright test <affected specs> --workers=2 --reporter=json",
   "retries": 0,
   "totals": {
-    "passed": 2369,
+    "passed": 2429,
     "skipped": 47,
     "failed": 0,
     "flaky": 0
@@ -635,7 +637,7 @@
     },
     {
       "spec": "parity-ui.spec.js",
-      "passed": 16,
+      "passed": 20,
       "skipped": 0,
       "failed": 0,
       "flaky": 0,
@@ -779,6 +781,19 @@
     {
       "spec": "recent-conversations.spec.js",
       "passed": 8,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0,
+      "projects": [
+        "android",
+        "desktop",
+        "desktop-firefox",
+        "desktop-webkit"
+      ]
+    },
+    {
+      "spec": "school-kind-parity.spec.js",
+      "passed": 56,
       "skipped": 0,
       "failed": 0,
       "flaky": 0,
@@ -3313,8 +3328,167 @@
         "flaky": 0
       },
       "failures": []
+    },
+    {
+      "report": "pwa-latest-candidate-final.json",
+      "at": "2026-10-21T08:40:46.780Z",
+      "stats": {
+        "startTime": "2026-10-21T08:40:46.780Z",
+        "duration": 343902.076,
+        "expected": 307,
+        "skipped": 0,
+        "unexpected": 1,
+        "flaky": 0
+      },
+      "failures": [
+        {
+          "file": "school-kind-parity.spec.js",
+          "title": "an authoritative college answer replaces stale directory metadata with canonical graduation years",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Test timeout of 30000ms exceeded.",
+            "Error: page.goto: Test timeout of 30000ms exceeded.\nCall log:\n  - navigating to \"http://127.0.0.1:4186/app/?demo=1&signup=1\", waiting until \"load\"\n\n\n  1 | import { expect, test } from '@playwright/test';\n  2 | async function schools(page, mode = 'college') {\n> 3 |     await page.goto('/app/?demo=1&s"
+          ]
+        }
+      ]
+    },
+    {
+      "report": "pwa-native-delta-final.json",
+      "at": "2026-10-21T08:41:17.046Z",
+      "stats": {
+        "startTime": "2026-10-21T08:41:17.046Z",
+        "duration": 9503.711,
+        "expected": 8,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-school-major-iteration.json",
+      "at": "2026-10-21T08:49:07.881Z",
+      "stats": {
+        "startTime": "2026-10-21T08:49:07.881Z",
+        "duration": 19897.731,
+        "expected": 10,
+        "skipped": 0,
+        "unexpected": 2,
+        "flaky": 0
+      },
+      "failures": [
+        {
+          "file": "school-kind-parity.spec.js",
+          "title": "a pending school lookup cannot be bypassed by selecting the provisional grade",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toContainText(expected) failed\n\nLocator: locator('#signupDialog').getByRole('status')\nExpected substring: \"Checking school\"\nError: strict mode violation: locator('#signupDialog').getByRole('status') resolved to 2 elements:\n    1) <p role=\"status\">Checking school…</p> aka getBy"
+          ]
+        },
+        {
+          "file": "school-kind-parity.spec.js",
+          "title": "major search has an empty state and Skip works with the offline bundled catalog",
+          "project": "desktop",
+          "status": "unexpected",
+          "error": [
+            "Error: expect(locator).toContainText(expected) failed\n\nLocator: locator('#signupDialog').getByRole('status')\nExpected substring: \"No match.\"\nError: strict mode violation: locator('#signupDialog').getByRole('status') resolved to 2 elements:\n    1) <p role=\"status\">No match. Try “Other”.</p> aka getBy"
+          ]
+        }
+      ]
+    },
+    {
+      "report": "pwa-school-major-iteration2.json",
+      "at": "2026-10-21T08:51:02.014Z",
+      "stats": {
+        "startTime": "2026-10-21T08:51:02.014Z",
+        "duration": 21789.969,
+        "expected": 12,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-school-major-final.json",
+      "at": "2026-10-21T08:52:03.586Z",
+      "stats": {
+        "startTime": "2026-10-21T08:52:03.586Z",
+        "duration": 118833.587,
+        "expected": 76,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-candidate-closeout-final.json",
+      "at": "2026-10-21T08:53:01.549Z",
+      "stats": {
+        "startTime": "2026-10-21T08:53:01.549Z",
+        "duration": 335282.012,
+        "expected": 361,
+        "skipped": 18,
+        "unexpected": 1,
+        "flaky": 0
+      },
+      "failures": [
+        {
+          "file": "production-adapter.spec.js",
+          "title": "Request a TBH uses full classmate rows with profile pictures",
+          "project": "desktop-webkit",
+          "status": "unexpected",
+          "error": [
+            "Test timeout of 30000ms exceeded.",
+            "Error: page.goto: Test timeout of 30000ms exceeded.\nCall log:\n  - navigating to \"http://127.0.0.1:4186/app/?signin=1\", waiting until \"load\"\n\n\n  1391 |     await interceptProductionAPI(page);\n  1392 |\n> 1393 |     await page.goto(\"/app/?signin=1\");\n       |                ^\n  1394 |     await page.ge"
+          ]
+        }
+      ]
+    },
+    {
+      "report": "pwa-school-recovery-final.json",
+      "at": "2026-10-21T08:55:22.358Z",
+      "stats": {
+        "startTime": "2026-10-21T08:55:22.358Z",
+        "duration": 97326.96800000001,
+        "expected": 56,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-tbh-candidate-final.json",
+      "at": "2026-10-21T08:58:51.398Z",
+      "stats": {
+        "startTime": "2026-10-21T08:58:51.398Z",
+        "duration": 4585.228,
+        "expected": 4,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
+    },
+    {
+      "report": "pwa-webkit-adapter-final.json",
+      "at": "2026-10-21T08:59:19.546Z",
+      "stats": {
+        "startTime": "2026-10-21T08:59:19.546Z",
+        "duration": 54328.801999999996,
+        "expected": 35,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "failures": []
     }
   ],
+  "implementationCommit": "c7505a7ef679d0edc20ece4346cd7b99c5a26096",
   "checks": [
     {
       "command": "npm run lint",
@@ -3345,12 +3519,12 @@
       "command": "npm run build",
       "status": "passed",
       "appVersion": "web-v123",
-      "release": "c456da578d828d5bba3d"
+      "release": "74153e528b17d1501886"
     },
     {
       "command": "npm run test:performance",
       "status": "passed",
-      "shellEstimateBytes": 775617,
+      "shellEstimateBytes": 782303,
       "unchangedBudgetBytes": 915000
     }
   ],
@@ -3370,7 +3544,9 @@
       "PrivacySettingsRenderTests/testWhoCanAddYouAdultDefault",
       "PrivacySettingsRenderTests/testPWAParentChoiceReference",
       "FriendsSentRequestsPreviewTests/testPWAComparisonPages"
-    ]
+    ],
+    "unchangedViewSourcesThrough": "a16cf16d7c23098d1f05c4dcc58b5deb9daf9708",
+    "equivalence": "The 799025a..a16cf16 delta changes no captured Friends, parent or privacy production view sources."
   },
   "screenshots": [
     {
@@ -3390,6 +3566,20 @@
       "sha256": "cceabec21a7268c15f2c74bc62e58de89a020539c05435379867d0b47e2ae6e9"
     }
   ],
+  "pwaCapture": {
+    "sourceCommit": "c7505a7ef679d0edc20ece4346cd7b99c5a26096",
+    "script": "scripts/capture-parity-ui.mjs",
+    "mobileCSSPixels": {
+      "width": 390,
+      "height": 844
+    },
+    "desktopCSSPixels": {
+      "width": 1440,
+      "height": 1000
+    },
+    "fixtures": "Local DemoAPI, blocked API traffic and synthetic camera",
+    "comparison": "screenshots/parity/comparison.html"
+  },
   "repairs": [
     "Explicit age fixture selection preserves all signup policy and API assertions.",
     "API origin assertion follows the configured local fixture port.",
@@ -3397,6 +3587,19 @@
     "Notification and signup recovery tests wait for completed backend registration/sign-in, not transient UI.",
     "Native row layout and history checks assert full-page geometry, inline actions, parent locks, QR reconnection and returning to the bell.",
     "Fixed comment stale-read outcome loss, a Memento duplicate-submit/publishing race, and question lazy mounting; original exploratory failures remain in runs.",
-    "Five-repeat WebKit Memento regression: 2 failures before the fix, 5/5 passed after."
+    "Five-repeat WebKit Memento regression: 2 failures before the fix, 5/5 passed after.",
+    "Added school-kind authority, eight canonical college years, optional searchable majors, profile major editing outside the cooldown, pending guards and stale submission recovery; 56 checks across four browser projects pass.",
+    "Major list scrolls independently so Skip remains visible at mobile and desktop sizes.",
+    "Unit guard caught direct display of a known grade error; routed it through the existing userMessage sanitizer. The unchanged unit suite then passed 174/174.",
+    "Two WebKit navigation timeouts occurred before page requests (the final TBH trace contains zero network events). The unchanged affected cases passed on rerun; a subsequent complete WebKit production-adapter run passed 35/35. No timeout/assertion or retry policy was weakened."
+  ],
+  "exploratoryChecks": [
+    {
+      "command": "npm run test:unit",
+      "passed": 173,
+      "failed": 1,
+      "reason": "The raw-error display guard caught the new grade-recovery text path.",
+      "resolution": "Use userMessage; final unchanged suite passed 174/174."
+    }
   ]
 }

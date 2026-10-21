@@ -95,5 +95,30 @@ for (const [size, viewport] of [['mobile', { width: 390, height: 844 }], ['deskt
     await cameraPage.screenshot({ path: `${out}after-parent-photo-${size}.png`, scale: 'css', animations: 'disabled' });
     await approval.getByRole('button', { name: 'Back to age selection', exact: true }).click();
     await cameraPage.close();
+    const collegePage = await browser.newPage({ viewport });
+    await collegePage.route('**/api/v1/**', route => route.abort());
+    await collegePage.goto(`${origin}/app/?demo=1&signup=1`);
+    await collegePage.evaluate(async () => {
+        const { DemoAPI } = await import('/app/demo-api.js');
+        DemoAPI.prototype.getNearbySchools = async () => ({ schools: [{ id: 701, name: 'Fixture University', city: 'Test City', state: 'CA', is_college: true }] });
+        DemoAPI.prototype.getSchoolKind = async school_id => ({ school_id, is_college: true });
+    });
+    const signup = collegePage.locator('#signupDialog');
+    await signup.locator('[data-signup-age="20"]').click();
+    await signup.getByRole('button', { name: 'Get Started!' }).click();
+    await signup.getByRole('button', { name: 'Choose Friends', exact: true }).click();
+    await signup.getByRole('button', { name: 'Continue', exact: true }).click();
+    await signup.getByPlaceholder('School, city, or ZIP').fill('90210');
+    await signup.getByRole('option', { name: /Fixture University/ }).click();
+    await signup.getByRole('button', { name: 'Continue', exact: true }).click();
+    await signup.getByRole('radio', { name: /^Class of/ }).first().waitFor();
+    await collegePage.evaluate(() => document.fonts.ready);
+    await collegePage.screenshot({ path: `${out}after-college-years-${size}.png`, scale: 'css', animations: 'disabled' });
+    await signup.getByRole('radio', { name: /^Class of/ }).first().click();
+    await signup.getByRole('button', { name: 'Continue', exact: true }).click();
+    await signup.getByPlaceholder('Search majors').fill('engineering');
+    await signup.getByRole('radio', { name: 'Mechanical Engineering', exact: true }).waitFor();
+    await collegePage.screenshot({ path: `${out}after-college-major-${size}.png`, scale: 'css', animations: 'disabled' });
+    await collegePage.close();
 }
 await browser.close();
