@@ -28,6 +28,7 @@
     "esbuild": "^0.25.9"
   },
   "dependencies": {
-    "livekit-client": "^2.22.2"
+    "livekit-client": "^2.22.2",
+    "qrcode": "^1.5.4"
   }
 }

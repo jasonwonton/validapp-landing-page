@@ -924,6 +924,12 @@ export class DemoAPI {
         const profile = this.classmates.find(classmate => String(classmate.user_id) === String(blockedUserId));
         if (profile && !this.blockedUsers.some(p => p.user_id === profile.user_id)) this.blockedUsers.push(profile);
         this.classmates = this.classmates.filter((classmate) => String(classmate.user_id) !== String(blockedUserId));
+        const f = this.friendFixture();
+        if (!f.blocked.includes(blockedUserId)) f.blocked.push(blockedUserId);
+        f.friends = f.friends.filter((id) => id !== blockedUserId);
+        f.incoming = f.incoming.filter((id) => id !== blockedUserId);
+        f.outgoing = f.outgoing.filter((id) => id !== blockedUserId);
+        this.saveFriendFixture();
         return { blocked_user_id: blockedUserId };
     }
 
@@ -975,6 +981,8 @@ export class DemoAPI {
             god_mode_invite_friend_goal: 5,
             global_visibility_boost_cost: 400,
             targeted_visibility_boost_cost: 200,
+            friends_enabled: new URLSearchParams(location.search).get("friends") === "1",
+            add_links_enabled: new URLSearchParams(location.search).get("friends") === "1",
             enable_tbh_requests: true,
             // QuestionDetailShareRow reads these (?snapchatshare=0 shows the expanded Instagram/TikTok row).
             enable_share_on_snapchat: new URLSearchParams(location.search).get("snapchatshare") !== "0",
@@ -1258,8 +1266,56 @@ export class DemoAPI {
         return { entry_id: entryId, ledger_date: localLedgerDate(), shared_chat_ids: shared, skipped_chat_ids: skipped, aura_points_earned: 10, total_aura_points: this.profile.aura_points + 10, published_at: new Date().toISOString() };
     }
 
-    async getClassmates() {
-        return this.classmates.map((classmate) => ({ ...classmate }));
+    friendFixture() {
+        if (this.friendData) return this.friendData;
+        let saved = null;
+        try { saved = JSON.parse(sessionStorage.getItem("valid:demo-friends") || "null"); } catch { /* optional fixture persistence */ }
+        this.friendData = saved || { friends: ["classmate-1"], incoming: ["classmate-2"], outgoing: ["classmate-3"], blocked: [], dismissed: [], reach: false, messages: false };
+        return this.friendData;
+    }
+    saveFriendFixture() { try { sessionStorage.setItem("valid:demo-friends", JSON.stringify(this.friendFixture())); } catch { /* fixture only */ } }
+    fixturePeople(ids) { return structuredClone([...this.classmates, ...(this.blockedUsers || [])].filter((p) => ids.includes(p.user_id))); }
+    async getFriends() { const friends = this.fixturePeople(this.friendFixture().friends); return { friends, total: friends.length, next_cursor: null }; }
+    async getPeopleRequests() {
+        const f = this.friendFixture();
+        return { can_add_people: true, incoming: this.fixturePeople(f.incoming), outgoing: this.fixturePeople(f.outgoing) };
+    }
+    async getFriendSuggestions() {
+        const f = this.friendFixture();
+        return { enabled: true, suggestions: structuredClone(this.classmates.filter((p) => ![...f.friends, ...f.incoming, ...f.outgoing, ...f.blocked, ...f.dismissed].includes(p.user_id)).map((p) => ({ ...p, reason: "grade", reason_label: "Your grade", mutual_count: 2 }))) };
+    }
+    async lookupPerson(_user, username) {
+        const p = this.classmates.find((p) => (p.username || p.first_name).toLowerCase() === username.replace(/^@/, "").toLowerCase());
+        if (!p) { const error = new Error("Person unavailable."); error.status = 404; throw error; }
+        const f = this.friendFixture(), id = p.user_id;
+        return { ...p, relation: f.friends.includes(id) ? "added" : f.incoming.includes(id) ? "added_you" : f.outgoing.includes(id) ? "requested" : "none", can_add: !f.blocked.includes(id), blocked_by_viewer: f.blocked.includes(id) };
+    }
+    async sendFriendRequest(_user, id) {
+        const f = this.friendFixture();
+        if (f.blocked.includes(id)) throw new Error("This account is unavailable.");
+        if (f.incoming.includes(id)) return this.acceptFriendRequest(_user, id);
+        if (f.friends.includes(id)) return { relation: "added", chat_id: "chat-demo-1" };
+        if (!f.outgoing.includes(id)) f.outgoing.push(id);
+        this.saveFriendFixture();
+        return { relation: "requested", chat_id: "chat-demo-1", request_messages: "on_accept" };
+    }
+    async acceptFriendRequest(_user, id) { const f = this.friendFixture(); f.incoming = f.incoming.filter((v) => v !== id); if (!f.friends.includes(id)) f.friends.push(id); this.saveFriendFixture(); return { relation: "added", chat_id: "chat-demo-1" }; }
+    async declineFriendRequest(_user, id) { this.friendFixture().incoming = this.friendFixture().incoming.filter((v) => v !== id); this.saveFriendFixture(); }
+    async cancelFriendRequest(_user, id) { this.friendFixture().outgoing = this.friendFixture().outgoing.filter((v) => v !== id); this.saveFriendFixture(); }
+    async removeFriend(_user, id) { this.friendFixture().friends = this.friendFixture().friends.filter((v) => v !== id); this.saveFriendFixture(); }
+    async dismissFriendSuggestion(_user, id) { this.friendFixture().dismissed.push(id); this.saveFriendFixture(); }
+    async getBlockedProfiles() { return this.fixturePeople(this.friendFixture().blocked); }
+    async unblockUser(_user, id) { this.friendFixture().blocked = this.friendFixture().blocked.filter((v) => v !== id); this.saveFriendFixture(); }
+    async getFriendReach() { return { available: true, school_contacts_only: this.friendFixture().reach, forced: false, locked_by_parent: false }; }
+    async updateFriendReach(_user, value) { this.friendFixture().reach = value; this.saveFriendFixture(); return this.getFriendReach(); }
+    async getMessageRequests() { return { available: true, from_anyone: this.friendFixture().messages, age_band: "teen", locked_by_parent: false }; }
+    async updateMessageRequests(_user, value) { this.friendFixture().messages = value; this.saveFriendFixture(); return this.getMessageRequests(); }
+    async getAddLink() { return { available: true, enabled: this.friendFixture().link === true, url: "https://validapp.lol/add/jules", username: "jules" }; }
+    async updateAddLink(_user, value) { this.friendFixture().link = value; this.saveFriendFixture(); return this.getAddLink(); }
+    async resolveAddLink(user, username) { return this.lookupPerson(user, username); }
+
+    async getClassmates(_user, search = "", limit = 500) {
+        return this.classmates.filter((p) => !this.friendFixture().blocked.includes(p.user_id)).filter((p) => `${p.first_name} ${p.last_name} ${p.username || ""}`.toLowerCase().includes(search.toLowerCase())).slice(0, limit).map((classmate) => ({ ...classmate }));
     }
 
     async getClassmatesWithMetadata() {

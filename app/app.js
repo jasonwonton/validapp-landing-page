@@ -317,6 +317,7 @@ const state = {
     askStoryFile: null,
     askStoryShareURL: null,
     anonymousInbox: null,
+    askBoxMode: "received",
     selectedAnonymousQuestionId: null,
     anonymousInboxGeneration: 0,
     topQuestionsWeekly: null,
@@ -969,6 +970,7 @@ function openDetailScreen(screen, { historyMode = "push" } = {}) {
 
 function closeDetailScreen(screen, { fromHistory = false } = {}) {
     closeDetailActionMenus();
+    if (screen.id === "classmateProfileDialog") ++state.classmateProfileGeneration;
     screen.classList.add("hidden");
     if (!$(".detail-screen:not(.hidden)")) {
         document.body.classList.remove("detail-screen-open");
@@ -1007,6 +1009,100 @@ function toggleDetailActionMenu(button) {
     button.setAttribute("aria-expanded", String(willOpen));
 }
 
+let activityViewPromise = null;
+function prepareActivityView() {
+    activityViewPromise ||= import("./activity.js").then(({ createActivityView }) => createActivityView({
+        api, getUser: () => api.user, getConfig: () => state.config, escapeHTML,
+        inboxLocked: isFeedVoteLocked,
+        getInboxEntries: () => [
+            ...(state.anonymousInbox?.questions || []).slice(0, 15).map((item) => ({ text: "Anonymous question", detail: item.body, destination: { route: "ask_question", id: item.id } })),
+            ...(state.anonymousInbox?.answers || []).slice(0, 15).map((item) => ({ text: `${item.recipient_display_name} replied`, detail: item.answer_text, destination: { route: "ask_answer", id: item.id } })),
+            ...(!isFeedVoteLocked() ? state.feedItems.slice(0, 15).map((item) => ({ text: item.question_text, detail: "Open poll", destination: { route: "poll", question_answer_id: item.question_answer_id } })) : []),
+            ...state.tbhPendingRequests.slice(0, 15).map((item) => ({ text: `${item.requester_first_name} requested a TBH`, destination: { route: "tbh_request", id: item.id } })),
+        ],
+        navigate: navigateActivityDestination,
+        onSummary: (summary) => {
+            $$("[data-bell-count]").forEach((badge) => { badge.textContent = summary.enabled && summary.badge_total ? ` ${Math.min(99, summary.badge_total)}` : ""; });
+        },
+    }));
+    return activityViewPromise;
+}
+async function navigateActivityDestination(destination) {
+    if (!api.user?.id) return;
+    const route = destination.route;
+    if (route === "friends") return openFriends({ section: "requests" });
+    if (["profile_aura", "boost_again", "target_back", "free_week_reveal"].includes(route)) { switchPanel("profile"); await loadProfilePanel({ force: true }); return; }
+    if (["my_questions", "question_approved"].includes(route)) { switchPanel("profile"); openQuestionDialog({ section: "history" }); return; }
+    if (route === "camera_filter") { switchPanel("chats"); showToast("Your camera filter is ready."); return; }
+    switchPanel("feed");
+    if (route === "story" || route === "story_viewers") {
+        const url = new URL(location.href); url.searchParams.set("story", destination.story_id);
+        history.replaceState(history.state, "", `${url.pathname}${url.search}`);
+        await (await prepareFeedView()).refreshStories?.(); return;
+    }
+    if (route === "ask_question") { await loadAnonymousInbox(); openAnonymousQuestionDialog(destination.id); return; }
+    if (route === "ask_answer") { await loadAnonymousInbox(); openAnonymousAnswerDialog(destination.id); return; }
+    if (route === "tbh_request") { await loadTbhContent(); openTbhComposer(destination.id); return; }
+    if (route === "poll" && destination.question_answer_id) {
+        if (isFeedVoteLocked()) { showToast("Play to unlock your polls."); return; }
+        const id = destination.question_answer_id;
+        if (!state.feedItems.some((item) => String(item.question_answer_id) === String(id))) {
+            try { const item = await api.getFeedItem(api.user.id, id); commitFeedItems([item]); } catch (error) { showToast(error.message); return; }
+        }
+        openFeedDetail(id);
+        if (destination.comment_id && commentsEnabled()) await openCommentsForTarget("poll", id, { commentId: destination.comment_id });
+        return;
+    }
+    if (route === "tbh" && destination.tbh_response_id) {
+        await loadTbhContent();
+        const id = destination.tbh_response_id;
+        const kind = state.tbhInboxItems.some((item) => String(item.id) === String(id)) ? "received" : state.tbhSentItems.some((item) => String(item.id) === String(id)) ? "sent" : "school";
+        await openTbhDetail(`${kind}:${id}`); return;
+    }
+    state.feedType = "personal";
+    state.personalInboxFilter = ["all", "polls", "tbhs", "ask_me"].includes(destination.filter) ? destination.filter : "all";
+    await loadFeed(true);
+}
+
+let friendsViewPromise = null;
+let sessionGeneration = 0;
+function prepareFriendsView() {
+    friendsViewPromise ||= import("./friends/index.js").then(({ createFriendsView }) => createFriendsView({
+        api, getUser: () => api.user, getConfig: () => state.config,
+        escapeHTML, avatarMarkup, showToast,
+        openProfile: (person) => openClassmateProfile(person.user_id, person),
+        openChat: async (person) => {
+            const owner = api.user?.id;
+            try {
+                const chat = await api.createChat(owner, [person.user_id]);
+                if (api.user?.id !== owner) return;
+                switchPanel("chats");
+                const route = await preloadRoute("chats");
+                await activatePanelRoute("chats");
+                await route.openChat?.(chat.id);
+            } catch (error) { if (api.user?.id === owner) showToast(error.message); }
+        },
+        onChanged: (change) => {
+            if (!change?.action) return;
+            state.classmateDirectory = null;
+            if (["block", "report"].includes(change.action)) {
+                state.classmates = state.classmates.filter((p) => String(p.user_id) !== change.userId);
+                state.choicesByQuestion.clear();
+                clearCachedAppState();
+                void loadFeed(true);
+            }
+            void preloadRoute("chats").then((route) => route.refresh?.()).catch(() => null);
+        },
+    }));
+    return friendsViewPromise;
+}
+async function openFriends(options = {}) {
+    if (!api.user?.id || state.config?.friends_enabled !== true) return;
+    const owner = api.user.id;
+    const view = await prepareFriendsView();
+    if (api.user?.id === owner) await view.open(options);
+}
+
 function showSignedOut(message = "") {
     weeklyGameGeneration++;
     weeklyGame?.close();
@@ -1015,6 +1111,14 @@ function showSignedOut(message = "") {
     document.querySelector("#playInviteDialog")?.close();
     void presenceLifecycle?.stop();
     document.querySelectorAll(".activity-settings-dialog").forEach(dialog => dialog.close());
+    ++sessionGeneration;
+    ++state.classmateProfileGeneration;
+    void friendsViewPromise?.then((view) => view.clear());
+    void activityViewPromise?.then((view) => view.clear());
+    $$("[data-open-friends], [data-open-friend-privacy]").forEach((button) => button.classList.add("hidden"));
+    $$("dialog[open]").forEach((dialog) => dialog.close());
+    $$(".detail-screen").forEach((screen) => screen.classList.add("hidden"));
+    document.body.classList.remove("detail-screen-open");
     clearInterval(state.playLockTimer);
     state.playLockTimer = state.playLockTick = null;
     stopStripeCheckoutPolling();
@@ -1053,6 +1157,8 @@ function showAuthView() {
 async function showSignedIn() {
     sessionRestorePending = false;
     hideSessionRecovery();
+    const generation = ++sessionGeneration;
+    const owner = api.user?.id;
     $("#authView").classList.add("hidden");
     hideLaunchSplash();
     try { localStorage.setItem(PRIOR_SESSION_KEY, "1"); } catch (_) { /* First-visit detection falls back to the installation id. */ }
@@ -1095,12 +1201,14 @@ async function showSignedIn() {
                 enable_web_comments: false,
             })),
         ]);
+        if (generation !== sessionGeneration || api.user?.id !== owner) return;
         api.user = { ...api.user, ...currentUser };
         state.profile = profile;
         state.classmatesStatus = classmatesStatus;
         state.config = config;
         // The Feed may have activated before config arrived: build Stories now.
         void feedView?.refreshStories?.();
+        $$("[data-open-friends], [data-open-friend-privacy]").forEach((button) => button.classList.toggle("hidden", config.friends_enabled !== true));
         const chatsEnabled = config.enable_chats === true && config.enable_web_chats === true;
         if (chatsEnabled && !chatPresence) {
             const { createChatPresence, bindPresenceLifecycle } = await import('./chat/presence.js');
@@ -1140,11 +1248,19 @@ async function showSignedIn() {
         initializeAppNavigation();
         void refreshBanner({ force: true });
         refreshWebPushStatus({ sync: true });
+        void prepareActivityView().then((view) => view.summary());
         if (!isFeedVoteLocked()) await loadFeed(true);
         await handleNotificationRoute();
         await handleGodModeManagementRoute();
+        const addUsername = new URL(location.href).searchParams.get("add");
+        if (addUsername && config.friends_enabled === true && config.add_links_enabled === true) {
+            await openFriends({ username: addUsername });
+            const url = new URL(location.href); url.searchParams.delete("add");
+            history.replaceState(history.state, "", `${url.pathname}${url.search}`);
+        }
         if (api.user?.deletion_requested_at) showPendingDeletion();
         void deferredAccountState.then(([askAccess, askSafetyNotices, askSafetyNoticeHistory, passkeyStatus]) => {
+            if (generation !== sessionGeneration || api.user?.id !== owner) return;
             state.askAccess = askAccess;
             state.askSafetyNotices = askSafetyNotices;
             state.askSafetyNoticeHistory = askSafetyNoticeHistory;
@@ -1278,6 +1394,7 @@ async function handleNotificationRoute() {
         }
     }
     params.delete("notification");
+    params.delete("anonymous_question_id");
     params.delete("tbh_request_id");
     params.delete("tbh_response_id");
     params.delete("question_answer_id");
@@ -2797,7 +2914,8 @@ function renderClassmateProfile() {
         <h3>${escapeHTML(displayName(profile))}</h3>
         <div class="profile-handle">${profile.username ? `@${escapeHTML(profile.username)}` : "Valid classmate"}</div>
         ${profile.bio ? `<p class="profile-bio">${escapeHTML(profile.bio)}</p>` : ""}
-        <div class="profile-school-meta"><span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-school.svg" alt=""><span>${escapeHTML(profile.school_name || state.profile?.school_name || "Your school")}</span></span>${profile.grade ? `<span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-graduation-cap.svg" alt=""><span>${escapeHTML(formatGrade(profile.grade))}</span></span>` : ""}</div>
+        ${profile.school_name && !profile.minimal_card ? `<div class="profile-school-meta"><span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-school.svg" alt=""><span>${escapeHTML(profile.school_name)}</span></span>${profile.grade ? `<span class="profile-school-meta-item"><img loading="lazy" decoding="async" src="../assets/app/profile-graduation-cap.svg" alt=""><span>${escapeHTML(formatGrade(profile.grade))}</span></span>` : ""}</div>` : ""}
+        ${state.config?.friends_enabled === true ? `<button class="secondary-button" type="button" data-profile-friend-options>${profile.blocked_by_viewer ? "Unblock" : profile.can_add === false ? "Unavailable" : "Friend options"}</button>` : ""}
         ${state.selectedClassmateAskTarget?.public_token ? `<a class="primary-button classmate-ask-button" href="../a/${encodeURIComponent(state.selectedClassmateAskTarget.public_token)}">${appSymbolMarkup("ask", "ask-me-symbol")}<span>Ask anonymously</span></a>` : ""}
         <div class="profile-stats-grid ${tbhRequestsEnabled() ? "" : "single"}">
             <div class="profile-stat-card"><strong><span class="heart">${uiIcon("heart")}</span>${Number(profile.vote_count || 0).toLocaleString()}</strong><span>Votes Received</span></div>
@@ -2816,46 +2934,51 @@ function renderClassmateProfile() {
     }
 }
 
-async function openClassmateProfile(userId) {
-    const preview = [...(state.classmateDirectory || []), ...(state.classmates || [])]
+async function openClassmateProfile(userId, suppliedPreview = null) {
+    const owner = api.user?.id;
+    const preview = suppliedPreview || [...(state.classmateDirectory || []), ...(state.classmates || [])]
         .find((classmate) => String(classmate.user_id) === String(userId));
     if (!preview) return;
     const generation = ++state.classmateProfileGeneration;
     state.classmateProfileReturnToDirectory = $("#classmateDirectoryDialog").open;
     if (state.classmateProfileReturnToDirectory) $("#classmateDirectoryDialog").close();
-    state.selectedClassmateProfile = preview;
+    state.selectedClassmateProfile = { user_id: userId, first_name: preview.first_name, username: preview.username, profile_picture_url: preview.profile_picture_url, minimal_card: true };
     state.selectedClassmateAskTarget = null;
     state.selectedClassmateTopQuestionsWeekly = null;
     state.selectedClassmateTopQuestionsAllTime = null;
     renderClassmateProfile();
     $("#classmateProfileStatus").textContent = "Loading profile...";
     openDetailScreen($("#classmateProfileDialog"));
-    const requests = await Promise.allSettled([
-        api.getProfile(userId),
-        api.getTopQuestions(userId, "weekly", 10),
-        api.getTopQuestions(userId, "all_time", 3),
-        api.getProfileAskTarget(userId),
-    ]);
-    if (generation !== state.classmateProfileGeneration) return;
-    if (requests[0].status === "fulfilled") state.selectedClassmateProfile = requests[0].value;
-    if (requests[1].status === "fulfilled") state.selectedClassmateTopQuestionsWeekly = requests[1].value;
-    else state.selectedClassmateTopQuestionsWeekly = [];
-    if (requests[2].status === "fulfilled") state.selectedClassmateTopQuestionsAllTime = requests[2].value;
-    else state.selectedClassmateTopQuestionsAllTime = [];
-    if (requests[3].status === "fulfilled") {
-        const askTargetResponse = requests[3].value;
-        const askTarget = askTargetResponse?.target || askTargetResponse;
-        state.selectedClassmateAskTarget = typeof askTarget?.public_token === "string" && askTarget.public_token.trim()
-            ? askTarget
-            : null;
+    try {
+        const profile = await api.getProfile(userId);
+        if (generation !== state.classmateProfileGeneration || api.user?.id !== owner) return;
+        state.selectedClassmateProfile = profile;
+        renderClassmateProfile();
+        const optional = await Promise.allSettled([
+            !profile.minimal_card && profile.can_add !== false ? api.getTopQuestions(userId, "weekly", 10) : Promise.resolve([]),
+            !profile.minimal_card && profile.can_add !== false ? api.getTopQuestions(userId, "all_time", 3) : Promise.resolve([]),
+            profile.can_add !== false ? api.getProfileAskTarget(userId) : Promise.resolve(null),
+        ]);
+        if (generation !== state.classmateProfileGeneration || api.user?.id !== owner) return;
+        state.selectedClassmateTopQuestionsWeekly = optional[0].status === "fulfilled" ? optional[0].value : [];
+        state.selectedClassmateTopQuestionsAllTime = optional[1].status === "fulfilled" ? optional[1].value : [];
+        const ask = optional[2].status === "fulfilled" ? optional[2].value?.target || optional[2].value : null;
+        state.selectedClassmateAskTarget = ask?.public_token ? ask : null;
+        $("#classmateProfileStatus").textContent = optional.slice(0, 2).some((result) => result.status === "rejected")
+            ? "Some profile details couldn't load. Reopen to retry." : "";
+        renderClassmateProfile();
+    } catch (error) {
+        if (generation !== state.classmateProfileGeneration || api.user?.id !== owner) return;
+        state.selectedClassmateProfile = null;
+        $("#classmateProfileCard").replaceChildren();
+        $("#classmateWeeklyPolls").replaceChildren();
+        $("#classmateAllTimePolls").replaceChildren();
+        $("#classmateProfileStatus").textContent = error.message || "This profile is unavailable. Go back and try again.";
     }
-    $("#classmateProfileStatus").textContent = requests[0].status === "rejected"
-        ? userMessage(requests[0].reason, "Could not load this profile.")
-        : "";
-    renderClassmateProfile();
 }
 
 function backToClassmates() {
+    ++state.classmateProfileGeneration;
     closeDetailScreen($("#classmateProfileDialog"));
     if (state.classmateProfileReturnToDirectory) {
         renderClassmateDirectory();
@@ -2863,6 +2986,7 @@ function backToClassmates() {
         requestAnimationFrame(() => document.activeElement?.closest?.("#classmateDirectoryDialog") && document.activeElement.blur());
     }
     state.classmateProfileReturnToDirectory = false;
+    void friendsViewPromise?.then((view) => view.returnFromProfile());
 }
 
 async function moderateSelectedClassmate(action) {
@@ -5343,26 +5467,41 @@ function renderAnonymousInbox() {
     renderFeed();
 }
 
-function openAnonymousAnswerDialog(answerId) {
-    const answer = state.anonymousInbox?.answers?.find((item) => String(item.id) === String(answerId));
+function openAnonymousAnswerDialog(answerId, sent = false) {
+    const answer = (sent ? state.anonymousInbox?.sent : state.anonymousInbox?.answers)?.find((item) => String(item.id) === String(answerId));
     if (!answer) return;
     const avatarURL = api.assetURL(answer.recipient_profile_picture_url);
     $("#anonymousAnswerRecipient").innerHTML = `${avatarMarkup({
         first_name: answer.recipient_display_name,
         username: answer.recipient_username,
         profile_picture_url: avatarURL,
-    }, "anonymous-answer-avatar")}<span><strong>${escapeHTML(answer.recipient_display_name)} replied to you</strong><small>@${escapeHTML(answer.recipient_username)}</small></span>`;
+    }, "anonymous-answer-avatar")}<span><strong>${escapeHTML(answer.recipient_display_name)}${answer.answer_text ? " replied to you" : " · Sent anonymously"}</strong><small>@${escapeHTML(answer.recipient_username)}</small></span>`;
     $("#anonymousOriginalMessage").textContent = answer.question_body;
-    $("#anonymousReceivedReply").textContent = answer.answer_text;
-    $("#anonymousAnswerReceivedAt").textContent = relativeTime(answer.answered_at);
+    $("#anonymousReceivedReply").textContent = answer.answer_text || "No reply yet.";
+    $("#anonymousAnswerReceivedAt").textContent = relativeTime(answer.answered_at || answer.created_at);
     openDetailScreen($("#anonymousAnswerDetailDialog"));
 }
 
-async function loadAnonymousInbox() {
+async function loadAnonymousInbox({ more = false } = {}) {
     const generation = ++state.anonymousInboxGeneration;
     try {
-        state.anonymousInbox = await api.getAnonymousInbox(api.user.id, 30, 0);
-        if (generation !== state.anonymousInboxGeneration || state.feedType !== "personal") return;
+        const owner = api.user?.id;
+        const cursor = {};
+        if (more && state.anonymousInbox) {
+            for (const [key, dateField, prefix] of [["questions", "created_at", "question"], ["answers", "answered_at", "answer"], ["sent", "created_at", "sent"]]) {
+                const last = state.anonymousInbox[key]?.at(-1);
+                if (last) { cursor[`${prefix}_before_${dateField}`] = last[dateField]; cursor[`${prefix}_before_id`] = last.id; }
+            }
+        }
+        const inbox = await api.getAnonymousInbox(owner, 30, 0, cursor);
+        if (generation !== state.anonymousInboxGeneration || state.feedType !== "personal" || api.user?.id !== owner) return;
+        if (more && state.anonymousInbox) {
+            for (const key of ["questions", "answers", "sent"]) {
+                const rows = new Map([...(state.anonymousInbox[key] || []), ...(inbox[key] || [])].map((row) => [String(row.id), row]));
+                state.anonymousInbox[key] = [...rows.values()].slice(-200);
+            }
+        } else state.anonymousInbox = inbox;
+        $("[data-ask-more]").disabled = !["questions", "answers", "sent"].some((key) => inbox[key]?.length === 30);
         renderAnonymousInbox();
     } catch (error) {
         if (generation !== state.anonymousInboxGeneration || state.feedType !== "personal") return;
@@ -5550,6 +5689,7 @@ async function answerAnonymousQuestion(event) {
     } catch (error) {
         $("#anonymousAnswerStatus").textContent = userMessage(error, "Could not answer this question.");
     } finally {
+        setButtonLoading(button, false);
         updateAnonymousAnswerButton();
     }
 }
@@ -10144,6 +10284,20 @@ function bindEvents() {
         if (share) shareAnonymousAnswer(share.dataset.shareAnonymous);
     });
     document.addEventListener("click", (event) => {
+        if (event.target.closest("[data-open-notifications]")) void prepareActivityView().then((view) => view.open());
+        const askBox = event.target.closest("[data-ask-box]");
+        if (askBox) { state.askBoxMode = askBox.dataset.askBox; renderFeed(); }
+        if (event.target.closest("[data-ask-more]")) void loadAnonymousInbox({ more: true });
+        if (event.target.closest("[data-ask-classmates]")) void openClassmateDirectory();
+        const sentAsk = event.target.closest("[data-anonymous-sent]");
+        if (sentAsk) openAnonymousAnswerDialog(sentAsk.dataset.anonymousSent, true);
+        const recipient = event.target.closest("[data-sent-recipient]");
+        if (recipient) {
+            const sent = state.anonymousInbox?.sent?.find((item) => String(item.id) === recipient.dataset.sentRecipient);
+            if (sent?.recipient_available !== false && sent?.recipient_user_id) void openClassmateProfile(sent.recipient_user_id, { user_id: sent.recipient_user_id, first_name: sent.recipient_display_name, username: sent.recipient_username, profile_picture_url: sent.recipient_profile_picture_url });
+        }
+        if (event.target.closest("[data-open-friends]")) void openFriends();
+        if (event.target.closest("[data-open-friend-privacy]")) void openFriends({ section: "privacy" });
         if (!event.target.closest(".detail-overflow")) closeDetailActionMenus();
     });
     mementoDay.subscribe(renderCameraTab);
@@ -10392,6 +10546,12 @@ function bindEvents() {
         if (classmate) openClassmateProfile(classmate.dataset.directoryClassmate);
     });
     $("#classmateProfileDialog").addEventListener("click", (event) => {
+        if (event.target.closest("[data-profile-friend-options]")) {
+            const person = state.selectedClassmateProfile;
+            closeDetailScreen($("#classmateProfileDialog"));
+            void openFriends({ person });
+            return;
+        }
         const menuButton = event.target.closest("[data-toggle-classmate-menu]");
         if (menuButton) toggleDetailActionMenu(menuButton);
         if (event.target.closest("[data-report-classmate]")) { closeDetailActionMenus(); moderateSelectedClassmate("report"); }

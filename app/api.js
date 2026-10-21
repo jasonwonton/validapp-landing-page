@@ -566,12 +566,56 @@ export class ValidAPI {
         return this.request(`/users/${userId}/blocks/${blockedUserId}`, { method: "POST" });
     }
 
-    getBlockedUsers(userId) {
-        return this.request(`/users/${userId}/blocks/profiles`);
+    getBlockedUsers(userId) { return this.request(`/users/${userId}/blocks/profiles`); }
+
+    getFriends(userId, cursor = "") {
+        const params = new URLSearchParams({ limit: "100" });
+        if (cursor) params.set("cursor", cursor);
+        return this.request(`/users/${userId}/friends?${params}`);
     }
 
-    unblockUser(userId, blockedUserId) {
-        return this.request(`/users/${userId}/blocks/${blockedUserId}`, { method: "DELETE" });
+    getFriendSuggestions(userId) { return this.request(`/users/${userId}/friends/suggestions`); }
+    getPeopleRequests(userId) { return this.request(`/users/${userId}/people/requests`); }
+    lookupPerson(userId, username) {
+        return this.request(`/users/${userId}/people/lookup?${new URLSearchParams({ username })}`);
+    }
+    sendFriendRequest(userId, targetId, source = null) {
+        return this.request(`/users/${userId}/people/requests`, { method: "POST", body: JSON.stringify({
+            user_id: targetId, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+            ...(source ? { source } : {}),
+        }) });
+    }
+    acceptFriendRequest(userId, targetId) {
+        return this.request(`/users/${userId}/people/requests/${targetId}/accept`, { method: "POST" });
+    }
+    declineFriendRequest(userId, targetId) {
+        return this.request(`/users/${userId}/people/requests/${targetId}/ignore`, { method: "POST" });
+    }
+    cancelFriendRequest(userId, targetId) {
+        return this.request(`/users/${userId}/people/requests/${targetId}`, { method: "DELETE" });
+    }
+    removeFriend(userId, targetId) {
+        return this.request(`/users/${userId}/friends/${targetId}`, { method: "DELETE" });
+    }
+    dismissFriendSuggestion(userId, targetId) {
+        return this.request(`/users/${userId}/friends/suggestions/${targetId}/dismiss`, { method: "POST" });
+    }
+    getBlockedProfiles(userId) { return this.request(`/users/${userId}/blocks/profiles`); }
+    unblockUser(userId, targetId) { return this.request(`/users/${userId}/blocks/${targetId}`, { method: "DELETE" }); }
+    getFriendReach(userId) { return this.request(`/users/${userId}/friend-reach`); }
+    updateFriendReach(userId, schoolContactsOnly) {
+        return this.request(`/users/${userId}/friend-reach`, { method: "PUT", body: JSON.stringify({ school_contacts_only: schoolContactsOnly }) });
+    }
+    getMessageRequests(userId) { return this.request(`/users/${userId}/message-requests`); }
+    updateMessageRequests(userId, fromAnyone) {
+        return this.request(`/users/${userId}/message-requests`, { method: "PUT", body: JSON.stringify({ from_anyone: fromAnyone }) });
+    }
+    getAddLink(userId) { return this.request(`/users/${userId}/add-link`); }
+    updateAddLink(userId, enabled) {
+        return this.request(`/users/${userId}/add-link`, { method: "PUT", body: JSON.stringify({ enabled }) });
+    }
+    resolveAddLink(userId, username) {
+        return this.request(`/users/${userId}/add-link/resolve?${new URLSearchParams({ username })}`);
     }
 
     getPlayQuestions(userId) {
@@ -853,11 +897,20 @@ export class ValidAPI {
         });
     }
 
-    getAnonymousInbox(userId, limit = 30, offset = 0) {
-        const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    getAnonymousInbox(userId, limit = 30, offset = 0, cursor = {}) {
+        const params = new URLSearchParams({ limit: String(limit), offset: String(offset), include_sent: "true", ...cursor });
         return this.request(`/users/${userId}/anonymous-inbox?${params}`);
     }
 
+    getActivity(userId, cursor = "") {
+        const params = new URLSearchParams({ limit: "30" });
+        if (cursor) params.set("cursor", cursor);
+        return this.request(`/users/${userId}/activity?${params}`);
+    }
+    getActivitySummary(userId) { return this.request(`/users/${userId}/activity/summary`); }
+    markActivityRead(userId, payload) {
+        return this.request(`/users/${userId}/activity/read`, { method: "POST", body: JSON.stringify(payload) });
+    }
     getTbhRequestTargets(userId, search = "") {
         const params = new URLSearchParams();
         if (search.trim()) params.set("search", search.trim());
