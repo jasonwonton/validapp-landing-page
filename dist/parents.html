@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Valid App FAQ for Parents: Safety, Privacy &amp; Polls</title>
-    <meta name="description" content="Our mission and answers for parents about Valid: anonymity, paid reveals, bullying, contacts, notifications, and getting help.">
+    <meta name="description" content="Learn about Valid's parental controls: Parent access, text chats, polls, teen privacy settings, and how to link your account. See screenshots and answers for parents.">
     <link rel="canonical" href="https://validapp.lol/parents.html">
     <link rel="icon" type="image/png" href="assets/AppIconV2.png">
     <style>
@@ -92,6 +92,27 @@
         }
         summary::marker { color: #555b64; }
         .answer { padding: 0 0 10px 20px; }
+        .parent-screenshots {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 20px;
+            margin: 24px 0;
+        }
+        .parent-screenshots figure { min-width: 0; margin: 0; }
+        .parent-screenshots a { display: block; }
+        .parent-screenshots img {
+            display: block;
+            width: 100%;
+            height: auto;
+            border: 1px solid var(--border);
+            border-radius: 18px;
+        }
+        .parent-screenshots figcaption {
+            margin-top: 10px;
+            color: var(--muted);
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
         .safety-preview { width: min(390px, 100%); margin: 24px auto; }
         .safety-preview img {
             display: block;
@@ -126,6 +147,8 @@
         @media (max-width: 600px) {
             .nav { align-items: flex-start; flex-direction: column; padding: 16px 0; }
             .answer { padding-left: 0; }
+            .parent-screenshots { grid-template-columns: 1fr; }
+            .parent-screenshots figure { width: min(320px, 100%); margin: 0 auto; }
         }
     </style>
 <script defer src="/assets/public-analytics.js"></script>
@@ -144,11 +167,11 @@
     </header>
     <main>
         <h1>FAQ for Parents</h1>
-        <p class="intro">You deserve to understand the apps your child uses. Here is why we're building Valid, how its features work, and what to do if something doesn't feel right.</p>
+        <p class="intro">You deserve to understand the apps your child uses. Valid includes <a href="#parental-controls">parental controls through Parent access</a>, so linked parents can stay involved from their own phone.</p>
 
         <section class="mission" aria-labelledby="mission-title">
             <h2 id="mission-title">Our mission</h2>
-            <p class="mission-statement">Help students feel appreciated, build connections, and communicate with kindness and respect.</p>
+            <p class="mission-statement">Give classmates compliments and make memories through Mementos and chats.</p>
             <p>So much of social media today revolves around watching an endless stream of content. We believe there should also be space for students to connect with people they know, express appreciation, and build friendships within their communities.</p>
             <p>We're building Valid to make it easier to express appreciation, start conversations, and strengthen friendships within school communities. That purpose also means taking concerns about privacy, spending, and harmful behavior seriously.</p>
         </section>
@@ -161,6 +184,37 @@
                 <div class="answer">
                     <p>We created Valid to give students a safe space to connect within their communities. Students can only add classmates and people in their contacts; they cannot add strangers outside those groups. We believe keeping connections within those familiar circles creates a safer environment for students.</p>
                     <p>Through positive polls, chats, and Stories, students can express appreciation and build friendships with the people around them. Valid is for students ages 13 and older, as set out in our <a href="terms.html">Terms</a>.</p>
+                </div>
+            </details>
+
+            <details open id="parental-controls">
+                <summary>Does Valid have parental controls?</summary>
+                <div class="answer">
+                    <p><strong>Yes. Valid has parental controls through Parent access on iPhone.</strong> Once linked, a parent signs in with their own phone number on their own phone to read their child's text chats and see polls about their child and their school's feed.</p>
+                    <p>For linked teen accounts (ages 13–17), parents can choose <strong>who can add them</strong>, <strong>who can message them</strong>, and whether others can see their <strong>activity status</strong>. Choosing the more restrictive setting keeps that choice in place while the parent is linked.</p>
+                    <p><strong>To link a teen account:</strong> email <a href="mailto:support@validapp.lol?subject=Parent%20access">support@validapp.lol</a> to request Parent access. Once enabled, open <strong>Settings → Privacy → Parent access</strong> on your child's iPhone and confirm your own phone number with a text code. If you are already linked, choose <strong>Log in</strong> in Valid on your phone and use that number.</p>
+                    <p>Parent access shows text messages, not chat photos, videos, or voice notes. Parents can report concerns, but cannot send messages, post, or vote as their child. Parent access ends when the child turns 18.</p>
+                    <div class="parent-screenshots" aria-label="Screenshots of Valid's parent view and teen privacy controls">
+                        <figure>
+                            <a href="assets/parent-view-chats.png" aria-label="Enlarge screenshot of the parent chat view">
+                                <img src="assets/parent-view-chats.png" width="1206" height="2622" loading="lazy" alt="Valid parent view showing Maya's text chats with Ava, a school soccer group, and Jordan.">
+                            </a>
+                            <figcaption><strong>Read text chats.</strong> See conversations from your own phone. Reading here does not mark messages as read.</figcaption>
+                        </figure>
+                        <figure>
+                            <a href="assets/parent-who-can-add.png" aria-label="Enlarge screenshot of who can add a linked teen">
+                                <img src="assets/parent-who-can-add.png" width="1206" height="2622" loading="lazy" alt="Parent control for who can add Maya, with School &amp; contacts selected instead of Everyone.">
+                            </a>
+                            <figcaption><strong>Choose who can add them.</strong> Linked teen accounts can be limited to school and contact connections, including people who have their number.</figcaption>
+                        </figure>
+                        <figure>
+                            <a href="assets/parent-who-can-message.png" aria-label="Enlarge screenshot of who can message a linked teen">
+                                <img src="assets/parent-who-can-message.png" width="1206" height="2622" loading="lazy" alt="Parent control for who can message Maya, with People Maya knows selected so everyone else waits for an accepted friend request.">
+                            </a>
+                            <figcaption><strong>Choose who can message them.</strong> Require other people to wait until your teen accepts their friend request.</figcaption>
+                        </figure>
+                    </div>
+                    <p>Screenshots show example names and conversations. Tap a screenshot to see it full size.</p>
                 </div>
             </details>
 
