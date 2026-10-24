@@ -2,6 +2,7 @@ import { uiIcon } from '../ui-icons.js';
 import { userMessage } from '../user-message.js';
 import { confirmSheet } from '../ui-dialogs.js';
 import { createRingback, createRingtone } from './ringback.js';
+import { reportCallStartBlocked } from './start-blocked.js';
 const TERMINAL_STATES = new Set(["ended", "declined", "missed", "cancelled", "failed"]);
 const callOutcome = state => ({ declined: 'Call declined', missed: 'No answer', cancelled: 'Call cancelled', failed: 'Could not connect' }[state] || 'Call ended');
 
@@ -12,7 +13,14 @@ async function loadLiveKit() {
     return import("./livekit.bundle.js");
 }
 
+// A permission prompt the browser never answers (hidden, quieted, or behind
+// another window) would otherwise leave "Connecting…" up with nothing sent.
+export const MICROPHONE_CHECK_TIMEOUT_MS = 30000;
+
 function permissionMessage(error, mediaType) {
+    if (error?.name === "MicrophoneTimeoutError") {
+        return "Your browser didn’t answer the microphone request. Allow the microphone for Valid in your browser settings, then try again.";
+    }
     if (error?.name === "NotAllowedError" || error?.name === "SecurityError") {
         return `Allow ${mediaType === "video" ? "camera and microphone" : "microphone"} access in your browser settings, then try again.`;
     }
@@ -235,15 +243,42 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         compactMute.disabled = operationInFlight || !room;
     }
 
-    async function preflightPermissions(mediaType) {
-        if (!navigator.mediaDevices?.getUserMedia) throw new Error("Calling is not supported by this browser.");
-        const stream = await navigator.mediaDevices.getUserMedia({
+    // Every way this fails is before the server hears of the call, so each one
+    // reports call.start_blocked (start-blocked.js).
+    async function preflightPermissions(mediaType, { chatId = null, direction = 'outgoing' } = {}) {
+        const blocked = (reason, error) => {
+            reportCallStartBlocked(reason, { chatId, mediaType, direction, errorName: error?.name });
+            return error;
+        };
+        if (!navigator.mediaDevices?.getUserMedia) {
+            throw blocked('unsupported_browser', Object.assign(new Error("Calling is not supported by this browser."), { name: 'NotSupportedError' }));
+        }
+        let timer;
+        const request = navigator.mediaDevices.getUserMedia({
             audio: true,
             // Camera is progressive: a video call can still connect safely as
             // audio-only when camera permission or publisher capacity is absent.
             video: false,
         });
-        for (const track of stream.getTracks()) track.stop();
+        const timeout = new Promise((_, reject) => {
+            timer = setTimeout(() => reject(Object.assign(
+                new Error("Your browser didn’t answer the microphone request."), { name: 'MicrophoneTimeoutError' },
+            )), globalThis.__VALID_MICROPHONE_CHECK_TIMEOUT_MS__ ?? MICROPHONE_CHECK_TIMEOUT_MS);
+        });
+        try {
+            const stream = await Promise.race([request, timeout]);
+            for (const track of stream.getTracks()) track.stop();
+        } catch (error) {
+            if (error?.name === 'MicrophoneTimeoutError') {
+                // A late answer must not leave the microphone open.
+                void request.then(stream => stream.getTracks().forEach(track => track.stop()), () => null);
+                throw blocked('microphone_timeout', error);
+            }
+            const denied = error?.name === 'NotAllowedError' || error?.name === 'SecurityError';
+            throw blocked(denied ? 'microphone_denied' : 'microphone_unavailable', error);
+        } finally {
+            clearTimeout(timer);
+        }
     }
 
     function detachElement(element) {
@@ -423,9 +458,14 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
     }
 
     async function start(mediaType, chat) {
-        if (!enabled()) return showToast?.("Calls are not available in this web release.");
-        if (currentCall || operationInFlight || ending) return showToast?.("You’re already in a call.");
+        const blocked = reason => reportCallStartBlocked(reason, { chatId: chat?.id, mediaType });
+        if (!enabled()) { blocked('calls_unavailable'); return showToast?.("Calls are not available in this web release."); }
+        if (currentCall || operationInFlight || ending) {
+            blocked(currentCall ? 'already_in_call' : 'start_in_flight');
+            return showToast?.("You’re already in a call.");
+        }
         if (Number(chat?.accepted_count || 0) < 2 || chat?.has_viewer_blocked_member === true) {
+            blocked('chat_unavailable');
             return showToast?.("This chat isn’t available for calls.");
         }
         operationInFlight = true;
@@ -439,7 +479,7 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         startRequestIds.set(key, requestId);
         if (startRequestIds.size > 32) startRequestIds.delete(startRequestIds.keys().next().value);
         try {
-            await preflightPermissions(mediaType);
+            await preflightPermissions(mediaType, { chatId: chat.id });
             if (!isCurrent(token)) return;
             const call = await api.startCall(callerId, chat.id, mediaType, requestId);
             if (!isCurrent(token)) {
@@ -503,7 +543,7 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
                 titleNode.textContent = call.caller_name || "Valid call";
                 setIncomingMode(false);
                 showDialog();
-                await preflightPermissions(call.media_type);
+                await preflightPermissions(call.media_type, { chatId: call.chat_id });
                 if (!isCurrent(token)) return;
                 await connectToCall(call, token);
             } else {
@@ -515,7 +555,8 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         } catch (error) {
             if (!isCurrent(token)) return;
             if (currentCall) await finish({ notifyBackend: true });
-            showToast?.(userMessage(error, "That call is no longer available."));
+            const permission = ["MicrophoneTimeoutError", "NotAllowedError", "SecurityError", "NotFoundError", "NotSupportedError"].includes(error?.name);
+            showToast?.(permission ? permissionMessage(error, currentCall?.media_type || "audio") : userMessage(error, "That call is no longer available."));
         } finally { if (isCurrent(token)) { operationInFlight = false; updateControls(); } }
     }
 
@@ -526,7 +567,7 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         const token = generation, call = currentCall;
         updateControls();
         try {
-            await preflightPermissions(call.media_type);
+            await preflightPermissions(call.media_type, { chatId: call.chat_id, direction: 'incoming' });
             if (!isCurrent(token)) return;
             const accepted = await api.acceptCall(userId(), call.id);
             if (!isCurrent(token)) return;
