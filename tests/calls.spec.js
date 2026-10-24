@@ -453,3 +453,68 @@ test('the service worker hands a call to the visible app and retires it there', 
     await expect(page.locator('.call-overlay[open] [data-call-status]')).toHaveText('Call cancelled');
     await expect(page.getByRole('button', { name: 'Accept call' })).toHaveCount(0);
 });
+
+// call.start_blocked: a tap that stops in the browser before the server hears
+// of the call is reported, so a "dead" call button is visible in diagnostics.
+async function captureStartBlocked(page) {
+    const reports = [];
+    await page.route('**/api/v1/client-logs', async route => {
+        const body = route.request().postDataJSON();
+        if (body?.event === 'call.start_blocked') reports.push(body);
+        await route.fulfill({ status: 201, contentType: 'application/json', body: '{}' });
+    });
+    return reports;
+}
+
+test('a denied microphone reports call.start_blocked and never starts the call', async ({ page }) => {
+    const reports = await captureStartBlocked(page);
+    await installCallHarness(page);
+    await page.evaluate(async () => {
+        navigator.mediaDevices.getUserMedia = async () => { throw new DOMException('Permission denied', 'NotAllowedError'); };
+        await __calls.start('audio', { id: 'chat-1', accepted_count: 2 });
+        await __calls.start('audio', { id: 'chat-1', accepted_count: 2 });
+    });
+    const log = await page.evaluate(() => __callLog);
+    expect(log.some(([name]) => name === 'start')).toBe(false);
+    expect(log).toContainEqual(['toast', 'Allow microphone access in your browser settings, then try again.']);
+    await expect.poll(() => reports.length).toBe(1);
+    const [report] = reports;
+    expect(report.severity).toBe('warning');
+    expect(report.context).toMatchObject({
+        flow: 'voice_video_call', stage: 'microphone_denied', distribution_channel: 'web_pwa',
+        call_direction: 'outgoing', call_media_type: 'audio', error_code: 'NotAllowedError',
+    });
+    expect(report.context.client_instance_id).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.stringify(report)).not.toContain('chat-1');
+});
+
+test('a microphone prompt that never answers times out, explains, and reports', async ({ page }) => {
+    const reports = await captureStartBlocked(page);
+    await installCallHarness(page);
+    await page.evaluate(async () => {
+        window.__VALID_MICROPHONE_CHECK_TIMEOUT_MS__ = 50;
+        navigator.mediaDevices.getUserMedia = () => new Promise(resolve => {
+            window.__lateGrant = () => resolve({ getTracks: () => [{ stop() { __callLog.push(['lateTrackStopped']); } }] });
+        });
+        await __calls.start('audio', { id: 'chat-1', accepted_count: 2 });
+        __lateGrant();
+    });
+    await expect.poll(() => page.evaluate(() => __callLog.map(([name]) => name))).toContain('lateTrackStopped');
+    const log = await page.evaluate(() => __callLog);
+    expect(log.some(([name]) => name === 'start')).toBe(false);
+    expect(log).toContainEqual(['toast', 'Your browser didn’t answer the microphone request. Allow the microphone for Valid in your browser settings, then try again.']);
+    await expect.poll(() => reports.map(report => report.context.stage)).toEqual(['microphone_timeout']);
+});
+
+test('taps stopped before the microphone check report their reason', async ({ page }) => {
+    const reports = await captureStartBlocked(page);
+    await installCallHarness(page);
+    await page.evaluate(async () => {
+        await __calls.start('audio', { id: 'chat-2', accepted_count: 1 });
+        delete navigator.mediaDevices;
+        Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: undefined });
+        await __calls.start('audio', { id: 'chat-3', accepted_count: 2 });
+    });
+    expect(await page.evaluate(() => __callLog.some(([name]) => name === 'start'))).toBe(false);
+    await expect.poll(() => reports.map(report => report.context.stage).sort()).toEqual(['chat_unavailable', 'unsupported_browser']);
+});
