@@ -14,6 +14,7 @@ const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
 const outputRoot = path.join(repositoryRoot, "dist");
 const staticDirectories = [".well-known", "app", "assets"];
 const staticFiles = [
+    "founding-creators.html",
     "_headers",
     "robots.txt",
     "sitemap.xml",
