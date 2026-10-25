@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Founding Creators · Valid</title>
+  <meta name="description" content="Want to be featured on Valid? Share your best videos, memes, or photos. We'll boost approved posts when our new feed launches.">
+  <meta name="theme-color" content="#d6f5ef">
+  <link rel="canonical" href="https://validapp.lol/founding-creators.html">
+  <link rel="icon" type="image/png" href="/assets/AppIconV2.png">
+  <meta property="og:title" content="Want to be featured on Valid?">
+  <meta property="og:description" content="Become a founding creator. Share your best posts and we'll bring the boost.">
+  <meta property="og:url" content="https://validapp.lol/founding-creators.html">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://validapp.lol/assets/AppIconV2.png">
+  <link rel="stylesheet" href="/assets/founding-creators.css">
+  <script defer src="/assets/founding-creators.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="Valid home"><img src="/assets/valid-logo.webp" alt="Valid" width="964" height="372"></a>
+    <span class="header-label">A new feed. Your first moment.</span>
+  </header>
+  <main>
+    <section class="intro" aria-labelledby="headline">
+      <p class="eyebrow"><span aria-hidden="true">✦</span> FOUNDING CREATORS</p>
+      <h1 id="headline">Want to be<br>featured on <span>Valid?</span></h1>
+      <p class="lede">Share your best videos, memes, or photos. We're looking for creators to help shape Valid's new feed.</p>
+      <div class="boost-card">
+        <span class="boost-star" aria-hidden="true">✷</span>
+        <div><h2>Your posts.<br>Our boost.</h2>
+        <p>When the new feed launches, we'll repost approved content on your Valid profile and boost it so more people can discover you.</p></div>
+      </div>
+      <p class="small-note">One great post or a whole collection.<br>Submit as many as you like.</p>
+    </section>
+    <section class="application" aria-labelledby="application-heading">
+      <div class="form-heading"><span class="pill">EARLY ACCESS TO THE SPOTLIGHT</span><h2 id="application-heading">Show us what you make.</h2><p>No follower minimum. Just your best stuff.</p></div>
+      <noscript><p class="form-message">Please enable JavaScript to submit your posts, or <a href="/contact.html">contact the Valid team</a>.</p></noscript>
+      <form id="creator-form">
+        <fieldset>
+          <legend>Where do you create content?</legend>
+          <div class="platforms">
+            <label><input type="radio" name="platform" value="tiktok" required><span>TikTok</span></label>
+            <label><input type="radio" name="platform" value="instagram" required><span>Instagram</span></label>
+            <label><input type="radio" name="platform" value="youtube" required><span>YouTube</span></label>
+            <label><input type="radio" name="platform" value="other" required><span>Other</span></label>
+          </div>
+        </fieldset>
+        <div class="field"><label for="social-handle">Your username there</label><input id="social-handle" name="handle" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="64" placeholder="@yourhandle" required></div>
+        <div class="field"><label for="valid-username">Your Valid username</label><input id="valid-username" name="valid_username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="64" placeholder="@youonvalid" aria-describedby="username-hint" required><p id="username-hint" class="hint">The profile you'd like your posts to appear on.</p></div>
+        <fieldset class="post-fields">
+          <legend>Link to your best post</legend>
+          <p class="hint">Videos, memes, photos—all welcome. Use public post links.</p>
+          <div id="post-links">
+            <div class="post-row"><label class="sr-only" for="post-1">Post link 1</label><input id="post-1" name="post_url" type="text" inputmode="url" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="2048" placeholder="https://..." required></div>
+          </div>
+          <button id="add-post" class="add-post" type="button">+ Add another post</button>
+          <p id="batch-hint" class="hint" hidden>That's 10 links. Submit these, then send more.</p>
+        </fieldset>
+        <div class="permission">
+          <label><input type="checkbox" id="consent" name="consent" required><span>I created the posts I submit and have permission to share everything in them. I give Valid permission to repost these posts on my Valid profile and to feature and boost them in Valid's new feed when it launches. I keep ownership of my content.</span></label>
+        </div>
+        <button class="submit" id="submit-posts" type="submit" disabled>Submit my posts <span aria-hidden="true">↗</span></button>
+        <p id="form-status" class="form-message" role="status" aria-live="polite" tabindex="-1" hidden></p>
+        <p class="fine-print">Our team reviews every submission. Have a question or want to withdraw a post? <a href="/contact.html">Contact us.</a><br>By submitting, you agree to our <a href="/terms.html">Terms</a> and <a href="/privacy-policy.html">Privacy Policy</a>.</p>
+      </form>
+    </section>
+  </main>
+  <footer><a href="/">Valid</a><span>Make something worth sharing.</span><a href="/contact.html">Contact</a></footer>
+</body>
+</html>
