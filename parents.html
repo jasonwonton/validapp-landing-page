@@ -67,6 +67,35 @@
         h2 { margin: 0 0 18px; font-size: 1.8rem; }
         p { color: var(--muted); margin: 0 0 16px; }
         .intro { max-width: 720px; font-size: 1.1rem; }
+        .parent-setup {
+            margin: 30px 0;
+            padding: clamp(22px, 4vw, 34px);
+            border: 3px solid var(--text);
+            border-radius: 20px;
+            background: #fff;
+            scroll-margin-top: 24px;
+        }
+        .parent-setup label { display: block; margin-bottom: 8px; }
+        .parent-setup input, .parent-setup button {
+            font: inherit;
+            border: 2px solid var(--text);
+            border-radius: 12px;
+            padding: 12px 16px;
+            min-height: 48px;
+        }
+        .parent-setup input { width: 100%; background: white; color: var(--text); }
+        .parent-setup button { cursor: pointer; background: var(--accent); color: var(--text); }
+        .parent-setup button:disabled { opacity: 0.65; cursor: wait; }
+        .parent-setup input:focus-visible, .parent-setup button:focus-visible {
+            outline: 3px solid #0749ad; outline-offset: 3px;
+        }
+        .setup-fields { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+        .setup-username { flex: 1 1 220px; }
+        .setup-help { font-size: 0.95rem; margin-top: 12px; }
+        #parent-setup-error { color: #a02020; margin-top: 12px; }
+        #parent-link-steps h3 { font-size: 1.5rem; line-height: 1.3; }
+        #parent-link-steps li { margin-bottom: 16px; }
+        #parent-link-steps ol { padding-left: 24px; }
         .mission {
             margin: 30px 0;
             padding: clamp(22px, 4vw, 34px);
@@ -168,6 +197,35 @@
         <h1>FAQ for Parents</h1>
         <p class="intro">You deserve to understand the apps your child uses. Valid includes <a href="#parental-controls">parental controls through Parent access</a>, so linked parents can stay involved from their own phone.</p>
 
+        <section class="parent-setup" id="setup-parent-access" aria-labelledby="setup-title">
+            <h2 id="setup-title">Set up parental controls</h2>
+            <p>Enter your child's Valid username to make Parent access available on their iPhone. Then link your phone number from their account.</p>
+            <form id="parent-setup-form" hidden>
+                <div class="setup-fields">
+                    <div class="setup-username">
+                        <label for="child-username">Your child's username</label>
+                        <input id="child-username" name="username" type="text" placeholder="@username" maxlength="64" autocomplete="off" autocapitalize="none" spellcheck="false" required aria-describedby="username-help parent-setup-error">
+                    </div>
+                    <button type="submit" id="enable-parent-access">Enable Parent access</button>
+                </div>
+                <p class="setup-help" id="username-help">Find their @username on their Valid profile. Parent access is available for accounts under 18.</p>
+                <p id="parent-setup-error" role="alert"></p>
+            </form>
+            <noscript><p>To enable Parent access, email <a href="mailto:support@validapp.lol?subject=Parent%20access">support@validapp.lol</a> with your child's username.</p></noscript>
+            <div id="parent-link-steps" hidden tabindex="-1" role="region" aria-labelledby="parent-link-ready">
+                <h3 id="parent-link-ready">Parent access is ready to link</h3>
+                <p>Finish these steps to turn on parental controls for <strong id="enabled-username"></strong>:</p>
+                <ol>
+                    <li><strong>On your child's iPhone:</strong> open Valid, go to their profile, then open <strong>Settings → Privacy → Parent access</strong>. If Privacy is already open, close it and open it again.</li>
+                    <li>Tap <strong>Continue</strong> and enter <strong>your own phone number</strong>, then tap <strong>Send code</strong>.</li>
+                    <li>Enter the code texted to your phone <strong>on your child's phone</strong>. Read and confirm what you'll be able to see, then tap <strong>Link parent</strong>.</li>
+                    <li><strong>On your own iPhone:</strong> <a href="https://apps.apple.com/us/app/valid-compliment-classmates/id6755367062">open or download Valid</a>, choose <strong>Log in</strong>, and use the same phone number. Choose <strong>Open parent view</strong>.</li>
+                </ol>
+                <p>Parental controls start after linking is complete. If Parent access doesn't appear, update Valid on your child's iPhone or <a href="mailto:support@validapp.lol?subject=Parent%20access">contact support</a>.</p>
+                <button type="button" id="setup-another-child">Set up another child</button>
+            </div>
+        </section>
+
         <section class="mission" aria-labelledby="mission-title">
             <h2 id="mission-title">Our mission</h2>
             <p class="mission-statement">Give classmates compliments and make memories through Mementos and chats.</p>
@@ -191,7 +249,7 @@
                 <div class="answer">
                     <p><strong>Yes. Valid has parental controls through Parent access on iPhone.</strong> Once linked, a parent signs in with their own phone number on their own phone to read their child's text chats and see polls about their child and their school's feed.</p>
                     <p>For linked teen accounts (ages 13–17), parents can choose <strong>who can add them</strong>, <strong>who can message them</strong>, and whether others can see their <strong>activity status</strong>. Choosing the more restrictive setting keeps that choice in place while the parent is linked.</p>
-                    <p><strong>To link a teen account:</strong> email <a href="mailto:support@validapp.lol?subject=Parent%20access">support@validapp.lol</a> to request Parent access. Once enabled, open <strong>Settings → Privacy → Parent access</strong> on your child's iPhone and confirm your own phone number with a text code. If you are already linked, choose <strong>Log in</strong> in Valid on your phone and use that number.</p>
+                    <p><strong>To link an account:</strong> <a href="#setup-parent-access">enter your child's username above to enable Parent access</a>, then follow the steps on your child's iPhone to link your own phone number with a text code. If you are already linked, choose <strong>Log in</strong> in Valid on your phone and use that number.</p>
                     <p>Parent access shows text messages, not chat photos, videos, or voice notes. Parents can report concerns, but cannot send messages, post, or vote as their child. Parent access ends when the child turns 18.</p>
                     <div class="parent-screenshots" aria-label="Screenshots of Valid's parent view and teen privacy controls">
                         <figure>
@@ -320,5 +378,6 @@
             <span><a href="index.html">Home</a> &nbsp; <a href="privacy-policy.html">Privacy</a> &nbsp; <a href="terms.html">Terms</a> &nbsp; <a href="contact.html">Contact</a></span>
         </div>
     </footer>
+    <script src="assets/parent-controls.js" defer></script>
 </body>
 </html>
