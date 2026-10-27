@@ -44,3 +44,18 @@ test("invalid usernames stay local and server errors remain retryable", async ({
     await page.getByRole("button", { name: "Enable Parent access" }).click();
     await expect(page.getByRole("alert")).toContainText("Check your connection");
 });
+
+test("privacy and friendship examples identify the preview and load their screenshots", async ({ page }) => {
+    await page.goto("/parents.html");
+    const section = page.locator("details").filter({ has: page.getByText("How do friends, followers, and privacy settings work?") });
+    await expect(section).toContainText("a preview of an upcoming app update");
+    await expect(section).toContainText("someone who saved your child's number");
+    const images = section.locator("img");
+    await expect(images).toHaveCount(4);
+    for (const image of await images.all()) {
+        await expect(image).toHaveAttribute("alt", /.+/);
+        await image.scrollIntoViewIfNeeded();
+        await expect.poll(() => image.evaluate(element => element.complete && element.naturalWidth > 0)).toBe(true);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
