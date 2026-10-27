@@ -11,9 +11,10 @@ test("parent submits a username, then gets phone-linking instructions", async ({
     await page.goto("/parents.html#setup-parent-access");
     await page.getByLabel("Your child's username").fill(" @Teenie ");
     await page.getByRole("button", { name: "Enable Parent access" }).click();
-    await expect(page.getByRole("heading", { name: "Parent access is ready to link" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Continue on your child’s phone" })).toBeVisible();
     expect(submitted).toEqual({ username: "teenie" });
     await expect(page.locator("#enabled-username")).toHaveText("@teenie");
+    await expect(page.locator("#parent-link-steps")).toContainText("is an eligible account");
     await expect(page.locator("#parent-link-steps")).toContainText("Settings → Privacy → Parent access");
     await expect(page.locator("#parent-link-steps")).toContainText("Parental controls start after linking is complete");
     await expect(page.locator("#parent-link-steps")).toBeFocused();
