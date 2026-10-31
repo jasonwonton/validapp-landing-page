@@ -518,3 +518,128 @@ test('taps stopped before the microphone check report their reason', async ({ pa
     expect(await page.evaluate(() => __callLog.some(([name]) => name === 'start'))).toBe(false);
     await expect.poll(() => reports.map(report => report.context.stage).sort()).toEqual(['chat_unavailable', 'unsupported_browser']);
 });
+
+// In-call audio checks (audio-health.js): a silent mic or blocked sound shows
+// a warning, and every connected call sends call.quality_summary at the end.
+async function captureCallReports(page, { rejectWebKeys = false } = {}) {
+    const reports = [];
+    await page.route('**/api/v1/client-logs', async route => {
+        const body = route.request().postDataJSON();
+        reports.push(body);
+        const rejected = rejectWebKeys && body?.event === 'call.quality_summary' && 'cq_mic_on_s' in body.context;
+        await route.fulfill({ status: rejected ? 422 : 201, contentType: 'application/json', body: '{}' });
+    });
+    return reports;
+}
+
+// A published microphone whose capture level is zero until it restarts.
+async function installFakeMicrophone(page, { silent }) {
+    await page.evaluate((silent) => {
+        Object.assign(window, { __micEnergy: 0, __micDuration: 0, __micSilent: silent });
+        const track = {
+            kind: 'audio', sid: 'TR_MIC', mediaStreamTrack: { muted: false, readyState: 'live' },
+            attach() { const element = document.createElement('audio'); element.play = async () => {}; return element; },
+            detach() {},
+            async getRTCStatsReport() {
+                __micDuration += 2;
+                if (!__micSilent) __micEnergy += 0.01;
+                return new Map([['S', { id: 'S', type: 'media-source', kind: 'audio', totalAudioEnergy: __micEnergy, totalSamplesDuration: __micDuration }]]);
+            },
+            async restartTrack() { __callLog.push(['restartMic']); __micSilent = false; },
+        };
+        __fakeRoom.localParticipant.trackPublications.set('mic', { kind: 'audio', source: 'microphone', track, isMuted: false });
+    }, silent);
+}
+
+test('a silent microphone warns, restarts, and the call reports its audio', async ({ page }) => {
+    const reports = await captureCallReports(page);
+    await installCallHarness(page); await page.clock.install();
+    await page.evaluate(() => __calls.start('audio', { id: 'chat-1', accepted_count: 2 }));
+    await installFakeMicrophone(page, { silent: true });
+    const warning = page.locator('[data-call-audio-warning]');
+    await page.clock.runFor(8000);
+    await expect(warning).toBeHidden();
+    await page.clock.runFor(2000);
+    await expect(warning).toBeVisible();
+    await expect(warning).toContainText('Your mic isn’t picking up any sound.');
+    await expect(page.locator('[data-call-enable-sound]')).toBeHidden();
+    await page.screenshot({ path: test.info().outputPath('mic-silent.png') });
+    // Muting hides it; unmuting brings back what the mic still does.
+    await page.locator('[data-call-audio]').click();
+    await expect(warning).toBeHidden();
+    await page.locator('[data-call-audio]').click();
+    await expect(warning).toBeVisible();
+    await page.getByRole('button', { name: 'Restart mic' }).click();
+    await expect(warning).toBeHidden();
+    expect(await page.evaluate(() => __callLog.filter(([name]) => name === 'restartMic'))).toHaveLength(1);
+    await page.clock.runFor(10000);
+    await expect(warning).toBeHidden();
+    await page.locator('[data-call-hangup]').click();
+    await expect.poll(() => reports.filter(report => report.event === 'call.quality_summary').length).toBe(1);
+    const summary = reports.find(report => report.event === 'call.quality_summary');
+    expect(summary.severity).toBe('warning');
+    expect(summary.context).toMatchObject({
+        flow: 'voice_video_call', stage: 'quality_summary', distribution_channel: 'web_pwa',
+        call_direction: 'outgoing', call_media_type: 'audio', call_participant_count: '1',
+        cq_mic_warnings: '2', cq_sound_warnings: '0', cq_playback_blocked_s: '0', cq_audio_route: 'unknown',
+    });
+    expect(Number(summary.context.cq_mic_silent_s)).toBeGreaterThanOrEqual(8);
+    expect(Number(summary.context.cq_mic_on_s)).toBeGreaterThan(Number(summary.context.cq_mic_silent_s));
+    expect(summary.context.client_instance_id).toMatch(/^[a-f0-9]{64}$/);
+    for (const value of Object.values(summary.context)) expect(value).toEqual(expect.any(String));
+    expect(JSON.stringify(summary)).not.toContain('chat-1');
+});
+
+test('blocked call sound explains itself and one tap turns it on', async ({ page }) => {
+    const reports = await captureCallReports(page);
+    await installCallHarness(page); await installToneProbe(page);
+    await page.evaluate(async () => {
+        await __calls.start('audio', { id: 'chat-1', accepted_count: 2 });
+        // Autoplay stays refused until the person taps.
+        window.__playBlocked = true;
+        const track = new __FakeTrack('audio');
+        track.attach = () => {
+            const element = document.createElement('audio');
+            element.play = async () => { if (window.__playBlocked) throw new DOMException('Tap required', 'NotAllowedError'); };
+            return element;
+        };
+        __fakeRoom.remoteParticipants.set('peer', { name: 'Peer', trackPublications: new Map([['a', { kind: 'audio', track }]]) });
+        __fakeRoom.handlers.get('trackSubscribed')();
+    });
+    const warning = page.locator('[data-call-audio-warning]');
+    await expect(warning).toBeVisible();
+    await expect(warning).toContainText('Your browser is blocking call sound.');
+    await expect(page.locator('[data-call-restart-mic]')).toBeHidden();
+    await page.screenshot({ path: test.info().outputPath('sound-blocked.png') });
+    await page.evaluate(() => { window.__playBlocked = false; });
+    await page.getByRole('button', { name: 'Tap to enable sound' }).click();
+    await expect(warning).toBeHidden();
+    await page.locator('[data-call-hangup]').click();
+    await expect.poll(() => reports.find(report => report.event === 'call.quality_summary')?.context.cq_sound_warnings).toBe('1');
+});
+
+test('a server without the web audio fields still gets the shared summary', async ({ page }) => {
+    const reports = await captureCallReports(page, { rejectWebKeys: true });
+    await installCallHarness(page);
+    await page.evaluate(() => __calls.start('audio', { id: 'chat-1', accepted_count: 2 }));
+    await page.locator('[data-call-hangup]').click();
+    await expect.poll(() => reports.filter(report => report.event === 'call.quality_summary').length).toBe(2);
+    const [first, second] = reports.filter(report => report.event === 'call.quality_summary');
+    expect(first.context.cq_mic_on_s).toBe('0');
+    expect(Object.keys(second.context).filter(key => key.startsWith('cq_')).sort()).toEqual([
+        'cq_audio_route', 'cq_camera_pauses', 'cq_candidate', 'cq_lost_s', 'cq_poor_s',
+        'cq_reconnect_s', 'cq_reconnects', 'cq_remote_poor_s', 'cq_samples', 'cq_transport',
+    ]);
+    expect(second.id).not.toBe(first.id);
+});
+
+test('a call that never connects sends no summary', async ({ page }) => {
+    const reports = await captureCallReports(page);
+    await installCallHarness(page);
+    await page.evaluate(() => { window.__delayConnect = true; window.__pendingStart = __calls.start('audio', { id: 'chat-1', accepted_count: 2 }); });
+    await expect.poll(() => page.evaluate(() => typeof window.__resolveConnect)).toBe('function');
+    await page.locator('[data-call-hangup]').click();
+    await page.evaluate(async () => { __resolveConnect(); await __pendingStart; });
+    await page.waitForTimeout(300);
+    expect(reports.filter(report => report.event === 'call.quality_summary')).toHaveLength(0);
+});

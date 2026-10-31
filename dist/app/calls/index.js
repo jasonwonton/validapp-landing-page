@@ -3,6 +3,8 @@ import { userMessage } from '../user-message.js';
 import { confirmSheet } from '../ui-dialogs.js';
 import { createRingback, createRingtone } from './ringback.js';
 import { reportCallStartBlocked } from './start-blocked.js';
+import { AUDIO_SAMPLE_INTERVAL_MS, CallAudioHealth, readIncomingAudioStats, readOutgoingAudioStats } from './audio-health.js';
+import { sendCallQualitySummary } from './call-diagnostics.js';
 const TERMINAL_STATES = new Set(["ended", "declined", "missed", "cancelled", "failed"]);
 const callOutcome = state => ({ declined: 'Call declined', missed: 'No answer', cancelled: 'Call cancelled', failed: 'Could not connect' }[state] || 'Call ended');
 
@@ -55,6 +57,9 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
     let leavePromptOpen = false;
     let minimized = false;
     let vibrationTimer = null;
+    // In-call audio checks (audio-health.js): sampled while connected.
+    let audioHealth = null, audioTimer = null, audioSampling = false, audioCall = null;
+    let soundBlocked = false, micSilent = false, audioWarning = null;
     const isCurrent = token => token === generation && !ending;
     const startRequestIds = new Map();
     const attachedMedia = new Map();
@@ -81,7 +86,11 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
                 <button type="button" data-call-flip aria-label="Switch camera" hidden>${uiIcon('flip')}</button>
                 <button class="call-hangup" type="button" data-call-hangup aria-label="End call">${uiIcon('hangup')}</button>
             </div>
-            <button class="call-enable-sound hidden" type="button" data-call-enable-sound>Tap to enable sound</button>
+            <div class="call-audio-warning" role="alert" data-call-audio-warning hidden>
+                <p data-call-audio-warning-text></p>
+                <button class="call-enable-sound hidden" type="button" data-call-enable-sound>Tap to enable sound</button>
+                <button class="call-enable-sound hidden" type="button" data-call-restart-mic>Restart mic</button>
+            </div>
             <button class="call-enable-sound hidden" type="button" data-call-dismiss>Close</button>
             <p class="call-note">Keep Valid open during your call.</p>
         </section>`;
@@ -105,7 +114,10 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
     const activeActions = dialog.querySelector("[data-call-active-actions]");
     const soundButton = dialog.querySelector("[data-call-enable-sound]");
     const dismissButton = dialog.querySelector('[data-call-dismiss]');
-    const ringback = createRingback({ onBlocked: () => soundButton.classList.remove('hidden') });
+    const audioWarningNode = dialog.querySelector('[data-call-audio-warning]');
+    const audioWarningText = dialog.querySelector('[data-call-audio-warning-text]');
+    const restartMicButton = dialog.querySelector('[data-call-restart-mic]');
+    const ringback = createRingback({ onBlocked: () => setSoundBlocked(true) });
     const microphoneButton = dialog.querySelector("[data-call-audio]");
     const cameraButton = dialog.querySelector("[data-call-video]");
     const flipButton = dialog.querySelector("[data-call-flip]");
@@ -237,6 +249,8 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         output.disabled = operationInFlight || !room;
         flipButton.hidden = !cameraEnabled;
         flipButton.disabled = operationInFlight || !room;
+        restartMicButton.disabled = operationInFlight || !room;
+        renderAudioWarning();
         const compactMute = compactBar.querySelector('[data-call-compact-mute]');
         compactMute.innerHTML = uiIcon(muted ? 'mic-off' : 'mic');
         compactMute.setAttribute('aria-label', muted ? 'Unmute' : 'Mute');
@@ -314,7 +328,7 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         card.append(element);
         attachedMedia.set(element, track);
         if (outputDeviceId && element.setSinkId) void element.setSinkId(outputDeviceId).catch(() => { outputDeviceId = ''; });
-        element.play?.().catch(() => soundButton.classList.remove("hidden"));
+        element.play?.().catch(() => setSoundBlocked(true));
         return element;
     }
 
@@ -396,9 +410,124 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
             const playbackReady = Promise.all([toneReady, room?.startAudio?.()]);
             await playbackReady;
             for (const element of attachedMedia.keys()) await element.play?.();
-            if (isCurrent(token)) soundButton.classList.add("hidden");
+            if (isCurrent(token)) setSoundBlocked(false);
         } catch (_) {
-            if (isCurrent(token) && currentCall) soundButton.classList.remove("hidden");
+            if (isCurrent(token) && currentCall) setSoundBlocked(true);
+        }
+    }
+
+    // One warning at a time; blocked sound first, since one tap fixes it.
+    function renderAudioWarning() {
+        const next = soundBlocked ? 'sound' : micSilent && !muted && room ? 'mic' : null;
+        if (next && next !== audioWarning) audioHealth?.warningShown(next);
+        audioWarning = next;
+        audioWarningNode.hidden = !next;
+        soundButton.classList.toggle('hidden', next !== 'sound');
+        restartMicButton.classList.toggle('hidden', next !== 'mic');
+        audioWarningText.textContent = next === 'sound' ? 'Your browser is blocking call sound.'
+            : next === 'mic' ? 'Your mic isn’t picking up any sound. End any other call or app using it, then restart your mic.' : '';
+    }
+
+    function setSoundBlocked(value) {
+        if (soundBlocked === value) return;
+        soundBlocked = value;
+        renderAudioWarning();
+    }
+
+    function setMicSilent(value) {
+        if (micSilent === value) return;
+        micSilent = value;
+        renderAudioWarning();
+    }
+
+    function microphonePublication() {
+        for (const publication of room?.localParticipant?.trackPublications?.values?.() || []) {
+            const kind = publication.kind || publication.track?.kind;
+            if (kind === 'audio' && (!publication.source || publication.source === 'microphone')) return publication;
+        }
+        return null;
+    }
+
+    function startAudioChecks(token) {
+        audioHealth = new CallAudioHealth(Date.now());
+        audioCall = { id: currentCall?.id, direction: outgoing ? 'outgoing' : 'incoming', mediaType: currentCall?.media_type };
+        audioTimer = setInterval(() => { void sampleAudio(token); }, AUDIO_SAMPLE_INTERVAL_MS);
+        void sampleAudio(token);
+    }
+
+    // Sends the summary once, for a call that connected.
+    function stopAudioChecks() {
+        clearInterval(audioTimer);
+        audioTimer = null;
+        if (audioHealth && audioCall) sendCallQualitySummary({ callId: audioCall.id, direction: audioCall.direction, mediaType: audioCall.mediaType, summary: audioHealth.summary(Date.now()) });
+        audioHealth = null;
+        audioCall = null;
+        soundBlocked = false;
+        micSilent = false;
+        renderAudioWarning();
+    }
+
+    async function sampleAudio(token) {
+        if (audioSampling || !isCurrent(token) || !room || !audioHealth) return;
+        audioSampling = true;
+        const sampleRoom = room, health = audioHealth;
+        try {
+            const micPublication = microphonePublication();
+            const micTrack = micPublication?.track;
+            const micOn = Boolean(micTrack) && !muted && !micPublication.isMuted;
+            const statsOf = async track => { try { return await track?.getRTCStatsReport?.(); } catch (_) { return null; } };
+            const outgoingAudio = micOn ? readOutgoingAudioStats(await statsOf(micTrack)) : null;
+            let path = outgoingAudio?.path || null;
+            const incoming = [];
+            for (const participant of sampleRoom.remoteParticipants.values()) {
+                for (const publication of participant.trackPublications?.values?.() || []) {
+                    if ((publication.kind || publication.track?.kind) !== 'audio' || !publication.track || publication.isMuted) continue;
+                    const stats = readIncomingAudioStats(await statsOf(publication.track));
+                    if (!stats) continue;
+                    incoming.push({ id: publication.trackSid || publication.track.sid || participant.identity, ...stats });
+                    path ||= stats.path;
+                }
+            }
+            if (!isCurrent(token) || room !== sampleRoom || audioHealth !== health) return;
+            const capture = micTrack?.mediaStreamTrack;
+            const remotes = [...sampleRoom.remoteParticipants.values()];
+            const result = health.record({
+                at: Date.now(),
+                micOn,
+                mic: micOn ? { energy: outgoingAudio?.energy, duration: outgoingAudio?.duration, trackMuted: capture?.muted === true, ended: capture?.readyState === 'ended' } : null,
+                incoming,
+                playbackBlocked: soundBlocked,
+                quality: sampleRoom.localParticipant?.connectionQuality,
+                remoteDegraded: remotes.some(participant => participant.connectionQuality === 'poor' || participant.connectionQuality === 'lost'),
+                participants: remotes.length + 1,
+                rttMs: path?.rttMs, candidate: path?.candidate, transport: path?.transport,
+            });
+            setMicSilent(result.micSilent);
+        } finally {
+            audioSampling = false;
+        }
+    }
+
+    // Another app may have let go of the mic: ask the browser for it again.
+    async function restartMicrophone() {
+        if (!room || operationInFlight) return;
+        const token = generation;
+        operationInFlight = true;
+        updateControls();
+        try {
+            const track = microphonePublication()?.track;
+            if (track?.restartTrack) await track.restartTrack();
+            else {
+                await room.localParticipant.setMicrophoneEnabled(false);
+                await room.localParticipant.setMicrophoneEnabled(true);
+            }
+            if (!isCurrent(token)) return;
+            audioHealth?.micRestarted();
+            setMicSilent(false);
+        } catch (error) {
+            if (isCurrent(token)) showToast?.(permissionMessage(error, 'audio'));
+        } finally {
+            if (isCurrent(token)) { operationInFlight = false; updateControls(); }
         }
     }
 
@@ -424,8 +553,13 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         room.on(liveKit.RoomEvent.LocalTrackUnpublished, rerender);
         room.on(liveKit.RoomEvent.ParticipantConnected, rerender);
         room.on(liveKit.RoomEvent.ParticipantDisconnected, rerender);
-        room.on(liveKit.RoomEvent.Reconnecting, () => { if (isCurrent(token)) { reconnecting = true; renderParticipants(); } });
-        room.on(liveKit.RoomEvent.Reconnected, () => { if (isCurrent(token)) { reconnecting = false; renderParticipants(); } });
+        room.on(liveKit.RoomEvent.Reconnecting, () => { if (isCurrent(token)) { reconnecting = true; audioHealth?.reconnectStarted(Date.now()); renderParticipants(); } });
+        room.on(liveKit.RoomEvent.Reconnected, () => { if (isCurrent(token)) { reconnecting = false; audioHealth?.reconnectFinished(Date.now()); renderParticipants(); } });
+        // LiveKit could not start remote audio without a tap.
+        const playbackRoom = room;
+        if (liveKit.RoomEvent.AudioPlaybackStatusChanged) room.on(liveKit.RoomEvent.AudioPlaybackStatusChanged, () => {
+            if (isCurrent(token) && playbackRoom.canPlaybackAudio === false) setSoundBlocked(true);
+        });
         room.on(liveKit.RoomEvent.Disconnected, () => {
             if (isCurrent(token) && currentCall && !TERMINAL_STATES.has(currentCall.state)) void finish({ notifyBackend: true, outcome: 'Call disconnected' });
         });
@@ -455,6 +589,7 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         renderParticipants();
         void enableAudioPlayback();
         void acquireWakeLock();
+        startAudioChecks(token);
     }
 
     async function start(mediaType, chat) {
@@ -685,6 +820,7 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         if (document.hidden) {
             if (cameraEnabled && room && !operationInFlight) {
                 cameraPausedForBackground = true;
+                audioHealth?.cameraPaused();
                 try { await room.localParticipant.setCameraEnabled(false); } catch (_) { /* Already stopped. */ }
             }
             return;
@@ -738,7 +874,7 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         cameraPausedForBackground = false;
         ringback.dispose(); outgoing = false; ringbackFinished = false;
         mediaReady = false; reconnecting = false;
-        soundButton.classList.add('hidden');
+        stopAudioChecks();
         currentCall = null;
         clearTimeout(lifecycleTimer);
         lifecycleTimer = null;
@@ -826,6 +962,7 @@ export function createCallsController({ api, getUser, getConfig, showToast, onCa
         if (button.matches("[data-call-video]")) void setCamera(!cameraEnabled);
         if (button.matches('[data-call-output]')) void chooseAudioOutput();
         if (button.matches("[data-call-enable-sound]")) void enableAudioPlayback();
+        if (button.matches('[data-call-restart-mic]')) void restartMicrophone();
     });
     // Esc and Android Back never hang up by themselves.
     dialog.addEventListener("cancel", (event) => {
