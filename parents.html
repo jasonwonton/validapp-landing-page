@@ -67,6 +67,78 @@
         h2 { margin: 0 0 18px; font-size: 1.8rem; }
         p { color: var(--muted); margin: 0 0 16px; }
         .intro { max-width: 720px; font-size: 1.1rem; }
+        .parent-setup {
+            margin: 30px 0;
+            padding: clamp(22px, 4vw, 34px);
+            border: 3px solid var(--text);
+            border-radius: 20px;
+            background: #fff;
+            scroll-margin-top: 24px;
+        }
+        .parent-setup h2 { margin-bottom: 12px; }
+        .parent-setup label { display: block; margin-bottom: 8px; color: var(--text); }
+        .parent-setup input, .parent-setup button {
+            font: inherit;
+            border: 2px solid var(--text);
+            border-radius: 12px;
+            padding: 12px 16px;
+            min-height: 48px;
+        }
+        .parent-setup input { width: 100%; background: #fff; color: var(--text); }
+        .parent-setup button { cursor: pointer; background: var(--accent); color: var(--text); }
+        .parent-setup button:disabled { opacity: 0.65; cursor: wait; }
+        .parent-setup input:focus-visible, .parent-setup button:focus-visible {
+            outline: 3px solid #0749ad; outline-offset: 3px;
+        }
+        .setup-fields { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+        .setup-account { flex: 1 1 240px; }
+        .setup-help { font-size: 0.95rem; margin: 12px 0 0; }
+        #parent-setup-error { color: #a02020; margin: 12px 0 0; }
+        #parent-setup-error:empty { display: none; }
+        #parent-link-steps { scroll-margin-top: 24px; }
+        #parent-link-steps:focus { outline: none; }
+        #parent-link-steps h3 { margin: 0 0 8px; font-size: 1.5rem; font-weight: 400; line-height: 1.3; }
+        .link-steps { list-style: none; counter-reset: step; margin: 24px 0; padding: 0; }
+        .link-steps > li {
+            counter-increment: step;
+            display: grid;
+            grid-template-columns: 1fr 160px;
+            gap: 20px;
+            align-items: start;
+            padding: 20px 0;
+            border-top: 1px solid var(--border);
+        }
+        .link-steps h4 { margin: 0 0 8px; font-size: 1.15rem; font-weight: 400; color: var(--text); }
+        .link-steps h4::before {
+            content: counter(step);
+            display: inline-grid;
+            place-items: center;
+            width: 30px;
+            height: 30px;
+            margin-right: 10px;
+            border-radius: 50%;
+            background: var(--accent);
+            border: 2px solid var(--text);
+            font-size: 1rem;
+        }
+        .link-steps p { margin: 0 0 8px; }
+        .link-steps img {
+            display: block;
+            width: 100%;
+            height: auto;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+        }
+        .step-device {
+            display: inline-block;
+            margin-bottom: 6px;
+            padding: 2px 10px;
+            border-radius: 999px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-size: 0.85rem;
+        }
         .mission {
             margin: 30px 0;
             padding: clamp(22px, 4vw, 34px);
@@ -148,10 +220,13 @@
             .nav { align-items: flex-start; flex-direction: column; padding: 16px 0; }
             .answer { padding-left: 0; }
             .parent-screenshots { grid-template-columns: 1fr; }
+            .link-steps > li { grid-template-columns: 1fr; }
+            .link-steps img { width: min(200px, 100%); }
             .parent-screenshots figure { width: min(320px, 100%); margin: 0 auto; }
         }
     </style>
 <script defer src="/assets/public-analytics.js"></script>
+<script defer src="/assets/parent-controls.js"></script>
 </head>
 <body>
     <header class="site-header">
@@ -168,6 +243,72 @@
     <main>
         <h1>FAQ for Parents</h1>
         <p class="intro">You deserve to understand the apps your child uses. Valid includes <a href="#parental-controls">parental controls through Parent access</a>, so linked parents can stay involved from their own phone.</p>
+
+        <section class="parent-setup" id="setup-parent-access" aria-labelledby="setup-title">
+            <h2 id="setup-title">Set up parental controls</h2>
+            <p>Enter your child's Valid username or phone number to turn on Parent access for their account. We'll then walk you through linking your phone, step by step.</p>
+            <form id="parent-setup-form" hidden novalidate>
+                <div class="setup-fields">
+                    <div class="setup-account">
+                        <label for="child-account">Your child's @username or phone number</label>
+                        <input id="child-account" name="account" type="text" placeholder="@username or (555) 555-0123" maxlength="64" autocomplete="off" autocapitalize="none" spellcheck="false" required aria-describedby="account-help parent-setup-error">
+                    </div>
+                    <button type="submit" id="enable-parent-access">Turn on Parent access</button>
+                </div>
+                <p class="setup-help" id="account-help">Their @username is on their Valid profile. Parent access is for accounts under 18, and you'll need your child's iPhone for the next steps.</p>
+                <p id="parent-setup-error" role="alert"></p>
+            </form>
+            <noscript><p>To turn on Parent access, email <a href="mailto:support@validapp.lol?subject=Parent%20access">support@validapp.lol</a> with your child's username.</p></noscript>
+            <div id="parent-link-steps" hidden tabindex="-1" role="region" aria-labelledby="parent-link-ready">
+                <h3 id="parent-link-ready">Next, link your phone</h3>
+                <p>If <strong id="enabled-account"></strong> is a Valid account under 18, Parent access is now on. Have your child's iPhone and your own phone with you, then follow these steps.</p>
+                <ol class="link-steps">
+                    <li>
+                        <div>
+                            <span class="step-device">Your child's iPhone</span>
+                            <h4>Open Parent access</h4>
+                            <p>Open Valid and go to their profile. Tap the <strong>⚙︎ Settings</strong> button, then <strong>Privacy</strong>, then <strong>Parent access</strong>.</p>
+                            <p>If Privacy was already open, close it and open it again.</p>
+                        </div>
+                        <img src="assets/parent-step-privacy.webp" width="804" height="600" loading="lazy" decoding="async" alt="Valid's Privacy settings on a teen's iPhone, with Parent access: Let a parent see your account.">
+                    </li>
+                    <li>
+                        <div>
+                            <span class="step-device">Your child's iPhone</span>
+                            <h4>Enter your phone number</h4>
+                            <p>Read what you'll be able to see together, then tap <strong>Continue</strong>. Enter <strong>your own</strong> phone number (not your child's) and tap <strong>Send code</strong>.</p>
+                        </div>
+                        <img src="assets/parent-step-link.webp" width="804" height="1748" loading="lazy" decoding="async" alt="The Share your account with a parent screen listing what a parent sees, with Continue and Not now.">
+                    </li>
+                    <li>
+                        <div>
+                            <span class="step-device">Your child's iPhone</span>
+                            <h4>Type the code from your phone</h4>
+                            <p>We text a code to your phone. Type it on your child's iPhone, check the box, and tap <strong>Link parent</strong>.</p>
+                        </div>
+                        <img src="assets/parent-step-code.webp" width="804" height="1093" loading="lazy" decoding="async" alt="Enter your parent's code screen with the code field, a confirmation checkbox and the Link parent button.">
+                    </li>
+                    <li>
+                        <div>
+                            <span class="step-device">Your phone</span>
+                            <h4>Sign in as a parent</h4>
+                            <p><a href="https://apps.apple.com/us/app/valid-compliment-classmates/id6755367062">Download Valid</a> on your own iPhone, tap <strong>Log in</strong>, and use the same phone number. Tap <strong>Open parent view</strong>.</p>
+                        </div>
+                        <img src="assets/parent-step-sign-in.webp" width="804" height="1440" loading="lazy" decoding="async" alt="You're signing in as a parent screen with the Open parent view button.">
+                    </li>
+                    <li>
+                        <div>
+                            <span class="step-device">Your phone</span>
+                            <h4>Choose their settings</h4>
+                            <p>Open the <strong>Settings</strong> tab in parent view to choose who can add, message, and see your child, and more. A safer choice stays in place while you're linked.</p>
+                        </div>
+                        <img src="assets/parent-step-settings.webp" width="804" height="1286" loading="lazy" decoding="async" alt="Parent view Settings tab listing the teen's privacy controls.">
+                    </li>
+                </ol>
+                <p>Don't see Parent access on your child's iPhone? Check the username or number you entered, update Valid from the App Store, and reopen Privacy. Still stuck? <a href="mailto:support@validapp.lol?subject=Parent%20access">Email support</a>.</p>
+                <button type="button" id="setup-another-child">Set up another child</button>
+            </div>
+        </section>
 
         <section class="mission" aria-labelledby="mission-title">
             <h2 id="mission-title">Our mission</h2>
@@ -191,27 +332,52 @@
                 <summary>Does Valid have parental controls?</summary>
                 <div class="answer">
                     <p><strong>Yes. Valid has parental controls through Parent access on iPhone.</strong> Once linked, a parent signs in with their own phone number on their own phone to read their child's text chats and see polls about their child and their school's feed.</p>
-                    <p>For linked teen accounts (ages 13–17), parents can choose <strong>who can add them</strong>, <strong>who can message them</strong>, and whether others can see their <strong>activity status</strong>. Choosing the more restrictive setting keeps that choice in place while the parent is linked.</p>
-                    <p><strong>To link a teen account:</strong> email <a href="mailto:support@validapp.lol?subject=Parent%20access">support@validapp.lol</a> to request Parent access. Once enabled, open <strong>Settings → Privacy → Parent access</strong> on your child's iPhone and confirm your own phone number with a text code. If you are already linked, choose <strong>Log in</strong> in Valid on your phone and use that number.</p>
+                    <p>For linked teen accounts (ages 13–17), parents can choose:</p>
+                    <ul>
+                        <li><strong>Who can add them</strong>, <strong>who can message them</strong>, and who can <strong>find them by username</strong></li>
+                        <li><strong>Who can see their posts and Stories</strong> and <strong>who can comment on their posts</strong></li>
+                        <li>Whether they <strong>appear in polls</strong> and whether others can see <strong>when they're active</strong></li>
+                        <li>Whether the <strong>For You</strong> feed and For You profiles are on</li>
+                    </ul>
+                    <p>Choosing the safer setting keeps it in place while the parent is linked; your child can't change it back. Parents can also see their child's profile and posts.</p>
+                    <p><strong>To link an account:</strong> <a href="#setup-parent-access">enter your child's username or phone number above</a>, then follow the steps to link your phone with a text code on your child's iPhone. If you are already linked, choose <strong>Log in</strong> in Valid on your phone and use that number.</p>
                     <p>Parent access shows text messages, not chat photos, videos, or voice notes. Parents can report concerns, but cannot send messages, post, or vote as their child. Parent access ends when the child turns 18.</p>
-                    <div class="parent-screenshots" aria-label="Screenshots of Valid's parent view and teen privacy controls">
+                    <div class="parent-screenshots" aria-label="Screenshots of Valid's parent view and parental controls">
                         <figure>
-                            <a href="assets/parent-view-chats.png" aria-label="Enlarge screenshot of the parent chat view">
-                                <img src="assets/parent-view-chats.png" width="1206" height="2622" loading="lazy" alt="Valid parent view showing Maya's text chats with Ava, a school soccer group, and Jordan.">
+                            <a href="assets/parent-view-chats.webp" aria-label="Enlarge screenshot of the parent chats">
+                                <img src="assets/parent-view-chats.webp" width="804" height="1748" loading="lazy" decoding="async" alt="Parent view showing Maya's text chats with Ava, a soccer group and Jordan, and her For You chats.">
                             </a>
-                            <figcaption><strong>Read text chats.</strong> See conversations from your own phone. Reading here does not mark messages as read.</figcaption>
+                            <figcaption><strong>Read text chats.</strong> See their chats from your own phone, including For You chats. Reading here doesn't mark anything as read.</figcaption>
                         </figure>
                         <figure>
-                            <a href="assets/parent-who-can-add.png" aria-label="Enlarge screenshot of who can add a linked teen">
-                                <img src="assets/parent-who-can-add.png" width="1206" height="2622" loading="lazy" alt="Parent control for who can add Maya, with School &amp; contacts selected instead of Everyone.">
+                            <a href="assets/parent-view-feed.webp" aria-label="Enlarge screenshot of the parent feed">
+                                <img src="assets/parent-view-feed.webp" width="804" height="1748" loading="lazy" decoding="async" alt="Parent view of Maya's feed with polls she was voted in.">
                             </a>
-                            <figcaption><strong>Choose who can add them.</strong> Linked teen accounts can be limited to school and contact connections, including people who have their number.</figcaption>
+                            <figcaption><strong>See their feed.</strong> Polls about your child and their school's feed.</figcaption>
                         </figure>
                         <figure>
-                            <a href="assets/parent-who-can-message.png" aria-label="Enlarge screenshot of who can message a linked teen">
-                                <img src="assets/parent-who-can-message.png" width="1206" height="2622" loading="lazy" alt="Parent control for who can message Maya, with People Maya knows selected so everyone else waits for an accepted friend request.">
+                            <a href="assets/parent-view-profile.webp" aria-label="Enlarge screenshot of the parent profile view">
+                                <img src="assets/parent-view-profile.webp" width="804" height="1748" loading="lazy" decoding="async" alt="Parent view of Maya's profile with her For You profiles listed.">
                             </a>
-                            <figcaption><strong>Choose who can message them.</strong> Require other people to wait until your teen accepts their friend request.</figcaption>
+                            <figcaption><strong>See their profiles.</strong> Their profile and posts, plus any For You profiles they post as.</figcaption>
+                        </figure>
+                        <figure>
+                            <a href="assets/parent-view-settings.webp" aria-label="Enlarge screenshot of the parent privacy controls">
+                                <img src="assets/parent-view-settings.webp" width="804" height="1748" loading="lazy" decoding="async" alt="Parent Settings tab with Maya's privacy: Add them, Message them, See their posts and stories, Comment on their posts, and Find them by username.">
+                            </a>
+                            <figcaption><strong>Choose who can reach them.</strong> Who can add them, message them, see their posts and Stories, comment, and find them by username.</figcaption>
+                        </figure>
+                        <figure>
+                            <a href="assets/parent-view-settings-more.webp" aria-label="Enlarge screenshot of the more parent controls">
+                                <img src="assets/parent-view-settings-more.webp" width="804" height="1748" loading="lazy" decoding="async" alt="More parent controls: Appear in polls, Show when they're active, For You, For You profiles, and Keep For You profiles private.">
+                            </a>
+                            <figcaption><strong>Turn features off.</strong> Polls, active status, For You and For You profiles. A safer choice can't be changed back while you're linked.</figcaption>
+                        </figure>
+                        <figure>
+                            <a href="assets/parent-who-can-comment.webp" aria-label="Enlarge screenshot of the who can comment">
+                                <img src="assets/parent-who-can-comment.webp" width="804" height="1748" loading="lazy" decoding="async" alt="Who can comment on their posts, with Friends selected instead of School &amp; contacts or Everyone.">
+                            </a>
+                            <figcaption><strong>Pick an audience.</strong> For example, only friends can comment on their posts.</figcaption>
                         </figure>
                     </div>
                     <p>Screenshots show example names and conversations. Tap a screenshot to see it full size.</p>
