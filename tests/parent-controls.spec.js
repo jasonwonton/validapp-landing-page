@@ -67,7 +67,7 @@ test("bad entries stay on the page and server errors can be retried", async ({ p
     await expect(page.locator("#parent-setup-error")).toContainText("3–30 letters");
     await field(page).fill("555-0136");
     await submit(page).click();
-    await expect(page.locator("#parent-setup-error")).toContainText("area code");
+    await expect(page.locator("#parent-setup-error")).toContainText("10-digit phone number");
     expect(requests).toBe(0);
     await field(page).fill("maya");
     await submit(page).click();

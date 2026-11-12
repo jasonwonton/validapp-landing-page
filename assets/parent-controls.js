@@ -22,9 +22,10 @@
     function parse(raw) {
         const value = raw.trim();
         if (/^\+?[\d\s().-]+$/.test(value)) {
-            const digits = value.replace(/\D/g, "");
-            if (digits.length < 10 || digits.length > 15) {
-                return { error: "Enter their phone number with the area code." };
+            // Valid accounts use US numbers: 10 digits, or 11 starting with 1.
+            const digits = value.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
+            if (digits.length !== 10) {
+                return { error: "Enter their 10-digit phone number, with the area code." };
             }
             return { body: { phone_number: value }, shown: value };
         }
