@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 
@@ -645,6 +646,7 @@ async function interceptProductionAPI(page, { signup = false, phoneExists = fals
             body,
             authorization: request.headers().authorization || null,
             contentType: request.headers()["content-type"] || null,
+            clientInstance: request.headers()["x-client-instance-id"] || null,
         });
 
         const fulfill = (payload, status = 200) => route.fulfill({
@@ -1073,6 +1075,10 @@ test("real adapter links signup only after Turnstile-backed SMS verification", a
     expect(phoneCheck.authorization).toBeNull();
     expect(phoneCheck.body.phone_number).toBe("4155550123");
     expect(phoneCheck.body.device_installation_id).toBe(completion.body.deviceInstallationId);
+    // Every request names the device by the SHA-256 of that same id, as iOS does.
+    const installationHash = createHash("sha256").update(completion.body.deviceInstallationId).digest("hex");
+    expect(requests.length).toBeGreaterThan(0);
+    for (const request of requests) expect(request.clientInstance, request.path).toBe(installationHash);
     const nearby = requests.find((request) => request.path === "/api/v1/highschools/nearby?zip_code=90210&limit=50");
     expect(nearby.authorization).toBeNull();
     expect(requests.some((request) => request.path === "/api/v1/highschools/request")).toBe(false);

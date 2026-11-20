@@ -10,6 +10,7 @@ const APP_SHELL = [
     "./preferences.js",
     "./app.js",
     "./api.js",
+    "./installation-id.js",
     "./session-recovery.js",
     "./passkeys.js",
     "./auth-reliability.js",

@@ -16,7 +16,7 @@ test('only anonymous safe production requests can change origin', () => {
 
 test('network fallback keeps exact body and omits credentials on alternate', async () => {
     const calls=[];
-    const r=await fetchAuthWithRecovery(url,{method:'POST',body:'{"phone_number":"test"}',headers:{Authorization:'Bearer must-not-forward'}},{fetcher:async(u,o)=>{
+    const r=await fetchAuthWithRecovery(url,{method:'POST',body:'{"phone_number":"test"}',headers:{Authorization:'Bearer must-not-forward','X-Client-Instance-ID':'a'.repeat(64)}},{fetcher:async(u,o)=>{
         calls.push([u,o]); if(calls.length<2) throw new TypeError('network');
         return new Response('{"ok":true}',{headers:{'Content-Type':'application/json'}});
     }});
@@ -25,6 +25,8 @@ test('network fallback keeps exact body and omits credentials on alternate', asy
     assert.equal(calls[1][1].body,calls[0][1].body);
     assert.equal(calls[1][1].credentials,'omit');
     assert.equal(calls[1][1].headers.has('Authorization'),false);
+    assert.equal(calls[0][1].headers.get('X-Client-Instance-ID'),'a'.repeat(64));
+    assert.equal(calls[1][1].headers.has('X-Client-Instance-ID'),false);
     assert.equal(calls[1][1].redirect,'error');
 });
 

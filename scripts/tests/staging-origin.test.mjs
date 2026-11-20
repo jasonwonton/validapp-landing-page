@@ -180,3 +180,9 @@ test('SSE concurrency cap is finite and slots recover after disconnect', async (
     assert.equal(activeStreams, 0);
     assert.equal((await send('/api/v1/config')).status, 200);
 });
+test('the device hash header reaches the API and unlisted headers do not', async () => {
+    const instance = 'c'.repeat(64);
+    assert.equal((await send('/api/v1/config', { headers: { 'x-client-instance-id': instance, 'x-unlisted': 'drop' } })).status, 200);
+    assert.equal(calls.at(-1).headers['x-client-instance-id'], instance);
+    assert.equal(calls.at(-1).headers['x-unlisted'], undefined);
+});
