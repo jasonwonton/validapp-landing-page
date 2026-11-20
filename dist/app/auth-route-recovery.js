@@ -27,6 +27,8 @@ export async function fetchAuthWithRecovery(url, options, { fetcher = fetch, tim
         try {
             const headers = new Headers(options.headers);
             headers.delete('Authorization'); headers.delete('Cookie');
+            // The other API hosts get these anonymous requests without the device hash.
+            if (index > 0) headers.delete('X-Client-Instance-ID');
             const response = await fetcher(routes[index], { ...options, headers, signal: controller.signal,
                 cache: 'no-store', credentials: index === 0 ? (options.credentials || 'same-origin') : 'omit', redirect: 'error', referrerPolicy: 'no-referrer' });
             // Consume the small anonymous JSON response within the same deadline.

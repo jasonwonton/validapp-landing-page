@@ -1,0 +1,106 @@
+.weekly-game-dialog { padding:0; border:0; border-radius:0; width:100%; height:100dvh; max-width:560px; max-height:100dvh; margin:0 auto; color:#fff; background:#07181a; overflow:auto; overscroll-behavior:contain; font-family:Jua,system-ui,sans-serif; }
+.weekly-game-dialog::backdrop {background:rgba(0,0,0,.8)}
+.weekly-game-dialog [hidden] {display:none!important}
+.weekly-game-header {position:sticky; top:0; z-index:2; display:flex; align-items:center; justify-content:space-between; padding:calc(12px + env(safe-area-inset-top)) 16px 12px; background:#07181a; gap:8px; border-bottom:1px solid #ffffff1f;}
+.weekly-game-header button {color:#20e6cc;background:none;border:0;min-height:44px;padding:6px 0;font:inherit;font-size:14px;cursor:pointer;}
+.weekly-game-header strong {font-size:16px;}
+.weekly-game-content {padding:20px 20px calc(28px + env(safe-area-inset-bottom));text-align:center;}
+.weekly-game-intro h1 {font-size:40px;margin:12px 0;line-height:1.1;color:#fff;}
+.weekly-game-eyebrow {color:#00e5c4;letter-spacing:1.6px;font-size:12px;}
+.weekly-game-intro img {width:min(220px,65vw);height:auto;aspect-ratio:1;border-radius:30px;margin:18px auto 8px;display:block;}
+.weekly-game-intro p {font-size:19px;line-height:1.4;}
+.weekly-game-dialog .weekly-game-practice {font-size:13px;color:#a7babc;max-width:300px;margin:16px auto;}
+.weekly-game-status {font:15px/1.5 system-ui,sans-serif;color:#d6e6e7;margin:18px 0;min-height:24px;}
+.weekly-game-controls {display:grid;gap:14px;}
+.weekly-game-controls label {display:flex;justify-content:center;align-items:center;gap:8px;font-size:14px;color:#c9dadc;}
+.weekly-game-controls input {width:18px;height:18px;accent-color:#00e5c4;}
+.weekly-game-controls button,.weekly-game-actions button,.weekly-game-actions a,.weekly-game-rankings button {font:18px Jua,system-ui,sans-serif;min-height:52px;border-radius:18px;border:0;background:#00e5c4;color:#002e29;padding:14px 18px;text-decoration:none;cursor:pointer;}
+.weekly-game-dialog button:disabled {opacity:.45;cursor:default;}
+.weekly-game-controls small {font:12px/1.5 system-ui,sans-serif;color:#93a9ac;max-width:310px;margin:auto;}
+.weekly-game-camera {position:relative;max-width:360px;margin:0 auto;overflow:hidden;border-radius:24px;background:#000;}
+.weekly-game-source {position:absolute;width:1px;height:1px;opacity:.001;pointer-events:none;}
+.weekly-game-sandbox {position:fixed;left:0;top:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none;}
+.weekly-game-camera canvas {display:block;width:100%;max-height:62dvh;aspect-ratio:9/16;object-fit:contain;}
+.weekly-game-tracking {position:absolute;bottom:9px;left:10px;right:10px;padding:8px;border-radius:12px;background:#07181acc;color:#fff;font-size:13px;}
+.weekly-game-tracking.ready {color:#00e5c4;}
+.weekly-game-result h2 {font-size:52px;line-height:1;margin:18px 0;color:#fff;}
+.weekly-game-result video {width:100%;max-width:270px;max-height:42dvh;border-radius:20px;background:#000;}
+.weekly-game-actions {display:grid;gap:10px;max-width:360px;margin:18px auto 0;}
+.weekly-game-actions a,.weekly-game-actions button:last-child {background:#193537;color:#fff;}
+.weekly-game-rankings ol {list-style:none;padding:0;text-align:left;}
+.weekly-game-rankings li {display:flex;justify-content:space-between;gap:16px;padding:16px 8px;border-bottom:1px solid #ffffff20;font-size:17px;}
+.weekly-game-rankings li span {overflow-wrap:anywhere;}
+.weekly-game-rankings strong {color:#00e5c4;}
+.weekly-game-rankings p {color:#a7babc;font:14px/1.5 system-ui,sans-serif;}
+@media(min-width:650px){.weekly-game-dialog{height:calc(100dvh - 40px);max-height:900px;margin:20px auto;border-radius:28px}.weekly-game-content{padding-bottom:28px}}
+.weekly-game-intro .weekly-game-artwork {object-fit:cover;background:#193537;}
+.weekly-game-dialog .weekly-game-app-only {font:15px/1.5 system-ui,sans-serif;color:#d6e6e7;max-width:320px;margin:16px auto;}
+.weekly-game-ios-link {display:block;padding:16px;border-radius:18px;background:#00e5c4;color:#002e29;text-decoration:none;font-size:18px;}
+
+.web-game-dialog .weekly-game-content{display:flex;flex-direction:column;min-height:0}.web-game-player{width:100%;height:min(66dvh,640px);min-height:260px}.web-game-player iframe{display:block;width:100%;height:100%;border:0;border-radius:18px;background:#ccf7f4}.web-game-dialog [data-poster]{width:min(100%,240px);height:auto;border-radius:14px}.web-game-dialog [data-score]{margin:8px 0}.web-game-dialog .weekly-game-actions{margin-top:12px}
+
+/* iOS header icons: ✕ on the left, ⏸ (web game) on the right. */
+.weekly-game-header button .ui-icon {width:22px;height:22px;}
+.weekly-game-header button {display:grid;place-items:center;min-width:44px;}
+.weekly-game-header-spacer {width:44px;}
+.weekly-game-header [data-pause] .ui-icon {width:20px;height:20px;}
+
+/* Result: score, Share on Snapchat (+ More…), then [Leaderboard] [Play again]. */
+.weekly-game-share-row {display:flex;gap:10px;max-width:360px;margin:14px auto 0;}
+.weekly-game-share-row.secondary {margin-top:10px;}
+.weekly-game-share-row button,.weekly-game-share-row a {flex:1;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:50px;padding:10px 16px;border-radius:25px;border:2px solid #000;font:18px Jua,system-ui,sans-serif;text-decoration:none;cursor:pointer;}
+.weekly-game-snapchat {background:#fffc00;color:#000;}
+.weekly-game-snapchat-glyph {width:24px;height:24px;object-fit:contain;}
+.weekly-game-share-row button,.weekly-game-share-row a {white-space:nowrap;}
+.weekly-game-more,.weekly-game-save {flex:0 0 auto;padding-inline:22px;background:#fff;color:#000;}
+.weekly-game-share-row.secondary > * {flex:1;}
+.weekly-game-result-actions {display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:360px;margin:14px auto 0;}
+.weekly-game-result-actions button {min-height:50px;border:0;border-radius:25px;background:var(--peach,#ffb15e);color:#000;font:18px Jua,system-ui,sans-serif;cursor:pointer;}
+.weekly-game-dialog .weekly-game-share-row button:disabled,.weekly-game-dialog .weekly-game-result-actions button:disabled {opacity:.45;}
+
+/* The Love Flap player sits on the app's aqua like EasterEggWebGameView. */
+.web-game-dialog,.web-game-dialog .weekly-game-header {background:var(--aqua,#ccf7f4);color:var(--ink,#000);}
+.web-game-dialog .weekly-game-header {border-bottom-color:rgba(0,0,0,.08);}
+.web-game-dialog .weekly-game-header button {color:var(--ink,#000);}
+.web-game-dialog .weekly-game-status {color:var(--muted,#335);}
+.web-game-dialog .weekly-game-result h2 {color:var(--ink,#000);font-size:34px;}
+.web-game-dialog .weekly-game-actions button {background:var(--peach,#ffb15e);color:#000;}
+.web-game-dialog .weekly-game-actions button:last-child {background:var(--white,#fff);color:var(--ink,#000);border:2px solid var(--outline,#000);}
+.web-game-player iframe {border:2px solid var(--outline,#000);}
+
+/* Game home (EasterEggGameView): aqua sheet, Done on the right. */
+.weekly-game-home {background:var(--aqua,#ccf7f4);color:var(--ink,#000);}
+.weekly-game-home-toolbar {position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;padding:calc(10px + env(safe-area-inset-top)) 16px 6px;background:var(--aqua,#ccf7f4);}
+.weekly-game-home-toolbar button {min-height:44px;padding:0 6px;border:0;background:none;color:var(--ink,#000);font:18px Jua,system-ui,sans-serif;cursor:pointer;}
+.weekly-game-home-content {display:grid;justify-items:center;gap:24px;padding:4px 24px calc(28px + env(safe-area-inset-bottom));text-align:center;}
+.weekly-game-home-art {display:grid;place-items:center;width:80px;height:80px;margin-top:20px;border-radius:16px;overflow:hidden;background:var(--mint,#d1eded);}
+.weekly-game-home-art img,.weekly-game-art-image {width:100%;height:100%;object-fit:cover;display:block;}
+.weekly-game-art-text {font:34px/1 Jua,system-ui,sans-serif;color:var(--dark-teal,#00342d);}
+.weekly-game-art-symbol {display:grid;place-items:center;width:100%;height:100%;color:#00a896;}
+.weekly-game-art-symbol .ui-icon {width:60%;height:60%;}
+.weekly-game-home h1 {margin:0;font:34px/1.1 Jua,system-ui,sans-serif;color:var(--ink,#000);}
+.weekly-game-home-stats {display:grid;grid-template-columns:1fr 1fr;gap:32px;width:100%;max-width:360px;}
+.weekly-game-home-stats div {display:grid;gap:6px;}
+.weekly-game-home-stats strong {font:34px/1 Jua,system-ui,sans-serif;}
+.weekly-game-home-stats small,.weekly-game-home-note {color:var(--muted,#335);font-size:13px;margin:0;}
+.weekly-game-home-play,.weekly-game-home-app-only a {width:100%;max-width:400px;}
+.weekly-game-home-app-only {display:grid;gap:14px;width:100%;max-width:400px;}
+.weekly-game-home-app-only p {margin:0;font:16px/1.45 system-ui,sans-serif;color:var(--muted,#335);}
+.weekly-game-home-app-only a {display:grid;place-items:center;text-decoration:none;}
+.weekly-game-home-error {display:grid;gap:8px;}
+.weekly-game-home-error p {margin:0;color:var(--danger-text,#a3293c);}
+.weekly-game-home-error button {border:0;background:none;color:var(--ink,#000);text-decoration:underline;font:inherit;cursor:pointer;}
+.weekly-game-home-leaderboard {display:grid;gap:16px;width:100%;max-width:440px;text-align:left;}
+.weekly-game-home-leaderboard h2 {margin:0;font:20px Jua,system-ui,sans-serif;color:var(--ink,#000);}
+.weekly-game-home-leaderboard ol {display:grid;gap:8px;margin:0;padding:0;list-style:none;}
+.weekly-game-rank-row {display:flex;align-items:center;gap:12px;padding:12px;border-radius:14px;background:var(--white,#fff);font-size:17px;}
+.weekly-game-rank-row.me {background:var(--mint,#d1eded);}
+.weekly-game-rank {flex:0 0 40px;text-align:center;}
+.weekly-game-rank-name {flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.weekly-game-rank-row strong {font-variant-numeric:tabular-nums;}
+.weekly-game-rank-empty {padding:12px 0;color:var(--muted,#335);}
+.weekly-game-rank-divider {height:1px;margin:4px 0;background:rgba(0,0,0,.15);}
+.weekly-game-home-loading {justify-self:center;width:22px;height:22px;border:3px solid rgba(0,0,0,.15);border-top-color:var(--ink,#000);border-radius:50%;animation:weekly-game-spin .8s linear infinite;}
+.weekly-game-home-loading[hidden] {display:none;}
+@keyframes weekly-game-spin {to {transform:rotate(360deg);}}
+@media (prefers-reduced-motion: reduce) {.weekly-game-home-loading {animation:none;}}
