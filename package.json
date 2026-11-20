@@ -16,7 +16,7 @@
     "test:passkey-integration": "node scripts/test-passkey-backend.mjs",
     "test:production": "node scripts/check-production.mjs",
     "test:seo": "node --test scripts/tests/seo.test.mjs",
-    "test:auth-recovery": "node --test scripts/tests/auth-route-policy.test.mjs scripts/tests/auth-route-recovery.test.mjs scripts/tests/session-recovery.test.mjs",
+    "test:auth-recovery": "node --test scripts/tests/auth-route-policy.test.mjs scripts/tests/auth-route-recovery.test.mjs scripts/tests/session-recovery.test.mjs scripts/tests/installation-id.test.mjs",
     "test:weekly-game": "node --test scripts/tests/weekly-game.test.mjs scripts/tests/weekly-game-v2.test.mjs && playwright test tests/weekly-game.spec.js tests/weekly-game-v2.spec.js",
     "test:foundations": "node --test scripts/tests/media-url.test.mjs scripts/tests/user-message.test.mjs",
     "test:calls": "node --test scripts/tests/call-audio-health.test.mjs && playwright test tests/calls.spec.js",

@@ -1,4 +1,5 @@
 import { ValidAPI } from "./api.js";
+import { deviceInstallationId } from "./installation-id.js";
 import { uiIcon } from "./ui-icons.js";
 import { feedVoterLine, senderGradeIsSafe, senderStatement, tbhSenderLine } from "./feed-sender.js";
 import { createAdditionalPasskey, createSignupPasskey, passkeysSupported, signInWithPasskey } from "./passkeys.js";
@@ -3270,16 +3271,6 @@ async function finishSignIn() {
     if (state.postAuthLanding !== "play") return;
     if (state.activePanel !== "play") switchPanel("play", { historyMode: "replace", restoreScroll: false });
     void runPostAuthSheets({ reason: "signin" });
-}
-
-function deviceInstallationId() {
-    const key = "valid.web.installation-id";
-    let value = localStorage.getItem(key);
-    if (!value) {
-        value = crypto.randomUUID();
-        localStorage.setItem(key, value);
-    }
-    return value;
 }
 
 function dateOfBirthFromAge(value) {

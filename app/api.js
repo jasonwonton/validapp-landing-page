@@ -3,6 +3,7 @@ import { permitsAuthRouteRecovery, fetchAuthWithRecovery } from './auth-route-re
 import { reportAuthFailure } from './auth-reliability.js';
 import { authStage, authRejectionCode } from './auth-diagnostics.js';
 import { apiErrorMessage, validationMessage } from './user-message.js';
+import { CLIENT_INSTANCE_HEADER, clientInstanceHash, readyClientInstanceHash } from './installation-id.js';
 
 function apiBaseURL() {
     // Browser auth is first-party: production hosting must reverse-proxy this
@@ -66,6 +67,11 @@ export class ValidAPI {
     }
 
     async request(path, options = {}) {
+        // Which device this account is used on: the hashed installation id, as
+        // iOS sends it. Detection only. Without it the request goes as before;
+        // only the first request can wait, and at most 100 ms.
+        let instance = readyClientInstanceHash();
+        if (instance === undefined) instance = await clientInstanceHash();
         const requestRevision = this.sessionRevision;
         const includeResponseHeaders = options.includeResponseHeaders === true;
         const silentAuthFailure = options.silentAuthFailure === true;
@@ -79,6 +85,7 @@ export class ValidAPI {
             const version = document.querySelector('meta[name="valid-app-version"]')?.content;
             if (/^web-v\d{1,6}$/.test(version || '')) headers.set('X-Client-Version', version);
         }
+        if (instance) headers.set(CLIENT_INSTANCE_HEADER, instance);
 
         if (options.body && !(options.body instanceof FormData) && !headers.has("Content-Type")) {
             headers.set("Content-Type", "application/json");
