@@ -583,6 +583,16 @@ export class ValidAPI {
         });
     }
 
+    // A completed share (the share sheet resolved, or the link was copied).
+    // The server credits a signup to an invite only once its send is
+    // recorded; the same sendEventId makes a retry a no-op.
+    recordInviteSent(userId, inviteId, { sendEventId = crypto.randomUUID(), recipientCount = 1 } = {}) {
+        return this.request(`/users/${userId}/invites/${inviteId}/sent`, {
+            method: "POST",
+            body: JSON.stringify({ send_event_id: sendEventId, recipient_count: recipientCount, recipient_phone_numbers: [] }),
+        });
+    }
+
     updateBio(userId, bio) {
         return this.request(`/users/${userId}/bio`, {
             method: "PUT",

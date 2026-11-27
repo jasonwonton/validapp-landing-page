@@ -1081,7 +1081,13 @@ export class DemoAPI {
     async createInvite() {
         this.inviteStatus.sent_today += 1;
         this.inviteStatus.remaining = Math.max(0, this.inviteStatus.remaining - 1);
-        return { share_url: `https://validapp.lol/invite/demo-${Date.now().toString(36)}` };
+        return { id: crypto.randomUUID(), share_url: `https://validapp.lol/invite/demo-${Date.now().toString(36)}` };
+    }
+
+    async recordInviteSent(_userId, inviteId) {
+        // Demo only: lets the UI tests see that a completed share was reported.
+        (window.__validDemoInviteSends ||= []).push(inviteId);
+        return { invite_id: inviteId, sent_at: new Date().toISOString(), recipient_count: 1, recorded: true };
     }
 
     async updateBio(_userId, bio) {
