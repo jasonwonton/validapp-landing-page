@@ -941,6 +941,25 @@ function renderProfileInviteCard() {
     </article>`;
 }
 
+// The server attributes a signup to an invite only after the app reports the
+// share as done (POST /users/{id}/invites/{invite_id}/sent sets sent_at), so
+// report it when the share sheet resolves or the link is copied. One send
+// event id, so a retry never counts twice; a failure never bothers the person.
+async function reportInviteSent(invite) {
+    if (!invite?.id || !api.user?.id || typeof api.recordInviteSent !== "function") return;
+    const sendEventId = crypto.randomUUID();
+    for (const waitMs of [0, 2000, 8000]) {
+        if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
+        try {
+            await api.recordInviteSent(api.user.id, invite.id, { sendEventId });
+            return;
+        } catch (error) {
+            const status = Number(error?.status);
+            if (status >= 400 && status < 500 && status !== 408 && status !== 429) return;
+        }
+    }
+}
+
 async function shareProfileInvite(button, channel) {
     setButtonLoading(button, true, "Opening…");
     const status = $("#profileInviteStatus");
@@ -949,9 +968,12 @@ async function shareProfileInvite(button, channel) {
         const invite = await api.createInvite(api.user.id, channel);
         const copy = `Join me on Valid — it’s more fun with classmates. ${invite.share_url}`;
         if (channel === "imessage" && /iPhone|iPad|iPod/i.test(navigator.userAgent)) location.href = `sms:&body=${encodeURIComponent(copy)}`;
-        else if (navigator.share) await navigator.share({ title: "Join me on Valid", text: "Join me on Valid — it’s more fun with classmates.", url: invite.share_url });
-        else {
+        else if (navigator.share) {
+            await navigator.share({ title: "Join me on Valid", text: "Join me on Valid — it’s more fun with classmates.", url: invite.share_url });
+            reportInviteSent(invite);
+        } else {
             await navigator.clipboard.writeText(invite.share_url);
+            reportInviteSent(invite);
             status.textContent = "Invite link copied.";
         }
     } catch (error) {
@@ -1209,8 +1231,10 @@ async function shareGodModeInvite(button, channel) {
             location.href = `sms:&body=${encodeURIComponent(`${shareText} ${invite.share_url}`)}`;
         } else if (navigator.share) {
             await navigator.share({ title: "Join me on Valid", text: shareText, url: invite.share_url });
+            reportInviteSent(invite);
         } else {
             await navigator.clipboard.writeText(invite.share_url);
+            reportInviteSent(invite);
             status.textContent = channel === "snapchat" ? "Invite copied — paste it into Snapchat." : "Invite link copied.";
         }
     } catch (error) {
@@ -4372,9 +4396,12 @@ async function inviteAndUnlock(button) {
     setButtonLoading(button, true, "Making your invite...");
     try {
         const invite = await api.createInvite(api.user.id, "web");
-        if (navigator.share) await navigator.share({ title: "Join me on Valid", text: "Join Valid and unlock my next polls", url: invite.share_url });
-        else {
+        if (navigator.share) {
+            await navigator.share({ title: "Join me on Valid", text: "Join Valid and unlock my next polls", url: invite.share_url });
+            reportInviteSent(invite);
+        } else {
             await navigator.clipboard.writeText(invite.share_url);
+            reportInviteSent(invite);
             showToast("Invite link copied");
         }
     } catch (error) {
